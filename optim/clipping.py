@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+from enum import Enum, unique
+from typing import Any, List
+
+import torch
+from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
+
+
+@unique
+class GradientClipping(Enum):
+    NORM = "norm"
+    VALUE = "value"
+    NONE = "none"
+
+
+class GradientClippingOptimizer(OptimizerWrapper):
+    """
+    Clips gradients before doing optimization step.
+
+    Constructor Args:
+        optimizer (KeyedOptimizer): optimizer to wrap
+        clipping (GradientClipping): how to clip gradients
+        max_gradient (float): max value for clipping
+    """
+
+    def __init__(
+        self,
+        optimizer: KeyedOptimizer,
+        clipping: GradientClipping = GradientClipping.NORM,
+        max_gradient: float = 1.0,
+    ) -> None:
+        super().__init__(optimizer)
+        self._clipping = clipping
+        self._max_gradient = max_gradient
+
+        self._params: List[torch.Tensor] = []
+        for param_group in self.param_groups:
+            self._params += list(param_group["params"])
+
+    # pyre-ignore [2]
+    def step(self, closure: Any = None) -> None:
+        if self._clipping == GradientClipping.NORM:
+            torch.nn.utils.clip_grad_norm_(self._params, self._max_gradient)
+        elif self._clipping == GradientClipping.VALUE:
+            torch.nn.utils.clip_grad_value_(self._params, self._max_gradient)
+
+        super().step(closure)

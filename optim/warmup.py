@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+
+import logging
+import math
+from dataclasses import dataclass
+from enum import Enum, unique
+from typing import List, Any
+
+from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+@unique
+class WarmupPolicy(Enum):
+    NONE = "none"
+    LINEAR = "linear"
+    CONSTANT = "constant"
+    POLY = "poly"
+    STEP = "step"
+    INVSQRT = "inv_sqrt"  # inverse square root
+
+
+@dataclass
+class WarmupStage:
+    policy: WarmupPolicy = WarmupPolicy.LINEAR
+    max_iters: int = 1
+    value: float = 1.0
+    lr_scale: float = 1.0
+    # used as number denominator for iters in poly decay
+    # default to max_iters if not set to value > 0
+    # also used as stepsize in step decay
+    # default to 1 if not set to value > 0
+    decay_iters: int = -1
+
+
+def _lr_stages(stages: List[WarmupStage]) -> List[WarmupStage]:
+    last_stage = WarmupStage(policy=WarmupPolicy.NONE, max_iters=1 << 63, value=1.0)
+    if len(stages) == 0:
+        return [last_stage]
+
+    start_iter = 0
+    for stage in stages:
+        assert stage.max_iters > start_iter, (
+            f"Max iter of the stage {stage} must be greater than the previous "
+            f"max iter {start_iter}"
+        )
+        start_iter = stage.max_iters
+        if stage.decay_iters <= 0:
+            if stage.policy == WarmupPolicy.STEP:
+                stage.decay_iters = 1
+            else:
+                stage.decay_iters = stage.max_iters
+    return stages + [last_stage]
+
+
+def _get_multiplier(stage: WarmupStage, iter: int) -> float:
+    multiplier = 1.0
+    if stage.policy == WarmupPolicy.LINEAR:
+        multiplier = stage.value + (1.0 - stage.value) * iter / stage.max_iters
+    elif stage.policy == WarmupPolicy.CONSTANT:
+        multiplier = stage.value
+    elif stage.policy == WarmupPolicy.POLY:
+        multiplier = math.pow(1 - iter / stage.decay_iters, stage.value)
+    elif stage.policy == WarmupPolicy.STEP:
+        multiplier = math.pow(stage.value, iter // stage.decay_iters)
+    elif stage.policy == WarmupPolicy.INVSQRT:
+        multiplier = 1.0 / math.sqrt(iter)
+    return multiplier * stage.lr_scale
+
+
+class WarmupOptimizer(OptimizerWrapper):
+    """
+    Adjusts learning rate according to the schedule.
+
+    Constructor Args:
+        optimizer (KeyedOptimizer): optimizer to wrap
+        stages (List[WarmupStage]): stages to go through
+        lr (float): initial learning rate
+        lr_param (str): learning rate parameter in parameter group.
+    """
+
+    def __init__(
+        self,
+        optimizer: KeyedOptimizer,
+        stages: List[WarmupStage],
+        lr: float = 0.1,
+        lr_param: str = "lr",
+    ) -> None:
+        self._stages: List[WarmupStage] = _lr_stages(stages)
+        self._lr_param: str = lr_param
+        self._lr: float = lr
+        super().__init__(optimizer)
+        for param_group in self.param_groups:
+            param_group["iter"], param_group["stage_id"] = 1, 0
+
+    def zero_grad(self, set_to_none: bool = False) -> None:
+        for param_group in self.param_groups:
+            iter_, stage_id = param_group["iter"], param_group["stage_id"]
+            lr = self._lr * _get_multiplier(self._stages[stage_id], iter_)
+            # pyre-ignore [16]
+            param_group[self._lr_param] = lr
+
+        super().zero_grad(set_to_none=set_to_none)
+
+    # pyre-ignore [2]
+    def step(self, closure: Any = None) -> None:
+        for param_group in self.param_groups:
+            iter_, stage_id = param_group["iter"], param_group["stage_id"]
+            iter_ += 1
+            if iter_ > self._stages[stage_id].max_iters and stage_id + 1 < len(
+                self._stages
+            ):
+                stage_id += 1
+                logger.info(
+                    "Optimizer finishing "
+                    f"{self._stages[stage_id - 1]} "
+                    "switching to "
+                    f"{self._stages[stage_id]}"
+                )
+            param_group["iter"], param_group["stage_id"] = iter_, stage_id
+
+        super().step(closure)
