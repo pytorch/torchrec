@@ -27,7 +27,7 @@ class DocStringLinterTest(unittest.TestCase):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 0)
+        self.assertEqual(p.call_count, 0)
 
     def test_docstring_no_modules(self) -> None:
         src = """
@@ -39,10 +39,10 @@ class A:
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 0)
+        self.assertEqual(p.call_count, 0)
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    # `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(uses_LazyModuleExtensionMixin=st.booleans())
     def test_docstring_no_docstring(self, uses_LazyModuleExtensionMixin: bool) -> None:
         src = """
@@ -56,13 +56,43 @@ class F(${parent_class_list}):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 1)
+        self.assertEqual(p.call_count, 1)
         self.assertTrue(
             "No docstring found in a TorchRec module" in p.call_args_list[0][0][0]
         )
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    # `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(uses_LazyModuleExtensionMixin=st.booleans())
+    def test_docstring_no_module_init(
+        self, uses_LazyModuleExtensionMixin: bool
+    ) -> None:
+        src = """
+class F(${parent_class_list}):
+    \"""
+    \"""
+    def forward(self, net, z):
+        pass
+        """
+        src = populate_parent_class_list(src, uses_LazyModuleExtensionMixin)
+        with patch("builtins.print") as p, patch(
+            "torchrec.linter.module_linter.read_file", return_value=src
+        ):
+            module_linter.linter_one_file("a")
+
+        self.assertEqual(p.call_count, 3)
+        self.assertTrue(
+            "No runnable example in a TorchRec module" in p.call_args_list[0][0][0]
+        )
+        self.assertTrue(
+            "Missing required keywords from TorchRec module"
+            in p.call_args_list[1][0][0]
+        )
+        self.assertTrue("Missing docstring descriptions" in p.call_args_list[2][0][0])
+        self.assertTrue("['z']" in p.call_args_list[2][0][0])
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(uses_LazyModuleExtensionMixin=st.booleans())
     def test_missing_args(self, uses_LazyModuleExtensionMixin: bool) -> None:
         src = """
@@ -81,7 +111,7 @@ class F(${parent_class_list}):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 4)
+        self.assertEqual(p.call_count, 4)
         self.assertTrue(
             "No runnable example in a TorchRec module" in p.call_args_list[0][0][0]
         )
@@ -96,7 +126,7 @@ class F(${parent_class_list}):
         self.assertTrue("['z']" in p.call_args_list[3][0][0])
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    # `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(uses_LazyModuleExtensionMixin=st.booleans())
     def test_valid_module(self, uses_LazyModuleExtensionMixin: bool) -> None:
         src = """
@@ -129,10 +159,10 @@ class F(${parent_class_list}):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 0)
+        self.assertEqual(p.call_count, 0)
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    # `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(uses_LazyModuleExtensionMixin=st.booleans())
     def test_num_ctor_args(self, uses_LazyModuleExtensionMixin: bool) -> None:
         # Case 1: TorchRec module has less than 5 ctor args -> pass
@@ -169,7 +199,7 @@ class F(${parent_class_list}):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 0)
+        self.assertEqual(p.call_count, 0)
 
         # Case 2: TorchRec module has more than 5 ctor args -> print error
         src = """
@@ -206,7 +236,7 @@ class F(${parent_class_list}):
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 1)
+        self.assertEqual(p.call_count, 1)
         self.assertTrue(
             "TorchRec module has too many constructor arguments"
             in p.call_args_list[0][0][0]
@@ -246,7 +276,7 @@ class F:
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEquals(p.call_count, 0)
+        self.assertEqual(p.call_count, 0)
 
 
 if __name__ == "__main__":

@@ -159,6 +159,9 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
             functions[sub_node.name] = get_function_args(sub_node)
 
     def check_function(function_name: str) -> None:
+        if function_name not in functions:
+            return
+
         if function_name == "__init__":
             # NOTE: -1 to not count the `self` argument.
             num_args = sum([len(args) for args in functions[function_name]]) - 1
