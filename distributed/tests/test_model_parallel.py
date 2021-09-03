@@ -8,12 +8,8 @@ from typing import List, Tuple, Optional, Callable
 import hypothesis.strategies as st
 import numpy as np
 import torch
-import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
-from torchrec.distributed.collective_utils import (
-    invoke_on_rank_and_broadcast_result,
-)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.tests.test_model import (
@@ -429,13 +425,7 @@ class ModelParallelTest(unittest.TestCase):
         )
         plan: Optional[ShardingPlan]
         if planner:
-            plan = invoke_on_rank_and_broadcast_result(
-                pg if pg else dist.ProcessGroup.WORLD,
-                0,
-                planner.plan,
-                local_model,
-                sharders,
-            )
+            plan = planner.collective_plan(local_model, sharders)
         else:
             plan = None
         local_model = DistributedModelParallel(

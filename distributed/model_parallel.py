@@ -7,9 +7,6 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn import parallel
-from torchrec.distributed.collective_utils import (
-    invoke_on_rank_and_broadcast_result,
-)
 from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import EmbeddingShardingPlanner, sharder_name
 from torchrec.distributed.types import (
@@ -86,13 +83,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         # 2. Call ShardingPlanner.plan passing all found modules and corresponding sharders.
         if plan is None:
-            planner = EmbeddingShardingPlanner(self._pg, self.device)
-            plan = invoke_on_rank_and_broadcast_result(
-                pg,
-                0,
-                planner.plan,
-                module,
-                sharders,
+            plan = EmbeddingShardingPlanner(self._pg, self.device).collective_plan(
+                module, sharders
             )
 
         self._plan: ShardingPlan = plan

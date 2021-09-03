@@ -7,6 +7,9 @@ from typing import Dict, Optional, List, Callable, Tuple
 import torch
 import torch.distributed as dist
 from torch import nn
+from torchrec.distributed.collective_utils import (
+    invoke_on_rank_and_broadcast_result,
+)
 from torchrec.distributed.planner.cost_functions import (
     cost_func_compute_based,
 )
@@ -62,6 +65,22 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             self._cost_functions = cost_functions
 
         self._topology: Topology = get_topology(pg, device, storage)
+
+    def collective_plan(
+        self,
+        module: nn.Module,
+        sharders: List[ModuleSharder[nn.Module]],
+    ) -> ShardingPlan:
+        """
+        Call self.plan(...) on rank 0 and broadcast
+        """
+        return invoke_on_rank_and_broadcast_result(
+            self._pg,
+            0,
+            self.plan,
+            module,
+            sharders,
+        )
 
     def plan(
         self,

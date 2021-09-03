@@ -470,3 +470,21 @@ class ShardingPlanner(abc.ABC):
             Sharding plan.
         """
         ...
+
+    @abc.abstractmethod
+    def collective_plan(
+        self,
+        module: nn.Module,
+        sharders: List[ModuleSharder[nn.Module]],
+    ) -> ShardingPlan:
+        """
+        Call self.plan(...) on rank 0 and broadcast
+
+        Args:
+            modules
+            sharders
+
+        Returns:
+            Sharding plan.
+        """
+        ...
