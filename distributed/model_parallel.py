@@ -188,16 +188,20 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             return module
         self._init_parameters(module)
         module = module.to(self.device)
-        return cast(
-            nn.Module,
-            parallel.DistributedDataParallel(
-                module,
-                device_ids=None if self.device.type == "cpu" else [self.device],
-                process_group=self._pg,
-                gradient_as_bucket_view=True,
-                broadcast_buffers=False,
-            ),
-        )
+        param_grad = [p for p in module.parameters() if p.requires_grad]
+        if len(param_grad) > 0:
+            return cast(
+                nn.Module,
+                parallel.DistributedDataParallel(
+                    module,
+                    device_ids=None if self.device.type == "cpu" else [self.device],
+                    process_group=self._pg,
+                    gradient_as_bucket_view=True,
+                    broadcast_buffers=False,
+                ),
+            )
+        else:
+            return module
 
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
