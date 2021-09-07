@@ -87,8 +87,6 @@ class CombinedOptimizer(KeyedOptimizer):
     def __init__(
         self, optims: List[Union[KeyedOptimizer, Tuple[str, KeyedOptimizer]]]
     ) -> None:
-        super().__init__({}, {}, [])
-
         # Append empty optimizer key if not passed.
         self._optims: List[Tuple[str, KeyedOptimizer]] = []
         for key_value in optims:
@@ -194,6 +192,22 @@ class CombinedOptimizer(KeyedOptimizer):
             ]
             opt_state_dict = {"state": opt_state, "param_groups": opt_param_groups}
             opt.load_state_dict(opt_state_dict)
+
+    @property
+    def param_groups(self) -> Collection[Mapping[str, Any]]:
+        return [
+            param_group for _, opt in self._optims for param_group in opt.param_groups
+        ]
+
+    @property
+    def params(self) -> Mapping[str, Union[torch.Tensor, ShardedTensor]]:
+        # TODO: combine params
+        return {}
+
+    @property
+    def state(self) -> Mapping[str, Any]:
+        # TODO: combin state
+        return {}
 
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
