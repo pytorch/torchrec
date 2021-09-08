@@ -77,6 +77,40 @@ def _assert_offsets_or_lengths_is_provided(
 torch.fx.wrap("_assert_offsets_or_lengths_is_provided")
 
 
+def _regroup_keyed_tensors(
+    keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
+) -> List[torch.Tensor]:
+    embedding_dicts = [keyed_tensor.to_dict() for keyed_tensor in keyed_tensors]
+    lengths = [keyed_tensor.length_per_key() for keyed_tensor in keyed_tensors]
+    indices = [keyed_tensor._key_indices() for keyed_tensor in keyed_tensors]
+    key_dim = keyed_tensors[0].key_dim()
+
+    key_to_idx: dict[str, int] = {}
+    for (i, keyed_tensor) in enumerate(keyed_tensors):
+        for key in keyed_tensor.keys():
+            key_to_idx[key] = i
+
+    # Rearrange values based on groups with a single torch.cat operation.
+    cat_input: List[torch.Tensor] = []
+    for group in groups:
+        for name in group:
+            cat_input.append(embedding_dicts[key_to_idx[name]][name])
+    rearranged_values = torch.cat(cat_input, key_dim)
+
+    # Provide views over the rearranged values with a single torch.split operation.
+    split_lengths: List[int] = []
+    for group in groups:
+        group_length = 0
+        for name in group:
+            group_length += lengths[key_to_idx[name]][indices[key_to_idx[name]][name]]
+        split_lengths.append(group_length)
+
+    return list(rearranged_values.split(split_lengths, dim=key_dim))
+
+
+torch.fx.wrap("_regroup_keyed_tensors")
+
+
 def _values_string(values: torch.Tensor, start: int, end: int) -> str:
     return "[" + ", ".join([str(value.item()) for value in values[start:end]]) + "]"
 
@@ -907,6 +941,12 @@ class KeyedTensor(metaclass=torch.fx.ProxyableClassMeta):
         lengths = self._length_per_key
         split_values = self._values.split(lengths, dim=self._key_dim)
         return {key: split_values[index] for (key, index) in indices.items()}
+
+    @staticmethod
+    def regroup(
+        keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
+    ) -> List[torch.Tensor]:
+        return _regroup_keyed_tensors(keyed_tensors, groups)
 
     def __str__(self) -> str:
         if len(self._keys) == 0:

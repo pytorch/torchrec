@@ -865,6 +865,90 @@ class TestKeyedTensor(unittest.TestCase):
         for key in keys:
             self.assertTrue(torch.equal(kt[key], d[key]))
 
+    def test_regroup_single_kt(self) -> None:
+        tensor_list = [torch.randn(2, 3) for i in range(5)]
+        key_dim = 1
+        keys = ["dense_0", "dense_1", "dense_2", "dense_3", "dense_4"]
+        kt = KeyedTensor.from_tensor_list(keys, tensor_list, key_dim)
+        grouped_tensors = KeyedTensor.regroup(
+            [kt], [["dense_0", "dense_4"], ["dense_1", "dense_3"], ["dense_2"]]
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[0], torch.cat([tensor_list[0], tensor_list[4]], key_dim)
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[1], torch.cat([tensor_list[1], tensor_list[3]], key_dim)
+            )
+        )
+        self.assertTrue(torch.equal(grouped_tensors[2], tensor_list[2]))
+
+    def test_regroup_multiple_kt(self) -> None:
+        key_dim = 1
+        tensor_list_1 = [torch.randn(2, 3) for i in range(3)]
+        keys_1 = ["dense_0", "dense_1", "dense_2"]
+        kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+        tensor_list_2 = [torch.randn(2, 3) for i in range(2)]
+        keys_2 = ["sparse_0", "sparse_1"]
+        kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+        grouped_tensors = KeyedTensor.regroup(
+            [kt_1, kt_2], [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[0],
+                torch.cat(
+                    [tensor_list_1[0], tensor_list_2[1], tensor_list_1[2]], key_dim
+                ),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[1],
+                torch.cat([tensor_list_1[1], tensor_list_2[0]], key_dim),
+            )
+        )
+
+    def test_regroup_scriptable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(
+                self, inputs: List[KeyedTensor], groups: List[List[str]]
+            ) -> List[torch.Tensor]:
+                return KeyedTensor.regroup(inputs, groups)
+
+        m = MyModule()
+        torch.jit.script(m)
+
+    def test_regroup_fxable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(
+                self, inputs: List[KeyedTensor], groups: List[List[str]]
+            ) -> List[torch.Tensor]:
+                return KeyedTensor.regroup(inputs, groups)
+
+        m = MyModule()
+
+        # input
+        key_dim = 1
+        tensor_list_1 = [torch.randn(2, 3) for i in range(3)]
+        keys_1 = ["dense_0", "dense_1", "dense_2"]
+        kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+        tensor_list_2 = [torch.randn(2, 3) for i in range(2)]
+        keys_2 = ["sparse_0", "sparse_1"]
+        kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+        inputs = [kt_1, kt_2]
+        groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+
+        # ensure that symbolic tracing works
+        gm = torch.fx.symbolic_trace(m)
+        results = m(inputs, groups)
+        traced_results = gm(inputs, groups)
+        self.assertEqual(len(results), len(traced_results))
+        for result, traced_result in zip(results, traced_results):
+            self.assertTrue(torch.equal(result, traced_result))
+
     def test_scriptable(self) -> None:
         class MyModule(torch.nn.Module):
             def forward(self, input: KeyedTensor) -> torch.Tensor:
