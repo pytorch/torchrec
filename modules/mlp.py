@@ -144,10 +144,6 @@ class MLP(torch.nn.Module):
         >>> mlp_module = MLP(layer_sizes, bias=True)
         >>> output = mlp_module(input)
         >>> assert list(output.shape) == [batch_size, layer_sizes[-1]]
-        >>>
-        >>> mlp_module = MLP(layer_sizes, activation=lambda: Swish(LayerNorm(1, affine_axis=1)))
-        >>> output = mlp_module(input)
-        >>> assert list(output.shape) == [batch_size, layer_sizes[-1]]
     """
 
     def __init__(
@@ -219,10 +215,6 @@ class MCMLP(MLP):
         >>>
         >>> input = torch.randn(batch_size, in_sizes)
         >>> multi_channel_mlp = MCMLP(layer_sizes, num_channels, bias=True)
-        >>> output = multi_channel_mlp(input)
-        >>> assert list(output.shape) == [num_channels, batch_size, layer_sizes[-1]]
-        >>>
-        >>> multi_channel_mlp = MCMLP(layer_sizes, num_channels, activation=lambda: Swish(LayerNorm(2, affine_axis=1)))
         >>> output = multi_channel_mlp(input)
         >>> assert list(output.shape) == [num_channels, batch_size, layer_sizes[-1]]
     """

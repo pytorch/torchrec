@@ -2,7 +2,6 @@
 
 import torchrec.distributed  # noqa
 from torchrec.fx import tracer  # noqa
-from torchrec.modules.activation import Swish  # noqa
 from torchrec.modules.concat import PadCat, Split  # noqa
 from torchrec.modules.embedding_configs import (  # noqa
     EmbeddingBagConfig,

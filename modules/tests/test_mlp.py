@@ -8,7 +8,6 @@ import torch
 from hypothesis import given, settings
 from torch import nn
 from torchrec.fx import symbolic_trace
-from torchrec.modules.activation import Swish
 from torchrec.modules.concat import PadCat, Split
 from torchrec.modules.mlp import Perceptron, MCPerceptron, MLP, MCMLP
 from torchrec.modules.normalization import LayerNorm
@@ -25,8 +24,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                Swish(LayerNorm(1)),
+                nn.SiLU(),
             ]
         ),
     )
@@ -90,8 +88,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                Swish(LayerNorm(2, num_channels=4)),
+                nn.SiLU(),
             ]
         ),
     )
@@ -142,8 +139,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                Swish(LayerNorm(2, num_channels=4)),
+                nn.SiLU(),
             ]
         ),
     )
@@ -193,8 +189,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                lambda: Swish(LayerNorm(1)),
+                nn.SiLU(),
             ]
         ),
     )
@@ -274,8 +269,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                lambda: Swish(LayerNorm(1, num_channels=4)),
+                nn.SiLU(),
             ]
         ),
     )
@@ -344,8 +338,7 @@ class TestMLP(unittest.TestCase):
                 torch.relu,
                 torch.tanh,
                 torch.sigmoid,
-                Swish(1.5),
-                lambda: Swish(LayerNorm(1, num_channels=4)),
+                nn.SiLU(),
             ]
         ),
     )
