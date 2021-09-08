@@ -8,7 +8,6 @@ import torch
 from hypothesis import given, settings
 from torch import nn
 from torchrec.fx import symbolic_trace
-from torchrec.modules.concat import PadCat, Split
 from torchrec.modules.mlp import Perceptron, MCPerceptron, MLP, MCMLP
 from torchrec.modules.normalization import LayerNorm
 from torchrec.modules.utils import extract_module_or_tensor_callable
@@ -331,7 +330,6 @@ class TestMLP(unittest.TestCase):
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     # to decorator factory `hypothesis.given`.
     @given(
-        is_ragged_input=st.booleans(),
         has_bias=st.booleans(),
         activation=st.sampled_from(
             [
@@ -345,7 +343,6 @@ class TestMLP(unittest.TestCase):
     @settings(deadline=None)
     def test_mlp_multi_channel_3d_input(
         self,
-        is_ragged_input: bool,
         has_bias: bool,
         activation: Union[
             Callable[[], torch.nn.Module],
@@ -353,66 +350,29 @@ class TestMLP(unittest.TestCase):
             Callable[[torch.Tensor], torch.Tensor],
         ],
     ) -> None:
-        if is_ragged_input:
-            input_last_dim_sizes = [40, 30, 20, 10]
-        else:
-            input_last_dim_sizes = [40, 40, 40, 40]
-
         batch_size = 3
-        input_tensors: List[torch.Tensor] = [
-            torch.randn(1, batch_size, input_last_dim_size)
-            for input_last_dim_size in input_last_dim_sizes
-        ]
+        input: torch.Tensor = torch.randn(4, batch_size, 40)
 
-        cat_dim = 0
-        pad_dim = 2
         mlp_layer_sizes = [16, 8, 4]
         num_tasks = 4
 
         def run_mlp_and_check_output(
             multi_channel_mlp: torch.nn.Module,
-            input_tensors: List[torch.Tensor],
+            input: torch.Tensor,
             batch_size: int,
             last_layer_size: int,
         ) -> None:
-            output_tensors = multi_channel_mlp(input_tensors)
+            output_tensors = multi_channel_mlp(input)
             for i in range(len(output_tensors)):
                 self.assertEqual(
-                    list(output_tensors[i].shape), [1, batch_size, last_layer_size]
+                    list(output_tensors[i].shape), [batch_size, last_layer_size]
                 )
 
-        # Case 1: Manually use torchrec.MCPerceptron modules to build multi-channel MLP module.
-        multi_channel_mlp = nn.Sequential(
-            PadCat(cat_dim, pad_dim),
-            *[
-                MCPerceptron(
-                    layer_size,
-                    num_tasks,
-                    bias=has_bias,
-                    activation=extract_module_or_tensor_callable(activation),
-                )
-                for layer_size in mlp_layer_sizes
-            ],
-            Split(
-                [t.size(cat_dim) for t in input_tensors],
-                dim=cat_dim,
-            ),
+        multi_channel_mlp = MCMLP(
+            mlp_layer_sizes, num_tasks, bias=has_bias, activation=activation
         )
         run_mlp_and_check_output(
-            multi_channel_mlp, input_tensors, batch_size, mlp_layer_sizes[-1]
-        )
-
-        # Case 2: Use torchrec.MCMLP module.
-        multi_channel_mlp = nn.Sequential(
-            PadCat(cat_dim, pad_dim),
-            MCMLP(mlp_layer_sizes, num_tasks, bias=has_bias, activation=activation),
-            Split(
-                [t.size(cat_dim) for t in input_tensors],
-                dim=cat_dim,
-            ),
-        )
-        run_mlp_and_check_output(
-            multi_channel_mlp, input_tensors, batch_size, mlp_layer_sizes[-1]
+            multi_channel_mlp, input, batch_size, mlp_layer_sizes[-1]
         )
 
     def test_fx_script_Perceptron(self) -> None:
