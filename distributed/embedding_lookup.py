@@ -535,7 +535,7 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
             split_embedding_weights,
         ):
             param_group["params"].append(weight)
-            param_key = "embedding_bags." + table_config.name + ".weight"
+            param_key = table_config.name + ".weight"
             params[param_key] = weight
 
         for table_config, optimizer_states, weight in zip(

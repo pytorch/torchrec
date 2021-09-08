@@ -46,22 +46,22 @@ class KeyedOptimizer(optim.Optimizer):
                 )
             )
 
+    def state_dict(self) -> Dict[str, Any]:
         # Same parameter can be associated w/ multiple keys,
         # it happens e.g. in case of BatchedDenseEmbeddingBag.
-        self._param_to_keys: Dict[torch.Tensor, List[str]] = {}
-        for key, p in params.items():
+        param_to_keys: Dict[torch.Tensor, List[str]] = {}
+        for key, p in self.params.items():
             tensor = p.local_shard if isinstance(p, ShardedTensor) else p
-            if tensor not in self._param_to_keys:
-                self._param_to_keys[tensor] = []
-            self._param_to_keys[tensor].append(key)
+            if tensor not in param_to_keys:
+                param_to_keys[tensor] = []
+            param_to_keys[tensor].append(key)
 
-    def state_dict(self) -> Dict[str, Any]:
         state = {}
         param_groups = []
         for param_group in self.param_groups:
             for param in param_group["params"]:
                 if param in self.state:
-                    keys = self._param_to_keys[param]
+                    keys = param_to_keys[param]
                     # TODO figure out how to split optimizer state if needed.
                     for key in keys:
                         state[key] = self.state[param]
@@ -69,7 +69,7 @@ class KeyedOptimizer(optim.Optimizer):
             packed = {k: v for k, v in param_group.items() if k != "params"}
             param_keys = []
             for p in param_group["params"]:
-                param_keys += self._param_to_keys[p]
+                param_keys += param_to_keys[p]
             packed["params"] = param_keys
             param_groups.append(packed)
         return {"state": state, "param_groups": param_groups}

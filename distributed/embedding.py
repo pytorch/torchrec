@@ -2,7 +2,7 @@
 
 import copy
 from collections import OrderedDict
-from typing import List, Dict, Optional, Type, Any, TypeVar
+from typing import List, Dict, Optional, Type, Any, TypeVar, Mapping, Union
 
 import torch
 import torch.distributed as dist
@@ -29,6 +29,7 @@ from torchrec.distributed.types import (
     ShardedModule,
     ShardingType,
     ShardedModuleContext,
+    ShardedTensor,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.fused import FusedOptimizerModule
@@ -185,6 +186,11 @@ class ShardedEmbeddingBagCollection(
         for lookup in self._lookups:
             for _, module in lookup.named_modules():
                 if isinstance(module, FusedOptimizerModule):
+                    # modify param keys to match EmbeddingBagCollection
+                    params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
+                    for param_key, weight in module.fused_optimizer.params.items():
+                        params["embedding_bags." + param_key] = weight
+                    module.fused_optimizer.params = params
                     optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
