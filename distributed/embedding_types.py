@@ -10,9 +10,10 @@ from torch import nn
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
+    ShardMetadata,
+    ShardedTensorMetadata,
     ParameterStorage,
 )
-from torchrec.distributed.types import ShardedTensorMetadata
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
@@ -64,8 +65,8 @@ class ShardedConfig:
     rank: int = 0
     local_rows: int = 0
     local_cols: int = 0
-    sharded_tensor: bool = False
-    metadata: ShardedTensorMetadata = field(default_factory=ShardedTensorMetadata)
+    local_metadata: Optional[ShardMetadata] = None
+    global_metadata: Optional[ShardedTensorMetadata] = None
 
 
 @dataclass

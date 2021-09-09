@@ -138,24 +138,24 @@ class TwEmbeddingSharding(EmbeddingSharding):
         for table in tables:
             rank = table.rank
             shards: List[ShardMetadata] = []
+            local_metadata = ShardMetadata(
+                shard_lengths=[
+                    table.num_embeddings,
+                    table.embedding_dim,
+                ],
+                shard_offsets=[0, 0],
+                placement=f"rank:{rank}/{self._device}",
+            )
             for r in range(world_size):
                 if r == rank:
-                    shards.append(
-                        ShardMetadata(
-                            dims=[
-                                table.num_embeddings,
-                                table.embedding_dim,
-                            ],
-                            offsets=[0, 0],
-                        )
-                    )
-                else:
-                    shards.append(
-                        ShardMetadata(
-                            dims=[0, 0],
-                            offsets=[0, 0],
-                        )
-                    )
+                    shards.append(local_metadata)
+
+            # construct the global sharded_tensor_metadata
+            table.global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([table.num_embeddings, table.embedding_dim]),
+            )
+
             tables_per_rank[rank].append(
                 ShardedEmbeddingTable(
                     num_embeddings=table.num_embeddings,
@@ -170,8 +170,8 @@ class TwEmbeddingSharding(EmbeddingSharding):
                     rank=table.rank,
                     local_rows=table.num_embeddings,
                     local_cols=table.embedding_dim,
-                    sharded_tensor=True,
-                    metadata=ShardedTensorMetadata(shards=shards),
+                    local_metadata=local_metadata,
+                    global_metadata=table.global_metadata,
                 )
             )
         return tables_per_rank

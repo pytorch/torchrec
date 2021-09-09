@@ -109,7 +109,6 @@ class DpEmbeddingSharding(EmbeddingSharding):
                         rank=table.rank,
                         local_rows=table.num_embeddings,
                         local_cols=table.embedding_dim,
-                        sharded_tensor=False,
                     )
                 )
         return tables_per_rank

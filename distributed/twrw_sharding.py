@@ -283,19 +283,29 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             )
             shards = [
                 ShardMetadata(
-                    dims=[
+                    shard_lengths=[
                         local_rows[rank],
                         local_cols[rank],
                     ],
-                    offsets=[local_row_offsets[rank], 0],
+                    shard_offsets=[local_row_offsets[rank], 0],
+                    placement=f"rank:{rank}/{self._device}",
                 )
-                for rank in range(world_size)
+                for rank in range(
+                    table_node * local_size, (table_node + 1) * local_size
+                )
             ]
+
+            # construct the global sharded_tensor_metadata
+            table.global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([table.num_embeddings, table.embedding_dim]),
+            )
 
             for rank in range(
                 table_node * local_size,
                 (table_node + 1) * local_size,
             ):
+                rank_idx = rank - (table_node * local_size)
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=table.num_embeddings,
@@ -310,8 +320,8 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
                         rank=table.rank,
                         local_rows=local_rows[rank],
                         local_cols=table.embedding_dim,
-                        sharded_tensor=True,
-                        metadata=ShardedTensorMetadata(shards=shards),
+                        local_metadata=shards[rank_idx],
+                        global_metadata=table.global_metadata,
                     )
                 )
         return tables_per_rank

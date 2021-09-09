@@ -281,18 +281,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         state_dict = self.state_dict(prefix=prefix, keep_vars=True)
         for key, value in state_dict.items():
-            if isinstance(value, torch.Tensor):
-                if value.requires_grad:
-                    yield key, cast(
-                        nn.Parameter,
-                        value,
-                    )
-            elif isinstance(value, ShardedTensor):
-                if value.local_shard.requires_grad:
-                    yield key, cast(
-                        nn.Parameter,
-                        value,
-                    )
+            if value.requires_grad:
+                yield key, value
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

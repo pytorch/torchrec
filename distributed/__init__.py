@@ -15,6 +15,4 @@ from torchrec.distributed.types import (  # noqa
     ShardingPlanner,
     ShardedModule,
     ShardedTensor,
-    ShardedTensorMetadata,
-    ShardMetadata,
-)
+)  # noqa

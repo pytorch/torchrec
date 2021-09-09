@@ -2,7 +2,7 @@
 
 import abc
 import operator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Generic, Optional, TypeVar, List, Type
 
@@ -28,6 +28,12 @@ import torch
 import torch.distributed as dist
 import torch.fx
 from torch import nn
+from torch.distributed._sharded_tensor import (  # noqa
+    Shard,
+    ShardedTensor,
+    ShardedTensorMetadata,
+)
+from torch.distributed._sharding_spec import ShardMetadata  # noqa
 
 
 class ShardingType(Enum):
@@ -222,38 +228,6 @@ for orig_method_name in torch.fx.graph.reflectable_magic_methods:
 
     # pyre-ignore [16]
     scope(orig_method_name)
-
-
-"""
-ShardedTensor, ShardedTensorMetadata, ShardMetadata are temporary until
-tensor sharding lands in PyTorch.
-See https://github.com/pytorch/pytorch/issues/55207 for details.
-"""
-
-
-@dataclass
-class ShardMetadata:
-    # Dimensions of the tensor representing this shard.
-    dims: List[int] = field(default_factory=list)
-    # Starting offsets for each dimension of this shard in the
-    # ShardedTensor. Should be same size as self.dims. self.offsets()
-    # combined with self.dims accurately identifies which partition of the
-    # Tensor this shard represents.
-    offsets: List[int] = field(default_factory=list)
-
-
-@dataclass
-class ShardedTensorMetadata:
-    shards: List[ShardMetadata] = field(default_factory=list)
-
-
-@dataclass
-class ShardedTensor:
-    local_shard: torch.Tensor
-    sharding_metadata: ShardedTensorMetadata
-
-    def __hash__(self) -> int:
-        return hash(self.local_shard)
 
 
 @dataclass

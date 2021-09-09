@@ -3,9 +3,10 @@
 import abc
 from collections import OrderedDict
 from math import sqrt
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Tuple
 
 import torch
+import torch.distributed._sharded_tensor as sharded_tensor
 from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
@@ -21,11 +22,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     EmbeddingComputeKernel,
 )
-from torchrec.distributed.types import (
-    ShardedTensor,
-    ShardMetadata,
-    ShardedTensorMetadata,
-)
+from torchrec.distributed.types import Shard, ShardedTensorMetadata, ShardMetadata
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
@@ -35,13 +32,6 @@ from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
 )
-
-
-def wrap_weight_to_parameter(weights: List[torch.Tensor]) -> List[torch.Tensor]:
-    for i, v in enumerate(weights):
-        if not isinstance(v, torch.nn.Parameter):
-            weights[i] = torch.nn.Parameter(v)
-    return weights
 
 
 class BaseEmbedding(abc.ABC, nn.Module):
@@ -223,17 +213,47 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
             grouped_configs: List[GroupedEmbeddingConfig],
         ) -> None:
             for emb_module, config in zip(emb_modules, grouped_configs):
+                # A map to record qualifided name to sharded parameter local shards
+                # as there might be cases each rank have multiple shards of a single
+                # sharded tensor, we should group the local shards together and create
+                # the sharded tensor parameter in state_dict calls
+                key_to_shards: Dict[str, List[Shard]] = {}
+                global_metadatas: Dict[str, ShardedTensorMetadata] = {}
                 for (key, param), table_config in zip(
                     emb_module.state_dict(None, prefix, keep_vars).items(),
                     config.embedding_tables,
                 ):
-                    # pyre-ignore [16]
-                    destination[key] = (
-                        ShardedTensor(
-                            local_shard=param, sharding_metadata=table_config.metadata
+                    if table_config.global_metadata is not None:
+                        # set additional field of sharded tensor based on local tensor properties
+                        table_config.global_metadata.tensor_properties.dtype = (
+                            param.dtype
                         )
-                        if table_config.sharded_tensor
-                        else param
+                        table_config.global_metadata.tensor_properties.requires_grad = (
+                            param.requires_grad
+                        )
+
+                        # record all local shards for the same sharded tensor key
+                        if key not in key_to_shards:
+                            key_to_shards[key] = [
+                                Shard(param, table_config.local_metadata)
+                            ]
+                            global_metadatas[key] = table_config.global_metadata
+                        else:
+                            key_to_shards[key].append(
+                                Shard(param, table_config.local_metadata)
+                            )
+
+                    else:
+                        # pyre-ignore [16]
+                        destination[key] = param
+
+                # update destination with sharded tensor parameter and its key
+                for key in key_to_shards:
+                    local_shards = key_to_shards[key]
+                    global_metadata = global_metadatas[key]
+                    destination[key] = sharded_tensor.init_from_local_shards(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=global_metadata,
                     )
 
         update_destination(self._emb_modules, self.grouped_configs)
@@ -436,7 +456,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             self._local_rows,
             self._num_embeddings,
             self._embedding_dims,
-            wrap_weight_to_parameter(self.emb_module.split_embedding_weights()),
+            self.emb_module.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)
             param.data.uniform_(-sqrt(1 / num_emb), sqrt(1 / num_emb))
@@ -470,16 +490,6 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             assert config.local_rows == param.size(0)
             assert config.local_cols == param.size(1)
 
-            # When optimizer is not fused
-            # and we are asked to not detach,
-            # we need to return full weight
-            # as otherwise autograd won't work.
-            if keep_vars and isinstance(
-                self.emb_module,
-                DenseTableBatchedEmbeddingBagsCodegen,
-            ):
-                param = self.emb_module.weights
-
             destination[prefix + f"{config.name}.weight"] = param
         return destination
 
@@ -502,20 +512,38 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
     ) -> None:
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
 
-        def to_sharded_metadata(
-            metadata: ShardedTensorMetadata,
-        ) -> ShardedTensorMetadata:
+        def to_rowwise_sharded_metadata(
+            local_metadata: ShardMetadata,
+            global_metadata: ShardedTensorMetadata,
+        ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
             rw_shards: List[ShardMetadata] = []
-            for shard in metadata.shards:
-                rw_shards.append(
-                    ShardMetadata(
-                        dims=[shard.dims[0]],
-                        offsets=[shard.offsets[0]],
-                    )
+            rw_local_shard: ShardMetadata = local_metadata
+            for shard in global_metadata.shards_metadata:
+                rw_shard = ShardMetadata(
+                    shard_lengths=[shard.shard_lengths[0]],
+                    shard_offsets=[shard.shard_offsets[0]],
+                    placement=shard.placement,
                 )
-            return ShardedTensorMetadata(
-                shards=rw_shards,
+
+                if local_metadata == shard:
+                    rw_local_shard = rw_shard
+
+                rw_shards.append(rw_shard)
+
+            tensor_properties = sharded_tensor.TensorProperties(
+                dtype=global_metadata.tensor_properties.dtype,
+                layout=global_metadata.tensor_properties.layout,
+                requires_grad=global_metadata.tensor_properties.requires_grad,
+                memory_format=global_metadata.tensor_properties.memory_format,
+                pin_memory=global_metadata.tensor_properties.pin_memory,
             )
+
+            rw_metadata = ShardedTensorMetadata(
+                shards_metadata=rw_shards,
+                size=torch.Size([global_metadata.size[0]]),
+                tensor_properties=tensor_properties,
+            )
+            return rw_local_shard, rw_metadata
 
         # pyre-ignore [33]
         state: Dict[Any, Any] = {}
@@ -527,9 +555,7 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
 
         # Fused optimizers use buffers (they don't use autograd) and we want to make sure
         # that state_dict look identical to non-fused version.
-        split_embedding_weights = wrap_weight_to_parameter(
-            emb_module.split_embedding_weights()
-        )
+        split_embedding_weights = emb_module.split_embedding_weights()
         for table_config, weight in zip(
             config.embedding_tables,
             split_embedding_weights,
@@ -547,35 +573,42 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
             # momentum1
             assert table_config.local_rows == optimizer_states[0].size(0)
             momentum1_key = f"{table_config.name}.momentum1"
-            """
-            TODO T99255928 Uncomment this code once moved to torch.dist.ShardedTensor,
-            currently it's pickled in OptimizerAgent
-            and we can't pickle types loaded from torch.package.
-            momentum1 = ShardedTensor(
-                local_shard=optimizer_states[0],
-                sharding_metadata=to_sharded_metadata(table_config.metadata)
-                if optimizer_states[0].dim() == 1
-                else table_config.metadata,
-            )"""
-            momentum1 = optimizer_states[0]
+            if optimizer_states[0].dim() == 1:
+                (local_metadata, sharded_tensor_metadata) = to_rowwise_sharded_metadata(
+                    table_config.local_metadata, table_config.global_metadata
+                )
+            else:
+                (local_metadata, sharded_tensor_metadata) = (
+                    table_config.local_metadata,
+                    table_config.global_metadata,
+                )
 
+            momentum1 = sharded_tensor.init_from_local_shards(
+                local_shards=[Shard(optimizer_states[0], local_metadata)],
+                sharded_tensor_metadata=sharded_tensor_metadata,
+            )
             state[weight][momentum1_key] = momentum1
             # momentum2
             if len(optimizer_states) == 2:
                 assert table_config.local_rows == optimizer_states[1].size(0)
                 momentum2_key = f"{table_config.name}.momentum2"
-                """
-                TODO T99255928 Uncomment this code once moved to torch.dist.ShardedTensor,
-                currently it's pickled in OptimizerAgent
-                and we can't pickle types loaded from torch.package.
-                momentum2 = ShardedTensor(
-                    local_shard=optimizer_states[1],
-                    sharding_metadata=to_sharded_metadata(table_config.metadata)
-                    if optimizer_states[1].dim() == 1
-                    else table_config.metadata,
+
+                if optimizer_states[1].dim() == 1:
+                    (
+                        local_metadata,
+                        sharded_tensor_metadata,
+                    ) = to_rowwise_sharded_metadata(
+                        table_config.local_metadata, table_config.global_metadata
+                    )
+                else:
+                    (local_metadata, sharded_tensor_metadata) = (
+                        table_config.local_metadata,
+                        table_config.global_metadata,
+                    )
+                momentum2 = sharded_tensor.init_from_local_shards(
+                    local_shards=[Shard(optimizer_states[1], local_metadata)],
+                    sharded_tensor_metadata=sharded_tensor_metadata,
                 )
-                """
-                momentum2 = optimizer_states[1]
                 state[weight][momentum2_key] = momentum2
 
         super().__init__(params, state, [param_group])
@@ -817,17 +850,62 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             grouped_configs: List[GroupedEmbeddingConfig],
         ) -> None:
             for emb_module, config in zip(emb_modules, grouped_configs):
+                # A map to record qualifided name to sharded parameter local shards
+                # as there might be cases each rank have multiple shards of a single
+                # sharded tensor, we should group the local shards together and create
+                # the sharded tensor parameter in state_dict calls
+                key_to_shards: Dict[str, List[Shard]] = {}
+                global_metadatas: Dict[str, ShardedTensorMetadata] = {}
                 for (key, param), table_config in zip(
                     emb_module.state_dict(None, prefix, keep_vars).items(),
                     config.embedding_tables,
                 ):
-                    # pyre-ignore [16]
-                    destination[key] = (
-                        ShardedTensor(
-                            local_shard=param, sharding_metadata=table_config.metadata
+                    # When optimizer is not fused
+                    # and we are asked to not detach,
+                    # we need to return full weight
+                    # as otherwise autograd won't work.
+                    if (
+                        keep_vars
+                        and isinstance(
+                            emb_module,
+                            BaseBatchedEmbeddingBag,
                         )
-                        if table_config.sharded_tensor
-                        else param
+                        and isinstance(
+                            emb_module.emb_module, DenseTableBatchedEmbeddingBagsCodegen
+                        )
+                    ):
+                        # pyre-ignore [16]
+                        destination[key] = emb_module.emb_module.weights
+                    elif table_config.global_metadata is not None:
+                        # set additional field of sharded tensor based on local tensor properties
+                        table_config.global_metadata.tensor_properties.dtype = (
+                            param.dtype
+                        )
+                        table_config.global_metadata.tensor_properties.requires_grad = (
+                            param.requires_grad
+                        )
+
+                        # record all local shards for the same sharded tensor key
+                        if key not in key_to_shards:
+                            key_to_shards[key] = [
+                                Shard(param, table_config.local_metadata)
+                            ]
+                            global_metadatas[key] = table_config.global_metadata
+                        else:
+                            key_to_shards[key].append(
+                                Shard(param, table_config.local_metadata)
+                            )
+
+                    else:
+                        destination[key] = param
+
+                # update destination with sharded tensor parameter and its key
+                for key in key_to_shards:
+                    local_shards = key_to_shards[key]
+                    global_metadata = global_metadatas[key]
+                    destination[key] = sharded_tensor.init_from_local_shards(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=global_metadata,
                     )
 
         update_destination(self._emb_modules, self.grouped_configs)

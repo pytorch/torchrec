@@ -5,6 +5,7 @@ from typing import (
     Callable,
     List,
     Mapping,
+    Set,
     Dict,
     Any,
     Collection,
@@ -51,10 +52,17 @@ class KeyedOptimizer(optim.Optimizer):
         # it happens e.g. in case of BatchedDenseEmbeddingBag.
         param_to_keys: Dict[torch.Tensor, List[str]] = {}
         for key, p in self.params.items():
-            tensor = p.local_shard if isinstance(p, ShardedTensor) else p
-            if tensor not in param_to_keys:
-                param_to_keys[tensor] = []
-            param_to_keys[tensor].append(key)
+            if isinstance(p, ShardedTensor):
+                for local_shard in p.local_shards():
+                    tensor = local_shard.tensor
+                    if tensor not in param_to_keys:
+                        param_to_keys[tensor] = []
+                    param_to_keys[tensor].append(key)
+            else:
+                tensor = p
+                if tensor not in param_to_keys:
+                    param_to_keys[tensor] = []
+                param_to_keys[tensor].append(key)
 
         state = {}
         param_groups = []
@@ -72,6 +80,7 @@ class KeyedOptimizer(optim.Optimizer):
                 param_keys += param_to_keys[p]
             packed["params"] = param_keys
             param_groups.append(packed)
+
         return {"state": state, "param_groups": param_groups}
 
     # pyre-ignore [2]
@@ -94,17 +103,18 @@ class CombinedOptimizer(KeyedOptimizer):
                 key_value = ("", key_value)
             self._optims.append(key_value)
 
-        self._new_to_old_keys: List[Dict[str, str]] = [
-            {
-                CombinedOptimizer._prepend_opt_key(param, opt_key): param
-                for param_group in opt.state_dict()["param_groups"]  # CombinedOptimizer
-                # can have CombinedOptimizers as children, so directly accessing
-                # opt.params is incorrect as CombinedOptimizers themselves do not hold
-                # any params.
-                for param in param_group["params"]
-            }
-            for opt_key, opt in self._optims
-        ]
+        self._new_to_old_keys: List[Dict[str, str]] = []
+        all_keys: Set[str] = set()
+        for opt_key, opt in self._optims:
+            new_to_old_keys = {}
+            for param_group in opt.state_dict()["param_groups"]:
+                for param in param_group["params"]:
+                    new_param = CombinedOptimizer._prepend_opt_key(param, opt_key)
+                    if new_param in all_keys:
+                        raise ValueError(f"Duplicate param key {new_param}")
+                    all_keys.add(new_param)
+                    new_to_old_keys[new_param] = param
+            self._new_to_old_keys.append(new_to_old_keys)
 
     def __repr__(self) -> str:
         ret = []
@@ -137,10 +147,11 @@ class CombinedOptimizer(KeyedOptimizer):
             opt_key: str,
         ) -> Dict[Any, Any]:
             params = param_group["params"]
-            param_group["params"] = [
+            updated = deepcopy(param_group)
+            updated["params"] = [
                 CombinedOptimizer._prepend_opt_key(param, opt_key) for param in params
             ]
-            return param_group
+            return updated
 
         state = {}
         param_groups = []
@@ -164,18 +175,17 @@ class CombinedOptimizer(KeyedOptimizer):
         return {"state": state, "param_groups": param_groups}
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        state_dict = deepcopy(state_dict)
-
         # pyre-ignore[3]
         def update_params(
             param_group: Dict[Any, Any],  # pyre-ignore[2]
             new_to_old_keys: Dict[str, str],
         ) -> Dict[Any, Any]:
             params = param_group["params"]
-            param_group["params"] = [
+            updated = deepcopy(param_group)
+            updated["params"] = [
                 new_to_old_keys[param] for param in params if param in new_to_old_keys
             ]
-            return param_group
+            return updated
 
         state = state_dict["state"]
         param_groups = state_dict["param_groups"]
@@ -190,6 +200,7 @@ class CombinedOptimizer(KeyedOptimizer):
                 for param_group in param_groups
                 if all(p in new_to_old_keys for p in param_group["params"])
             ]
+
             opt_state_dict = {"state": opt_state, "param_groups": opt_param_groups}
             opt.load_state_dict(opt_state_dict)
 
@@ -221,10 +232,14 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
         optim_factory: OptimizerFactory,
     ) -> None:
         # Get local shards and dedup.
-        tensors = {
-            (value.local_shard if isinstance(value, ShardedTensor) else value)
-            for value in params.values()
-        }
+        tensors: Set[torch.Tensor] = set()
+        for value in params.values():
+            if isinstance(value, ShardedTensor):
+                for local_shard in value.local_shards():
+                    tensors.add(local_shard.tensor)
+            else:
+                tensors.add(value)
+
         self._optimizer: optim.Optimizer = optim_factory(list(tensors))
         super().__init__(params, self._optimizer.state, self._optimizer.param_groups)
 

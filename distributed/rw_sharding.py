@@ -165,6 +165,8 @@ class RwEmbeddingSharding(EmbeddingSharding):
     ) -> None:
         super().__init__()
         self._pg = pg
+        if device is None:
+            device = torch.device("cpu")
         self._device = device
         self._is_sequence = is_sequence
         sharded_tables_per_rank = self._shard(sharded_tables)
@@ -216,14 +218,22 @@ class RwEmbeddingSharding(EmbeddingSharding):
             )
             shards = [
                 ShardMetadata(
-                    dims=[
+                    shard_lengths=[
                         local_rows[rank],
                         table.embedding_dim,
                     ],
-                    offsets=[block_size * min(rank, last_rank), 0],
+                    shard_offsets=[block_size * min(rank, last_rank), 0],
+                    placement=f"rank:{rank}/{self._device}",
                 )
                 for rank in range(world_size)
             ]
+
+            # construct the global sharded_tensor_metadata
+            table.global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([table.num_embeddings, table.embedding_dim]),
+            )
+
             for rank in range(world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
@@ -239,8 +249,8 @@ class RwEmbeddingSharding(EmbeddingSharding):
                         rank=table.rank,
                         local_rows=local_rows[rank],
                         local_cols=table.embedding_dim,
-                        sharded_tensor=True,
-                        metadata=ShardedTensorMetadata(shards=shards),
+                        local_metadata=shards[rank],
+                        global_metadata=table.global_metadata,
                     )
                 )
         return tables_per_rank

@@ -447,16 +447,17 @@ class ModelParallelTest(unittest.TestCase):
             assert name in global_state_dict
             global_tensor = global_state_dict[name]
             if isinstance(tensor, ShardedTensor):
-                assert global_tensor.ndim == tensor.local_shard.ndim
-                shard_meta = tensor.sharding_metadata.shards[rank]
-                t = global_tensor.detach()
-                t = t[
-                    shard_meta.offsets[0] : shard_meta.offsets[0]
-                    + tensor.local_shard.shape[0],
-                    shard_meta.offsets[1] : shard_meta.offsets[1]
-                    + tensor.local_shard.shape[1],
-                ]
-                tensor.local_shard.copy_(t)
+                for local_shard in tensor.local_shards():
+                    assert global_tensor.ndim == local_shard.tensor.ndim
+                    shard_meta = local_shard.metadata
+                    t = global_tensor.detach()
+                    t = t[
+                        shard_meta.shard_offsets[0] : shard_meta.shard_offsets[0]
+                        + local_shard.tensor.shape[0],
+                        shard_meta.shard_offsets[1] : shard_meta.shard_offsets[1]
+                        + local_shard.tensor.shape[1],
+                    ]
+                    local_shard.tensor.copy_(t)
             else:
                 tensor.copy_(global_tensor)
 
