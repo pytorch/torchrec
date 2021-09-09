@@ -622,7 +622,6 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
     def permute(
         self, indices: List[int], indices_tensor: Optional[torch.Tensor] = None
     ) -> "KeyedJaggedTensor":
-        permuted_keys: List[str] = []
 
         if indices_tensor is None:
             indices_tensor = torch.tensor(
@@ -630,22 +629,21 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             )
 
         offset_per_key = self.offset_per_key()
-
+        permuted_keys: List[str] = []
         permuted_offset_per_key: List[int] = [0]
         permuted_lengths_sum = 0
-        permuted_index = 0
-        seen: Dict[str, bool] = {}
+        seen: Dict[str, int] = {}
         for index in indices:
             key = self._keys[index]
-            assert key not in seen, "Permute() does not support duplicate keys"
-            seen[key] = True
+            count = seen.get(key, 0)
+
             start_offset = offset_per_key[index]
             end_offset = offset_per_key[index + 1]
 
+            permuted_keys.append(f"{key}@copy_{count}" if count else key)
             permuted_lengths_sum += end_offset - start_offset
-            permuted_keys.append(key)
             permuted_offset_per_key.append(permuted_lengths_sum)
-            permuted_index += 1
+            seen[key] = count + 1
 
         (
             permuted_lengths,

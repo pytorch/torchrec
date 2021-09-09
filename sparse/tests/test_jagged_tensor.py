@@ -544,6 +544,59 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         )
         self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
 
+    def test_permute_duplicates(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0])
+        keys = ["index_0", "index_1", "index_2"]
+
+        jag_tensor = KeyedJaggedTensor.from_lengths_sync(
+            values=values,
+            keys=keys,
+            lengths=lengths,
+        )
+
+        indices = [1, 0, 2, 1, 1]
+        permuted_jag_tensor = jag_tensor.permute(indices)
+
+        self.assertEqual(
+            permuted_jag_tensor.keys(),
+            ["index_1", "index_0", "index_2", "index_1@copy_1", "index_1@copy_2"],
+        )
+        self.assertEqual(
+            permuted_jag_tensor.offset_per_key(),
+            [0, 3, 5, 8, 11, 14],
+        )
+        self.assertTrue(
+            torch.equal(
+                permuted_jag_tensor.values(),
+                torch.Tensor(
+                    [
+                        3.0,
+                        4.0,
+                        5.0,
+                        1.0,
+                        2.0,
+                        6.0,
+                        7.0,
+                        8.0,
+                        3.0,
+                        4.0,
+                        5.0,
+                        3.0,
+                        4.0,
+                        5.0,
+                    ]
+                ),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                permuted_jag_tensor.lengths(),
+                torch.IntTensor([1, 1, 1, 0, 2, 0, 0, 3, 0, 1, 1, 1, 1, 1, 1]),
+            )
+        )
+        self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
+
     # pyre-ignore[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
