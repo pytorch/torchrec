@@ -306,6 +306,16 @@ class TestJaggedTensor(unittest.TestCase):
             )
         )
 
+    def test_float_lengths_offsets_throws(self) -> None:
+        values = torch.rand((7, 3))
+        lengths = torch.tensor([3.0, 4.0])
+        offsets = torch.tensor([0.0, 3.0, 7.0])
+
+        with self.assertRaises(AssertionError):
+            JaggedTensor(values=values, lengths=lengths)
+        with self.assertRaises(AssertionError):
+            JaggedTensor(values=values, offsets=offsets)
+
     def test_to(self) -> None:
         j = JaggedTensor(
             offsets=torch.tensor([0, 2, 2, 3]),

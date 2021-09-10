@@ -152,6 +152,10 @@ class JaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         self._values: torch.Tensor = values
         self._weights: Optional[torch.Tensor] = weights
         _assert_offsets_or_lengths_is_provided(offsets, lengths)
+        if offsets is not None:
+            _assert_tensor_has_no_elements_or_has_integers(offsets, "offsets")
+        if lengths is not None:
+            _assert_tensor_has_no_elements_or_has_integers(lengths, "lengths")
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
 
