@@ -9,7 +9,6 @@ from hypothesis import given, settings
 from torch import nn
 from torchrec.fx import symbolic_trace
 from torchrec.modules.mlp import Perceptron, MCPerceptron, MLP, MCMLP
-from torchrec.modules.normalization import LayerNorm
 from torchrec.modules.utils import extract_module_or_tensor_callable
 
 
