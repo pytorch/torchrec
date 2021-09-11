@@ -3,7 +3,7 @@
 import abc
 from collections import OrderedDict
 from math import sqrt
-from typing import List, Optional, Dict, Any, Union, Tuple
+from typing import List, Optional, Dict, Any, Union, Tuple, cast
 
 import torch
 import torch.distributed._sharded_tensor as sharded_tensor
@@ -16,6 +16,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
+from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     BaseEmbeddingLookup,
@@ -845,8 +846,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             destination._metadata = OrderedDict()
 
         def update_destination(
-            # pyre-ignore [24]
-            emb_modules: nn.ModuleList,
+            emb_modules: "nn.ModuleList[BaseEmbeddingBag]",
             grouped_configs: List[GroupedEmbeddingConfig],
         ) -> None:
             for emb_module, config in zip(emb_modules, grouped_configs):
@@ -912,6 +912,31 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         update_destination(self._score_emb_modules, self.grouped_score_configs)
 
         return destination
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        def _load(
+            emb_modules: "nn.ModuleList[BaseEmbeddingBag]",
+            state_dict: "OrderedDict[str, torch.Tensor]",
+        ) -> Tuple[List[str], List[str]]:
+            missing_keys = []
+            for emb_module in emb_modules:
+                for key, param in emb_module.state_dict(None).items():
+                    if key in state_dict:
+                        param.copy_(state_dict[key])
+                        del state_dict[key]
+                    else:
+                        missing_keys.append(cast(str, key))
+            unexepected_keys = list(state_dict.keys())
+            return missing_keys, unexepected_keys
+
+        m1, u1 = _load(self._emb_modules, state_dict)
+        m2, u2 = _load(self._score_emb_modules, state_dict)
+
+        return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""

@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Type, Any, TypeVar, Mapping, Union
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.dp_sharding import DpEmbeddingSharding
 from torchrec.distributed.embedding_sharding import (
@@ -53,6 +54,17 @@ def create_embedding_sharding(
         return TwRwEmbeddingSharding(sharded_tables, pg, device)
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
+
+
+def filter_state_dict(
+    state_dict: "OrderedDict[str, torch.Tensor]", name: str
+) -> "OrderedDict[str, torch.Tensor]":
+    rtn_dict = OrderedDict()
+    for key, value in state_dict.items():
+        if key.startswith(name):
+            # + 1 to length is to remove the '.' after the key
+            rtn_dict[key[len(name) + 1 :]] = value
+    return rtn_dict
 
 
 def _create_sharded_table_configs(
@@ -326,6 +338,29 @@ class ShardedEmbeddingBagCollection(
             else:
                 lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
         return destination
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        prefix: str = "",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexpected_keys = []
+        for lookup in self._lookups:
+            if isinstance(lookup, DistributedDataParallel):
+                missing, unexpected = lookup.module.load_state_dict(
+                    filter_state_dict(state_dict, prefix + "embedding_bags"), strict
+                )
+            else:
+                missing, unexpected = lookup.load_state_dict(
+                    filter_state_dict(state_dict, prefix + "embedding_bags"), strict
+                )
+            missing_keys.extend(missing)
+            unexpected_keys.extend(unexpected)
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
+        )
 
     def sparse_grad_parameter_names(
         self,

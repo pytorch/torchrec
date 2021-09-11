@@ -3,11 +3,13 @@
 import multiprocessing
 import os
 import unittest
-from typing import List, Tuple, Optional, Callable
+from collections import OrderedDict
+from typing import List, Tuple, Optional, Callable, cast
 
 import hypothesis.strategies as st
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -532,3 +534,114 @@ class ModelParallelTest(unittest.TestCase):
             global_model.train(False)
             full_pred = global_model(global_input)
             return full_pred
+
+
+class ModelParallelStateDictTest(unittest.TestCase):
+    def setUp(self) -> None:
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["LOCAL_WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda:0")
+            backend = "nccl"
+            torch.cuda.set_device(self.device)
+        else:
+            self.device = torch.device("cpu")
+            backend = "gloo"
+        if not dist.is_initialized():
+            dist.init_process_group(backend=backend)
+
+        num_features = 4
+        num_weighted_features = 2
+        self.batch_size = 3
+        self.num_float_features = 10
+
+        self.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(num_features)
+        ]
+        self.weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4,
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(num_weighted_features)
+        ]
+
+    def _generate_dmps_and_batch(
+        self,
+    ) -> Tuple[List[DistributedModelParallel], ModelInput]:
+        _, local_batch = ModelInput.generate(
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=self.num_float_features,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+        batch = local_batch[0].to(self.device)
+
+        # Create two TestSparseNN modules, wrap both in DMP
+        dmps = []
+        for _ in range(2):
+            m = TestSparseNN(
+                tables=self.tables,
+                weighted_tables=self.weighted_tables,
+                dense_device=self.device,
+                sparse_device=torch.device("meta"),
+            )
+            dmp = DistributedModelParallel(
+                module=m,
+                init_data_parallel=False,
+                device=self.device,
+            )
+
+            with torch.no_grad():
+                dmp(batch)
+                dmp.init_data_parallel()
+            dmps.append(dmp)
+        return (dmps, batch)
+
+    def test_load_state_dict(self) -> None:
+        models, batch = self._generate_dmps_and_batch()
+        m1, m2 = models
+
+        # load the second's (m2's) with the first (m1's) state_dict
+        m2.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", m1.state_dict()), strict=False
+        )
+
+        # validate the models are equivalent
+        with torch.no_grad():
+            loss1, pred1 = m1(batch)
+            loss2, pred2 = m2(batch)
+            self.assertTrue(torch.equal(loss1, loss2))
+            self.assertTrue(torch.equal(pred1, pred2))
+        sd1 = m1.state_dict()
+        for key, value in m2.state_dict().items():
+            v2 = sd1[key]
+            self.assertTrue(torch.equal(value, v2))
+
+    def test_load_state_dict_prefix(self) -> None:
+        (m1, m2), batch = self._generate_dmps_and_batch()
+
+        # load the second's (m2's) with the first (m1's) state_dict
+        m2.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", m1.state_dict(prefix="alpha")),
+            prefix="alpha",
+            strict=False,
+        )
+
+        # validate the models are equivalent
+        sd1 = m1.state_dict()
+        for key, value in m2.state_dict().items():
+            v2 = sd1[key]
+            self.assertTrue(torch.equal(value, v2))

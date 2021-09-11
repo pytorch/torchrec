@@ -7,7 +7,11 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn import parallel
-from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
+from torch.nn.modules.module import _IncompatibleKeys
+from torchrec.distributed.embedding import (
+    EmbeddingBagCollectionSharder,
+    filter_state_dict,
+)
 from torchrec.distributed.planner import EmbeddingShardingPlanner, sharder_name
 from torchrec.distributed.types import (
     ShardingPlan,
@@ -28,7 +32,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     """
     Entry point to model parallelism.
     Example:
-        @torch.no_grad()
+        >>> @torch.no_grad()
         def init_weights(m):
             if isinstance(m, nn.Linear)
                 m.weight.fill_(1.0)
@@ -40,14 +44,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         m = DistributedModelParallel(m)
         m.apply(init_weights)
 
+    Constructor Args:
+        module: module to wrap,
+        pg: this processes' process group, defaults to dist.GroupMember.WORLD,
+        device: this device, defaults to cpu,
+        plan: plan to use when sharding, defaults to EmbeddingShardingPlanner.collective_plan(),
+        sharders: ModuleSharders available to shard with, defaults to EmbeddingBagCollectionSharder(),
+        init_data_parallel: data-parallel modules can be lazy, i.e. they delay parameter initialization until the first forward pass. Pass True if that's a case to delay initialization of data parallel modules. Do first forward pass and then call DistributedModelParallel.init_data_parallel().
+
     Call Args:
-        module: module to shard
-        plan: sharding plan to use
-        sharders: list of supported sharders per module type
-        init_data_parallel: data-parallel modules can be lazy,
-            i.e. they delay parameter initialization until the first forward pass.
-            Pass True if that's a case to delay initialization of data parallel modules.
-            Do first forward pass and then call DistributedModelParallel.init_data_parallel().
 
     Returns:
         None
@@ -275,6 +280,38 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             for name, child in module.named_children():
                 self._state_dict(child, destination, prefix + name + ".", keep_vars)
         return destination
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        prefix: str = "",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        return self._load_state_dict(self.module, state_dict, prefix, strict)
+
+    def _load_state_dict(
+        self,
+        module: nn.Module,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        prefix: str = "",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexepected_keys = []
+        if isinstance(module, parallel.DistributedDataParallel):
+            return module.module.load_state_dict(state_dict, strict)
+        elif isinstance(module, ShardedModule):
+            return module.load_state_dict(state_dict, strict=strict)
+        else:
+            for name, child in module.named_children():
+                m_keys, u_keys = self._load_state_dict(
+                    child, filter_state_dict(state_dict, prefix + name), "", strict
+                )
+                missing_keys.extend(m_keys)
+                unexepected_keys.extend(u_keys)
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexepected_keys
+        )
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
