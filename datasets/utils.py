@@ -216,6 +216,7 @@ class LoadFiles(IterDataPipe[Tuple[str, "IOBase"]]):
         # pyre-ignore[4]
         self.open_kw = open_kw
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
+        self.path_manager.set_strict_kwargs_checking(False)
 
     # Remove annotation due to 'IOBase' is a general type and true type
     # is determined at runtime based on mode. Some `DataPipe` requiring

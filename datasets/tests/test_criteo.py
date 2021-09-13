@@ -6,8 +6,9 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Any, Dict, Generator
+from typing import List, Any, Dict, Generator
 
+from torch.utils.data import DataLoader
 from torchrec.datasets.criteo import criteo_kaggle, criteo_terabyte
 
 
@@ -108,3 +109,65 @@ class CriteoKaggleTest(_CriteoTest):
             for sample in dataset:
                 self._validate_sample(sample, train=False)
             self.assertEqual(len(list(iter(dataset))), 10)
+
+
+class CriteoDataLoaderTest(_CriteoTest):
+    def _validate_dataloader_sample(
+        self,
+        sample: Dict[str, List[Any]],  # pyre-ignore[2]
+        batch_size: int,
+        train: bool = True,
+    ) -> None:
+        unbatched_samples = [{} for _ in range(self._sample_len(sample))]
+        for k, batched_values in sample.items():
+            for (idx, value) in enumerate(batched_values):
+                unbatched_samples[idx][k] = value
+        for sample in unbatched_samples:
+            self._validate_sample(sample, train=train)
+
+    def _sample_len(
+        self,
+        sample: Dict[str, List[Any]],  # pyre-ignore[2]
+    ) -> int:
+        return len(next(iter(sample.values())))
+
+    def _test_dataloader(
+        self,
+        num_workers: int = 0,
+        batch_size: int = 1,
+        num_tsvs: int = 1,
+        num_rows_per_tsv: int = 10,
+        train: bool = True,
+    ) -> None:
+        with contextlib.ExitStack() as stack:
+            pathnames = [
+                stack.enter_context(
+                    self._create_dataset_tsv(num_rows=num_rows_per_tsv, train=train)
+                )
+                for _ in range(num_tsvs)
+            ]
+            dataset = criteo_terabyte(pathnames)
+            dataloader = DataLoader(
+                dataset, batch_size=batch_size, num_workers=num_workers
+            )
+            total_len = 0
+            for sample in dataloader:
+                sample_len = self._sample_len(sample)
+                total_len += sample_len
+                self._validate_dataloader_sample(
+                    sample, batch_size=batch_size, train=train
+                )
+            self.assertEqual(total_len, len(list(iter(dataset))))
+
+    def test_multiple_train_workers(self) -> None:
+        self._test_dataloader(
+            num_workers=4, batch_size=16, num_tsvs=5, num_rows_per_tsv=32
+        )
+
+    def test_fewer_tsvs_than_workers(self) -> None:
+        self._test_dataloader(
+            num_workers=2, batch_size=16, num_tsvs=1, num_rows_per_tsv=16
+        )
+
+    def test_single_worker(self) -> None:
+        self._test_dataloader(batch_size=16, num_tsvs=2, num_rows_per_tsv=16)

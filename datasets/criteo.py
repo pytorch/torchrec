@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from typing import (
+    Iterator,
     Any,
     Callable,
     Dict,
@@ -10,6 +11,7 @@ from typing import (
     Union,
 )
 
+import torch
 import torch.utils.data.datapipes as dp
 from torch.utils.data import IterDataPipe
 from torchrec.datasets.utils import LoadFiles, ReadLinesFromCSV, safe_cast
@@ -41,19 +43,35 @@ def _default_row_mapper(example: List[str]) -> Dict[str, Union[int, str]]:
     }
 
 
-def _criteo(
-    paths: Iterable[str],
-    *,
-    # pyre-ignore[2]
-    row_mapper: Optional[Callable[[List[str]], Any]] = _default_row_mapper,
-    # pyre-ignore[2]
-    **open_kw,
-) -> IterDataPipe:
-    datapipe = LoadFiles(paths, mode="r", **open_kw)
-    datapipe = ReadLinesFromCSV(datapipe, delimiter="\t")
-    if row_mapper:
-        datapipe = dp.iter.Mapper(datapipe, row_mapper)
-    return datapipe
+class CriteoIterDataPipe(IterDataPipe):
+    def __init__(
+        self,
+        paths: Iterable[str],
+        *,
+        # pyre-ignore[2]
+        row_mapper: Optional[Callable[[List[str]], Any]] = _default_row_mapper,
+        # pyre-ignore[2]
+        **open_kw,
+    ) -> None:
+        self.paths = paths
+        self.row_mapper = row_mapper
+        self.open_kw: Any = open_kw  # pyre-ignore[4]
+
+    # pyre-ignore[3]
+    def __iter__(self) -> Iterator[Any]:
+        worker_info = torch.utils.data.get_worker_info()
+        paths = self.paths
+        if worker_info is not None:
+            paths = (
+                path
+                for (idx, path) in enumerate(paths)
+                if idx % worker_info.num_workers == worker_info.id
+            )
+        datapipe = LoadFiles(paths, mode="r", **self.open_kw)
+        datapipe = ReadLinesFromCSV(datapipe, delimiter="\t")
+        if self.row_mapper:
+            datapipe = dp.iter.Mapper(datapipe, self.row_mapper)
+        yield from datapipe
 
 
 def criteo_terabyte(
@@ -78,7 +96,7 @@ def criteo_terabyte(
         >>> datapipe = dp.iter.Collator(datapipe)
         >>> batch = next(iter(datapipe))
     """
-    return _criteo(paths, row_mapper=row_mapper, **open_kw)
+    return CriteoIterDataPipe(paths, row_mapper=row_mapper, **open_kw)
 
 
 def criteo_kaggle(
@@ -105,4 +123,4 @@ def criteo_kaggle(
         >>> )
         >>> example = next(iter(test_datapipe))
     """
-    return _criteo((path,), row_mapper=row_mapper, **open_kw)
+    return CriteoIterDataPipe((path,), row_mapper=row_mapper, **open_kw)
