@@ -13,7 +13,6 @@ from torchrec.modules.embedding_modules import (  # noqa
     EmbeddingCollection,
 )  # noqa
 from torchrec.modules.linear import MCLinear  # noqa
-from torchrec.modules.mlp import Perceptron, MLP, MCPerceptron, MCMLP  # noqa
 from torchrec.modules.score_learning import PositionWeightsAttacher  # noqa
 from torchrec.modules.sparsenn import SimpleSparseNN, SparseArch  # noqa
 from torchrec.sparse.jagged_tensor import (  # noqa
