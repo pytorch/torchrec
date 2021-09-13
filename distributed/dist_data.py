@@ -23,7 +23,24 @@ except OSError:
 
 
 def _recat(local_split: int, num_splits: int, stagger: int = 1) -> List[int]:
-    # Reconcatate indices from [x1,x2..xZ, y1,y2,..yX] -> [x1,y1,x2,y2,...xX, yX]
+    """
+    Calculates relevant recat indices required to reorder All-to-All Collective
+
+    Call Args:
+        local_split: how many features in local split
+        num_splits: how many splits (typically WORLD_SIZE)
+        stagger: secondary reordering, (typically 1, but WORLD_SIZE/LOCAL_WORLD_SIZE for TWRW)
+
+    Returns:
+        List[int]
+
+    Example:
+    >>> _recat(2, 4, 1)
+        [0, 2, 4, 6, 1, 3, 5, 7]
+    >>> _recat(2, 4, 2)
+        [0, 4, 2, 6, 1, 5, 3, 7]
+
+    """
     recat: List[int] = []
 
     feature_order: List[int] = [
@@ -229,6 +246,7 @@ class KJTAllToAll(nn.Module):
             each pg.rank().  It is assumed the KeyedJaggedTensor is ordered by destination rank.
             Same for all ranks.
         device (Optional[torch.device]): device on which buffers will be allocated
+        stagger (int): stagger value to apply to recat tensor, see _recat function for more detail
 
     Call Args:
         input (KeyedJaggedTensor): Input KJT tensor
