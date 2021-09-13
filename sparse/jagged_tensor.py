@@ -169,6 +169,26 @@ class JaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             weights=weights,
         )
 
+    @staticmethod
+    def from_dense_lengths(
+        values: torch.Tensor,
+        lengths: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+    ) -> "JaggedTensor":
+        """
+        Constructs `JaggedTensor` from dense values/weights of shape (B, N,).
+
+        Note that `lengths` is still of shape (B,).
+        """
+        mask2d = torch.arange(values.size(1)).expand(
+            values.size(0), -1
+        ) < lengths.unsqueeze(-1)
+        return JaggedTensor(
+            values=values[mask2d],
+            weights=weights[mask2d] if weights is not None else None,
+            lengths=lengths,
+        )
+
     def lengths(self) -> torch.Tensor:
         _lengths = _maybe_compute_lengths(self._lengths, self._offsets)
         self._lengths = _lengths

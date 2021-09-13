@@ -208,6 +208,29 @@ def block_bucketize_ref(
 
 
 class TestJaggedTensor(unittest.TestCase):
+    def test_from_dense_lengths(self) -> None:
+        values = torch.Tensor(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]
+        )
+        weights = 12.0 - values
+        j0 = JaggedTensor.from_dense_lengths(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 3]),
+        )
+        self.assertTrue(torch.equal(j0.lengths(), torch.IntTensor([1, 0, 2, 3])))
+        self.assertTrue(
+            torch.equal(j0.values(), torch.Tensor([1.0, 7.0, 8.0, 10.0, 11.0, 12.0]))
+        )
+        self.assertTrue(j0.weights_or_none() is None)
+        j1 = JaggedTensor.from_dense_lengths(
+            values=values,
+            lengths=torch.IntTensor([2, 0, 1, 1]),
+            weights=weights,
+        )
+        self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([2, 0, 1, 1])))
+        self.assertTrue(torch.equal(j1.values(), torch.Tensor([1.0, 2.0, 7.0, 10.0])))
+        self.assertTrue(torch.equal(j1.weights(), torch.Tensor([11.0, 10.0, 5.0, 2.0])))
+
     def test_key_lookup(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         keys = ["index_0", "index_1"]
