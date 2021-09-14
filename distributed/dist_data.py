@@ -102,16 +102,18 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
         out_lengths = torch.empty(
             dim_0 * dim_1 * self._workers,
             device=self._device,
-            dtype=torch.int32,
+            dtype=in_lengths.dtype,
         )
 
         with record_function("## all2all_data:lengths ##"):
-            self._pg.alltoall_base(
+            dist.all_to_all_single(
                 output=out_lengths,
                 input=in_lengths,
                 output_split_sizes=[dim_0 * dim_1] * self._workers,
                 input_split_sizes=[split * dim_1 for split in self._splits],
-            ).wait()
+                group=self._pg,
+                async_op=False,
+            )
 
         self._in_lengths_per_worker = _split_lengths(
             splits, input.keys(), input.offset_per_key()
@@ -125,13 +127,16 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
             device=self._device,
             dtype=in_values.dtype,
         )
-        # pyre-ignore [11]: Annotation `dist.Work` is not defined as a type.
-        self._values_awaitable: dist.Work = self._pg.alltoall_base(
+        # Pyre-fixme [11]
+        self._values_awaitable: dist.Work = dist.all_to_all_single(
             output=out_values,
             input=in_values,
             output_split_sizes=self._out_lengths_per_worker,
             input_split_sizes=self._in_lengths_per_worker,
+            group=self._pg,
+            async_op=True,
         )
+
         self._values: torch.Tensor = out_values
         self._lengths: torch.Tensor = out_lengths
 
@@ -145,12 +150,13 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
                 device=self._device,
                 dtype=in_weights.dtype,
             )
-
-            self._weights_awaitable: dist.Work = self._pg.alltoall_base(
+            self._weights_awaitable: dist.Work = dist.all_to_all_single(
                 output=out_weights,
                 input=in_weights,
                 output_split_sizes=self._out_lengths_per_worker,
                 input_split_sizes=self._in_lengths_per_worker,
+                group=self._pg,
+                async_op=True,
             )
             self._weights: torch.Tensor = out_weights
 

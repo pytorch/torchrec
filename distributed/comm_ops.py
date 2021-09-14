@@ -119,9 +119,9 @@ class All2AllVInfo(object):
         D_local_list : (List[Int]): embedding dimension of each embedding table
             locally (in my current rank)
         input_split_sizes (list[Int]): The input split sizes for each rank, this
-            remembers how to split the input when doing the alltoall_single operation
+            remembers how to split the input when doing the all_to_all_single operation
         output_split_sizes (list[Int]): The output split sizes for each rank, this
-            remembers how to fill the output when doing the alltoall_single operation
+            remembers how to fill the output when doing the all_to_all_single operation
     """
 
     dims_sum_per_rank: List[int]
