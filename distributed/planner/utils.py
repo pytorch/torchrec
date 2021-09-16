@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import math
-from typing import Any, Type, Dict, Optional, List, cast
+from typing import Any, Type, Dict, Optional, List, cast, Tuple
 
 import torch
 import torch.distributed as dist
 from torchrec.distributed.comm import get_local_size, get_num_groups
+from torchrec.distributed.planner.parameter_sharding import ParameterShardingFactory
 from torchrec.distributed.planner.types import (
     ShardingOption,
     Topology,
@@ -19,16 +20,17 @@ from torchrec.distributed.types import (
     ParameterStorage,
     ShardingPlan,
     ShardingType,
-    ParameterSharding,
 )
 
 MAX_DDR_STORAGE: int = 4 * 1024 * 1024 * 1024 * 1024  # 4 TB
+MIN_DIM: int = 32
 
 SHARDING_PREFERENCE: Dict[str, int] = {
     ShardingType.DATA_PARALLEL.value: 0,
     ShardingType.TABLE_WISE.value: 1,
     ShardingType.TABLE_ROW_WISE.value: 2,
     ShardingType.ROW_WISE.value: 3,
+    ShardingType.COLUMN_WISE.value: 4,
 }
 
 
@@ -74,9 +76,19 @@ def is_enough_storage(
         ), "Sharding option must have a device for TW storage calcuation"
         device_ranks = [device.rank]
         host_ranks = [topology.host_and_device_by_rank[device.rank][0]]
+    elif sharding_option.sharding_type == ShardingType.COLUMN_WISE.value:
+        assert (
+            device is not None
+        ), "Sharding option must have a device for CW storage calcuation"
+        device_ranks = [device.rank]
+        host_ranks = [topology.host_and_device_by_rank[device.rank][0]]
+        storage = {
+            # pyre-fixme[58]
+            k: math.ceil(v / sharding_option.shards_count)
+            for k, v in storage.items()
+        }
     else:
         raise ValueError(f"unsupported sharding_type {sharding_option.sharding_type}")
-
     for storage_type, storage_usage in storage.items():
         if storage_type == ParameterStorage.HBM.value:
             for device_rank in device_ranks:
@@ -115,16 +127,16 @@ def allocate_param(
         }
     elif sharding_option.sharding_type == ShardingType.TABLE_ROW_WISE.value:
         assert (
-            sharding_option.rank is not None
+            sharding_option.ranks is not None
         ), "Sharding option must have a device for TWRW storage calcuation"
         device_ranks = [
             device.rank
             # pyre-fixme[22]: The cast is redundant.
-            for device in topology.get_host(cast(int, sharding_option.rank)).devices
+            for device in topology.get_host(cast(int, sharding_option.ranks[0])).devices
         ]
         host_ranks = [
             # pyre-fixme[22]: The cast is redundant.
-            topology.host_and_device_by_rank[cast(int, sharding_option.rank)][0]
+            topology.host_and_device_by_rank[cast(int, sharding_option.ranks[0])][0]
         ]
         storage = {
             k: math.ceil(v / len(device_ranks if k == "hbm" else host_ranks))
@@ -132,11 +144,24 @@ def allocate_param(
         }
     elif sharding_option.sharding_type == ShardingType.TABLE_WISE.value:
         assert (
-            sharding_option.rank is not None
+            sharding_option.ranks is not None
         ), "Sharding option must have a device for TW storage calcuation"
         # pyre-fixme[22]: The cast is redundant.
-        device_ranks = [cast(int, sharding_option.rank)]
-        host_ranks = [topology.host_and_device_by_rank[sharding_option.rank][0]]
+        device_ranks = [cast(int, sharding_option.ranks[0])]
+        # pyre-fixme[16]
+        host_ranks = [topology.host_and_device_by_rank[sharding_option.ranks[0]][0]]
+    elif sharding_option.sharding_type == ShardingType.COLUMN_WISE.value:
+        assert (
+            sharding_option.ranks is not None
+        ), "Sharding option must have at least one device for CW storage calcuation"
+        # for col-wise sharding, we allocate one shard at a time
+        device_ranks = [sharding_option.ranks[-1]]
+        host_ranks = [topology.host_and_device_by_rank[sharding_option.ranks[-1]][0]]
+        storage = {
+            # pyre-fixme[58]
+            k: math.ceil(v / sharding_option.shards_count)
+            for k, v in storage.items()
+        }
     else:
         raise ValueError(f"unsupported sharding_type {sharding_option.sharding_type}")
 
@@ -189,15 +214,18 @@ def param_sort_key(
 
 def to_plan(
     parameter_infos: List[ParameterInfo],
+    device: torch.device,
+    world_size: int,
+    local_size: Optional[int],
 ) -> ShardingPlan:
     plan = {}
     for parameter_info in parameter_infos:
-        sharding_option = parameter_info.sharding_options[0]
         shards = plan.get(parameter_info.prefix, {})
-        shards[parameter_info.name] = ParameterSharding(
-            sharding_type=sharding_option.sharding_type,
-            compute_kernel=sharding_option.compute_kernel,
-            rank=sharding_option.rank,
+        shards[parameter_info.name] = ParameterShardingFactory.shard_parameters(
+            param_info=parameter_info,
+            device=device,
+            world_size=world_size,
+            local_size=local_size,
         )
         plan[parameter_info.prefix] = shards
     return ShardingPlan(plan)

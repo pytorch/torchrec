@@ -7,13 +7,14 @@ from typing import List, Tuple, Optional, Dict, Any
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import KJTAllToAll
 from torchrec.distributed.embedding_types import (
-    ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
     BaseEmbeddingLookup,
     SparseFeatures,
     EmbeddingComputeKernel,
+    ShardedEmbeddingTableShard,
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.embedding_configs import (
@@ -102,10 +103,10 @@ class SparseFeaturesAllToAll(nn.Module):
 
 # group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
 def group_tables(
-    tables_per_rank: List[List[ShardedEmbeddingTable]],
+    tables_per_rank: List[List[ShardedEmbeddingTableShard]],
 ) -> Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
     def _group_tables_helper(
-        embedding_tables: List[ShardedEmbeddingTable],
+        embedding_tables: List[ShardedEmbeddingTableShard],
     ) -> Tuple[List[GroupedEmbeddingConfig], List[GroupedEmbeddingConfig]]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
         score_grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
@@ -119,8 +120,8 @@ def group_tables(
                         EmbeddingComputeKernel.BATCHED_FUSED,
                         EmbeddingComputeKernel.SSD,
                     ]:
-                        grouped_tables: List[ShardedEmbeddingTable] = []
-                        grouped_score_tables: List[ShardedEmbeddingTable] = []
+                        grouped_tables: List[ShardedEmbeddingTableShard] = []
+                        grouped_score_tables: List[ShardedEmbeddingTableShard] = []
                         for table in embedding_tables:
                             if table.compute_kernel in [
                                 EmbeddingComputeKernel.BATCHED_FUSED_UVM,
@@ -254,6 +255,10 @@ class EmbeddingSharding(abc.ABC):
 
     @abc.abstractmethod
     def embedding_dims(self) -> List[int]:
+        pass
+
+    @abc.abstractmethod
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
         pass
 
     @abc.abstractmethod

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Generic, Optional, TypeVar, List, Type
 
+from torch.distributed._sharding_spec import ShardingSpec
+
 try:
     # For python 3.6 and below, GenericMeta will be used by
     # other metaclasses (i.e. AwaitableMeta) for customized
@@ -46,6 +48,8 @@ class ShardingType(Enum):
     DATA_PARALLEL = "data_parallel"
     # Placed on a single rank
     TABLE_WISE = "table_wise"
+    # Placed on multiple ranks as different sharded tables
+    COLUMN_WISE = "column_wise"
     # Range-split on the first dimension across all ranks
     ROW_WISE = "row_wise"
     # Row-wise on the same node and table-wise across nodes
@@ -250,10 +254,12 @@ class ParameterSharding:
 
     """
     ShardingType.TABLE_WISE - rank where this embedding is placed
+    ShardingType.COLUMN_WISE - rank where this embedding shards are placed, we see them as individual tables
     ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
     ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
     """
-    rank: Optional[int] = None
+    ranks: Optional[List[int]] = None
+    sharding_spec: Optional[ShardingSpec] = None
 
 
 @dataclass

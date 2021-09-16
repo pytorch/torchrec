@@ -10,6 +10,7 @@ from torch import nn
 from torchrec.distributed.collective_utils import (
     invoke_on_rank_and_broadcast_result,
 )
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.planner.cost_functions import (
     cost_func_compute_based,
 )
@@ -30,6 +31,7 @@ from torchrec.distributed.planner.utils import (
     deallocate_param,
     param_sort_key,
     to_plan,
+    MIN_DIM,
 )
 from torchrec.distributed.types import (
     ShardingPlan,
@@ -50,6 +52,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         cost_functions: Optional[List[Callable[[CostInput], int]]] = None,
     ) -> None:
         self._world_size: int = dist.get_world_size(pg)
+        self._local_size: int = get_local_size()
         self._hints: Dict[str, ParameterHints] = hints if hints else {}
         self._input_stats: Dict[str, ParameterInputStats] = (
             input_stats if input_stats else {}
@@ -119,7 +122,12 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             if not self._place(unplaced_param_infos, placed_param_infos):
                 self._backtrack(unplaced_param_infos, placed_param_infos)
 
-        return to_plan([param_info for _, param_info in placed_param_infos])
+        return to_plan(
+            [param_info for _, param_info in placed_param_infos],
+            self._device,
+            self._world_size,
+            self._local_size,
+        )
 
     def _place(
         self,
@@ -135,25 +143,32 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         heapq.heapify(candidate_devices)
         sort_key, param_info = heapq.heappop(unplaced_param_infos)
         sharding_option = param_info.sharding_options[0]
+        shards_count = sharding_option.shards_count
 
         is_placed = False
-        if sharding_option.sharding_type == ShardingType.TABLE_WISE.value:
+        if sharding_option.sharding_type in [
+            ShardingType.TABLE_WISE.value,
+            ShardingType.COLUMN_WISE.value,
+        ]:
             constrained_devices = []
+            ranks = []
             while candidate_devices:
                 candidate_device = heapq.heappop(candidate_devices)
                 if is_enough_storage(sharding_option, self._topology, candidate_device):
-                    sharding_option.rank = candidate_device.rank
+                    ranks.append(candidate_device.rank)
+                    sharding_option.ranks = ranks
                     allocate_param(sharding_option, self._topology)
-                    heapq.heappush(
-                        placed_param_infos,
-                        (
-                            param_sort_key(param_info, self._world_size, "storage"),
-                            param_info,
-                        ),
-                    )
                     heapq.heappush(candidate_devices, candidate_device)
-                    is_placed = True
-                    break
+                    if len(ranks) == shards_count:
+                        heapq.heappush(
+                            placed_param_infos,
+                            (
+                                param_sort_key(param_info, self._world_size, "storage"),
+                                param_info,
+                            ),
+                        )
+                        is_placed = True
+                        break
                 constrained_devices.append(candidate_device)
 
             for constrained_device in constrained_devices:
@@ -163,6 +178,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             devices_per_host = len(self._topology.hosts[0].devices)
             candidate_hosts = [0] * num_hosts
             constrained_devices = []
+            ranks = []
             while candidate_devices:
                 candidate_device = heapq.heappop(candidate_devices)
                 host_idx, _ = self._topology.host_and_device_by_rank[
@@ -172,7 +188,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 if candidate_hosts[host_idx] == devices_per_host and is_enough_storage(
                     sharding_option, self._topology, candidate_device
                 ):
-                    sharding_option.rank = candidate_device.rank
+                    ranks.append(candidate_device.rank)
+                    sharding_option.ranks = ranks
                     allocate_param(sharding_option, self._topology)
                     heapq.heappush(
                         placed_param_infos,
@@ -194,6 +211,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             ShardingType.ROW_WISE.value,
         ]:
             if is_enough_storage(sharding_option, self._topology):
+                sharding_option.ranks = None
                 allocate_param(sharding_option, self._topology)
                 heapq.heappush(
                     placed_param_infos,
@@ -246,7 +264,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             if len(placed_param_info.sharding_options) > 1 and not is_option_discarded:
                 placed_param_info.sharding_options.popleft()
                 is_option_discarded = True
-            placed_param_info.sharding_options[0].rank = None
             heapq.heappush(
                 unplaced_param_infos,
                 (
@@ -280,6 +297,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 for sharding_type in self._filter_sharding_types(
                     name, sharder.sharding_types
                 ):
+                    shards_count, shard_size = self._get_shards_count_size(
+                        name, param, sharding_type
+                    )
                     for compute_kernel in self._filter_compute_kernels(
                         name, sharder.compute_kernels(sharding_type, self._device)
                     ):
@@ -304,6 +324,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                                 storage_usage=sharder.storage_usage(
                                     param, self._device, compute_kernel
                                 ),
+                                shards_count=shards_count,
+                                sharded_dim_block_size=shard_size,
                             )
                         )
                 param_infos.append(
@@ -343,3 +365,23 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 f"No available compute kernels after applying hints for {name}"
             )
         return compute_kernels
+
+    def _get_shards_count_size(
+        self, name: str, param: torch.Tensor, sharding_type: str
+    ) -> Tuple[Optional[int], Optional[int]]:
+        shards_count = None
+        shard_dim = None
+        if sharding_type == ShardingType.COLUMN_WISE.value:
+            _hint = self._hints.get(name, None)
+            shard_dim_hint = None if _hint is None else _hint.shard_dim
+            shard_dim = shard_dim_hint if shard_dim_hint is not None else MIN_DIM
+            # column-wise shard the weights
+            shards_count, residual = divmod(param.shape[1], shard_dim)
+            assert (
+                shards_count > 0
+            ), f"the table {name} cannot be column-wise sharded into shards of {shard_dim} dimensions"
+            if residual > 0:
+                shards_count += 1
+        elif sharding_type == ShardingType.TABLE_WISE.value:
+            shards_count = 1
+        return shards_count, shard_dim

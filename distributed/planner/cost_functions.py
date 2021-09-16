@@ -3,13 +3,15 @@
 import math
 from typing import Dict
 
-from torchrec.distributed.embedding_types import ShardingType, EmbeddingComputeKernel
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.types import CostInput
+from torchrec.distributed.types import ShardingType
 
 
 # Constants
 COMMS_MULTIPLER: Dict[str, int] = {
     ShardingType.TABLE_WISE.value: 2,
+    ShardingType.COLUMN_WISE.value: 2,
     ShardingType.ROW_WISE.value: 5,
     ShardingType.TABLE_ROW_WISE.value: 3,
     ShardingType.DATA_PARALLEL.value: 1,

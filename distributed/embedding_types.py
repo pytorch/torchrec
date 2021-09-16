@@ -7,17 +7,16 @@ from typing import List, Optional, Dict, Any, TypeVar
 
 import torch
 from torch import nn
+from torch.distributed._sharded_tensor import ShardedTensorMetadata
+from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
-    ShardMetadata,
-    ShardedTensorMetadata,
     ParameterStorage,
 )
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
-    BaseEmbeddingConfig,
     EmbeddingTableConfig,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -60,18 +59,36 @@ class SparseFeatures:
 
 @dataclass
 class ShardedConfig:
-    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.DENSE
-    embedding_names: List[str] = field(default_factory=list)
-    rank: int = 0
     local_rows: int = 0
     local_cols: int = 0
+
+
+@dataclass
+class ShardedMetaConfig(ShardedConfig):
     local_metadata: Optional[ShardMetadata] = None
     global_metadata: Optional[ShardedTensorMetadata] = None
 
 
 @dataclass
-class ShardedEmbeddingTable(ShardedConfig, EmbeddingTableConfig):
+class EmbeddingAttributes:
     embedding_names: List[str] = field(default_factory=list)
+    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.DENSE
+
+
+@dataclass
+class ShardedEmbeddingTable(
+    EmbeddingAttributes,
+    EmbeddingTableConfig,
+):
+    ranks: Optional[List[int]] = None
+    sharding_spec: Optional[EnumerableShardingSpec] = None
+
+
+@dataclass
+class ShardedEmbeddingTableShard(
+    ShardedMetaConfig, EmbeddingAttributes, EmbeddingTableConfig
+):
+    pass
 
 
 @dataclass
@@ -80,7 +97,7 @@ class GroupedEmbeddingConfig:
     pooling: PoolingType
     is_weighted: bool
     compute_kernel: EmbeddingComputeKernel
-    embedding_tables: List[ShardedEmbeddingTable]
+    embedding_tables: List[ShardedEmbeddingTableShard]
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
@@ -97,7 +114,7 @@ class GroupedEmbeddingConfig:
     def dim_sum(self) -> int:
         dim_sum = 0
         for table in self.embedding_tables:
-            dim_sum += table.num_features() * table.embedding_dim
+            dim_sum += table.num_features() * table.local_cols
         return dim_sum
 
     def feature_names(self) -> List[str]:
@@ -109,7 +126,7 @@ class GroupedEmbeddingConfig:
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
         for table in self.embedding_tables:
-            embedding_dims.extend([table.embedding_dim] * table.num_features())
+            embedding_dims.extend([table.local_cols] * table.num_features())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
@@ -117,6 +134,12 @@ class GroupedEmbeddingConfig:
         for table in self.embedding_tables:
             embedding_names.extend(table.embedding_names)
         return embedding_names
+
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_metadata: List[Optional[ShardMetadata]] = []
+        for table in self.embedding_tables:
+            embedding_metadata.append(table.local_metadata)
+        return embedding_metadata
 
 
 class BaseEmbeddingLookup(abc.ABC, nn.Module):

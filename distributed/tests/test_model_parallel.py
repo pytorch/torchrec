@@ -4,7 +4,7 @@ import multiprocessing
 import os
 import unittest
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Callable, cast
+from typing import List, Tuple, Optional, Callable, Dict, cast
 
 import hypothesis.strategies as st
 import numpy as np
@@ -14,6 +14,8 @@ import torch.nn as nn
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.planner.embedding_planner import EmbeddingShardingPlanner
+from torchrec.distributed.planner.types import ParameterHints
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestEBCSharder,
@@ -23,7 +25,6 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardedTensor,
     ShardingPlan,
-    ShardingPlanner,
     ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -283,7 +284,7 @@ class ModelParallelTest(unittest.TestCase):
         self.tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 1) * 4,
+                embedding_dim=(i + 2) * 4,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -292,7 +293,7 @@ class ModelParallelTest(unittest.TestCase):
         self.weighted_tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 1) * 4,
+                embedding_dim=(i + 2) * 4,
                 name="weighted_table_" + str(i),
                 feature_names=["weighted_feature_" + str(i)],
             )
@@ -307,6 +308,7 @@ class ModelParallelTest(unittest.TestCase):
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
         backend: str,
+        hints: Optional[Dict[str, ParameterHints]] = None,
         local_size: Optional[int] = None,
     ) -> List[torch.Tensor]:
         mgr = multiprocessing.Manager()
@@ -324,6 +326,7 @@ class ModelParallelTest(unittest.TestCase):
                     sharders,
                     outputs,
                     backend,
+                    hints,
                 ),
                 kwargs={
                     "local_size": local_size,
@@ -359,6 +362,7 @@ class ModelParallelTest(unittest.TestCase):
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
+        hints: Optional[Dict[str, ParameterHints]] = None,
     ) -> None:
 
         # Run distributed training and collect predictions.
@@ -373,6 +377,7 @@ class ModelParallelTest(unittest.TestCase):
             #  but got `List[TestEBCSharder]`.
             sharders=sharders,
             backend=backend,
+            hints=hints,
         )
 
         full_pred = self._gen_full_pred_after_one_step(
@@ -393,7 +398,7 @@ class ModelParallelTest(unittest.TestCase):
         sharders: List[ModuleSharder[nn.Module]],
         outputs: List[torch.Tensor],
         backend: str,
-        planner: Optional[ShardingPlanner] = None,
+        hints: Optional[Dict[str, ParameterHints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
         # Generate model & inputs.
@@ -404,7 +409,6 @@ class ModelParallelTest(unittest.TestCase):
         # Instantiate lazy modules.
         with torch.no_grad():
             global_model(local_input)
-
         if backend == "nccl":
             device = torch.device(f"cuda:{rank}")
             torch.cuda.set_device(device)
@@ -417,7 +421,7 @@ class ModelParallelTest(unittest.TestCase):
             backend=backend,
             local_size=local_size,
         )
-
+        planner = EmbeddingShardingPlanner(pg, device, hints)
         # Shard model.
         local_model = TestSparseNN(
             sparse_device=torch.device("meta"),
@@ -426,10 +430,8 @@ class ModelParallelTest(unittest.TestCase):
             dense_device=device,
         )
         plan: Optional[ShardingPlan]
-        if planner:
-            plan = planner.collective_plan(local_model, sharders)
-        else:
-            plan = None
+        plan = planner.plan(local_model, sharders)
+
         local_model = DistributedModelParallel(
             local_model,
             pg=pg,
