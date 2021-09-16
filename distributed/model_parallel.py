@@ -17,7 +17,6 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
     ShardedModule,
-    ShardedTensor,
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
@@ -88,7 +87,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         # 2. Call ShardingPlanner.plan passing all found modules and corresponding sharders.
         if plan is None:
-            plan = EmbeddingShardingPlanner(self._pg, self.device).collective_plan(
+            plan = EmbeddingShardingPlanner(self._pg, self.device).plan(
                 module, sharders
             )
 

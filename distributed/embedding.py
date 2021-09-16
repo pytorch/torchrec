@@ -9,6 +9,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.cw_sharding import CwEmbeddingSharding
 from torchrec.distributed.dp_sharding import DpEmbeddingSharding
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
@@ -52,6 +53,8 @@ def create_embedding_sharding(
         return DpEmbeddingSharding(sharded_tables, pg, device)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
         return TwRwEmbeddingSharding(sharded_tables, pg, device)
+    elif sharding_type == ShardingType.COLUMN_WISE.value:
+        return CwEmbeddingSharding(sharded_tables, pg, device)
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
 
@@ -115,9 +118,9 @@ def _create_sharded_table_configs(
                 embedding_names=embedding_names,
                 compute_kernel=compute_kernel,
                 is_weighted=module.is_weighted,
-                rank=parameter_sharding.rank
-                if parameter_sharding.rank is not None
-                else 0,
+                # pyre-fixme [6]
+                sharding_spec=parameter_sharding.sharding_spec,
+                ranks=parameter_sharding.ranks,
             )
         )
     return sharding_type_to_sharded_tables

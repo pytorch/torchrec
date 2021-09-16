@@ -4,6 +4,7 @@ from typing import List, Optional, Any, Dict
 
 import torch
 import torch.distributed as dist
+from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     SequenceEmbeddingAllToAll,
@@ -15,7 +16,6 @@ from torchrec.distributed.embedding_lookup import (
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesAllToAll,
-    ShardedEmbeddingTable,
     group_tables,
     BasePooledEmbeddingDist,
     BaseSequenceEmbeddingDist,
@@ -23,10 +23,14 @@ from torchrec.distributed.embedding_sharding import (
     SequenceShardingContext,
     BaseEmbeddingLookup,
 )
-from torchrec.distributed.embedding_types import GroupedEmbeddingConfig, SparseFeatures
+from torchrec.distributed.embedding_types import (
+    GroupedEmbeddingConfig,
+    SparseFeatures,
+    ShardedEmbeddingTable,
+    ShardedEmbeddingTableShard,
+)
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
-    ShardMetadata,
     Awaitable,
 )
 
@@ -130,34 +134,25 @@ class TwEmbeddingSharding(EmbeddingSharding):
 
     def _shard(
         self, tables: List[ShardedEmbeddingTable]
-    ) -> List[List[ShardedEmbeddingTable]]:
+    ) -> List[List[ShardedEmbeddingTableShard]]:
         world_size = self._pg.size()
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
+        tables_per_rank: List[List[ShardedEmbeddingTableShard]] = [
             [] for i in range(world_size)
         ]
         for table in tables:
-            rank = table.rank
-            shards: List[ShardMetadata] = []
-            local_metadata = ShardMetadata(
-                shard_lengths=[
-                    table.num_embeddings,
-                    table.embedding_dim,
-                ],
-                shard_offsets=[0, 0],
-                placement=f"rank:{rank}/{self._device}",
-            )
-            for r in range(world_size):
-                if r == rank:
-                    shards.append(local_metadata)
+            # pyre-fixme [16]
+            rank = table.ranks[0]
+            # pyre-fixme [16]
+            shards = table.sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
-            table.global_metadata = ShardedTensorMetadata(
+            global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
                 size=torch.Size([table.num_embeddings, table.embedding_dim]),
             )
 
             tables_per_rank[rank].append(
-                ShardedEmbeddingTable(
+                ShardedEmbeddingTableShard(
                     num_embeddings=table.num_embeddings,
                     embedding_dim=table.embedding_dim,
                     name=table.name,
@@ -167,11 +162,10 @@ class TwEmbeddingSharding(EmbeddingSharding):
                     pooling=table.pooling,
                     compute_kernel=table.compute_kernel,
                     is_weighted=table.is_weighted,
-                    rank=table.rank,
                     local_rows=table.num_embeddings,
                     local_cols=table.embedding_dim,
-                    local_metadata=local_metadata,
-                    global_metadata=table.global_metadata,
+                    local_metadata=shards[0],
+                    global_metadata=global_metadata,
                 )
             )
         return tables_per_rank
@@ -255,6 +249,18 @@ class TwEmbeddingSharding(EmbeddingSharding):
             for grouped_config in score_grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_metadata = []
+        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
+            self._grouped_embedding_configs_per_rank,
+            self._score_grouped_embedding_configs_per_rank,
+        ):
+            for grouped_config in grouped_embedding_configs:
+                embedding_metadata.extend(grouped_config.embedding_metadata())
+            for grouped_config in score_grouped_embedding_configs:
+                embedding_metadata.extend(grouped_config.embedding_metadata())
+        return embedding_metadata
 
     def id_list_feature_names(self) -> List[str]:
         id_list_feature_names = []

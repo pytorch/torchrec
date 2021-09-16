@@ -16,6 +16,7 @@ class ParameterHints:
 
     sharding_types: Optional[List[str]] = None
     compute_kernels: Optional[List[str]] = None
+    shard_dim: Optional[int] = None
 
 
 @dataclass
@@ -80,7 +81,9 @@ class ShardingOption:
     compute_kernel: str
     storage_usage: Dict[str, int]
     cost: int = 0
-    rank: Optional[int] = None
+    ranks: Optional[List[int]] = None
+    shards_count: Optional[int] = None
+    sharded_dim_block_size: Optional[int] = None
 
     def __lt__(self, other: "ShardingOption") -> bool:
         """

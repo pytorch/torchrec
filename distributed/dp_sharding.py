@@ -4,6 +4,7 @@ from typing import List, Optional, cast, Dict, Any
 
 import torch
 import torch.distributed as dist
+from torch.distributed._sharding_spec import ShardMetadata
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -11,7 +12,6 @@ from torchrec.distributed.embedding_lookup import (
 )
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
-    ShardedEmbeddingTable,
     group_tables,
     BasePooledEmbeddingDist,
     BaseSequenceEmbeddingDist,
@@ -19,7 +19,12 @@ from torchrec.distributed.embedding_sharding import (
     SequenceShardingContext,
     BaseEmbeddingLookup,
 )
-from torchrec.distributed.embedding_types import GroupedEmbeddingConfig, SparseFeatures
+from torchrec.distributed.embedding_types import (
+    GroupedEmbeddingConfig,
+    SparseFeatures,
+    ShardedEmbeddingTable,
+    ShardedEmbeddingTableShard,
+)
 from torchrec.distributed.types import Awaitable, NoWait
 
 
@@ -88,15 +93,15 @@ class DpEmbeddingSharding(EmbeddingSharding):
 
     def _shard(
         self, tables: List[ShardedEmbeddingTable]
-    ) -> List[List[ShardedEmbeddingTable]]:
+    ) -> List[List[ShardedEmbeddingTableShard]]:
         world_size = self._pg.size()
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
+        tables_per_rank: List[List[ShardedEmbeddingTableShard]] = [
             [] for i in range(world_size)
         ]
         for table in tables:
             for rank in range(world_size):
                 tables_per_rank[rank].append(
-                    ShardedEmbeddingTable(
+                    ShardedEmbeddingTableShard(
                         num_embeddings=table.num_embeddings,
                         embedding_dim=table.embedding_dim,
                         name=table.name,
@@ -106,7 +111,6 @@ class DpEmbeddingSharding(EmbeddingSharding):
                         pooling=table.pooling,
                         compute_kernel=table.compute_kernel,
                         is_weighted=table.is_weighted,
-                        rank=table.rank,
                         local_rows=table.num_embeddings,
                         local_cols=table.embedding_dim,
                     )
@@ -167,6 +171,14 @@ class DpEmbeddingSharding(EmbeddingSharding):
         for grouped_config in self._score_grouped_embedding_configs:
             embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_metadata = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_metadata.extend(grouped_config.embedding_metadata())
+        for grouped_config in self._score_grouped_embedding_configs:
+            embedding_metadata.extend(grouped_config.embedding_metadata())
+        return embedding_metadata
 
     def id_list_feature_names(self) -> List[str]:
         id_list_feature_names = []

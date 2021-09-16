@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict, Any
 
 import torch
 import torch.distributed as dist
+from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsReduceScatter,
     SequenceEmbeddingAllToAll,
@@ -15,7 +16,6 @@ from torchrec.distributed.embedding_lookup import (
 from torchrec.distributed.embedding_sharding import (
     group_tables,
     SparseFeaturesAllToAll,
-    ShardedEmbeddingTable,
     BasePooledEmbeddingDist,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
@@ -23,10 +23,14 @@ from torchrec.distributed.embedding_sharding import (
     SequenceShardingContext,
     BaseEmbeddingLookup,
 )
-from torchrec.distributed.embedding_types import GroupedEmbeddingConfig, SparseFeatures
+from torchrec.distributed.embedding_types import (
+    ShardedEmbeddingTable,
+    GroupedEmbeddingConfig,
+    SparseFeatures,
+    ShardedEmbeddingTableShard,
+)
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
-    ShardMetadata,
     Awaitable,
 )
 
@@ -189,54 +193,25 @@ class RwEmbeddingSharding(EmbeddingSharding):
 
     def _shard(
         self, tables: List[ShardedEmbeddingTable]
-    ) -> List[List[ShardedEmbeddingTable]]:
+    ) -> List[List[ShardedEmbeddingTableShard]]:
         world_size = self._pg.size()
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
+        tables_per_rank: List[List[ShardedEmbeddingTableShard]] = [
             [] for i in range(world_size)
         ]
 
-        def _shard_table_rows(
-            hash_size: int, world_size: int
-        ) -> Tuple[List[int], int, int]:
-            block_size = (hash_size + world_size - 1) // world_size
-            last_rank = hash_size // block_size
-            last_block_size = hash_size - block_size * last_rank
-            local_rows: List[int] = []
-            for rank in range(world_size):
-                if rank < last_rank:
-                    local_row = block_size
-                elif rank == last_rank:
-                    local_row = last_block_size
-                else:
-                    local_row = 0
-                local_rows.append(local_row)
-            return (local_rows, block_size, last_rank)
-
         for table in tables:
-            local_rows, block_size, last_rank = _shard_table_rows(
-                table.num_embeddings, world_size
-            )
-            shards = [
-                ShardMetadata(
-                    shard_lengths=[
-                        local_rows[rank],
-                        table.embedding_dim,
-                    ],
-                    shard_offsets=[block_size * min(rank, last_rank), 0],
-                    placement=f"rank:{rank}/{self._device}",
-                )
-                for rank in range(world_size)
-            ]
+            # pyre-fixme [16]
+            shards = table.sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
-            table.global_metadata = ShardedTensorMetadata(
+            global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
                 size=torch.Size([table.num_embeddings, table.embedding_dim]),
             )
 
             for rank in range(world_size):
                 tables_per_rank[rank].append(
-                    ShardedEmbeddingTable(
+                    ShardedEmbeddingTableShard(
                         num_embeddings=table.num_embeddings,
                         embedding_dim=table.embedding_dim,
                         name=table.name,
@@ -246,11 +221,10 @@ class RwEmbeddingSharding(EmbeddingSharding):
                         pooling=table.pooling,
                         compute_kernel=table.compute_kernel,
                         is_weighted=table.is_weighted,
-                        rank=table.rank,
-                        local_rows=local_rows[rank],
+                        local_rows=shards[rank].shard_lengths[0],
                         local_cols=table.embedding_dim,
                         local_metadata=shards[rank],
-                        global_metadata=table.global_metadata,
+                        global_metadata=global_metadata,
                     )
                 )
         return tables_per_rank
@@ -313,6 +287,14 @@ class RwEmbeddingSharding(EmbeddingSharding):
         for grouped_config in self._score_grouped_embedding_configs:
             embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_metadata = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_metadata.extend(grouped_config.embedding_metadata())
+        for grouped_config in self._score_grouped_embedding_configs:
+            embedding_metadata.extend(grouped_config.embedding_metadata())
+        return embedding_metadata
 
     def id_list_feature_names(self) -> List[str]:
         id_list_feature_names = []

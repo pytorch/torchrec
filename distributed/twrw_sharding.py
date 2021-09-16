@@ -2,10 +2,11 @@
 
 import itertools
 import math
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict, Any
 
 import torch
 import torch.distributed as dist
+from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.comm import intra_and_cross_node_pg
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsReduceScatter,
@@ -15,17 +16,20 @@ from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     group_tables,
     SparseFeaturesAllToAll,
-    ShardedEmbeddingTable,
     BasePooledEmbeddingDist,
     BaseSequenceEmbeddingDist,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
     BaseEmbeddingLookup,
 )
-from torchrec.distributed.embedding_types import GroupedEmbeddingConfig, SparseFeatures
+from torchrec.distributed.embedding_types import (
+    GroupedEmbeddingConfig,
+    SparseFeatures,
+    ShardedEmbeddingTable,
+    ShardedEmbeddingTableShard,
+)
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
-    ShardMetadata,
     Awaitable,
 )
 
@@ -229,74 +233,21 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
 
     def _shard(
         self, tables: List[ShardedEmbeddingTable]
-    ) -> List[List[ShardedEmbeddingTable]]:
+    ) -> List[List[ShardedEmbeddingTableShard]]:
         world_size = self._world_size
         local_size = self._local_size
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
+        tables_per_rank: List[List[ShardedEmbeddingTableShard]] = [
             [] for i in range(world_size)
         ]
 
-        def _shard_table_rows(
-            table_node: int,
-            hash_size: int,
-            embedding_dim: int,
-            world_size: int,
-            local_size: int,
-        ) -> Tuple[List[int], List[int], List[int]]:
-            block_size = math.ceil(hash_size / local_size)
-            last_block_size = hash_size - block_size * (local_size - 1)
-            first_local_rank = (table_node) * local_size
-            last_local_rank = first_local_rank + local_size - 1
-            local_rows: List[int] = []
-            local_cols: List[int] = []
-            local_row_offsets: List[int] = []
-            cumul_row_offset = 0
-            for rank in range(world_size):
-                if rank < first_local_rank:
-                    local_row = 0
-                    local_col = 0
-                elif rank < last_local_rank:
-                    local_row = block_size
-                    local_col = embedding_dim
-                elif rank == last_local_rank:
-                    local_row = last_block_size
-                    local_col = embedding_dim
-                else:
-                    cumul_row_offset = 0
-                    local_row = 0
-                    local_col = 0
-                local_rows.append(local_row)
-                local_cols.append(local_col)
-                local_row_offsets.append(cumul_row_offset)
-                cumul_row_offset += local_row
-
-            return (local_rows, local_cols, local_row_offsets)
-
         for table in tables:
-            table_node = table.rank // local_size
-            local_rows, local_cols, local_row_offsets = _shard_table_rows(
-                table_node=table_node,
-                embedding_dim=table.embedding_dim,
-                hash_size=table.num_embeddings,
-                world_size=world_size,
-                local_size=local_size,
-            )
-            shards = [
-                ShardMetadata(
-                    shard_lengths=[
-                        local_rows[rank],
-                        local_cols[rank],
-                    ],
-                    shard_offsets=[local_row_offsets[rank], 0],
-                    placement=f"rank:{rank}/{self._device}",
-                )
-                for rank in range(
-                    table_node * local_size, (table_node + 1) * local_size
-                )
-            ]
+            # pyre-ignore [16]
+            table_node = table.ranks[0] // local_size
+            # pyre-fixme [16]
+            shards = table.sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
-            table.global_metadata = ShardedTensorMetadata(
+            global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
                 size=torch.Size([table.num_embeddings, table.embedding_dim]),
             )
@@ -307,7 +258,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             ):
                 rank_idx = rank - (table_node * local_size)
                 tables_per_rank[rank].append(
-                    ShardedEmbeddingTable(
+                    ShardedEmbeddingTableShard(
                         num_embeddings=table.num_embeddings,
                         embedding_dim=table.embedding_dim,
                         name=table.name,
@@ -317,11 +268,10 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
                         pooling=table.pooling,
                         compute_kernel=table.compute_kernel,
                         is_weighted=table.is_weighted,
-                        rank=table.rank,
-                        local_rows=local_rows[rank],
+                        local_rows=shards[rank_idx].shard_lengths[0],
                         local_cols=table.embedding_dim,
                         local_metadata=shards[rank_idx],
-                        global_metadata=table.global_metadata,
+                        global_metadata=global_metadata,
                     )
                 )
         return tables_per_rank
@@ -396,6 +346,16 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             for grouped_config in score_grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_metadata = []
+        for grouped_config in self._grouped_embedding_configs_per_node:
+            for config in grouped_config:
+                embedding_metadata.extend(config.embedding_metadata())
+        for grouped_config in self._score_grouped_embedding_configs_per_node:
+            for config in grouped_config:
+                embedding_metadata.extend(config.embedding_metadata())
+        return embedding_metadata
 
     def id_list_feature_names(self) -> List[str]:
         id_list_feature_names = []
