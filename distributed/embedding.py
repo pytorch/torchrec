@@ -2,11 +2,23 @@
 
 import copy
 from collections import OrderedDict
-from typing import List, Dict, Optional, Type, Any, TypeVar, Mapping, Union
+from typing import (
+    List,
+    Dict,
+    Optional,
+    Type,
+    Any,
+    TypeVar,
+    Mapping,
+    Union,
+    Tuple,
+    Iterator,
+)
 
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.nn import parallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
@@ -32,6 +44,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardedModuleContext,
     ShardedTensor,
+    append_prefix,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.fused import FusedOptimizerModule
@@ -342,10 +355,22 @@ class ShardedEmbeddingBagCollection(
                 lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
         return destination
 
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for lookup in self._lookups:
+            if isinstance(lookup, parallel.DistributedDataParallel):
+                yield from lookup.module.named_parameters(
+                    append_prefix(prefix, "embedding_bags"), recurse
+                )
+            else:
+                yield from lookup.named_parameters(
+                    append_prefix(prefix, "embedding_bags"), recurse
+                )
+
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
-        prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         missing_keys = []
@@ -353,11 +378,13 @@ class ShardedEmbeddingBagCollection(
         for lookup in self._lookups:
             if isinstance(lookup, DistributedDataParallel):
                 missing, unexpected = lookup.module.load_state_dict(
-                    filter_state_dict(state_dict, prefix + "embedding_bags"), strict
+                    filter_state_dict(state_dict, "embedding_bags"),
+                    strict,
                 )
             else:
                 missing, unexpected = lookup.load_state_dict(
-                    filter_state_dict(state_dict, prefix + "embedding_bags"), strict
+                    filter_state_dict(state_dict, "embedding_bags"),
+                    strict,
                 )
             missing_keys.extend(missing)
             unexpected_keys.extend(unexpected)
@@ -374,11 +401,11 @@ class ShardedEmbeddingBagCollection(
         for lookup in self._lookups:
             if isinstance(lookup, DistributedDataParallel):
                 lookup.module.sparse_grad_parameter_names(
-                    destination, prefix + "embedding_bags."
+                    destination, append_prefix(prefix, "embedding_bags")
                 )
             else:
                 lookup.sparse_grad_parameter_names(
-                    destination, prefix + "embedding_bags."
+                    destination, append_prefix(prefix, "embedding_bags")
                 )
         return destination
 

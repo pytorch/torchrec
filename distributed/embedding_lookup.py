@@ -3,7 +3,7 @@
 import abc
 from collections import OrderedDict
 from math import sqrt
-from typing import List, Optional, Dict, Any, Union, Tuple, cast
+from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
 import torch
 import torch.distributed._sharded_tensor as sharded_tensor
@@ -23,7 +23,13 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     EmbeddingComputeKernel,
 )
-from torchrec.distributed.types import Shard, ShardedTensorMetadata, ShardMetadata
+from torchrec.distributed.types import (
+    Shard,
+    ShardedTensorMetadata,
+    ShardMetadata,
+    append_prefix,
+    ShardedTensor,
+)
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
@@ -33,6 +39,32 @@ from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
 )
+
+
+def _load_state_dict(
+    emb_modules: "nn.ModuleList[nn.Module]",
+    state_dict: "OrderedDict[str, torch.Tensor]",
+) -> Tuple[List[str], List[str]]:
+    missing_keys = []
+    for emb_module in emb_modules:
+        for key, param in emb_module.state_dict().items():
+            if key in state_dict:
+                if isinstance(param, ShardedTensor):
+                    assert len(param.local_shards()) == 1
+                    dst_tensor = param.local_shards()[0].tensor
+                else:
+                    dst_tensor = param
+                if isinstance(state_dict[key], ShardedTensor):
+                    # pyre-fixme[16]
+                    assert len(state_dict[key].local_shards()) == 1
+                    src_tensor = state_dict[key].local_shards()[0].tensor
+                else:
+                    src_tensor = state_dict[key]
+                dst_tensor.detach().copy_(src_tensor)
+            else:
+                missing_keys.append(cast(str, key))
+    unexepected_keys = list(state_dict.keys())
+    return missing_keys, unexepected_keys
 
 
 class BaseEmbedding(abc.ABC, nn.Module):
@@ -108,15 +140,41 @@ class GroupedEmbedding(BaseEmbedding):
             destination = OrderedDict()
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
+
         for config, emb_module in zip(
             self._config.embedding_tables,
             self._emb_modules,
         ):
+            key = prefix + f"{config.name}.weight"
             param = emb_module.weight if keep_vars else emb_module.weight.data
             assert config.local_rows == param.size(0)
             assert config.local_cols == param.size(1)
-            destination[prefix + f"{config.name}.weight"] = param
+            if config.global_metadata is not None:
+                # set additional field of sharded tensor based on local tensor properties
+                config.global_metadata.tensor_properties.dtype = param.dtype
+                config.global_metadata.tensor_properties.requires_grad = (
+                    param.requires_grad
+                )
+                destination[key] = sharded_tensor.init_from_local_shards(
+                    local_shards=[Shard(param, config.local_metadata)],
+                    sharded_tensor_metadata=config.global_metadata,
+                )
+            else:
+                destination[key] = param
+
         return destination
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for config, emb_module in zip(
+            self._config.embedding_tables,
+            self._emb_modules,
+        ):
+            param = emb_module.weight
+            assert config.local_rows == param.size(0)
+            assert config.local_cols == param.size(1)
+            yield append_prefix(prefix, f"{config.name}.weight"), param
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
@@ -124,7 +182,7 @@ class GroupedEmbedding(BaseEmbedding):
         destination = [] if destination is None else destination
         if self._sparse:
             for config in self._config.embedding_tables:
-                destination.append(prefix + f"{config.name}.weight")
+                destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
 
@@ -208,58 +266,25 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
 
-        def update_destination(
-            # pyre-ignore [24]
-            emb_modules: nn.ModuleList,
-            grouped_configs: List[GroupedEmbeddingConfig],
-        ) -> None:
-            for emb_module, config in zip(emb_modules, grouped_configs):
-                # A map to record qualifided name to sharded parameter local shards
-                # as there might be cases each rank have multiple shards of a single
-                # sharded tensor, we should group the local shards together and create
-                # the sharded tensor parameter in state_dict calls
-                key_to_shards: Dict[str, List[Shard]] = {}
-                global_metadatas: Dict[str, ShardedTensorMetadata] = {}
-                for (key, param), table_config in zip(
-                    emb_module.state_dict(None, prefix, keep_vars).items(),
-                    config.embedding_tables,
-                ):
-                    if table_config.global_metadata is not None:
-                        # set additional field of sharded tensor based on local tensor properties
-                        table_config.global_metadata.tensor_properties.dtype = (
-                            param.dtype
-                        )
-                        table_config.global_metadata.tensor_properties.requires_grad = (
-                            param.requires_grad
-                        )
-
-                        # record all local shards for the same sharded tensor key
-                        if key not in key_to_shards:
-                            key_to_shards[key] = [
-                                Shard(param, table_config.local_metadata)
-                            ]
-                            global_metadatas[key] = table_config.global_metadata
-                        else:
-                            key_to_shards[key].append(
-                                Shard(param, table_config.local_metadata)
-                            )
-
-                    else:
-                        # pyre-ignore [16]
-                        destination[key] = param
-
-                # update destination with sharded tensor parameter and its key
-                for key in key_to_shards:
-                    local_shards = key_to_shards[key]
-                    global_metadata = global_metadatas[key]
-                    destination[key] = sharded_tensor.init_from_local_shards(
-                        local_shards=local_shards,
-                        sharded_tensor_metadata=global_metadata,
-                    )
-
-        update_destination(self._emb_modules, self.grouped_configs)
+        for emb_module in self._emb_modules:
+            emb_module.state_dict(destination, prefix, keep_vars)
 
         return destination
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        # pyre-ignore [6]
+        m, u = _load_state_dict(self._emb_modules, state_dict)
+        return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for emb_module in self._emb_modules:
+            yield from emb_module.named_parameters(prefix, recurse)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
@@ -382,15 +407,41 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
             destination = OrderedDict()
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
+
         for config, emb_module in zip(
             self._config.embedding_tables,
             self._emb_modules,
         ):
+            key = prefix + f"{config.name}.weight"
             param = emb_module.weight if keep_vars else emb_module.weight.data
             assert config.local_rows == param.size(0)
             assert config.local_cols == param.size(1)
-            destination[prefix + f"{config.name}.weight"] = param
+            if config.global_metadata is not None:
+                # set additional field of sharded tensor based on local tensor properties
+                config.global_metadata.tensor_properties.dtype = param.dtype
+                config.global_metadata.tensor_properties.requires_grad = (
+                    param.requires_grad
+                )
+                destination[key] = sharded_tensor.init_from_local_shards(
+                    local_shards=[Shard(param, config.local_metadata)],
+                    sharded_tensor_metadata=config.global_metadata,
+                )
+            else:
+                destination[key] = param
+
         return destination
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for config, emb_module in zip(
+            self._config.embedding_tables,
+            self._emb_modules,
+        ):
+            param = emb_module.weight
+            assert config.local_rows == param.size(0)
+            assert config.local_cols == param.size(1)
+            yield append_prefix(prefix, f"{config.name}.weight"), param
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
@@ -398,7 +449,7 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
         destination = [] if destination is None else destination
         if self._sparse:
             for config in self._config.embedding_tables:
-                destination.append(prefix + f"{config.name}.weight")
+                destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
 
@@ -488,10 +539,21 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
         ):
+            key = prefix + f"{config.name}.weight"
             assert config.local_rows == param.size(0)
             assert config.local_cols == param.size(1)
-
-            destination[prefix + f"{config.name}.weight"] = param
+            if config.global_metadata is not None:
+                # set additional field of sharded tensor based on local tensor properties
+                config.global_metadata.tensor_properties.dtype = param.dtype
+                config.global_metadata.tensor_properties.requires_grad = (
+                    param.requires_grad
+                )
+                destination[key] = sharded_tensor.init_from_local_shards(
+                    local_shards=[Shard(param, config.local_metadata)],
+                    sharded_tensor_metadata=config.global_metadata,
+                )
+            else:
+                destination[key] = param
         return destination
 
     @property
@@ -695,6 +757,11 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        yield from ()
+
 
 class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
@@ -720,6 +787,16 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        combined_table_names = "_".join(
+            [config.name for config in self._config.embedding_tables]
+        )
+        yield append_prefix(prefix, f"{combined_table_names}.weight"), cast(
+            nn.Parameter, self._emb_module.weights
+        )
 
 
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
@@ -845,71 +922,10 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
 
-        def update_destination(
-            emb_modules: "nn.ModuleList[BaseEmbeddingBag]",
-            grouped_configs: List[GroupedEmbeddingConfig],
-        ) -> None:
-            for emb_module, config in zip(emb_modules, grouped_configs):
-                # A map to record qualifided name to sharded parameter local shards
-                # as there might be cases each rank have multiple shards of a single
-                # sharded tensor, we should group the local shards together and create
-                # the sharded tensor parameter in state_dict calls
-                key_to_shards: Dict[str, List[Shard]] = {}
-                global_metadatas: Dict[str, ShardedTensorMetadata] = {}
-                for (key, param), table_config in zip(
-                    emb_module.state_dict(None, prefix, keep_vars).items(),
-                    config.embedding_tables,
-                ):
-                    # When optimizer is not fused
-                    # and we are asked to not detach,
-                    # we need to return full weight
-                    # as otherwise autograd won't work.
-                    if (
-                        keep_vars
-                        and isinstance(
-                            emb_module,
-                            BaseBatchedEmbeddingBag,
-                        )
-                        and isinstance(
-                            emb_module.emb_module, DenseTableBatchedEmbeddingBagsCodegen
-                        )
-                    ):
-                        # pyre-ignore [16]
-                        destination[key] = emb_module.emb_module.weights
-                    elif table_config.global_metadata is not None:
-                        # set additional field of sharded tensor based on local tensor properties
-                        table_config.global_metadata.tensor_properties.dtype = (
-                            param.dtype
-                        )
-                        table_config.global_metadata.tensor_properties.requires_grad = (
-                            param.requires_grad
-                        )
-
-                        # record all local shards for the same sharded tensor key
-                        if key not in key_to_shards:
-                            key_to_shards[key] = [
-                                Shard(param, table_config.local_metadata)
-                            ]
-                            global_metadatas[key] = table_config.global_metadata
-                        else:
-                            key_to_shards[key].append(
-                                Shard(param, table_config.local_metadata)
-                            )
-
-                    else:
-                        destination[key] = param
-
-                # update destination with sharded tensor parameter and its key
-                for key in key_to_shards:
-                    local_shards = key_to_shards[key]
-                    global_metadata = global_metadatas[key]
-                    destination[key] = sharded_tensor.init_from_local_shards(
-                        local_shards=local_shards,
-                        sharded_tensor_metadata=global_metadata,
-                    )
-
-        update_destination(self._emb_modules, self.grouped_configs)
-        update_destination(self._score_emb_modules, self.grouped_score_configs)
+        for emb_module in self._emb_modules:
+            emb_module.state_dict(destination, prefix, keep_vars)
+        for emb_module in self._score_emb_modules:
+            emb_module.state_dict(destination, prefix, keep_vars)
 
         return destination
 
@@ -918,25 +934,19 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         state_dict: "OrderedDict[str, torch.Tensor]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        def _load(
-            emb_modules: "nn.ModuleList[BaseEmbeddingBag]",
-            state_dict: "OrderedDict[str, torch.Tensor]",
-        ) -> Tuple[List[str], List[str]]:
-            missing_keys = []
-            for emb_module in emb_modules:
-                for key, param in emb_module.state_dict(None).items():
-                    if key in state_dict:
-                        param.copy_(state_dict[key])
-                        del state_dict[key]
-                    else:
-                        missing_keys.append(cast(str, key))
-            unexepected_keys = list(state_dict.keys())
-            return missing_keys, unexepected_keys
-
-        m1, u1 = _load(self._emb_modules, state_dict)
-        m2, u2 = _load(self._score_emb_modules, state_dict)
-
+        # pyre-ignore [6]
+        m1, u1 = _load_state_dict(self._emb_modules, state_dict)
+        # pyre-ignore [6]
+        m2, u2 = _load_state_dict(self._score_emb_modules, state_dict)
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for emb_module in self._emb_modules:
+            yield from emb_module.named_parameters(prefix, recurse)
+        for emb_module in self._score_emb_modules:
+            yield from emb_module.named_parameters(prefix, recurse)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""

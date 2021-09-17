@@ -4,7 +4,7 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, Generic, Optional, TypeVar, List, Type
+from typing import Any, Dict, Generic, Optional, TypeVar, List, Type, Iterator, Tuple
 
 from torch.distributed._sharding_spec import ShardingSpec
 
@@ -36,6 +36,13 @@ from torch.distributed._sharded_tensor import (  # noqa
     ShardedTensorMetadata,
 )
 from torch.distributed._sharding_spec import ShardMetadata  # noqa
+
+
+def append_prefix(prefix: str, name: str) -> str:
+    if prefix != "" and name != "":
+        return prefix + "." + name
+    else:
+        return prefix + name
 
 
 class ShardingType(Enum):
@@ -326,6 +333,11 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     ) -> List[str]:
         destination = [] if destination is None else destination
         return destination
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
 
 class ModuleSharder(abc.ABC, Generic[M]):

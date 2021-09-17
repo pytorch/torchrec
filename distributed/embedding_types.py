@@ -183,7 +183,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             EmbeddingComputeKernel.DENSE.value,
             EmbeddingComputeKernel.BATCHED_DENSE.value,
         ]
-        if sharding_type != ShardingType.DATA_PARALLEL:
+        if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
                 EmbeddingComputeKernel.SPARSE.value,

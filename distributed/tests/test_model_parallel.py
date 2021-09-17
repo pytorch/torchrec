@@ -4,7 +4,7 @@ import multiprocessing
 import os
 import unittest
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Callable, Dict, cast
+from typing import List, Tuple, Optional, Callable, Dict, cast, Set
 
 import hypothesis.strategies as st
 import numpy as np
@@ -13,7 +13,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.planner.embedding_planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import ParameterHints
 from torchrec.distributed.tests.test_model import (
@@ -482,15 +482,39 @@ class ModelParallelTest(unittest.TestCase):
             pred = local_model(local_input)
             outputs[rank] = pred.cpu()
 
+        ignore_names: Set[str] = set()
+        for name, m in local_model.module.named_modules():
+            if isinstance(m, ShardedModule):
+                sharded_params = plan.get_plan_for_module(name)
+                if sharded_params is not None:
+                    for k, p in sharded_params.items():
+                        if (
+                            p.compute_kernel
+                            == EmbeddingComputeKernel.BATCHED_DENSE.value
+                        ):
+                            ignore_names.add(k)
+
+        def should_ignore(key: str) -> bool:
+            for k in ignore_names:
+                if k != "" and key.find(k) != -1:
+                    return True
+            return False
+
         # Make sure that optimizer params FQN match model params FQN.
         opt_keys = set()
         for param_group in opt.state_dict()["param_groups"]:
             for key in param_group["params"]:
-                opt_keys.add(key)
+                if not should_ignore(key):
+                    opt_keys.add(key)
         model_keys = set()
         for key in local_model.state_dict().keys():
-            model_keys.add(key)
+            if not should_ignore(key):
+                model_keys.add(key)
         np.testing.assert_array_equal(sorted(opt_keys), sorted(model_keys))
+        # Make sure that named params FQN match model params FQN.
+        for key, _ in local_model.named_parameters():
+            if not should_ignore(key):
+                assert key in model_keys
 
     @classmethod
     def _gen_model_and_input(
@@ -630,7 +654,17 @@ class ModelParallelStateDictTest(unittest.TestCase):
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
             v2 = sd1[key]
-            self.assertTrue(torch.equal(value, v2))
+            if isinstance(value, ShardedTensor):
+                assert len(value.local_shards()) == 1
+                dst = value.local_shards()[0].tensor
+            else:
+                dst = value
+            if isinstance(v2, ShardedTensor):
+                assert len(v2.local_shards()) == 1
+                src = v2.local_shards()[0].tensor
+            else:
+                src = v2
+            self.assertTrue(torch.equal(src, dst))
 
     def test_load_state_dict_prefix(self) -> None:
         (m1, m2), batch = self._generate_dmps_and_batch()
@@ -646,4 +680,14 @@ class ModelParallelStateDictTest(unittest.TestCase):
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
             v2 = sd1[key]
-            self.assertTrue(torch.equal(value, v2))
+            if isinstance(value, ShardedTensor):
+                assert len(value.local_shards()) == 1
+                dst = value.local_shards()[0].tensor
+            else:
+                dst = value
+            if isinstance(v2, ShardedTensor):
+                assert len(v2.local_shards()) == 1
+                src = v2.local_shards()[0].tensor
+            else:
+                src = v2
+            self.assertTrue(torch.equal(src, dst))

@@ -17,6 +17,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
     ShardedModule,
+    append_prefix,
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
@@ -240,14 +241,14 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             module.sparse_grad_parameter_names(destination, prefix)
         elif isinstance(module, nn.Embedding):
             if module.sparse:
-                destination.append(prefix + "weight")
+                destination.append(append_prefix(prefix, "weight"))
         elif isinstance(module, nn.EmbeddingBag):
             if module.sparse:
-                destination.append(prefix + "weight")
+                destination.append(append_prefix(prefix, "weight"))
         else:
             for name, child in module.named_children():
                 self._sparse_grad_parameter_names(
-                    child, destination, prefix + name + "."
+                    child, destination, append_prefix(prefix, name)
                 )
         return destination
 
@@ -276,6 +277,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         elif isinstance(module, ShardedModule):
             module.state_dict(destination, prefix, keep_vars)
         else:
+            # pyre-ignore [29]
+            module._save_to_state_dict(destination, prefix, keep_vars)
             for name, child in module.named_children():
                 self._state_dict(child, destination, prefix + name + ".", keep_vars)
         return destination
@@ -304,7 +307,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         else:
             for name, child in module.named_children():
                 m_keys, u_keys = self._load_state_dict(
-                    child, filter_state_dict(state_dict, prefix + name), "", strict
+                    child,
+                    filter_state_dict(state_dict, prefix + name),
+                    "",
+                    strict,
                 )
                 missing_keys.extend(m_keys)
                 unexepected_keys.extend(u_keys)
@@ -312,13 +318,43 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             missing_keys=missing_keys, unexpected_keys=unexepected_keys
         )
 
+    def _named_parameters(
+        self, module: nn.Module, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        if isinstance(module, parallel.DistributedDataParallel):
+            yield from module.module.named_parameters(prefix, recurse)
+        elif isinstance(module, ShardedModule):
+            yield from module.named_parameters(prefix, recurse)
+        else:
+            yield from module.named_parameters(prefix, recurse=False)
+            for name, child in module.named_children():
+                yield from self._named_parameters(
+                    child, append_prefix(prefix, name), recurse
+                )
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
-        state_dict = self.state_dict(prefix=prefix, keep_vars=True)
-        for key, value in state_dict.items():
-            if value.requires_grad:
-                yield key, value
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        yield from self._named_parameters(self.module, prefix, recurse)
+
+    def _named_buffers(
+        self, module: nn.Module, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        if isinstance(module, parallel.DistributedDataParallel):
+            yield from module.module.named_buffers(prefix, recurse)
+        elif isinstance(module, ShardedModule):
+            yield from module.named_buffers(prefix, recurse)
+        else:
+            yield from module.named_buffers(prefix, recurse=False)
+            for name, child in module.named_children():
+                yield from self._named_buffers(
+                    child, append_prefix(prefix, name), recurse
+                )
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from self._named_buffers(self.module, prefix, recurse)
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

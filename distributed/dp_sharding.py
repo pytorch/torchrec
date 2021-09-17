@@ -138,17 +138,21 @@ class DpEmbeddingSharding(EmbeddingSharding):
                 device=self._device,
             )
         # TODO: pass ddp_bucket_cap_mb
-        return cast(
-            BaseEmbeddingLookup,
-            DistributedDataParallel(
-                module,
-                # pyre-ignore [16]
-                device_ids=None if self._device.type == "cpu" else [self._device],
-                process_group=self._pg,
-                gradient_as_bucket_view=True,
-                broadcast_buffers=False,
-            ),
-        )
+        param_grad = [p for p in module.parameters() if p.requires_grad]
+        if len(param_grad) > 0:
+            return cast(
+                BaseEmbeddingLookup,
+                DistributedDataParallel(
+                    module,
+                    # pyre-ignore [16]
+                    device_ids=None if self._device.type == "cpu" else [self._device],
+                    process_group=self._pg,
+                    gradient_as_bucket_view=True,
+                    broadcast_buffers=False,
+                ),
+            )
+        else:
+            return module
 
     def create_pooled_output_dist(self) -> DpPooledEmbeddingDist:
         return DpPooledEmbeddingDist()
