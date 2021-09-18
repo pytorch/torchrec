@@ -124,7 +124,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
         return to_plan(
             [param_info for _, param_info in placed_param_infos],
-            self._device,
             self._world_size,
             self._local_size,
         )

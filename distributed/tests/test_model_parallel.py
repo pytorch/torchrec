@@ -430,7 +430,7 @@ class ModelParallelTest(unittest.TestCase):
             dense_device=device,
         )
         plan: Optional[ShardingPlan]
-        plan = planner.plan(local_model, sharders)
+        plan = planner.collective_plan(local_model, sharders)
 
         local_model = DistributedModelParallel(
             local_model,

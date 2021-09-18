@@ -86,9 +86,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
 
-        # 2. Call ShardingPlanner.plan passing all found modules and corresponding sharders.
+        # 2. Call ShardingPlanner.collective_plan passing all found modules and corresponding sharders.
         if plan is None:
-            plan = EmbeddingShardingPlanner(self._pg, self.device).plan(
+            plan = EmbeddingShardingPlanner(self._pg, self.device).collective_plan(
                 module, sharders
             )
 

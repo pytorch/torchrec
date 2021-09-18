@@ -145,7 +145,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -162,7 +162,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[2].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -243,7 +243,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -260,7 +260,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[2].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -277,7 +277,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[3].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -340,7 +340,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             )
                         ]
                     ),
@@ -411,7 +411,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[0].embedding_dim,
                                 ],
                                 shard_offsets=[block_size, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             ),
                             ShardMetadata(
                                 shard_lengths=[
@@ -419,7 +419,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[0].embedding_dim,
                                 ],
                                 shard_offsets=[2 * block_size, 0],
-                                placement="rank:2/cuda:0",
+                                placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
                                 shard_lengths=[
@@ -427,7 +427,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[0].embedding_dim,
                                 ],
                                 shard_offsets=[3 * block_size, 0],
-                                placement="rank:3/cuda:0",
+                                placement="rank:3/cuda:3",
                             ),
                         ],
                     ),
@@ -452,7 +452,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[block_size, 0],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             ),
                             ShardMetadata(
                                 shard_lengths=[
@@ -460,7 +460,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[2 * block_size, 0],
-                                placement="rank:2/cuda:0",
+                                placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
                                 shard_lengths=[
@@ -468,7 +468,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     tables[1].embedding_dim,
                                 ],
                                 shard_offsets=[3 * block_size, 0],
-                                placement="rank:3/cuda:0",
+                                placement="rank:3/cuda:3",
                             ),
                         ],
                     ),
@@ -535,7 +535,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     block_size,
                                 ],
                                 shard_offsets=[0, block_size],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             ),
                         ]
                     ),
@@ -600,7 +600,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     residual,
                                 ],
                                 shard_offsets=[0, MIN_DIM],
-                                placement="rank:1/cuda:0",
+                                placement="rank:1/cuda:1",
                             ),
                         ]
                     ),
@@ -617,7 +617,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     MIN_DIM,
                                 ],
                                 shard_offsets=[0, 0],
-                                placement="rank:2/cuda:0",
+                                placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
                                 shard_lengths=[
@@ -625,7 +625,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                     residual,
                                 ],
                                 shard_offsets=[0, MIN_DIM],
-                                placement="rank:3/cuda:0",
+                                placement="rank:3/cuda:3",
                             ),
                         ]
                     ),
