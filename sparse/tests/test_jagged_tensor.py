@@ -769,7 +769,11 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         values = torch.rand((7, 3))
         keys = ["f1", "f2"]
         # torch.Tensor([3, 4]) also fails
+        # pyre-fixme[6]: Expected `Optional[typing.Type[torch._dtype]]` for 2nd
+        #  param but got `Type[float]`.
         lengths = torch.tensor([3, 4], dtype=float)
+        # pyre-fixme[6]: Expected `Optional[typing.Type[torch._dtype]]` for 2nd
+        #  param but got `Type[float]`.
         offsets = torch.tensor([0, 3, 7], dtype=float)
 
         with self.assertRaises(AssertionError):

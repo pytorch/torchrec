@@ -79,14 +79,8 @@ def _generate_sparse_features_batch(
         in_jagged.append(
             KeyedJaggedTensor.from_lengths_sync(
                 keys=keys,
-                # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                #  `Type[torch.int]`.
                 lengths=_to_tensor([lengths[key][i] for key in keys], i, torch.int),
-                # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                #  `Type[torch.int]`.
                 values=_to_tensor([values[key][i] for key in keys], i, torch.int),
-                # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                #  `Type[torch.float]`.
                 weights=_to_tensor([weights[key][i] for key in keys], i, torch.float)
                 if weights
                 else None,
@@ -103,22 +97,16 @@ def _generate_sparse_features_batch(
                 lengths=_to_tensor(
                     [lengths[key][j] for key, j in key_index],
                     i,
-                    # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                    #  `Type[torch.int]`.
                     torch.int,
                 ),
                 values=_to_tensor(
                     [values[key][j] for key, j in key_index],
                     i,
-                    # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                    #  `Type[torch.int]`.
                     torch.int,
                 ),
                 weights=_to_tensor(
                     [weights[key][j] for key, j in key_index],
                     i,
-                    # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                    #  `Type[torch.float]`.
                     torch.float,
                 )
                 if weights
@@ -148,8 +136,6 @@ def _generate_pooled_embedding_batch(
             _to_tensor(
                 [local_emb[key][b] for b in range(B * world_size) for key in in_keys],
                 i,
-                # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                #  `Type[torch.float]`.
                 torch.float,
             ).view(B * world_size, -1)
             if in_keys
@@ -159,8 +145,6 @@ def _generate_pooled_embedding_batch(
             _to_tensor(
                 [local_emb[key][b] for b in range(B * i, B * (i + 1)) for key in keys],
                 i,
-                # pyre-fixme[6]: Expected `dtype` for 3rd param but got
-                #  `Type[torch.float]`.
                 torch.float,
             ).view(B, -1)
         )
