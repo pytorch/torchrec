@@ -171,12 +171,16 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
 
     @property
     def sharding_types(self) -> List[str]:
-        return [
+        types = [
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
-            ShardingType.TABLE_ROW_WISE.value,
             ShardingType.ROW_WISE.value,
         ]
+        if torch.cuda.is_available():
+            # TWRW supported for CUDA only
+            types.append(ShardingType.TABLE_ROW_WISE.value)
+
+        return types
 
     def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
         ret = [
