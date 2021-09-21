@@ -214,14 +214,16 @@ def param_sort_key(
 
 def to_plan(
     parameter_infos: List[ParameterInfo],
+    device: torch.device,
     world_size: int,
-    local_size: Optional[int],
+    local_size: int,
 ) -> ShardingPlan:
     plan = {}
     for parameter_info in parameter_infos:
         shards = plan.get(parameter_info.prefix, {})
         shards[parameter_info.name] = ParameterShardingFactory.shard_parameters(
             param_info=parameter_info,
+            device=device,
             world_size=world_size,
             local_size=local_size,
         )

@@ -738,6 +738,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
                 weights_precision=to_sparse_type(config.data_type),
+                device=device,
                 **fused_params,
             )
         )
