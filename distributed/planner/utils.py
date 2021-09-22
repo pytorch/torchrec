@@ -84,7 +84,7 @@ def is_enough_storage(
         host_ranks = [topology.host_and_device_by_rank[device.rank][0]]
         storage = {
             # pyre-fixme[58]
-            k: math.ceil(v / sharding_option.shards_count)
+            k: math.ceil(v / sharding_option._num_col_wise_shards)
             for k, v in storage.items()
         }
     else:
@@ -159,7 +159,7 @@ def allocate_param(
         host_ranks = [topology.host_and_device_by_rank[sharding_option.ranks[-1]][0]]
         storage = {
             # pyre-fixme[58]
-            k: math.ceil(v / sharding_option.shards_count)
+            k: math.ceil(v / sharding_option._num_col_wise_shards)
             for k, v in storage.items()
         }
     else:

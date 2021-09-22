@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 import torch
 import torch.distributed as dist
@@ -27,12 +27,14 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
     SparseFeatures,
-    ShardedEmbeddingTableShard,
+    EmbeddingComputeKernel,
 )
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
     Awaitable,
+    ParameterSharding,
 )
+from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
 class RwSparseFeaturesDist(BaseSparseFeaturesDist):
@@ -162,7 +164,7 @@ class RwEmbeddingSharding(EmbeddingSharding):
 
     def __init__(
         self,
-        sharded_tables: List[ShardedEmbeddingTable],
+        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
@@ -173,7 +175,7 @@ class RwEmbeddingSharding(EmbeddingSharding):
             device = torch.device("cpu")
         self._device = device
         self._is_sequence = is_sequence
-        sharded_tables_per_rank = self._shard(sharded_tables)
+        sharded_tables_per_rank = self._shard(embedding_configs)
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
@@ -192,37 +194,37 @@ class RwEmbeddingSharding(EmbeddingSharding):
         ] = self._score_grouped_embedding_configs_per_rank[dist.get_rank(pg)]
 
     def _shard(
-        self, tables: List[ShardedEmbeddingTable]
-    ) -> List[List[ShardedEmbeddingTableShard]]:
+        self,
+        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+    ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._pg.size()
-        tables_per_rank: List[List[ShardedEmbeddingTableShard]] = [
+        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
         ]
-
-        for table in tables:
+        for config in embedding_configs:
             # pyre-fixme [16]
-            shards = table.sharding_spec.shards
+            shards = config[1].sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
-                size=torch.Size([table.num_embeddings, table.embedding_dim]),
+                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
             )
 
             for rank in range(world_size):
                 tables_per_rank[rank].append(
-                    ShardedEmbeddingTableShard(
-                        num_embeddings=table.num_embeddings,
-                        embedding_dim=table.embedding_dim,
-                        name=table.name,
-                        embedding_names=table.embedding_names,
-                        data_type=table.data_type,
-                        feature_names=table.feature_names,
-                        pooling=table.pooling,
-                        compute_kernel=table.compute_kernel,
-                        is_weighted=table.is_weighted,
+                    ShardedEmbeddingTable(
+                        num_embeddings=config[0].num_embeddings,
+                        embedding_dim=config[0].embedding_dim,
+                        name=config[0].name,
+                        embedding_names=config[0].embedding_names,
+                        data_type=config[0].data_type,
+                        feature_names=config[0].feature_names,
+                        pooling=config[0].pooling,
+                        is_weighted=config[0].is_weighted,
                         local_rows=shards[rank].shard_lengths[0],
-                        local_cols=table.embedding_dim,
+                        local_cols=config[0].embedding_dim,
+                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
                     )
@@ -288,13 +290,13 @@ class RwEmbeddingSharding(EmbeddingSharding):
             embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
-    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
-        embedding_metadata = []
+    def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_shard_metadata = []
         for grouped_config in self._grouped_embedding_configs:
-            embedding_metadata.extend(grouped_config.embedding_metadata())
+            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
         for grouped_config in self._score_grouped_embedding_configs:
-            embedding_metadata.extend(grouped_config.embedding_metadata())
-        return embedding_metadata
+            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
+        return embedding_shard_metadata
 
     def id_list_feature_names(self) -> List[str]:
         id_list_feature_names = []

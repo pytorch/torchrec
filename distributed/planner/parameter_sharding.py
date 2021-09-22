@@ -229,9 +229,9 @@ class CwParameterSharding:
         tensor = param_info.param
         # pyre-fixme [6]
         ranks = sorted(sharding_option.ranks)
-        block_size = sharding_option.sharded_dim_block_size
-        shards_count, residual = divmod(tensor.shape[1], block_size)
-        sizes = [block_size] * shards_count
+        block_size = sharding_option.col_wise_shard_dim
+        num_col_wise_shards, residual = divmod(tensor.shape[1], block_size)
+        sizes = [block_size] * num_col_wise_shards
         if residual > 0:
             sizes += [residual]
         merged_sizes = []

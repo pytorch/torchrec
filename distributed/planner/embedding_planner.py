@@ -143,13 +143,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         heapq.heapify(candidate_devices)
         sort_key, param_info = heapq.heappop(unplaced_param_infos)
         sharding_option = param_info.sharding_options[0]
-        shards_count = sharding_option.shards_count
 
         is_placed = False
-        if sharding_option.sharding_type in [
-            ShardingType.TABLE_WISE.value,
-            ShardingType.COLUMN_WISE.value,
-        ]:
+        if sharding_option.sharding_type == ShardingType.TABLE_WISE.value:
             constrained_devices = []
             ranks = []
             while candidate_devices:
@@ -159,7 +155,30 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     sharding_option.ranks = ranks
                     allocate_param(sharding_option, self._topology)
                     heapq.heappush(candidate_devices, candidate_device)
-                    if len(ranks) == shards_count:
+                    heapq.heappush(
+                        placed_param_infos,
+                        (
+                            param_sort_key(param_info, self._world_size, "storage"),
+                            param_info,
+                        ),
+                    )
+                    is_placed = True
+                    break
+                constrained_devices.append(candidate_device)
+
+            for constrained_device in constrained_devices:
+                heapq.heappush(candidate_devices, constrained_device)
+        elif sharding_option.sharding_type == ShardingType.COLUMN_WISE.value:
+            constrained_devices = []
+            ranks = []
+            while candidate_devices:
+                candidate_device = heapq.heappop(candidate_devices)
+                if is_enough_storage(sharding_option, self._topology, candidate_device):
+                    ranks.append(candidate_device.rank)
+                    sharding_option.ranks = ranks
+                    allocate_param(sharding_option, self._topology)
+                    heapq.heappush(candidate_devices, candidate_device)
+                    if len(ranks) == sharding_option._num_col_wise_shards:
                         heapq.heappush(
                             placed_param_infos,
                             (
@@ -297,7 +316,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 for sharding_type in self._filter_sharding_types(
                     name, sharder.sharding_types
                 ):
-                    shards_count, shard_size = self._get_shards_count_size(
+                    num_col_wise_shards, shard_size = self._get_num_col_wise_shards(
                         name, param, sharding_type
                     )
                     for compute_kernel in self._filter_compute_kernels(
@@ -324,8 +343,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                                 storage_usage=sharder.storage_usage(
                                     param, self._device, compute_kernel
                                 ),
-                                shards_count=shards_count,
-                                sharded_dim_block_size=shard_size,
+                                _num_col_wise_shards=num_col_wise_shards,
+                                col_wise_shard_dim=shard_size,
                             )
                         )
                 param_infos.append(
@@ -366,22 +385,28 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
         return compute_kernels
 
-    def _get_shards_count_size(
+    def _get_num_col_wise_shards(
         self, name: str, param: torch.Tensor, sharding_type: str
     ) -> Tuple[Optional[int], Optional[int]]:
-        shards_count = None
-        shard_dim = None
+        num_col_wise_shards = None
+        col_wise_shard_dim = None
         if sharding_type == ShardingType.COLUMN_WISE.value:
             _hint = self._hints.get(name, None)
-            shard_dim_hint = None if _hint is None else _hint.shard_dim
-            shard_dim = shard_dim_hint if shard_dim_hint is not None else MIN_DIM
+            col_wise_shard_dim_hint = (
+                None if _hint is None else _hint.col_wise_shard_dim
+            )
+            col_wise_shard_dim = (
+                col_wise_shard_dim_hint
+                if col_wise_shard_dim_hint is not None
+                else MIN_DIM
+            )
             # column-wise shard the weights
-            shards_count, residual = divmod(param.shape[1], shard_dim)
+            num_col_wise_shards, residual = divmod(param.shape[1], col_wise_shard_dim)
             assert (
-                shards_count > 0
-            ), f"the table {name} cannot be column-wise sharded into shards of {shard_dim} dimensions"
+                num_col_wise_shards > 0
+            ), f"the table {name} cannot be column-wise sharded into shards of {col_wise_shard_dim} dimensions"
             if residual > 0:
-                shards_count += 1
+                num_col_wise_shards += 1
         elif sharding_type == ShardingType.TABLE_WISE.value:
-            shards_count = 1
-        return shards_count, shard_dim
+            num_col_wise_shards = 1
+        return num_col_wise_shards, col_wise_shard_dim

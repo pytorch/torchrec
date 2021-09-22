@@ -48,6 +48,7 @@ class BaseEmbeddingConfig:
 class EmbeddingTableConfig(BaseEmbeddingConfig):
     pooling: PoolingType = PoolingType.SUM
     is_weighted: bool = False
+    embedding_names: List[str] = field(default_factory=list)
 
 
 @dataclass

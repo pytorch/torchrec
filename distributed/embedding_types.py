@@ -71,22 +71,14 @@ class ShardedMetaConfig(ShardedConfig):
 
 @dataclass
 class EmbeddingAttributes:
-    embedding_names: List[str] = field(default_factory=list)
     compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.DENSE
 
 
 @dataclass
 class ShardedEmbeddingTable(
+    ShardedMetaConfig,
     EmbeddingAttributes,
     EmbeddingTableConfig,
-):
-    ranks: Optional[List[int]] = None
-    sharding_spec: Optional[EnumerableShardingSpec] = None
-
-
-@dataclass
-class ShardedEmbeddingTableShard(
-    ShardedMetaConfig, EmbeddingAttributes, EmbeddingTableConfig
 ):
     pass
 
@@ -97,7 +89,7 @@ class GroupedEmbeddingConfig:
     pooling: PoolingType
     is_weighted: bool
     compute_kernel: EmbeddingComputeKernel
-    embedding_tables: List[ShardedEmbeddingTableShard]
+    embedding_tables: List[ShardedEmbeddingTable]
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
@@ -135,11 +127,12 @@ class GroupedEmbeddingConfig:
             embedding_names.extend(table.embedding_names)
         return embedding_names
 
-    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
-        embedding_metadata: List[Optional[ShardMetadata]] = []
+    def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_shard_metadata: List[Optional[ShardMetadata]] = []
         for table in self.embedding_tables:
-            embedding_metadata.append(table.local_metadata)
-        return embedding_metadata
+            for _ in table.feature_names:
+                embedding_shard_metadata.append(table.local_metadata)
+        return embedding_shard_metadata
 
 
 class BaseEmbeddingLookup(abc.ABC, nn.Module):

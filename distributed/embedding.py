@@ -28,7 +28,6 @@ from torchrec.distributed.embedding_sharding import (
     SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    ShardedEmbeddingTable,
     SparseFeatures,
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
@@ -47,6 +46,7 @@ from torchrec.distributed.types import (
     ShardedTensor,
     append_prefix,
 )
+from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
@@ -55,20 +55,20 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 def create_embedding_sharding(
     sharding_type: str,
-    sharded_tables: List[ShardedEmbeddingTable],
+    embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
     pg: dist.ProcessGroup,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwEmbeddingSharding(sharded_tables, pg, device)
+        return TwEmbeddingSharding(embedding_configs, pg, device)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwEmbeddingSharding(sharded_tables, pg, device)
+        return RwEmbeddingSharding(embedding_configs, pg, device)
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpEmbeddingSharding(sharded_tables, pg, device)
+        return DpEmbeddingSharding(embedding_configs, pg, device)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return TwRwEmbeddingSharding(sharded_tables, pg, device)
+        return TwRwEmbeddingSharding(embedding_configs, pg, device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return CwEmbeddingSharding(sharded_tables, pg, device)
+        return CwEmbeddingSharding(embedding_configs, pg, device)
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
 
@@ -84,11 +84,11 @@ def filter_state_dict(
     return rtn_dict
 
 
-def _create_sharded_table_configs(
+def _create_embedding_configs_by_sharding(
     module: EmbeddingBagCollection,
     pg: dist.ProcessGroup,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-) -> Dict[str, List[ShardedEmbeddingTable]]:
+) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding]]]:
     shared_feature: Dict[str, bool] = {}
     for embedding_config in module.embedding_bag_configs:
         if not embedding_config.feature_names:
@@ -99,11 +99,12 @@ def _create_sharded_table_configs(
             else:
                 shared_feature[feature_name] = True
 
-    sharding_type_to_sharded_tables: Dict[str, List[ShardedEmbeddingTable]] = {}
-    for embedding_config in module.embedding_bag_configs:
-        table_name = embedding_config.name
+    sharding_type_to_embedding_configs: Dict[
+        str, List[Tuple[EmbeddingTableConfig, ParameterSharding]]
+    ] = {}
+    for config in module.embedding_bag_configs:
+        table_name = config.name
         assert table_name in table_name_to_parameter_sharding
-
         parameter_sharding = table_name_to_parameter_sharding[table_name]
         if parameter_sharding.compute_kernel not in [
             kernel.value for kernel in EmbeddingComputeKernel
@@ -111,33 +112,31 @@ def _create_sharded_table_configs(
             raise ValueError(
                 f"Compute kernel not supported {parameter_sharding.compute_kernel}"
             )
-        compute_kernel = EmbeddingComputeKernel(parameter_sharding.compute_kernel)
         embedding_names: List[str] = []
-        for feature_name in embedding_config.feature_names:
+        for feature_name in config.feature_names:
             if shared_feature[feature_name]:
-                embedding_names.append(feature_name + "@" + embedding_config.name)
+                embedding_names.append(feature_name + "@" + config.name)
             else:
                 embedding_names.append(feature_name)
 
-        if parameter_sharding.sharding_type not in sharding_type_to_sharded_tables:
-            sharding_type_to_sharded_tables[parameter_sharding.sharding_type] = []
-        sharding_type_to_sharded_tables[parameter_sharding.sharding_type].append(
-            ShardedEmbeddingTable(
-                num_embeddings=embedding_config.num_embeddings,
-                embedding_dim=embedding_config.embedding_dim,
-                name=embedding_config.name,
-                data_type=embedding_config.data_type,
-                feature_names=copy.deepcopy(embedding_config.feature_names),
-                pooling=embedding_config.pooling,
-                embedding_names=embedding_names,
-                compute_kernel=compute_kernel,
-                is_weighted=module.is_weighted,
-                # pyre-fixme [6]
-                sharding_spec=parameter_sharding.sharding_spec,
-                ranks=parameter_sharding.ranks,
+        if parameter_sharding.sharding_type not in sharding_type_to_embedding_configs:
+            sharding_type_to_embedding_configs[parameter_sharding.sharding_type] = []
+        sharding_type_to_embedding_configs[parameter_sharding.sharding_type].append(
+            (
+                EmbeddingTableConfig(
+                    num_embeddings=config.num_embeddings,
+                    embedding_dim=config.embedding_dim,
+                    name=config.name,
+                    data_type=config.data_type,
+                    feature_names=copy.deepcopy(config.feature_names),
+                    pooling=config.pooling,
+                    is_weighted=module.is_weighted,
+                    embedding_names=embedding_names,
+                ),
+                parameter_sharding,
             )
         )
-    return sharding_type_to_sharded_tables
+    return sharding_type_to_embedding_configs
 
 
 class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
@@ -188,14 +187,14 @@ class ShardedEmbeddingBagCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_sharded_tables = _create_sharded_table_configs(
+        sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
             module, pg, table_name_to_parameter_sharding
         )
         self._sharding_type_to_sharding: Dict[str, EmbeddingSharding] = {
             sharding_type: create_embedding_sharding(
-                sharding_type, sharded_tables, pg, device
+                sharding_type, embedding_confings, pg, device
             )
-            for sharding_type, sharded_tables in sharding_type_to_sharded_tables.items()
+            for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
         }
 
         self._is_weighted: bool = module.is_weighted

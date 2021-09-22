@@ -14,7 +14,7 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     SparseFeatures,
     EmbeddingComputeKernel,
-    ShardedEmbeddingTableShard,
+    ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.embedding_configs import (
@@ -103,10 +103,10 @@ class SparseFeaturesAllToAll(nn.Module):
 
 # group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
 def group_tables(
-    tables_per_rank: List[List[ShardedEmbeddingTableShard]],
+    tables_per_rank: List[List[ShardedEmbeddingTable]],
 ) -> Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
     def _group_tables_helper(
-        embedding_tables: List[ShardedEmbeddingTableShard],
+        embedding_tables: List[ShardedEmbeddingTable],
     ) -> Tuple[List[GroupedEmbeddingConfig], List[GroupedEmbeddingConfig]]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
         score_grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
@@ -120,8 +120,8 @@ def group_tables(
                         EmbeddingComputeKernel.BATCHED_FUSED,
                         EmbeddingComputeKernel.SSD,
                     ]:
-                        grouped_tables: List[ShardedEmbeddingTableShard] = []
-                        grouped_score_tables: List[ShardedEmbeddingTableShard] = []
+                        grouped_tables: List[ShardedEmbeddingTable] = []
+                        grouped_score_tables: List[ShardedEmbeddingTable] = []
                         for table in embedding_tables:
                             if table.compute_kernel in [
                                 EmbeddingComputeKernel.BATCHED_FUSED_UVM,
@@ -258,7 +258,7 @@ class EmbeddingSharding(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def embedding_metadata(self) -> List[Optional[ShardMetadata]]:
+    def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         pass
 
     @abc.abstractmethod
