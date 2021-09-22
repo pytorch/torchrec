@@ -32,6 +32,7 @@ class CollectiveUtilsTest(MultiProcessTestCase):
     def setUpClass(cls) -> None:
         os.environ["MASTER_ADDR"] = str(MASTER_ADDR)
         os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         super().setUpClass()
 
     def setUp(self) -> None:

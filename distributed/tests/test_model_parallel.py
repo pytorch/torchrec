@@ -557,6 +557,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
         os.environ["LOCAL_WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
             backend = "nccl"
