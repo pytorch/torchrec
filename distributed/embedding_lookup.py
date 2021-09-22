@@ -808,12 +808,10 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        combined_table_names = "_".join(
-            [config.name for config in self._config.embedding_tables]
-        )
-        yield append_prefix(prefix, f"{combined_table_names}.weight"), cast(
-            nn.Parameter, self._emb_module.weights
-        )
+        for config in self._config.embedding_tables:
+            yield append_prefix(prefix, f"{config.name}.weight"), cast(
+                nn.Parameter, self._emb_module.weights
+            )
 
 
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):

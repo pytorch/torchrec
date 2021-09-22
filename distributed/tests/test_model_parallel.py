@@ -279,6 +279,9 @@ class ModelParallelTest(unittest.TestCase):
     @seed_and_log
     def setUp(self) -> None:
         torch.use_deterministic_algorithms(True)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
 
@@ -486,39 +489,20 @@ class ModelParallelTest(unittest.TestCase):
             pred = local_model(local_input)
             outputs[rank] = pred.cpu()
 
-        ignore_names: Set[str] = set()
-        for name, m in local_model.module.named_modules():
-            if isinstance(m, ShardedModule):
-                sharded_params = plan.get_plan_for_module(name)
-                if sharded_params is not None:
-                    for k, p in sharded_params.items():
-                        if (
-                            p.compute_kernel
-                            == EmbeddingComputeKernel.BATCHED_DENSE.value
-                        ):
-                            ignore_names.add(k)
-
-        def should_ignore(key: str) -> bool:
-            for k in ignore_names:
-                if k != "" and key.find(k) != -1:
-                    return True
-            return False
-
         # Make sure that optimizer params FQN match model params FQN.
+        model_keys = set()
+        for key in local_model.state_dict().keys():
+            model_keys.add(key)
         opt_keys = set()
         for param_group in opt.state_dict()["param_groups"]:
             for key in param_group["params"]:
-                if not should_ignore(key):
-                    opt_keys.add(key)
-        model_keys = set()
-        for key in local_model.state_dict().keys():
-            if not should_ignore(key):
-                model_keys.add(key)
+                assert key in model_keys
+                opt_keys.add(key)
         np.testing.assert_array_equal(sorted(opt_keys), sorted(model_keys))
+
         # Make sure that named params FQN match model params FQN.
         for key, _ in local_model.named_parameters():
-            if not should_ignore(key):
-                assert key in model_keys
+            assert key in model_keys
 
     @classmethod
     def _gen_model_and_input(
