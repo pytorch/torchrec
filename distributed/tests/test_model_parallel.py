@@ -13,7 +13,11 @@ import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
+from torchrec.distributed.model_parallel import (
+    DistributedModelParallel,
+    ShardedModule,
+    default_sharders,
+)
 from torchrec.distributed.planner.embedding_planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import ParameterHints
 from torchrec.distributed.tests.test_model import (
@@ -604,7 +608,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
         ]
 
     def _generate_dmps_and_batch(
-        self,
+        self, sharders: List[ModuleSharder[nn.Module]] = default_sharders
     ) -> Tuple[List[DistributedModelParallel], ModelInput]:
         _, local_batch = ModelInput.generate(
             batch_size=self.batch_size,
@@ -628,6 +632,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 module=m,
                 init_data_parallel=False,
                 device=self.device,
+                sharders=sharders,
             )
 
             with torch.no_grad():
@@ -691,3 +696,22 @@ class ModelParallelStateDictTest(unittest.TestCase):
             else:
                 src = v2
             self.assertTrue(torch.equal(src, dst))
+
+    # pyre-ignore[56]
+    @given(
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    def test_params_and_buffers(self, kernel_type: str) -> None:
+        (m, _), batch = self._generate_dmps_and_batch()
+        state_dict_keys = set(m.state_dict().keys())
+        param_keys = {key for (key, _) in m.named_parameters()}
+        buffer_keys = {key for (key, _) in m.named_buffers()}
+        self.assertEqual(state_dict_keys, {*param_keys, *buffer_keys})

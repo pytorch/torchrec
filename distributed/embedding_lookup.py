@@ -286,6 +286,12 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for emb_module in self._emb_modules:
+            yield from emb_module.named_buffers(prefix, recurse)
+
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
     ) -> List[str]:
@@ -763,6 +769,16 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, param in zip(
+            self._config.embedding_tables,
+            self.emb_module.split_embedding_weights(),
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, param
+
 
 class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
@@ -948,6 +964,14 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             yield from emb_module.named_parameters(prefix, recurse)
         for emb_module in self._score_emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for emb_module in self._emb_modules:
+            yield from emb_module.named_buffers(prefix, recurse)
+        for emb_module in self._score_emb_modules:
+            yield from emb_module.named_buffers(prefix, recurse)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""

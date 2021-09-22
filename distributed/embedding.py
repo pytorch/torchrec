@@ -368,6 +368,14 @@ class ShardedEmbeddingBagCollection(
                     append_prefix(prefix, "embedding_bags"), recurse
                 )
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for lookup in self._lookups:
+            yield from lookup.named_buffers(
+                append_prefix(prefix, "embedding_bags"), recurse
+            )
+
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
