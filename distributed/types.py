@@ -91,9 +91,23 @@ CompIn = TypeVar("CompIn")
 DistOut = TypeVar("DistOut")
 
 
-class _AwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
+class Awaitable(abc.ABC, Generic[W]):
+    @abc.abstractmethod
+    def wait(self) -> W:
+        pass
+
+
+class NoWait(Awaitable[W]):
+    def __init__(self, obj: W) -> None:
+        self._obj = obj
+
+    def wait(self) -> W:
+        return self._obj
+
+
+class _LazyAwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     """
-    The AwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
+    The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
     This is because ABCMeta/ProxyableClassMeta are both non-trival metaclasses
     Declaring this separately to ensure the init order of metaclasses
 
@@ -104,13 +118,13 @@ class _AwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     pass
 
 
-class Awaitable(Generic[W], metaclass=_AwaitableMeta):
+class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     """
-    The Awaitable type which exposes a `wait()` API, concrete types
+    The LazyAwaitable type which exposes a `wait()` API, concrete types
     can control how to initialize and how the `wait()` behavior should
     be in order to achieve specific async operation.
 
-    This base Awaitable type is a "lazy" async type, which means it will
+    This base LazyAwaitable type is a "lazy" async type, which means it will
     delay `wait()` as late as possible, see details in `__torch_function__`
     below. This could help the model automatically enable computation and
     communication overlap, model author doesn't need to manually call
@@ -122,7 +136,7 @@ class Awaitable(Generic[W], metaclass=_AwaitableMeta):
     * This works with Pytorch functions, but not any generic method, if
       you would like to do arbitary python operations, you need to
       implement the corresponding magic methods
-    * In the case that one function have two or more arguments are awaitables,
+    * In the case that one function have two or more arguments are LazyAwaitable,
       the lazy wait mechanism can't ensure perfect computation/communication
       overlap (i.e. quickly waited the first one but long wait on the second)
     """
@@ -134,18 +148,14 @@ class Awaitable(Generic[W], metaclass=_AwaitableMeta):
         # _result is used to cache the results after the wait() is called.
         self._result: Optional[W] = None
 
-    @abc.abstractmethod
-    def wait(self) -> W:
-        pass
-
     @staticmethod
     # pyre-ignore [2, 3]
     def _wait_async(obj: Any) -> Any:
         """
         This method is used internally to automatically wait when necessary
-        and cache the results of the `awaitable.wait()` call
+        and cache the results of the `LazyAwaitable.wait()` call
         """
-        if isinstance(obj, Awaitable):
+        if isinstance(obj, LazyAwaitable):
             if obj._result is None:
                 obj._result = obj.wait()
             return obj._result
@@ -155,44 +165,44 @@ class Awaitable(Generic[W], metaclass=_AwaitableMeta):
     # pyre-ignore [2, 3]
     def __torch_function__(self, func, types, args=(), kwargs=None):
         """
-        The Awaitable type has a `__torch_function__` implementation.
+        The LazyAwaitable type has a `__torch_function__` implementation.
         This means when this type is seens as an argument to a PyTorch
         function in a position where it expects a W, the PyTorch's
         dispatcher will call into this function for special handling
 
         Our `__torch_function__` implementation goes through all of the
-        args and kwargs and checks if any of them are `Awaitable`.
-        If it is, it will call `wait()` on it and replace the Awaitable
+        args and kwargs and checks if any of them are `LazyAwaitable`.
+        If it is, it will call `wait()` on it and replace the LazyAwaitable
         type object with the result of wait. In this way, async values
         are waited on when the concrete value is first needed and without
         the user having to write an explicit `wait()` call.
         """
         kwargs = kwargs or {}
 
-        # wait() on all Awaitable args/kwargs and replace
+        # wait() on all LazyAwaitable args/kwargs and replace
         # them with the resulting value.
-        new_args = torch.fx.node.map_aggregate(args, Awaitable._wait_async)
-        new_kwargs = torch.fx.node.map_aggregate(kwargs, Awaitable._wait_async)
+        new_args = torch.fx.node.map_aggregate(args, LazyAwaitable._wait_async)
+        new_kwargs = torch.fx.node.map_aggregate(kwargs, LazyAwaitable._wait_async)
 
         return func(*new_args, **new_kwargs)
 
     # pyre-ignore [2, 3]
     def __getattr__(self, name):
         """
-        overriding __getattr__ to allow awaitable to first wait and
+        overriding __getattr__ to allow LazyAwaitable to first wait and
         then call getattr on the wait results.
         """
         if name == "_result":
             raise RuntimeError(
-                f"Awaitable type {type(self)} has not been initialized properly, "
+                f"LazyAwaitable type {type(self)} has not been initialized properly, "
                 f"did you forget to call 'super()'?"
             )
 
-        res = Awaitable._wait_async(self)
+        res = LazyAwaitable._wait_async(self)
         return getattr(res, name)
 
 
-class NoWait(Awaitable[W]):
+class LazyNoWait(LazyAwaitable[W]):
     def __init__(self, obj: W) -> None:
         super().__init__()
         self._obj = obj
@@ -210,15 +220,17 @@ for orig_method_name in torch.fx.graph.magic_methods:
             lhs = args[0]
             op_fn = getattr(operator, method)
             if len(args) == 1:
-                return op_fn(Awaitable._wait_async(lhs))
+                return op_fn(LazyAwaitable._wait_async(lhs))
             elif len(args) == 2:
                 rhs = args[1]
-                return op_fn(Awaitable._wait_async(lhs), Awaitable._wait_async(rhs))
+                return op_fn(
+                    LazyAwaitable._wait_async(lhs), LazyAwaitable._wait_async(rhs)
+                )
             else:
                 raise RuntimeError(f"magic method {as_magic} not supported!")
 
         impl.__name__ = as_magic
-        setattr(Awaitable, as_magic, impl)
+        setattr(LazyAwaitable, as_magic, impl)
 
     # pyre-ignore [16]
     scope(orig_method_name)
@@ -231,11 +243,13 @@ for orig_method_name in torch.fx.graph.reflectable_magic_methods:
         # pyre-ignore [2, 3, 53]
         def impl(self, rhs):
             op_fn = getattr(operator, method)
-            return op_fn(Awaitable._wait_async(rhs), Awaitable._wait_async(self))
+            return op_fn(
+                LazyAwaitable._wait_async(rhs), LazyAwaitable._wait_async(self)
+            )
 
         impl.__name__ = as_magic
         impl.__qualname__ = as_magic
-        setattr(Awaitable, as_magic, impl)
+        setattr(LazyAwaitable, as_magic, impl)
 
     # pyre-ignore [16]
     scope(orig_method_name)
@@ -306,12 +320,14 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         pass
 
     @abc.abstractmethod
-    def output_dist(self, ctx: ShardedModuleContext, output: DistOut) -> Awaitable[Out]:
+    def output_dist(
+        self, ctx: ShardedModuleContext, output: DistOut
+    ) -> LazyAwaitable[Out]:
         pass
 
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: CompIn
-    ) -> Awaitable[Out]:
+    ) -> LazyAwaitable[Out]:
         """
         In case of multiple output distributions
         it makes sense to override this method and initiate
@@ -321,7 +337,7 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         return self.output_dist(ctx, output)
 
     # pyre-ignore[2]
-    def forward(self, *input, **kwargs) -> Awaitable[Out]:
+    def forward(self, *input, **kwargs) -> LazyAwaitable[Out]:
         ctx = self.create_context()
         dist_input = self.input_dist(ctx, *input, **kwargs).wait()
         return self.compute_and_output_dist(ctx, dist_input)

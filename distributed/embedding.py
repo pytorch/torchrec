@@ -39,6 +39,7 @@ from torchrec.distributed.tw_sharding import TwEmbeddingSharding
 from torchrec.distributed.twrw_sharding import TwRwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    LazyAwaitable,
     ParameterSharding,
     ShardedModule,
     ShardingType,
@@ -139,7 +140,7 @@ def _create_sharded_table_configs(
     return sharding_type_to_sharded_tables
 
 
-class EmbeddingCollectionAwaitable(Awaitable[KeyedTensor]):
+class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
         awaitables: List[Awaitable[torch.Tensor]],
@@ -313,7 +314,7 @@ class ShardedEmbeddingBagCollection(
 
     def output_dist(
         self, ctx: ShardedModuleContext, output: List[torch.Tensor]
-    ) -> Awaitable[KeyedTensor]:
+    ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
@@ -324,7 +325,7 @@ class ShardedEmbeddingBagCollection(
 
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: List[SparseFeatures]
-    ) -> Awaitable[KeyedTensor]:
+    ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))

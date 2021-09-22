@@ -448,7 +448,7 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
     def __init__(
         self,
         tensor_awaitable: Awaitable[torch.Tensor],
-        unbucketize_permute_tensor: torch.Tensor,
+        unbucketize_permute_tensor: Optional[torch.Tensor],
         embedding_dim: int,
     ) -> None:
         super().__init__()

@@ -5,10 +5,10 @@ from typing import Dict
 
 import torch
 import torch.fx
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import LazyAwaitable
 
 
-class NeedWait(Awaitable[torch.Tensor]):
+class NeedWait(LazyAwaitable[torch.Tensor]):
     def __init__(self, actual_value: torch.Tensor) -> None:
         super().__init__()
         self.actual_value = actual_value
@@ -18,7 +18,7 @@ class NeedWait(Awaitable[torch.Tensor]):
         return self.actual_value
 
 
-class NeedWaitNoInit(Awaitable[torch.Tensor]):
+class NeedWaitNoInit(LazyAwaitable[torch.Tensor]):
     def __init__(self, actual_value: torch.Tensor) -> None:
         # ill-formed type, no super.__init__() here
         # should error out when using it
@@ -29,7 +29,7 @@ class NeedWaitNoInit(Awaitable[torch.Tensor]):
         return self.actual_value
 
 
-class NeedWaitDict(Awaitable[Dict[str, torch.Tensor]]):
+class NeedWaitDict(LazyAwaitable[Dict[str, torch.Tensor]]):
     def __init__(self, actual_value: Dict[str, torch.Tensor], key: str) -> None:
         super().__init__()
         self.actual_value = actual_value
@@ -51,17 +51,17 @@ class AsyncModule(torch.nn.Module):
         x: torch.Tensor
 
     Returns:
-        Awaitable[torch.Tensor]
+        LazyAwaitable[torch.Tensor]
 
     Example:
         >>> AsyncModule()
     """
 
-    def forward(self, x: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> LazyAwaitable[torch.Tensor]:
         return NeedWait(x)
 
 
-class TestAwaitable(unittest.TestCase):
+class TestLazyAwaitable(unittest.TestCase):
     def test_lazy_torch_function(self) -> None:
         class Model(torch.nn.Module):
             def __init__(self):
@@ -123,14 +123,14 @@ class TestAwaitable(unittest.TestCase):
         traced_res = gm(torch.ones(3, 4))
         self.assertTrue(torch.equal(traced_res, ref_res))
 
-    def test_awaitable_init_error(self) -> None:
+    def test_lazy_awaitable_init_error(self) -> None:
         class Model(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.awaitable = NeedWaitNoInit(torch.ones(2, 3))
+                self.lazy_awaitable = NeedWaitNoInit(torch.ones(2, 3))
 
             def forward(self, x: torch.Tensor) -> torch.Tensor:
-                return x + self.awaitable
+                return x + self.lazy_awaitable
 
         m = Model()
 

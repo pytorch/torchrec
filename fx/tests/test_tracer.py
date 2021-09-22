@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 import torch
 import torch.fx
 from torch.testing import FileCheck  # @manual
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import LazyAwaitable
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
     JaggedTensor,
@@ -252,7 +252,7 @@ class TestTracer(unittest.TestCase):
         self.assertEqual(ref_out, traced_out)
 
     def test_trace_async_module(self) -> None:
-        class NeedWait(Awaitable[torch.Tensor]):
+        class NeedWait(LazyAwaitable[torch.Tensor]):
             def __init__(self, obj: torch.Tensor) -> None:
                 super().__init__()
                 self._obj = obj
@@ -264,10 +264,10 @@ class TestTracer(unittest.TestCase):
             def __init__(self):
                 super().__init__()
 
-            def forward(self, input) -> Awaitable[torch.Tensor]:
+            def forward(self, input) -> LazyAwaitable[torch.Tensor]:
                 return NeedWait(input + 2)
 
-        # Test automated awaitable type `wait()`
+        # Test automated LazyAwaitable type `wait()`
         class AutoModel(torch.nn.Module):
             def __init__(self) -> None:
                 super().__init__()
