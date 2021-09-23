@@ -57,7 +57,6 @@ class HostInfo:
     devices: List[DeviceInfo]
     # Host level storage
     ddr: Storage = field(default_factory=Storage)
-    ssd: Storage = field(default_factory=Storage)
 
 
 @dataclass
@@ -94,12 +93,10 @@ class ShardingOption:
             self.cost,
             self.storage_usage.get(ParameterStorage.HBM.value, 0),
             self.storage_usage.get(ParameterStorage.DDR.value, 0),
-            self.storage_usage.get(ParameterStorage.SSD.value, 0),
         ) < (
             other.cost,
             other.storage_usage.get(ParameterStorage.HBM.value, 0),
             other.storage_usage.get(ParameterStorage.DDR.value, 0),
-            other.storage_usage.get(ParameterStorage.SSD.value, 0),
         )
 
 

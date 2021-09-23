@@ -98,10 +98,6 @@ def is_enough_storage(
             for host_rank in host_ranks:
                 if topology.get_host(host_rank).ddr.free < storage_usage:
                     return False
-        elif storage_type == ParameterStorage.SSD.value:
-            for host_rank in host_ranks:
-                if topology.get_host(host_rank).ssd.free < storage_usage:
-                    return False
         else:
             raise ValueError(f"Unknown ParameterStorage type {storage_type}")
     return True
@@ -174,9 +170,6 @@ def allocate_param(
         elif storage_type == ParameterStorage.DDR.value:
             for host_rank in host_ranks:
                 topology.get_host(host_rank).ddr.free -= storage_usage
-        elif storage_type == ParameterStorage.SSD.value:
-            for host_rank in host_ranks:
-                topology.get_host(host_rank).ssd.free -= storage_usage
         else:
             raise ValueError(f"Unknown ParameterStorage type {storage_type}")
 
@@ -249,12 +242,9 @@ def _get_storage(
     if ddr is None:
         ddr = MAX_DDR_STORAGE
 
-    ssd = gb_to_bytes(storage_in_gb.get("ssd", 0))
-
     return {
         "hbm": hbm,
         "ddr": ddr,
-        "ssd": ssd,
     }
 
 
@@ -288,10 +278,6 @@ def get_topology(
                 ddr=Storage(
                     capacity=storage["ddr"],
                     free=storage["ddr"],
-                ),
-                ssd=Storage(
-                    capacity=storage["ssd"],
-                    free=storage["ssd"],
                 ),
             )
             for num_host in range(num_hosts)

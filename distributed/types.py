@@ -75,8 +75,6 @@ class ParameterStorage(Enum):
     HBM = "hbm"
     # CPU-attached memory
     DDR = "ddr"
-    # Flash card
-    SSD = "ssd"
 
 
 @unique

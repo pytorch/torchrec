@@ -23,7 +23,6 @@ KERNEL_MULTIPLER: Dict[str, int] = {
     EmbeddingComputeKernel.BATCHED_FUSED.value: 1,
     EmbeddingComputeKernel.BATCHED_FUSED_UVM.value: 15,
     EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value: 10,
-    EmbeddingComputeKernel.SSD.value: 100,
 }
 
 

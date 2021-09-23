@@ -42,7 +42,6 @@ class EmbeddingComputeKernel(Enum):
     BATCHED_FUSED = "batched_fused"
     BATCHED_FUSED_UVM = "batched_fused_uvm"
     BATCHED_FUSED_UVM_CACHING = "batched_fused_uvm_caching"
-    SSD = "ssd"
 
 
 @dataclass
@@ -189,7 +188,6 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 ret += [
                     EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
                     EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
-                    EmbeddingComputeKernel.SSD.value,
                 ]
         return ret
 
@@ -211,9 +209,6 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         }:
             assert device.type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
-        elif compute_kernel in {EmbeddingComputeKernel.SSD.value}:
-            assert device.type in {"cuda"}
-            return {ParameterStorage.SSD.value: tensor_bytes}
         else:
             assert device.type in {"cuda", "cpu"}
             storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
