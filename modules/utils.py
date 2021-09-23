@@ -27,3 +27,12 @@ def extract_module_or_tensor_callable(
             # pyre-ignore[7]: Expected `Union[typing.Callable[[torch.Tensor], torch.Tensor], torch.nn.Module]`
             return module_or_callable
         raise
+
+
+def get_module_output_dimension(
+    module: Union[Callable[[torch.Tensor], torch.Tensor], torch.nn.Module],
+    in_features: int,
+) -> int:
+    input = torch.zeros(1, in_features)
+    output = module(input)
+    return output.size(-1)
