@@ -13,14 +13,13 @@ from typing import (
     Union,
     Tuple,
     Iterator,
+    Set,
 )
 
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.nn import parallel
 from torch.nn.modules.module import _IncompatibleKeys
-from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
 from torchrec.distributed.dp_sharding import DpEmbeddingSharding
 from torchrec.distributed.embedding_sharding import (
@@ -347,26 +346,24 @@ class ShardedEmbeddingBagCollection(
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
         for lookup in self._lookups:
-            if isinstance(lookup, DistributedDataParallel):
-                lookup.module.state_dict(
-                    destination, prefix + "embedding_bags.", keep_vars
-                )
-            else:
-                lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
+            lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
         return destination
+
+    def named_modules(
+        self,
+        memo: Optional[Set[nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, nn.Module]]:
+        yield from [(prefix, self)]
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for lookup in self._lookups:
-            if isinstance(lookup, parallel.DistributedDataParallel):
-                yield from lookup.module.named_parameters(
-                    append_prefix(prefix, "embedding_bags"), recurse
-                )
-            else:
-                yield from lookup.named_parameters(
-                    append_prefix(prefix, "embedding_bags"), recurse
-                )
+            yield from lookup.named_parameters(
+                append_prefix(prefix, "embedding_bags"), recurse
+            )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
@@ -384,16 +381,10 @@ class ShardedEmbeddingBagCollection(
         missing_keys = []
         unexpected_keys = []
         for lookup in self._lookups:
-            if isinstance(lookup, DistributedDataParallel):
-                missing, unexpected = lookup.module.load_state_dict(
-                    filter_state_dict(state_dict, "embedding_bags"),
-                    strict,
-                )
-            else:
-                missing, unexpected = lookup.load_state_dict(
-                    filter_state_dict(state_dict, "embedding_bags"),
-                    strict,
-                )
+            missing, unexpected = lookup.load_state_dict(
+                filter_state_dict(state_dict, "embedding_bags"),
+                strict,
+            )
             missing_keys.extend(missing)
             unexpected_keys.extend(unexpected)
         return _IncompatibleKeys(
@@ -407,14 +398,9 @@ class ShardedEmbeddingBagCollection(
     ) -> List[str]:
         destination = [] if destination is None else destination
         for lookup in self._lookups:
-            if isinstance(lookup, DistributedDataParallel):
-                lookup.module.sparse_grad_parameter_names(
-                    destination, append_prefix(prefix, "embedding_bags")
-                )
-            else:
-                lookup.sparse_grad_parameter_names(
-                    destination, append_prefix(prefix, "embedding_bags")
-                )
+            lookup.sparse_grad_parameter_names(
+                destination, append_prefix(prefix, "embedding_bags")
+            )
         return destination
 
     @property

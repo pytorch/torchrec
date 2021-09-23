@@ -141,7 +141,7 @@ class ModelParallelTest(unittest.TestCase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 3,
+        torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least four GPUs",
     )
     # pyre-fixme[56]
@@ -159,12 +159,14 @@ class ModelParallelTest(unittest.TestCase):
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
+        local_size=st.sampled_from([2]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
     def test_sharding_nccl_twrw(
         self,
         sharding_type: str,
         kernel_type: str,
+        local_size: int,
     ) -> None:
         self._test_sharding(
             sharders=[
@@ -174,8 +176,8 @@ class ModelParallelTest(unittest.TestCase):
                 )
             ],
             backend="nccl",
-            world_size=4,
-            local_size=2,
+            world_size=2,
+            local_size=local_size,
         )
 
     # pyre-fixme[56]
@@ -496,8 +498,10 @@ class ModelParallelTest(unittest.TestCase):
         opt_keys = set()
         for param_group in opt.state_dict()["param_groups"]:
             for key in param_group["params"]:
-                assert key in model_keys
                 opt_keys.add(key)
+        model_keys = set()
+        for key in local_model.state_dict().keys():
+            model_keys.add(key)
         np.testing.assert_array_equal(sorted(opt_keys), sorted(model_keys))
 
         # Make sure that named params FQN match model params FQN.

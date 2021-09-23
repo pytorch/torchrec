@@ -16,9 +16,9 @@ from typing import (
 )
 
 import torch
-import torch.nn as nn
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
+from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
 
@@ -80,7 +80,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         optimizer: torch.optim.Optimizer,
         device: torch.device,
     ) -> None:
-        self._model: nn.Module = model
+        self._model: torch.nn.Module = model
         self._optimizer = optimizer
         self._device = device
         if str(self._device) == "cpu":
@@ -151,9 +151,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 class Tracer(torch.fx.Tracer):
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if isinstance(m, ShardedModule) or isinstance(
-            m, nn.parallel.DistributedDataParallel
-        ):
+        if isinstance(m, ShardedModule):
             return True
         return super().is_leaf_module(m, module_qualified_name)
 
@@ -303,11 +301,15 @@ def _get_node_args(node: Node) -> Tuple[List[ArgInfo], int]:
 
 
 def _rewrite_model(  # noqa C901
-    model: nn.Module,
+    model: torch.nn.Module,
     context: TrainPipelineContext,
     dist_stream: Optional[torch.cuda.streams.Stream],
 ) -> List[ShardedModule]:
-    if isinstance(model, DistributedModelParallel):
+
+    # Get underlying nn.Module
+    while isinstance(model, DistributedModelParallel) or isinstance(
+        model, DistributedDataParallel
+    ):
         model = model.module
 
     # Collect a list of sharded modules.

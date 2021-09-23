@@ -6,8 +6,9 @@ from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.nn import parallel
+from torch.distributed._sharded_tensor import ShardedTensor
 from torch.nn.modules.module import _IncompatibleKeys
+from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding import (
     EmbeddingBagCollectionSharder,
     filter_state_dict,
@@ -91,18 +92,30 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             plan = EmbeddingShardingPlanner(self._pg, self.device).collective_plan(
                 module, sharders
             )
-
         self._plan: ShardingPlan = plan
 
-        # 3. Replace modules w/ the result of ModuleSharder.shard call,
-        # replace rest w/ DistributedDataParallel wrappers.
+        # 3. Replace modules w/ sharded versions,
+        # and then wrap w/ DistributedDataParallel.
         fused_optims = []
-        self._shard_modules(
-            init_data_parallel=init_data_parallel,
-            init_model_parallel=True,
+        self._init_dmp(
             fused_optims=fused_optims,
         )
+        if init_data_parallel:
+            self._init_ddp()
         self._optim = CombinedOptimizer(fused_optims)
+
+    @property
+    def dmp_module(self) -> nn.Module:
+        """
+        Property to directly access sharded module, which
+        may or may not yet be wrapped in DDP
+        """
+        # pyre-ignore [7]
+        return (
+            self.module.module
+            if isinstance(self.module, DistributedDataParallel)
+            else self.module
+        )
 
     # pyre-ignore [2, 3]
     def forward(self, *args, **kwargs) -> Any:
@@ -113,92 +126,71 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         See init_data_parallel c-tor argument for usage.
         It's safe to call this method multiple times.
         """
-        self._shard_modules(
-            init_data_parallel=True, init_model_parallel=False, fused_optims=[]
-        )
+        if not isinstance(self.module, DistributedDataParallel):
+            self._init_ddp()
 
-    def _shard_modules(
+    def _init_dmp(
         self,
-        init_data_parallel: bool,
-        init_model_parallel: bool,
         fused_optims: List[Tuple[str, KeyedOptimizer]],
     ) -> None:
-        sharded = self._shard_modules_impl(
+        self._shard_modules_impl(
             self.module,
             "",
-            init_data_parallel,
-            init_model_parallel,
             fused_optims,
         )
-        if init_data_parallel and not sharded:
-            self.module = self._init_ddp(self.module)
 
     def _shard_modules_impl(
         self,
         module: nn.Module,
         path: str,
-        init_data_parallel: bool,
-        init_model_parallel: bool,
         fused_optims: List[Tuple[str, KeyedOptimizer]],
-    ) -> bool:
+    ) -> None:
         sharded_children = set()
         for name, child in module.named_children():
             curr_path = path + name
             sharded_params = self._plan.get_plan_for_module(curr_path)
             if sharded_params:
-                if init_model_parallel:
-                    # Shard module
-                    sharder_key = sharder_name(type(child))
-                    sharded_child = self._sharder_map[sharder_key].shard(
-                        child,
-                        sharded_params,
-                        self._pg,
-                        self.device,
-                    )
-                    setattr(module, name, sharded_child)
-
-                    # Collect fused optimizer.
-                    if isinstance(sharded_child, FusedOptimizerModule):
-                        fused_optims.append((curr_path, sharded_child.fused_optimizer))
+                # Shard module
+                sharder_key = sharder_name(type(child))
+                sharded_child = self._sharder_map[sharder_key].shard(
+                    child,
+                    sharded_params,
+                    self._pg,
+                    self.device,
+                )
+                setattr(module, name, sharded_child)
+                if isinstance(sharded_child, FusedOptimizerModule):
+                    fused_optims.append((curr_path, sharded_child.fused_optimizer))
                 sharded_children.add(name)
             else:
-                child_sharded = self._shard_modules_impl(
+                self._shard_modules_impl(
                     child,
                     curr_path + ".",
-                    init_data_parallel,
-                    init_model_parallel,
                     fused_optims,
                 )
-                if child_sharded:
-                    sharded_children.add(name)
 
-        if init_data_parallel and len(sharded_children) > 0:
-            for name, child in module.named_children():
-                if name not in sharded_children:
-                    dp_child = self._init_ddp(child)
-                    setattr(module, name, dp_child)
-
-        return len(sharded_children) > 0
-
-    def _init_ddp(self, module: nn.Module) -> nn.Module:
-        if isinstance(module, parallel.DistributedDataParallel):
-            return module
-        self._init_parameters(module)
-        module = module.to(self.device)
-        param_grad = [p for p in module.parameters() if p.requires_grad]
-        if len(param_grad) > 0:
-            return cast(
-                nn.Module,
-                parallel.DistributedDataParallel(
-                    module,
-                    device_ids=None if self.device.type == "cpu" else [self.device],
-                    process_group=self._pg,
-                    gradient_as_bucket_view=True,
-                    broadcast_buffers=False,
-                ),
-            )
-        else:
-            return module
+    def _init_ddp(self) -> None:
+        DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
+            module=self.module,
+            params_and_buffers_to_ignore=[
+                key
+                for key, value in self.module.state_dict().items()
+                if isinstance(value, ShardedTensor)
+            ],
+        )
+        # Allocate any 'meta' tensors
+        self._init_parameters(self.module)
+        # initailize DDP
+        self.module = cast(
+            nn.Module,
+            DistributedDataParallel(
+                module=self.module.to(self.device),
+                device_ids=None if self.device.type == "cpu" else [self.device],
+                process_group=self._pg,
+                gradient_as_bucket_view=True,
+                broadcast_buffers=False,
+            ),
+        )
 
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
@@ -230,14 +222,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self, destination: Optional[List[str]] = None, prefix: str = ""
     ) -> List[str]:
         destination = [] if destination is None else destination
-        return self._sparse_grad_parameter_names(self.module, destination, prefix)
+        return self._sparse_grad_parameter_names(self.dmp_module, destination, prefix)
 
     def _sparse_grad_parameter_names(
         self, module: nn.Module, destination: List[str], prefix: str = ""
     ) -> List[str]:
-        if isinstance(module, parallel.DistributedDataParallel):
-            self._sparse_grad_parameter_names(module.module, destination, prefix)
-        elif isinstance(module, ShardedModule):
+        if isinstance(module, ShardedModule):
             module.sparse_grad_parameter_names(destination, prefix)
         elif isinstance(module, nn.Embedding):
             if module.sparse:
@@ -263,7 +253,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
 
-        return self._state_dict(self.module, destination, prefix, keep_vars)
+        return self._state_dict(self.dmp_module, destination, prefix, keep_vars)
 
     def _state_dict(
         self,
@@ -272,9 +262,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str,
         keep_vars: bool,
     ) -> Dict[str, Any]:
-        if isinstance(module, parallel.DistributedDataParallel):
-            module.module.state_dict(destination, prefix, keep_vars)
-        elif isinstance(module, ShardedModule):
+        if isinstance(module, ShardedModule):
             module.state_dict(destination, prefix, keep_vars)
         else:
             # pyre-ignore [29]
@@ -289,7 +277,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        return self._load_state_dict(self.module, state_dict, prefix, strict)
+        return self._load_state_dict(self.dmp_module, state_dict, prefix, strict)
 
     def _load_state_dict(
         self,
@@ -298,13 +286,16 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
+        module.load_state_dict(state_dict, strict=strict)
         missing_keys = []
-        unexepected_keys = []
-        if isinstance(module, parallel.DistributedDataParallel):
-            return module.module.load_state_dict(state_dict, strict)
-        elif isinstance(module, ShardedModule):
+        unexpected_keys = []
+        if isinstance(module, ShardedModule):
             return module.load_state_dict(state_dict, strict=strict)
         else:
+            # pyre-ignore [29]
+            module._load_from_state_dict(
+                state_dict, prefix, {}, strict, missing_keys, unexpected_keys, []
+            )
             for name, child in module.named_children():
                 m_keys, u_keys = self._load_state_dict(
                     child,
@@ -313,17 +304,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                     strict,
                 )
                 missing_keys.extend(m_keys)
-                unexepected_keys.extend(u_keys)
+                unexpected_keys.extend(u_keys)
         return _IncompatibleKeys(
-            missing_keys=missing_keys, unexpected_keys=unexepected_keys
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
     def _named_parameters(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        if isinstance(module, parallel.DistributedDataParallel):
-            yield from module.module.named_parameters(prefix, recurse)
-        elif isinstance(module, ShardedModule):
+        if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
         else:
             yield from module.named_parameters(prefix, recurse=False)
@@ -335,14 +324,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.module, prefix, recurse)
+        yield from self._named_parameters(self.dmp_module, prefix, recurse)
 
     def _named_buffers(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        if isinstance(module, parallel.DistributedDataParallel):
-            yield from module.module.named_buffers(prefix, recurse)
-        elif isinstance(module, ShardedModule):
+        if isinstance(module, ShardedModule):
             yield from module.named_buffers(prefix, recurse)
         else:
             yield from module.named_buffers(prefix, recurse=False)
@@ -354,7 +341,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from self._named_buffers(self.module, prefix, recurse)
+        yield from self._named_buffers(self.dmp_module, prefix, recurse)
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

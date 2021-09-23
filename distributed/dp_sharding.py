@@ -5,7 +5,6 @@ from typing import List, Optional, cast, Dict, Any, Tuple
 import torch
 import torch.distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata
-from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
     GroupedEmbeddingsLookup,
@@ -141,22 +140,8 @@ class DpEmbeddingSharding(EmbeddingSharding):
                 fused_params=fused_params,
                 device=self._device,
             )
-        # TODO: pass ddp_bucket_cap_mb
-        param_grad = [p for p in module.parameters() if p.requires_grad]
-        if len(param_grad) > 0:
-            return cast(
-                BaseEmbeddingLookup,
-                DistributedDataParallel(
-                    module,
-                    # pyre-ignore [16]
-                    device_ids=None if self._device.type == "cpu" else [self._device],
-                    process_group=self._pg,
-                    gradient_as_bucket_view=True,
-                    broadcast_buffers=False,
-                ),
-            )
-        else:
-            return module
+        # DDP is applied at top level only
+        return module
 
     def create_pooled_output_dist(self) -> DpPooledEmbeddingDist:
         return DpPooledEmbeddingDist()
