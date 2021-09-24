@@ -4,7 +4,17 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, Generic, Optional, TypeVar, List, Type, Iterator, Tuple
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Optional,
+    TypeVar,
+    List,
+    Type,
+    Iterator,
+    Tuple,
+)
 
 from torch.distributed._sharding_spec import ShardingSpec
 
@@ -36,13 +46,6 @@ from torch.distributed._sharded_tensor import (  # noqa
     ShardedTensorMetadata,
 )
 from torch.distributed._sharding_spec import ShardMetadata  # noqa
-
-
-def append_prefix(prefix: str, name: str) -> str:
-    if prefix != "" and name != "":
-        return prefix + "." + name
-    else:
-        return prefix + name
 
 
 class ShardingType(Enum):

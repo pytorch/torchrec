@@ -20,7 +20,11 @@ from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable, ShardedModuleContext
+from torchrec.distributed.types import (
+    Awaitable,
+    ShardedModuleContext,
+)
+from torchrec.distributed.utils import get_unsharded_module_names
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -150,8 +154,15 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 
 class Tracer(torch.fx.Tracer):
+    def __init__(self, unsharded_module_names: List[str]) -> None:
+        super().__init__()
+        self._unsharded_module_names = unsharded_module_names
+
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if isinstance(m, ShardedModule):
+        if (
+            isinstance(m, ShardedModule)
+            or module_qualified_name in self._unsharded_module_names
+        ):
             return True
         return super().is_leaf_module(m, module_qualified_name)
 
@@ -319,7 +330,7 @@ def _rewrite_model(  # noqa C901
             sharded_modules[name] = m
 
     # Trace a model.
-    tracer = Tracer()
+    tracer = Tracer(get_unsharded_module_names(model))
     graph = tracer.trace(model)
 
     # Select sharded modules, which are top-level in the forward call graph,

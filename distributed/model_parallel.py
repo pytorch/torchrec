@@ -18,8 +18,8 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
     ShardedModule,
-    append_prefix,
 )
+from torchrec.distributed.utils import append_prefix
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 

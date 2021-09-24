@@ -27,9 +27,9 @@ from torchrec.distributed.types import (
     Shard,
     ShardedTensorMetadata,
     ShardMetadata,
-    append_prefix,
     ShardedTensor,
 )
+from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,

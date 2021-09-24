@@ -43,8 +43,8 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardedModuleContext,
     ShardedTensor,
-    append_prefix,
 )
+from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.fused import FusedOptimizerModule
