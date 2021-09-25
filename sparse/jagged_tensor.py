@@ -351,25 +351,50 @@ def _maybe_compute_stride_kjt(
 torch.fx.wrap("_maybe_compute_stride_kjt")
 
 
-def _maybe_compute_offset_per_key(
+def _maybe_compute_length_per_key(
     keys: List[str],
     stride: int,
-    offset_per_key: Optional[List[int]],
+    length_per_key: Optional[List[int]],
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
 ) -> List[int]:
-    if offset_per_key is None:
+    if length_per_key is None:
         if len(keys) and offsets is not None:
-            _offset: List[int] = offsets[::stride].cpu().tolist()
+            _length: List[int] = (
+                torch.sum((offsets[1:] - offsets[:-1]).view(-1, stride), dim=1)
+                .cpu()
+                .tolist()
+            )
         elif len(keys) and lengths is not None:
-            _offset: List[int] = (
+            _length: List[int] = (
                 torch.sum(lengths.view(-1, stride), dim=1).cpu().tolist()
             )
-            _offset = _cumsum(_offset)
         else:
-            _offset: List[int] = []
-        offset_per_key = _offset
-    return offset_per_key
+            _length: List[int] = []
+        length_per_key = _length
+    return length_per_key
+
+
+torch.fx.wrap("_maybe_compute_length_per_key")
+
+
+def _maybe_compute_offset_per_key(
+    keys: List[str],
+    stride: int,
+    length_per_key: Optional[List[int]],
+    offset_per_key: Optional[List[int]],
+    lengths: Optional[torch.Tensor],
+    offsets: Optional[torch.Tensor],
+) -> Tuple[List[int], List[int]]:
+    if length_per_key is None:
+        _length: List[int] = _maybe_compute_length_per_key(
+            keys, stride, length_per_key, lengths, offsets
+        )
+        length_per_key = _length
+        offset_per_key = _cumsum(length_per_key)
+    elif offset_per_key is None:
+        offset_per_key = _cumsum(length_per_key)
+    return length_per_key, offset_per_key
 
 
 torch.fx.wrap("_maybe_compute_offset_per_key")
@@ -457,6 +482,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         offsets: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
         # Below exposed to ensure torch.script-able
+        length_per_key: Optional[List[int]] = None,
         offset_per_key: Optional[List[int]] = None,
         index_per_key: Optional[Dict[str, int]] = None,
     ) -> None:
@@ -473,6 +499,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         self._stride: int = stride
 
         # lazy fields
+        self._length_per_key: Optional[List[int]] = length_per_key
         self._offset_per_key: Optional[List[int]] = offset_per_key
         self._index_per_key: Optional[Dict[str, int]] = index_per_key
 
@@ -539,6 +566,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         )
 
     def sync(self) -> "KeyedJaggedTensor":
+        self.length_per_key()
         self.offset_per_key()
         return self
 
@@ -578,14 +606,27 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         self._index_per_key: Dict[str, int] = _index_per_key
         return _index_per_key
 
-    def offset_per_key(self) -> List[int]:
-        _offset_per_key = _maybe_compute_offset_per_key(
+    def length_per_key(self) -> List[int]:
+        _length_per_key = _maybe_compute_length_per_key(
             self._keys,
             self.stride(),
+            self._length_per_key,
+            self._lengths,
+            self._offsets,
+        )
+        self._length_per_key = _length_per_key
+        return _length_per_key
+
+    def offset_per_key(self) -> List[int]:
+        _length_per_key, _offset_per_key = _maybe_compute_offset_per_key(
+            self._keys,
+            self.stride(),
+            self._length_per_key,
             self._offset_per_key,
             self._lengths,
             self._offsets,
         )
+        self._length_per_key = _length_per_key
         self._offset_per_key = _offset_per_key
         return _offset_per_key
 
@@ -595,14 +636,13 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         split_list: List[KeyedJaggedTensor] = []
         start = 0
         start_offset = 0
+        _length_per_key = self.length_per_key()
         _offset_per_key = self.offset_per_key()
         for segment in segments:
             end = start + segment
             keys: List[str] = self._keys[start:end]
             end_offset = _offset_per_key[end]
-            split_offset_per_key = [
-                offset - start_offset for offset in _offset_per_key[start : end + 1]
-            ]
+            split_length_per_key = _length_per_key[start:end]
             if len(keys) == 0:
                 split_list.append(
                     KeyedJaggedTensor(
@@ -618,6 +658,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
                         lengths=torch.tensor([], device=self.device(), dtype=torch.int),
                         offsets=torch.tensor([], device=self.device(), dtype=torch.int),
                         stride=self.stride(),
+                        length_per_key=None,
                         offset_per_key=None,
                         index_per_key=None,
                     )
@@ -635,7 +676,8 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
                         ],
                         offsets=None,
                         stride=self._stride,
-                        offset_per_key=split_offset_per_key,
+                        length_per_key=split_length_per_key,
+                        offset_per_key=None,
                         index_per_key=None,
                     )
                 )
@@ -652,21 +694,17 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
                 indices, dtype=torch.int, device=self.device()
             )
 
-        offset_per_key = self.offset_per_key()
+        length_per_key = self.length_per_key()
         permuted_keys: List[str] = []
-        permuted_offset_per_key: List[int] = [0]
+        permuted_length_per_key: List[int] = []
         permuted_lengths_sum = 0
         seen: Dict[str, int] = {}
         for index in indices:
             key = self._keys[index]
             count = seen.get(key, 0)
-
-            start_offset = offset_per_key[index]
-            end_offset = offset_per_key[index + 1]
-
             permuted_keys.append(f"{key}@copy_{count}" if count else key)
-            permuted_lengths_sum += end_offset - start_offset
-            permuted_offset_per_key.append(permuted_lengths_sum)
+            permuted_lengths_sum += length_per_key[index]
+            permuted_length_per_key.append(length_per_key[index])
             seen[key] = count + 1
 
         (
@@ -688,7 +726,8 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             lengths=permuted_lengths.view(-1),
             offsets=None,
             stride=self._stride,
-            offset_per_key=permuted_offset_per_key if len(permuted_keys) > 0 else None,
+            length_per_key=permuted_length_per_key if len(permuted_keys) > 0 else None,
+            offset_per_key=None,
             index_per_key=None,
         )
         return kjt
@@ -712,7 +751,6 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             The bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized values.
         """
         num_features = len(self.keys())
-        batch_size = self.lengths().numel() // num_features
         assert (
             block_sizes.numel() == num_features
         ), f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received."
@@ -747,6 +785,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
                 lengths=bucketized_lengths.view(-1),
                 offsets=None,
                 stride=self.stride(),
+                length_per_key=None,
                 offset_per_key=None,
                 index_per_key=None,
             ),
@@ -787,6 +826,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
+        length_per_key = self._length_per_key
         offset_per_key = self._offset_per_key
         index_per_key = self._index_per_key
 
@@ -803,8 +843,9 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             if offsets is not None
             else None,
             stride=self._stride,
-            offset_per_key=offset_per_key if offset_per_key is not None else None,
-            index_per_key=index_per_key if index_per_key is not None else None,
+            length_per_key=length_per_key,
+            offset_per_key=offset_per_key,
+            index_per_key=index_per_key,
         )
 
     def __str__(self) -> str:
