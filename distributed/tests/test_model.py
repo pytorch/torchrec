@@ -10,7 +10,7 @@ from torchrec.distributed.embedding import (
 )
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.train_pipeline import PipelinedInput
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
@@ -311,12 +311,41 @@ class TestSparseArch(nn.Module):
         )
 
 
-class TestSparseNN(nn.Module):
+class TestSparseNNBase(nn.Module):
+    """
+    Base class for a SparseNN model.
+
+    Constructor Args:
+        tables: List[BaseEmbeddingConfig],
+        weighted_tables: Optional[List[BaseEmbeddingConfig]],
+        embedding_groups: Optional[Dict[str, List[str]]],
+        dense_device: Optional[torch.device],
+        sparse_device: Optional[torch.device],
+    """
+
+    def __init__(
+        self,
+        tables: List[BaseEmbeddingConfig],
+        weighted_tables: Optional[List[BaseEmbeddingConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if dense_device is None:
+            dense_device = torch.device("cpu")
+        if sparse_device is None:
+            sparse_device = torch.device("cpu")
+
+
+class TestSparseNN(TestSparseNNBase):
     """
     Simple version of a SparseNN model.
 
     Constructor Args:
-        tables: List[EmbeddingBagConfig]
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: Optional[List[EmbeddingBagConfig]],
+        embedding_groups: Optional[Dict[str, List[str]]],
         dense_device: Optional[torch.device],
         sparse_device: Optional[torch.device],
 
@@ -333,15 +362,21 @@ class TestSparseNN(nn.Module):
     def __init__(
         self,
         tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
+        weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
     ) -> None:
-        super().__init__()
-        if dense_device is None:
-            dense_device = torch.device("cpu")
-        if sparse_device is None:
-            sparse_device = torch.device("cpu")
+        super().__init__(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(Optional[List[BaseEmbeddingConfig]], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+        if weighted_tables is None:
+            weighted_tables = []
+
         self.dense = TestDenseArch(dense_device)
         self.sparse = TestSparseArch(tables, weighted_tables, sparse_device)
         self.over = TestOverArch(tables, weighted_tables, dense_device)
