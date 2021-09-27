@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-import multiprocessing
 import os
 import unittest
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Callable, Dict, cast, Set
+from typing import List, Tuple, Optional, Dict, cast
 
 import hypothesis.strategies as st
 import numpy as np
@@ -15,24 +14,22 @@ from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
-    ShardedModule,
     default_sharders,
 )
-from torchrec.distributed.planner.embedding_planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import ParameterHints
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
+    TestSparseNNBase,
     TestEBCSharder,
     ModelInput,
 )
+from torchrec.distributed.tests.test_model_parallel_base import ModelParallelTestBase
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardedTensor,
-    ShardingPlan,
     ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.tests.utils import (
     get_free_port,
     skip_if_asan_class,
@@ -42,7 +39,7 @@ from torchrec.tests.utils import (
 
 
 @skip_if_asan_class
-class ModelParallelTest(unittest.TestCase):
+class ModelParallelTest(ModelParallelTestBase):
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -309,61 +306,9 @@ class ModelParallelTest(unittest.TestCase):
             for i in range(num_weighted_features)
         ]
 
-    def _run_multi_process_test(
-        self,
-        callable: Callable[[int, int, List[TestEBCSharder], List[torch.Tensor]], None],
-        world_size: int,
-        sharders: List[ModuleSharder[nn.Module]],
-        tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
-        backend: str,
-        hints: Optional[Dict[str, ParameterHints]] = None,
-        local_size: Optional[int] = None,
-    ) -> List[torch.Tensor]:
-        mgr = multiprocessing.Manager()
-        outputs = mgr.list([torch.tensor([])] * world_size)
-        ctx = multiprocessing.get_context("spawn")
-        processes = []
-        for rank in range(world_size):
-            p = ctx.Process(
-                target=callable,
-                args=(
-                    rank,
-                    world_size,
-                    tables,
-                    weighted_tables,
-                    sharders,
-                    outputs,
-                    backend,
-                    hints,
-                ),
-                kwargs={
-                    "local_size": local_size,
-                },
-            )
-            p.start()
-            processes.append(p)
-
-        for p in processes:
-            p.join()
-            self.assertEqual(0, p.exitcode)
-        return list(outputs)
-
-    @staticmethod
-    def _generate_inputs(
-        world_size: int,
-        tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
-        batch_size: int = 4,
-        num_float_features: int = 16,
-    ) -> Tuple[ModelInput, List[ModelInput]]:
-        return ModelInput.generate(
-            batch_size=batch_size,
-            world_size=world_size,
-            num_float_features=num_float_features,
-            tables=tables,
-            weighted_tables=weighted_tables,
-        )
+        self.embedding_groups = {
+            "group_0": ["feature_" + str(i) for i in range(num_features)]
+        }
 
     def _test_sharding(
         self,
@@ -380,8 +325,10 @@ class ModelParallelTest(unittest.TestCase):
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
+            model_class=cast(TestSparseNNBase, TestSparseNN),
             tables=self.tables,
             weighted_tables=self.weighted_tables,
+            embedding_groups=self.embedding_groups,
             # pyre-fixme[6]: Expected `List[ModuleSharder[nn.Module]]` for 4th param
             #  but got `List[TestEBCSharder]`.
             sharders=sharders,
@@ -389,169 +336,18 @@ class ModelParallelTest(unittest.TestCase):
             hints=hints,
         )
 
-        full_pred = self._gen_full_pred_after_one_step(
+        (global_model, inputs) = self._gen_model_and_input(
+            model_class=cast(TestSparseNNBase, TestSparseNN),
+            embedding_groups=self.embedding_groups,
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             world_size=world_size,
         )
+
+        full_pred = self._gen_full_pred_after_one_step(global_model, inputs)
+
         if full_pred is not None:
             torch.testing.assert_allclose(full_pred, torch.cat(local_pred))
-
-    @classmethod
-    def _test_sharding_single_rank(
-        cls,
-        rank: int,
-        world_size: int,
-        tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
-        sharders: List[ModuleSharder[nn.Module]],
-        outputs: List[torch.Tensor],
-        backend: str,
-        hints: Optional[Dict[str, ParameterHints]] = None,
-        local_size: Optional[int] = None,
-    ) -> None:
-        # Generate model & inputs.
-        (global_model, inputs) = cls._gen_model_and_input(
-            tables=tables, weighted_tables=weighted_tables, world_size=world_size
-        )
-        local_input = inputs[0][1][rank]
-        # Instantiate lazy modules.
-        with torch.no_grad():
-            global_model(local_input)
-        if backend == "nccl":
-            device = torch.device(f"cuda:{rank}")
-            torch.cuda.set_device(device)
-            local_input = local_input.to(device, True)
-        else:
-            device = torch.device("cpu")
-        pg = init_distributed_single_host(
-            rank=rank,
-            world_size=world_size,
-            backend=backend,
-            local_size=local_size,
-        )
-        planner = EmbeddingShardingPlanner(pg, device, hints)
-        # Shard model.
-        local_model = TestSparseNN(
-            sparse_device=torch.device("meta"),
-            tables=tables,
-            weighted_tables=weighted_tables,
-            dense_device=device,
-        )
-        plan: Optional[ShardingPlan]
-        plan = planner.collective_plan(local_model, sharders)
-
-        local_model = DistributedModelParallel(
-            local_model,
-            pg=pg,
-            plan=plan,
-            sharders=sharders,
-            init_data_parallel=False,
-            device=device,
-        )
-        # Instantiate lazy modules.
-        with torch.no_grad():
-            local_model(local_input)
-        local_model.init_data_parallel()
-
-        # Load state from the global model.
-        global_state_dict = global_model.state_dict()
-        for name, tensor in local_model.state_dict().items():
-            assert name in global_state_dict
-            global_tensor = global_state_dict[name]
-            if isinstance(tensor, ShardedTensor):
-                for local_shard in tensor.local_shards():
-                    assert global_tensor.ndim == local_shard.tensor.ndim
-                    shard_meta = local_shard.metadata
-                    t = global_tensor.detach()
-                    t = t[
-                        shard_meta.shard_offsets[0] : shard_meta.shard_offsets[0]
-                        + local_shard.tensor.shape[0],
-                        shard_meta.shard_offsets[1] : shard_meta.shard_offsets[1]
-                        + local_shard.tensor.shape[1],
-                    ]
-                    local_shard.tensor.copy_(t)
-            else:
-                tensor.copy_(global_tensor)
-
-        # Run a single training step of the sharded model.
-        dense_optim = KeyedOptimizerWrapper(
-            dict(local_model.named_parameters()),
-            lambda params: torch.optim.SGD(params, lr=0.1),
-        )
-        opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
-        opt.zero_grad()
-        loss, _ = local_model(local_input)
-        loss.backward()
-        opt.step()
-
-        # Run a forward pass the the sharded model.
-        with torch.no_grad():
-            local_model.train(False)
-            pred = local_model(local_input)
-            outputs[rank] = pred.cpu()
-
-        # Make sure that optimizer params FQN match model params FQN.
-        model_keys = set()
-        for key in local_model.state_dict().keys():
-            model_keys.add(key)
-        opt_keys = set()
-        for param_group in opt.state_dict()["param_groups"]:
-            for key in param_group["params"]:
-                opt_keys.add(key)
-        model_keys = set()
-        for key in local_model.state_dict().keys():
-            model_keys.add(key)
-        np.testing.assert_array_equal(sorted(opt_keys), sorted(model_keys))
-
-        # Make sure that named params FQN match model params FQN.
-        for key, _ in local_model.named_parameters():
-            assert key in model_keys
-
-    @classmethod
-    def _gen_model_and_input(
-        cls,
-        tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
-        world_size: int,
-    ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
-        torch.manual_seed(0)
-        model = TestSparseNN(tables=tables, weighted_tables=weighted_tables)
-        inputs = [
-            cls._generate_inputs(
-                world_size=world_size, tables=tables, weighted_tables=weighted_tables
-            )
-        ]
-        return (model, inputs)
-
-    @classmethod
-    def _gen_full_pred_after_one_step(
-        cls,
-        tables: List[EmbeddingBagConfig],
-        weighted_tables: List[EmbeddingBagConfig],
-        world_size: int,
-    ) -> torch.Tensor:
-        (global_model, inputs) = cls._gen_model_and_input(
-            tables=tables, weighted_tables=weighted_tables, world_size=world_size
-        )
-        global_input = inputs[0][0]
-
-        # Instantiate lazy modules.
-        with torch.no_grad():
-            global_model(global_input)
-
-        # Run a single training step of the global model.
-        opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
-        opt.zero_grad()
-        loss, _ = global_model(global_input)
-        loss.backward()
-        opt.step()
-
-        # Run a forward pass of the global model.
-        with torch.no_grad():
-            global_model.train(False)
-            full_pred = global_model(global_input)
-            return full_pred
 
 
 class ModelParallelStateDictTest(unittest.TestCase):
