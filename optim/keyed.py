@@ -15,7 +15,6 @@ from typing import (
 
 import torch
 from torch import optim
-from torchrec.distributed.types import ShardedTensor
 
 OptimizerFactory = Callable[[List[torch.Tensor]], optim.Optimizer]
 
@@ -27,7 +26,7 @@ class KeyedOptimizer(optim.Optimizer):
 
     def __init__(
         self,
-        params: Mapping[str, Union[torch.Tensor, ShardedTensor]],
+        params: Mapping[str, torch.Tensor],
         # pyre-ignore [2]
         state: Mapping[Any, Any],
         param_groups: Collection[Mapping[str, Any]],
@@ -52,17 +51,10 @@ class KeyedOptimizer(optim.Optimizer):
         # it happens e.g. in case of BatchedDenseEmbeddingBag.
         param_to_keys: Dict[torch.Tensor, List[str]] = {}
         for key, p in self.params.items():
-            if isinstance(p, ShardedTensor):
-                for local_shard in p.local_shards():
-                    tensor = local_shard.tensor
-                    if tensor not in param_to_keys:
-                        param_to_keys[tensor] = []
-                    param_to_keys[tensor].append(key)
-            else:
-                tensor = p
-                if tensor not in param_to_keys:
-                    param_to_keys[tensor] = []
-                param_to_keys[tensor].append(key)
+            tensor = p
+            if tensor not in param_to_keys:
+                param_to_keys[tensor] = []
+            param_to_keys[tensor].append(key)
 
         state = {}
         param_groups = []
@@ -211,7 +203,7 @@ class CombinedOptimizer(KeyedOptimizer):
         ]
 
     @property
-    def params(self) -> Mapping[str, Union[torch.Tensor, ShardedTensor]]:
+    def params(self) -> Mapping[str, torch.Tensor]:
         # TODO: combine params
         return {}
 
@@ -228,19 +220,13 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
 
     def __init__(
         self,
-        params: Mapping[str, Union[torch.Tensor, ShardedTensor]],
+        params: Mapping[str, torch.Tensor],
         optim_factory: OptimizerFactory,
     ) -> None:
         # Get local shards and dedup.
-        tensors: Set[torch.Tensor] = set()
-        for value in params.values():
-            if isinstance(value, ShardedTensor):
-                for local_shard in value.local_shards():
-                    tensors.add(local_shard.tensor)
-            else:
-                tensors.add(value)
+        params_set: Set[torch.Tensor] = set(params.values())
 
-        self._optimizer: optim.Optimizer = optim_factory(list(tensors))
+        self._optimizer: optim.Optimizer = optim_factory(list(params_set))
         super().__init__(params, self._optimizer.state, self._optimizer.param_groups)
 
     def zero_grad(self, set_to_none: bool = False) -> None:
@@ -254,7 +240,7 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
 class OptimizerWrapper(KeyedOptimizer):
     def __init__(self, optimizer: KeyedOptimizer) -> None:
         self._optimizer = optimizer
-        self.params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = optimizer.params
+        self.params: Mapping[str, torch.Tensor] = optimizer.params
         # pyre-ignore [4]
         self.state: Mapping[Any, Any] = optimizer.state
         self.param_groups: Collection[Mapping[str, Any]] = optimizer.param_groups
