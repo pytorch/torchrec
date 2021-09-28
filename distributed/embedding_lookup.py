@@ -242,7 +242,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
         assert sparse_features.id_list_features is not None
         embeddings: List[torch.Tensor] = []
         id_list_features_by_group = sparse_features.id_list_features.split(
-            self._id_list_feature_splits
+            self._id_list_feature_splits,
         )
         for emb_op, features in zip(self._emb_modules, id_list_features_by_group):
             embeddings.append(emb_op(features).view(-1))
@@ -896,7 +896,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         if len(self._emb_modules) > 0:
             assert sparse_features.id_list_features is not None
             id_list_features_by_group = sparse_features.id_list_features.split(
-                self._id_list_feature_splits
+                self._id_list_feature_splits,
             )
             for emb_op, features in zip(self._emb_modules, id_list_features_by_group):
                 embeddings.append(emb_op(features).values())
@@ -904,7 +904,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             assert sparse_features.id_score_list_features is not None
             id_score_list_features_by_group = (
                 sparse_features.id_score_list_features.split(
-                    self._id_score_list_feature_splits
+                    self._id_score_list_feature_splits,
                 )
             )
             for emb_op, features in zip(
