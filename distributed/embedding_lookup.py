@@ -114,8 +114,8 @@ class GroupedEmbedding(BaseEmbedding):
                         embedding_config.local_cols,
                         device=device,
                     ).uniform_(
-                        -sqrt(1 / embedding_config.num_embeddings),
-                        sqrt(1 / embedding_config.num_embeddings),
+                        embedding_config.get_weight_init_min(),
+                        embedding_config.get_weight_init_max(),
                     ),
                 )
             )
@@ -362,8 +362,8 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                         embedding_config.local_cols,
                         device=device,
                     ).uniform_(
-                        -sqrt(1 / embedding_config.num_embeddings),
-                        sqrt(1 / embedding_config.num_embeddings),
+                        embedding_config.get_weight_init_min(),
+                        embedding_config.get_weight_init_max(),
                     ),
                 )
             )
@@ -479,6 +479,8 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         self._pooling: PoolingMode = to_pooling_mode(config.pooling)
 
         self._local_rows: List[int] = []
+        self._weight_init_mins: List[float] = []
+        self._weight_init_maxs: List[float] = []
         self._num_embeddings: List[int] = []
         self._embedding_dims: List[int] = []
         self._feature_table_map: List[int] = []
@@ -488,6 +490,8 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         shared_feature: Dict[str, bool] = {}
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
+            self._weight_init_mins.append(config.get_weight_init_min())
+            self._weight_init_maxs.append(config.get_weight_init_max())
             self._num_embeddings.append(config.num_embeddings)
             self._embedding_dims.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
@@ -510,14 +514,18 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         assert len(self._num_embeddings) == len(
             self.emb_module.split_embedding_weights()
         )
-        for (rows, num_emb, emb_dim, param) in zip(
+        for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
             self._local_rows,
-            self._num_embeddings,
             self._embedding_dims,
+            self._weight_init_mins,
+            self._weight_init_maxs,
             self.emb_module.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)
-            param.data.uniform_(-sqrt(1 / num_emb), sqrt(1 / num_emb))
+            param.data.uniform_(
+                weight_init_min,
+                weight_init_max,
+            )
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         values = self.emb_module(

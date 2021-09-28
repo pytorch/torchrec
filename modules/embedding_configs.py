@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, unique
-from typing import List, Dict
+from math import sqrt
+from typing import Optional, List, Dict
 
 
 @unique
@@ -39,6 +40,20 @@ class BaseEmbeddingConfig:
     name: str = ""
     data_type: DataType = DataType.FP32
     feature_names: List[str] = field(default_factory=list)
+    weight_init_max: Optional[float] = None
+    weight_init_min: Optional[float] = None
+
+    def get_weight_init_max(self) -> float:
+        if self.weight_init_max is None:
+            return sqrt(1 / self.num_embeddings)
+        else:
+            return self.weight_init_max
+
+    def get_weight_init_min(self) -> float:
+        if self.weight_init_min is None:
+            return -sqrt(1 / self.num_embeddings)
+        else:
+            return self.weight_init_min
 
     def num_features(self) -> int:
         return len(self.feature_names)
