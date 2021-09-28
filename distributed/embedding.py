@@ -131,6 +131,8 @@ def _create_embedding_configs_by_sharding(
                     pooling=config.pooling,
                     is_weighted=module.is_weighted,
                     embedding_names=embedding_names,
+                    weight_init_max=config.weight_init_max,
+                    weight_init_min=config.weight_init_min,
                 ),
                 parameter_sharding,
             )

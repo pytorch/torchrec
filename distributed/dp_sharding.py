@@ -116,6 +116,8 @@ class DpEmbeddingSharding(EmbeddingSharding):
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
                         local_metadata=None,
                         global_metadata=None,
+                        weight_init_max=config[0].weight_init_max,
+                        weight_init_min=config[0].weight_init_min,
                     )
                 )
         return tables_per_rank
