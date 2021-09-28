@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 import torch
 import torch.nn as nn
 from torchrec.modules.embedding_configs import (
+    DataType,
     EmbeddingConfig,
     EmbeddingBagConfig,
     PoolingType,
@@ -108,12 +109,18 @@ class EmbeddingBagCollection(nn.Module):
             if embedding_config.name in table_names:
                 raise ValueError(f"Duplicate table name {embedding_config.name}")
             table_names.add(embedding_config.name)
+            dtype = (
+                torch.float32
+                if embedding_config.data_type == DataType.FP32
+                else torch.float16
+            )
             self.embedding_bags[embedding_config.name] = nn.EmbeddingBag(
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
                 mode=_to_mode(embedding_config.pooling),
                 device=device,
                 include_last_offset=True,
+                dtype=dtype,
             )
             if not embedding_config.feature_names:
                 embedding_config.feature_names = [embedding_config.name]
