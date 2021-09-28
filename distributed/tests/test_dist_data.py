@@ -19,6 +19,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAll,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
+    KJTAllToAllAwaitable,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.tests.utils import get_free_port, seed_and_log
@@ -196,9 +197,20 @@ class DistDataTestCase(abc.ABC, unittest.TestCase):
 class KJTAllToAllTest(DistDataTestCase):
     @classmethod
     def _validate(
-        cls, actual_output: KeyedJaggedTensor, expected_output: KeyedJaggedTensor
+        cls,
+        actual_output_awaitable: Union[KJTAllToAllAwaitable, KeyedJaggedTensor],
+        expected_output_awaitable: Union[KJTAllToAllAwaitable, KeyedJaggedTensor],
     ) -> None:
-
+        actual_output = (
+            actual_output_awaitable
+            if isinstance(actual_output_awaitable, KeyedJaggedTensor)
+            else actual_output_awaitable.wait()
+        )
+        expected_output = (
+            expected_output_awaitable
+            if isinstance(expected_output_awaitable, KeyedJaggedTensor)
+            else expected_output_awaitable.wait()
+        )
         assert_array_equal(
             actual_output.values().cpu(),
             expected_output.values().cpu(),
