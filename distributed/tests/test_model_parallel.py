@@ -277,12 +277,11 @@ class ModelParallelTest(ModelParallelTestBase):
 
     @seed_and_log
     def setUp(self) -> None:
+        super().setUp()
         torch.use_deterministic_algorithms(True)
         if torch.cuda.is_available():
             torch.backends.cudnn.allow_tf32 = False
             torch.backends.cuda.matmul.allow_tf32 = False
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
 
         num_features = 4
         num_weighted_features = 2

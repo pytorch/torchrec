@@ -22,10 +22,20 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
-from torchrec.tests.utils import init_distributed_single_host
+from torchrec.tests.utils import (
+    get_free_port,
+    seed_and_log,
+    init_distributed_single_host,
+)
 
 
 class ModelParallelTestBase(unittest.TestCase):
+    @seed_and_log
+    def setUp(self) -> None:
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+
     @classmethod
     def _test_sharding_single_rank(
         cls,
