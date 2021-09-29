@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import abc
 from typing import List, Dict, Optional
 
 import torch
@@ -26,7 +27,26 @@ def _to_mode(pooling: PoolingType) -> str:
         raise ValueError(f"Unsupported pooling {pooling}")
 
 
-class EmbeddingBagCollection(nn.Module):
+class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
+    """
+    Interface for EmbeddingBagCollection, GroupedEmbeddingBag, and BaseBatchedEmbeddingBag.
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> KeyedTensor:
+        pass
+
+    @abc.abstractproperty
+    def embedding_bag_configs(
+        self,
+    ) -> List[EmbeddingBagConfig]:
+        pass
+
+
+class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags)
     It processes sparse data in the form of KeyedJaggedTensor
@@ -100,7 +120,7 @@ class EmbeddingBagCollection(nn.Module):
         self.is_weighted = is_weighted
         # pyre-ignore[11]
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
-        self.embedding_bag_configs = tables
+        self._embedding_bag_configs = tables
         self._embedding_names: List[str] = []
         self._lengths_per_embedding: List[int] = []
         table_names = set()
@@ -144,7 +164,7 @@ class EmbeddingBagCollection(nn.Module):
         pooled_embeddings: List[torch.Tensor] = []
 
         for embedding_config, embedding_bag in zip(
-            self.embedding_bag_configs, self.embedding_bags.values()
+            self._embedding_bag_configs, self.embedding_bags.values()
         ):
             for feature_name in embedding_config.feature_names:
                 f = features[feature_name]
@@ -166,6 +186,10 @@ class EmbeddingBagCollection(nn.Module):
             values=data,
             length_per_key=self._lengths_per_embedding,
         )
+
+    @property
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        return self._embedding_bag_configs
 
 
 class EmbeddingCollection(nn.Module):

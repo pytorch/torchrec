@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import abc
+import dataclasses
 from collections import OrderedDict
 from math import sqrt
 from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
@@ -33,7 +34,9 @@ from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
+    EmbeddingBagConfig,
 )
+from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.optim.fused import FusedOptimizerModule, FusedOptimizer
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
@@ -301,17 +304,10 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
         return destination
 
 
-class BaseEmbeddingBag(abc.ABC, nn.Module):
+class BaseEmbeddingBag(EmbeddingBagCollectionInterface):
     """
     abstract base class for grouped nn.EmbeddingBag
     """
-
-    @abc.abstractmethod
-    def forward(
-        self,
-        features: KeyedJaggedTensor,
-    ) -> KeyedTensor:
-        pass
 
     """
     return sparse gradient parameter names
@@ -458,6 +454,20 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                 destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
+    @property
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        keys = {field.name for field in dataclasses.fields(EmbeddingBagConfig)}
+        return [
+            EmbeddingBagConfig(
+                **{
+                    key: value
+                    for key, value in dataclasses.asdict(table_config).items()
+                    if key in keys
+                }
+            )
+            for table_config in self._config.embedding_tables
+        ]
+
 
 class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
     def __init__(
@@ -579,6 +589,20 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         SplitTableBatchedEmbeddingBagsCodegen,
     ]:
         ...
+
+    @property
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        keys = {field.name for field in dataclasses.fields(EmbeddingBagConfig)}
+        return [
+            EmbeddingBagConfig(
+                **{
+                    key: value
+                    for key, value in dataclasses.asdict(table_config).items()
+                    if key in keys
+                }
+            )
+            for table_config in self._config.embedding_tables
+        ]
 
 
 class EmbeddingBagFusedOptimizer(FusedOptimizer):

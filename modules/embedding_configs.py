@@ -23,12 +23,16 @@ class DataType(Enum):
     FP32 = "FP32"
     FP16 = "FP16"
     INT8 = "INT8"
+    INT4 = "INT4"
+    INT2 = "INT2"
 
 
-ELEMENT_SIZE: Dict[DataType, int] = {
-    DataType.FP32: 4,
-    DataType.FP16: 2,
-    DataType.INT8: 1,
+DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
+    DataType.FP32: 32,
+    DataType.FP16: 16,
+    DataType.INT8: 8,
+    DataType.INT4: 4,
+    DataType.INT2: 2,
 }
 
 
