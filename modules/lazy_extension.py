@@ -2,7 +2,6 @@
 
 import functools
 import inspect
-import itertools
 from typing import (
     Any,
     Callable,
@@ -61,16 +60,16 @@ def lazy_apply(
         >>> @torch.no_grad()
         >>> def init_weights(m):
         >>>     print(m)
-        >>>     if type(m) == torchrec.MCLinear:
+        >>>     if type(m) == torch.nn.LazyLinear:
         >>>         m.weight.fill_(1.0)
         >>>         print(m.weight)
         >>>
-        >>> linear = torchrec.MCLinear(10, 2)
+        >>> linear = torch.nn.LazyLinear(2)
         >>> lazy_apply(linear, init_weights)  # doesn't run `init_weights` immediately
         >>> input = torch.randn(2, 10)
         >>> linear(input)  # runs `init_weights` only once, right after first forward pass
         >>>
-        >>> seq = torch.nn.Sequential(torchrec.MCLinear(10, 2), torchrec.MCLinear(10, 2))
+        >>> seq = torch.nn.Sequential(torch.nn.LazyLinear(2), torch.nn.LazyLinear(2))
         >>> lazy_apply(seq, init_weights)  # doesn't run `init_weights` immediately
         >>> input = torch.randn(2, 10)
         >>> seq(input)  # runs `init_weights` only once, right after first forward pass
@@ -129,11 +128,11 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
             >>> @torch.no_grad()
             >>> def init_weights(m):
             >>>     print(m)
-            >>>     if type(m) == torchrec.MCLinear:
+            >>>     if type(m) == torch.nn.LazyLinear:
             >>>         m.weight.fill_(1.0)
             >>>         print(m.weight)
             >>>
-            >>> linear = torchrec.MCLinear(10, 2)
+            >>> linear = torch.nn.LazyLinear(2)
             >>> linear.apply(init_weights)  # this fails, because `linear` (a lazy-module) hasn't been initialized yet
             >>>
             >>> input = torch.randn(2, 10)
