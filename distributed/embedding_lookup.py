@@ -492,7 +492,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         self._weight_init_mins: List[float] = []
         self._weight_init_maxs: List[float] = []
         self._num_embeddings: List[int] = []
-        self._embedding_dims: List[int] = []
+        self._local_cols: List[int] = []
         self._feature_table_map: List[int] = []
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
@@ -503,7 +503,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             self._weight_init_mins.append(config.get_weight_init_min())
             self._weight_init_maxs.append(config.get_weight_init_max())
             self._num_embeddings.append(config.num_embeddings)
-            self._embedding_dims.append(config.local_cols)
+            self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
             for feature_name in config.feature_names:
                 if feature_name not in shared_feature:
@@ -526,7 +526,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         )
         for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
             self._local_rows,
-            self._embedding_dims,
+            self._local_cols,
             self._weight_init_mins,
             self._weight_init_maxs,
             self.emb_module.split_embedding_weights(),
@@ -616,13 +616,28 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
         def to_rowwise_sharded_metadata(
             local_metadata: ShardMetadata,
             global_metadata: ShardedTensorMetadata,
+            sharding_dim: int,
         ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
             rw_shards: List[ShardMetadata] = []
             rw_local_shard: ShardMetadata = local_metadata
-            for shard in global_metadata.shards_metadata:
+            shards_metadata = global_metadata.shards_metadata
+            # column-wise sharding
+            # sort the metadata based on column offset and
+            # we construct the momentum tensor in row-wise sharded way
+            if sharding_dim == 1:
+                shards_metadata = sorted(
+                    shards_metadata, key=lambda shard: shard.shard_offsets[1]
+                )
+
+            for idx, shard in enumerate(shards_metadata):
+                offset = shard.shard_offsets[0]
+                # for column-wise sharding, we still create row-wise sharded metadata for optimizer
+                # manually create a row-wise offset
+                if sharding_dim == 1:
+                    offset = idx * shard.shard_lengths[0]
                 rw_shard = ShardMetadata(
                     shard_lengths=[shard.shard_lengths[0]],
-                    shard_offsets=[shard.shard_offsets[0]],
+                    shard_offsets=[offset],
                     placement=shard.placement,
                 )
 
@@ -638,10 +653,10 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                 memory_format=global_metadata.tensor_properties.memory_format,
                 pin_memory=global_metadata.tensor_properties.pin_memory,
             )
-
+            len_rw_shards = len(shards_metadata) if sharding_dim == 1 else 1
             rw_metadata = ShardedTensorMetadata(
                 shards_metadata=rw_shards,
-                size=torch.Size([global_metadata.size[0]]),
+                size=torch.Size([global_metadata.size[0] * len_rw_shards]),
                 tensor_properties=tensor_properties,
             )
             return rw_local_shard, rw_metadata
@@ -673,10 +688,15 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
             state[weight] = {}
             # momentum1
             assert table_config.local_rows == optimizer_states[0].size(0)
+            sharding_dim = (
+                1 if table_config.local_cols != table_config.embedding_dim else 0
+            )
             momentum1_key = f"{table_config.name}.momentum1"
             if optimizer_states[0].dim() == 1:
                 (local_metadata, sharded_tensor_metadata) = to_rowwise_sharded_metadata(
-                    table_config.local_metadata, table_config.global_metadata
+                    table_config.local_metadata,
+                    table_config.global_metadata,
+                    sharding_dim,
                 )
             else:
                 (local_metadata, sharded_tensor_metadata) = (
@@ -699,7 +719,9 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                         local_metadata,
                         sharded_tensor_metadata,
                     ) = to_rowwise_sharded_metadata(
-                        table_config.local_metadata, table_config.global_metadata
+                        table_config.local_metadata,
+                        table_config.global_metadata,
+                        sharding_dim,
                     )
                 else:
                     (local_metadata, sharded_tensor_metadata) = (
@@ -769,9 +791,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
-                    zip(
-                        self._local_rows, self._embedding_dims, managed, compute_devices
-                    )
+                    zip(self._local_rows, self._local_cols, managed, compute_devices)
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
@@ -822,7 +842,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
 
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
-                list(zip(self._local_rows, self._embedding_dims)),
+                list(zip(self._local_rows, self._local_cols)),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
                 use_cpu=device is None or device.type == "cpu",

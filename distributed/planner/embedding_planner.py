@@ -31,7 +31,6 @@ from torchrec.distributed.planner.utils import (
     deallocate_param,
     param_sort_key,
     to_plan,
-    MIN_DIM,
 )
 from torchrec.distributed.types import (
     ShardingPlan,
@@ -398,13 +397,10 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             col_wise_shard_dim = (
                 col_wise_shard_dim_hint
                 if col_wise_shard_dim_hint is not None
-                else MIN_DIM
+                else param.shape[1]
             )
             # column-wise shard the weights
             num_col_wise_shards, residual = divmod(param.shape[1], col_wise_shard_dim)
-            assert (
-                num_col_wise_shards > 0
-            ), f"the table {name} cannot be column-wise sharded into shards of {col_wise_shard_dim} dimensions"
             if residual > 0:
                 num_col_wise_shards += 1
         elif sharding_type == ShardingType.TABLE_WISE.value:

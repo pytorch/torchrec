@@ -551,6 +551,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
             hints={
                 "table_0": ParameterHints(
                     sharding_types=[ShardingType.COLUMN_WISE.value],
+                    col_wise_shard_dim=32,
                 ),
             },
         )
@@ -653,9 +654,11 @@ class TestEmbeddingPlanner(unittest.TestCase):
             hints={
                 "table_0": ParameterHints(
                     sharding_types=[ShardingType.COLUMN_WISE.value],
+                    col_wise_shard_dim=32,
                 ),
                 "table_1": ParameterHints(
                     sharding_types=[ShardingType.COLUMN_WISE.value],
+                    col_wise_shard_dim=32,
                 ),
             },
         )
