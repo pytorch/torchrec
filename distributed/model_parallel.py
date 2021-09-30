@@ -52,6 +52,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         plan: plan to use when sharding, defaults to EmbeddingShardingPlanner.collective_plan(),
         sharders: ModuleSharders available to shard with, defaults to EmbeddingBagCollectionSharder(),
         init_data_parallel: data-parallel modules can be lazy, i.e. they delay parameter initialization until the first forward pass. Pass True if that's a case to delay initialization of data parallel modules. Do first forward pass and then call DistributedModelParallel.init_data_parallel().
+        init_parameters: initialize parameters for modules still on meta device.
 
     Call Args:
 
@@ -67,11 +68,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         plan: Optional[ShardingPlan] = None,
         sharders: List[ModuleSharder[nn.Module]] = default_sharders,
         init_data_parallel: bool = True,
+        init_parameters: bool = True,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
         self.module = module
+        self.init_parameters = init_parameters
 
         if pg is None:
             pg = dist.GroupMember.WORLD
@@ -179,7 +182,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             ],
         )
         # Allocate any 'meta' tensors
-        self._init_parameters(self.module)
+        if self.init_parameters:
+            self._init_parameters(self.module)
         # initailize DDP
         self.module = cast(
             nn.Module,
@@ -191,6 +195,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 broadcast_buffers=False,
             ),
         )
+
+        # Enable static graph for better DPP performance
+        # pyre-ignore
+        self.module._set_static_graph()
 
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
