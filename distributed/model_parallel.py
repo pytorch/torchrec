@@ -6,7 +6,6 @@ from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.distributed._sharded_tensor import ShardedTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding import (
@@ -173,12 +172,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def _init_ddp(self) -> None:
+        sharded_parameter_names = set(self._sharded_parameter_names(self.module))
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=self.module,
             params_and_buffers_to_ignore=[
                 key
-                for key, value in self.module.state_dict().items()
-                if isinstance(value, ShardedTensor)
+                for key, _ in self.named_parameters()
+                if key in sharded_parameter_names
             ],
         )
         # Allocate any 'meta' tensors
@@ -333,6 +333,17 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         yield from self._named_parameters(self.dmp_module, prefix, recurse)
+
+    def _sharded_parameter_names(
+        self, module: nn.Module, prefix: str = "", recurse: bool = True
+    ) -> Iterator[str]:
+        if isinstance(module, ShardedModule):
+            yield from module.sharded_parameter_names(prefix, recurse)
+        else:
+            for name, child in module.named_children():
+                yield from self._sharded_parameter_names(
+                    child, append_prefix(prefix, name), recurse
+                )
 
     def _named_buffers(
         self, module: nn.Module, prefix: str = "", recurse: bool = True

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import unittest
-from typing import Any, Dict, List
+from collections import defaultdict
+from typing import Any
 
 import torch
 from torch.autograd import Variable
@@ -24,7 +25,7 @@ class TestWarmupOptimizer(unittest.TestCase):
             param_1_t = torch.tensor([1.0, 2.0])
             param_1 = Variable(param_1_t)
             keyed_optimizer = DummyKeyedOptimizer(
-                {"param_1": param_1}, {}, [{"params": [param_1]}]
+                {"param_1": param_1}, defaultdict(dict), [{"params": [param_1]}]
             )
             warmup_optimizer = WarmupOptimizer(
                 keyed_optimizer,
@@ -41,27 +42,26 @@ class TestWarmupOptimizer(unittest.TestCase):
         for _ in range(num_iters):
             warmup_optimizer_1.zero_grad()
             warmup_optimizer_1.step()
-        self.assertTrue(
-            warmup_optimizer_1.param_groups[0]["iter"],  # pyre-ignore[16]
-            num_iters + 1,
+
+        param_state = list(warmup_optimizer_1.state.values())[0]
+        self.assertEquals(
+            param_state["warmup"].tolist()[0],
+            num_iters,
         )
 
-        warmup_optimizer_state_dict = warmup_optimizer_1.state_dict()
-
         warmup_optimizer_2 = get_optimizer()
-        warmup_optimizer_2.load_state_dict(warmup_optimizer_state_dict)
+        warmup_optimizer_2.step()
+        warmup_optimizer_2.zero_grad()
 
-        # pyre-ignore[2, 3]
-        def remove_params(param_groups: List[Dict[Any, Any]]) -> List[Dict[Any, Any]]:
-            return [
-                {k: v for (k, v) in param_groups.items() if k != "params"}
-                for param_groups in param_groups
-            ]
+        warmup_optimizer_2.load_state_dict(warmup_optimizer_1.state_dict())
 
-        self.assertEqual(warmup_optimizer_1.state, warmup_optimizer_2.state)
         self.assertEqual(
-            remove_params(warmup_optimizer_1.param_groups),  # pyre-ignore[6]
-            remove_params(warmup_optimizer_2.param_groups),  # pyre-ignore[6]
+            warmup_optimizer_1.state_dict()["param_groups"],
+            warmup_optimizer_2.state_dict()["param_groups"],
+        )
+        torch.testing.assert_close(
+            warmup_optimizer_1.state_dict()["state"]["__warmup"],
+            warmup_optimizer_2.state_dict()["state"]["__warmup"],
         )
 
 

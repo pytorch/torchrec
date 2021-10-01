@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import abc
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, unique
 from typing import List, Optional, Dict, Any, TypeVar
 
 import torch
 from torch import nn
 from torch.distributed._sharded_tensor import ShardedTensorMetadata
-from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
+from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,

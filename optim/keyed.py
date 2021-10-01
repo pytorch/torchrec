@@ -15,6 +15,8 @@ from typing import (
 
 import torch
 from torch import optim
+from torch.distributed._sharded_tensor import ShardedTensor
+
 
 OptimizerFactory = Callable[[List[torch.Tensor]], optim.Optimizer]
 
@@ -47,33 +49,122 @@ class KeyedOptimizer(optim.Optimizer):
             )
 
     def state_dict(self) -> Dict[str, Any]:
-        # Same parameter can be associated w/ multiple keys,
-        # it happens e.g. in case of BatchedDenseEmbeddingBag.
-        param_to_keys: Dict[torch.Tensor, List[str]] = {}
-        for key, p in self.params.items():
-            tensor = p
-            if tensor not in param_to_keys:
-                param_to_keys[tensor] = []
-            param_to_keys[tensor].append(key)
+        """
+        Returned state and param_groups will contain parameter keys
+        instead of parameter indices in torch.Optimizer.
+        This allows for advanced functionality like optimizer re-sharding to be implemented.
+        """
 
-        state = {}
-        param_groups = []
-        for param_group in self.param_groups:
-            for param in param_group["params"]:
-                if param in self.state:
-                    keys = param_to_keys[param]
-                    # TODO figure out how to split optimizer state if needed.
-                    for key in keys:
-                        state[key] = self.state[param]
+        state = self.state
+        param_groups = self.param_groups
+        params = self.params
+        param_to_key = {param: key for key, param in params.items()}
 
-            packed = {k: v for k, v in param_group.items() if k != "params"}
+        ret_state = {
+            param_to_key[param]: state_val for param, state_val in state.items()
+        }
+
+        ret_groups = []
+        for group in param_groups:
             param_keys = []
-            for p in param_group["params"]:
-                param_keys += param_to_keys[p]
-            packed["params"] = param_keys
-            param_groups.append(packed)
+            for param in group["params"]:
+                param_keys.append(param_to_key[param])
+            ret_group = {"params": sorted(param_keys)}
+            for k, v in group.items():
+                if k != "params":
+                    ret_group[k] = deepcopy(v)
+            ret_groups.append(ret_group)
 
-        return {"state": state, "param_groups": param_groups}
+        return {"state": ret_state, "param_groups": ret_groups}
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """
+        This implementation is much stricter than the one in torch.Optimizer:
+        it requires implementations to fully initialize their state during first optimization iteration,
+        and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
+        Because of introduced strictness it allows us to:
+            * do compatibility checks for state and param_groups, which improves usability
+            * avoid state duplication by directly copying into state tensors, e.g.
+                optimizer.step()  # make sure optimizer is initialized
+                sd = optimizer.state_dict()
+                load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
+                optimizer.load_state_dict(sd)  # replace param_groups
+        """
+
+        new_state = state_dict["state"]
+        new_param_groups = state_dict["param_groups"]
+        state = self.state
+        param_groups = self.param_groups
+        params = self.params
+
+        # Load state
+        if len(state) != len(new_state):
+            raise ValueError(
+                f"Different parameter count: {len(state)} vs {len(new_state)}"
+            )
+        for param_key, param in params.items():
+            if param not in state:
+                continue
+            if param_key not in new_state:
+                raise ValueError(f"Parameter {param_key} not found")
+            if len(state[param]) != len(new_state[param_key]):
+                raise ValueError(
+                    f"Different state size: {len(state[param])} vs {len(new_state[param_key])}"
+                )
+            for state_key, state_val in state[param].items():
+                if state_key not in new_state[param_key]:
+                    raise ValueError(
+                        f"State key {state_key} not found for param {param_key}"
+                    )
+
+                new_state_val = new_state[param_key][state_key]
+                if isinstance(state_val, torch.Tensor):
+                    state_val.detach().copy_(new_state_val)
+                elif isinstance(state_val, ShardedTensor):
+                    num_shards = len(state_val.local_shards())
+                    num_new_shards = len(new_state_val.local_shards())
+                    if num_shards != num_new_shards:
+                        raise ValueError(
+                            f"Different number of shards {num_shards} vs {num_new_shards} for {param_key}/{state_key}"
+                        )
+                    for shard, new_shard in zip(
+                        state_val.local_shards(), new_state_val.local_shards()
+                    ):
+                        shard.tensor.detach().copy_(new_shard.tensor)
+                else:
+                    state[param][state_key] = deepcopy(new_state_val)
+
+        # Load param_groups.
+        if len(param_groups) != len(new_param_groups):
+            raise ValueError(
+                f"Different param_groups count: {len(param_groups)} vs {len(new_param_groups)}"
+            )
+        param_to_key = {param: key for key, param in params.items()}
+        group_map = {}
+        for group in param_groups:
+            param_keys = []
+            for param in group["params"]:
+                param_keys.append(param_to_key[param])
+            group_map["/".join(sorted(param_keys))] = group
+        new_group_map = {}
+        for new_group in new_param_groups:
+            param_keys = []
+            for param_key in new_group["params"]:
+                param_keys.append(param_key)
+            new_group_map["/".join(sorted(param_keys))] = new_group
+        for group_key, group in group_map.items():
+            if group_key not in new_group_map:
+                raise ValueError(f"Group {group_key} not found")
+            new_group = new_group_map[group_key]
+            if len(group) != len(new_group):
+                raise ValueError(
+                    f"Different param_group size: {len(group)} vs {len(new_group)}"
+                )
+            for k, v in group.items():
+                if k not in new_group:
+                    raise ValueError(f"Group key {k} not found for group {group_key}")
+                if k != "params":
+                    group[k] = deepcopy(new_group[k])
 
     # pyre-ignore [2]
     def add_param_group(self, param_group: Any) -> None:
@@ -95,18 +186,13 @@ class CombinedOptimizer(KeyedOptimizer):
                 key_value = ("", key_value)
             self._optims.append(key_value)
 
-        self._new_to_old_keys: List[Dict[str, str]] = []
         all_keys: Set[str] = set()
         for opt_key, opt in self._optims:
-            new_to_old_keys = {}
-            for param_group in opt.state_dict()["param_groups"]:
-                for param in param_group["params"]:
-                    new_param = CombinedOptimizer._prepend_opt_key(param, opt_key)
-                    if new_param in all_keys:
-                        raise ValueError(f"Duplicate param key {new_param}")
-                    all_keys.add(new_param)
-                    new_to_old_keys[new_param] = param
-            self._new_to_old_keys.append(new_to_old_keys)
+            for param_key in opt.params.keys():
+                new_param = CombinedOptimizer._prepend_opt_key(param_key, opt_key)
+                if new_param in all_keys:
+                    raise ValueError(f"Duplicate param key {new_param}")
+                all_keys.add(new_param)
 
     def __repr__(self) -> str:
         ret = []
@@ -132,70 +218,6 @@ class CombinedOptimizer(KeyedOptimizer):
     def _prepend_opt_key(name: str, opt_key: str) -> str:
         return opt_key + ("." if opt_key else "") + name
 
-    def state_dict(self) -> Dict[str, Any]:
-        # pyre-ignore[3]
-        def update_params(
-            param_group: Dict[Any, Any],  # pyre-ignore[2]
-            opt_key: str,
-        ) -> Dict[Any, Any]:
-            params = param_group["params"]
-            updated = deepcopy(param_group)
-            updated["params"] = [
-                CombinedOptimizer._prepend_opt_key(param, opt_key) for param in params
-            ]
-            return updated
-
-        state = {}
-        param_groups = []
-
-        for opt_key, opt in self._optims:
-            opt_state_dict = opt.state_dict()
-
-            opt_state = opt_state_dict["state"]
-            opt_state = {
-                CombinedOptimizer._prepend_opt_key(key, opt_key): value
-                for (key, value) in opt_state.items()
-            }
-            state.update(opt_state)
-
-            opt_param_groups = opt_state_dict["param_groups"]
-            opt_param_groups = [
-                update_params(param_group, opt_key) for param_group in opt_param_groups
-            ]
-            param_groups.extend(opt_param_groups)
-
-        return {"state": state, "param_groups": param_groups}
-
-    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        # pyre-ignore[3]
-        def update_params(
-            param_group: Dict[Any, Any],  # pyre-ignore[2]
-            new_to_old_keys: Dict[str, str],
-        ) -> Dict[Any, Any]:
-            params = param_group["params"]
-            updated = deepcopy(param_group)
-            updated["params"] = [
-                new_to_old_keys[param] for param in params if param in new_to_old_keys
-            ]
-            return updated
-
-        state = state_dict["state"]
-        param_groups = state_dict["param_groups"]
-        for (_, opt), new_to_old_keys in zip(self._optims, self._new_to_old_keys):
-            opt_state = {
-                new_to_old_keys[key]: value
-                for (key, value) in state.items()
-                if key in new_to_old_keys
-            }
-            opt_param_groups = [
-                update_params(param_group, new_to_old_keys)
-                for param_group in param_groups
-                if all(p in new_to_old_keys for p in param_group["params"])
-            ]
-
-            opt_state_dict = {"state": opt_state, "param_groups": opt_param_groups}
-            opt.load_state_dict(opt_state_dict)
-
     @property
     def param_groups(self) -> Collection[Mapping[str, Any]]:
         return [
@@ -204,13 +226,20 @@ class CombinedOptimizer(KeyedOptimizer):
 
     @property
     def params(self) -> Mapping[str, torch.Tensor]:
-        # TODO: combine params
-        return {}
+        ret = {}
+        for opt_key, opt in self._optims:
+            for param_key, param in opt.params.items():
+                ret[CombinedOptimizer._prepend_opt_key(param_key, opt_key)] = param
+        return ret
 
     @property
-    def state(self) -> Mapping[str, Any]:
-        # TODO: combin state
-        return {}
+    # pyre-ignore [3]
+    def state(self) -> Mapping[torch.Tensor, Any]:
+        ret = {}
+        for _, opt in self._optims:
+            for param, state in opt.state.items():
+                ret[param] = state
+        return ret
 
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
@@ -223,10 +252,7 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
         params: Mapping[str, torch.Tensor],
         optim_factory: OptimizerFactory,
     ) -> None:
-        # Get local shards and dedup.
-        params_set: Set[torch.Tensor] = set(params.values())
-
-        self._optimizer: optim.Optimizer = optim_factory(list(params_set))
+        self._optimizer: optim.Optimizer = optim_factory(list(params.values()))
         super().__init__(params, self._optimizer.state, self._optimizer.param_groups)
 
     def zero_grad(self, set_to_none: bool = False) -> None:

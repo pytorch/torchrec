@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import List, Any
 
+import torch
 from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class WarmupOptimizer(OptimizerWrapper):
         stages (List[WarmupStage]): stages to go through
         lr (float): initial learning rate
         lr_param (str): learning rate parameter in parameter group.
+        param_name: Name of fake parameter to hold warmup state.
     """
 
     def __init__(
@@ -86,38 +88,49 @@ class WarmupOptimizer(OptimizerWrapper):
         stages: List[WarmupStage],
         lr: float = 0.1,
         lr_param: str = "lr",
+        param_name: str = "__warmup",
     ) -> None:
+        super().__init__(optimizer)
         self._stages: List[WarmupStage] = _lr_stages(stages)
         self._lr_param: str = lr_param
         self._lr: float = lr
-        super().__init__(optimizer)
-        for param_group in self.param_groups:
-            param_group["iter"], param_group["stage_id"] = 1, 0
+        self._warmup_param: torch.nn.Parameter = torch.nn.Parameter()
+        # pyre-ignore [16]
+        self.params[param_name] = self._warmup_param
 
     def zero_grad(self, set_to_none: bool = False) -> None:
-        for param_group in self.param_groups:
-            iter_, stage_id = param_group["iter"], param_group["stage_id"]
-            lr = self._lr * _get_multiplier(self._stages[stage_id], iter_)
-            # pyre-ignore [16]
-            param_group[self._lr_param] = lr
-
         super().zero_grad(set_to_none=set_to_none)
+
+        if self._warmup_param in self.state:
+            iter_, stage_id = self.state[self._warmup_param]["warmup"].tolist()
+            for param_group in self.param_groups:
+                lr = self._lr * _get_multiplier(self._stages[stage_id], iter_)
+                # pyre-ignore [16]
+                param_group[self._lr_param] = lr
 
     # pyre-ignore [2]
     def step(self, closure: Any = None) -> None:
-        for param_group in self.param_groups:
-            iter_, stage_id = param_group["iter"], param_group["stage_id"]
-            iter_ += 1
-            if iter_ > self._stages[stage_id].max_iters and stage_id + 1 < len(
-                self._stages
-            ):
-                stage_id += 1
-                logger.info(
-                    "Optimizer finishing "
-                    f"{self._stages[stage_id - 1]} "
-                    "switching to "
-                    f"{self._stages[stage_id]}"
-                )
-            param_group["iter"], param_group["stage_id"] = iter_, stage_id
-
         super().step(closure)
+
+        if self._warmup_param in self.state:
+            iter_, stage_id = self.state[self._warmup_param]["warmup"].tolist()
+        else:
+            iter_ = 0
+            stage_id = 0
+
+        iter_ += 1
+        if iter_ > self._stages[stage_id].max_iters and stage_id + 1 < len(
+            self._stages
+        ):
+            stage_id += 1
+            logger.info(
+                "Optimizer finishing "
+                f"{self._stages[stage_id - 1]} "
+                "switching to "
+                f"{self._stages[stage_id]}"
+            )
+
+        # pyre-ignore [16]
+        self.state[self._warmup_param] = {
+            "warmup": torch.tensor([iter_, stage_id], dtype=torch.long)
+        }

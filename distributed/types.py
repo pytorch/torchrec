@@ -351,10 +351,11 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         destination = [] if destination is None else destination
         return destination
 
-    def named_buffers(
+    def sharded_parameter_names(
         self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from ()
+    ) -> Iterator[str]:
+        for key, _ in self.named_parameters(prefix, recurse):
+            yield key
 
 
 class ModuleSharder(abc.ABC, Generic[M]):

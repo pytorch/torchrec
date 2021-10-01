@@ -143,19 +143,6 @@ class ModelParallelTestBase(unittest.TestCase):
             pred = local_model(local_input)
             outputs[rank] = pred.cpu()
 
-        # Make sure that optimizer params FQN match model params FQN.
-        opt_keys = set()
-        for param_group in opt.state_dict()["param_groups"]:
-            for key in param_group["params"]:
-                opt_keys.add(key)
-        model_keys = set()
-        for key in local_model.state_dict().keys():
-            model_keys.add(key)
-        np.testing.assert_array_equal(sorted(opt_keys), sorted(model_keys))
-        # Make sure that named params FQN match model params FQN.
-        for key, _ in local_model.named_parameters():
-            assert key in model_keys
-
     def _run_multi_process_test(
         self,
         callable: Callable[
