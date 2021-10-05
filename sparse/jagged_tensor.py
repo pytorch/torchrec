@@ -22,14 +22,7 @@ def _cumsum(o: List[int]) -> List[int]:
 
 
 def _to_offsets(lengths: torch.Tensor) -> torch.Tensor:
-    return torch.cat(
-        (
-            # Pyre-fixme [16]
-            lengths.new_zeros([1]),
-            torch.cumsum(lengths, dim=0, dtype=lengths.dtype),
-        ),
-        dim=0,
-    )
+    return torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
 
 
 def _to_lengths(offsets: torch.Tensor) -> torch.Tensor:
