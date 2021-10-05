@@ -873,6 +873,23 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             + "\n})\n"
         )
 
+    def pin_memory(self) -> "KeyedJaggedTensor":
+        weights = self._weights
+        lengths = self._lengths
+        offsets = self._offsets
+
+        return KeyedJaggedTensor(
+            keys=self._keys,
+            values=self._values.pin_memory(),
+            weights=weights.pin_memory() if weights is not None else None,
+            lengths=lengths.pin_memory() if lengths is not None else None,
+            offsets=offsets.pin_memory() if offsets is not None else None,
+            stride=self._stride,
+            length_per_key=self._length_per_key,
+            offset_per_key=self._offset_per_key,
+            index_per_key=self._index_per_key,
+        )
+
 
 def _maybe_compute_offset_per_key_kt(
     length_per_key: List[int],
