@@ -367,19 +367,16 @@ class ShardedEmbeddingBagCollection(
                 append_prefix(prefix, "embedding_bags"), recurse
             )
 
-    def sharded_parameter_names(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[str]:
-        if recurse:
-            for lookup, sharding_type in zip(
-                self._lookups, self._sharding_type_to_sharding.keys()
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        for lookup, sharding_type in zip(
+            self._lookups, self._sharding_type_to_sharding.keys()
+        ):
+            if sharding_type == ShardingType.DATA_PARALLEL.value:
+                continue
+            for name, _ in lookup.named_parameters(
+                append_prefix(prefix, "embedding_bags")
             ):
-                if sharding_type == ShardingType.DATA_PARALLEL.value:
-                    continue
-                for name, _ in lookup.named_parameters(
-                    append_prefix(prefix, "embedding_bags"), recurse
-                ):
-                    yield name
+                yield name
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True

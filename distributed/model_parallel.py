@@ -335,14 +335,14 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         yield from self._named_parameters(self.dmp_module, prefix, recurse)
 
     def _sharded_parameter_names(
-        self, module: nn.Module, prefix: str = "", recurse: bool = True
+        self, module: nn.Module, prefix: str = ""
     ) -> Iterator[str]:
         if isinstance(module, ShardedModule):
-            yield from module.sharded_parameter_names(prefix, recurse)
+            yield from module.sharded_parameter_names(prefix)
         else:
             for name, child in module.named_children():
                 yield from self._sharded_parameter_names(
-                    child, append_prefix(prefix, name), recurse
+                    child, append_prefix(prefix, name)
                 )
 
     def _named_buffers(

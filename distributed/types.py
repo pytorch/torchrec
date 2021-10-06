@@ -351,10 +351,8 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         destination = [] if destination is None else destination
         return destination
 
-    def sharded_parameter_names(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[str]:
-        for key, _ in self.named_parameters(prefix, recurse):
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        for key, _ in self.named_parameters(prefix):
             yield key
 
 
