@@ -2,7 +2,7 @@
 
 import unittest
 from typing import List
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch, call
 
 import torch
 import torch.distributed as dist
@@ -103,7 +103,8 @@ class TestEmbeddingPlanner(unittest.TestCase):
         self.pg = MagicMock()
         self.device = torch.device("cuda:0")
 
-    def test_allocation_planner_balanced(self) -> None:
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_balanced(self, mock_logger: MagicMock) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 + i,
@@ -197,7 +198,23 @@ class TestEmbeddingPlanner(unittest.TestCase):
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
 
-    def test_allocation_planner_one_big_rest_small(self) -> None:
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 2308, Mean Pooling: 0, Emb Dims: 23, Shards: {'table_wise': 2}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 2307, Mean Pooling: 0, Emb Dims: 23, Shards: {'table_wise': 2}"
+                ),
+            ],
+        )
+
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_one_big_rest_small(
+        self, mock_logger: MagicMock
+    ) -> None:
         big_hash = int(1024 * 1024 * 1024 / 16 / 4)
         small_hash = 1000
         tables = [
@@ -294,7 +311,23 @@ class TestEmbeddingPlanner(unittest.TestCase):
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
 
-    def test_allocation_planner_two_big_rest_small(self) -> None:
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 1.0/0.0, Cost: 5780, Mean Pooling: 0, Emb Dims: 16, Shards: {'table_wise': 1}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 7200, Mean Pooling: 0, Emb Dims: 48, Shards: {'table_wise': 3}"
+                ),
+            ],
+        )
+
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_two_big_rest_small(
+        self, mock_logger: MagicMock
+    ) -> None:
         big_hash = int(1024 * 1024 * 1024 / 16 / 4)
         small_hash = 1000
         tables = [
@@ -373,7 +406,23 @@ class TestEmbeddingPlanner(unittest.TestCase):
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
 
-    def test_allocation_planner_rw_two_big_rest_small(self) -> None:
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 1.0/0.0, Cost: 8180, Mean Pooling: 0, Emb Dims: 48, Shards: {'table_wise': 1, 'data_parallel': 2}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 1.0/0.0, Cost: 8180, Mean Pooling: 0, Emb Dims: 48, Shards: {'table_wise': 1, 'data_parallel': 2}"
+                ),
+            ],
+        )
+
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_rw_two_big_rest_small(
+        self, mock_logger: MagicMock
+    ) -> None:
         big_hash = int(1024 * 1024 * 1024 / 16 / 4)
         small_hash = 1000
         tables = [
@@ -499,7 +548,19 @@ class TestEmbeddingPlanner(unittest.TestCase):
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
 
-    def test_allocation_planner_cw_balanced(self) -> None:
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    f"  Rank {rank} -- HBM/DDR: 0.5/0.0, Cost: 31298, Mean Pooling: 0, Emb Dims: 64, Shards: {{'row_wise': 2, 'data_parallel': 2}}"
+                )
+                for rank in range(dist.get_world_size())
+            ],
+        )
+
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_cw_balanced(self, mock_logger: MagicMock) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
@@ -560,8 +621,23 @@ class TestEmbeddingPlanner(unittest.TestCase):
         # pyre-ignore [6]
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 25600, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 25600, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                ),
+            ],
+        )
 
-    def test_allocation_planner_cw_two_big_rest_small_with_residual(self) -> None:
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_allocation_planner_cw_two_big_rest_small_with_residual(
+        self, mock_logger: MagicMock
+    ) -> None:
         big_hash = int(1024 * 1024 * 1024 / 16 / 4)
         small_hash = 1000
         tables = [
@@ -666,3 +742,22 @@ class TestEmbeddingPlanner(unittest.TestCase):
         # pyre-ignore [6]
         output = planner.plan(model, sharders)
         self.assertEqual(output.plan, expected_plan)
+
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                ),
+                call.info(
+                    "  Rank 2 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                ),
+                call.info(
+                    "  Rank 3 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                ),
+            ],
+        )

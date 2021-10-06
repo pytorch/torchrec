@@ -118,7 +118,7 @@ class ParameterInfo:
 
     @property
     def fqn(self) -> str:
-        return self.name + "." + self.prefix
+        return self.prefix + "." + self.name
 
 
 @dataclass

@@ -34,8 +34,12 @@ SHARDING_PREFERENCE: Dict[str, int] = {
 }
 
 
-def gb_to_bytes(gb: int) -> int:
-    return gb * 1024 * 1024 * 1024
+def gb_to_bytes(gb: float) -> int:
+    return int(gb * 1024 * 1024 * 1024)
+
+
+def bytes_to_gb(num_bytes: int) -> float:
+    return float(num_bytes / (1024 * 1024 * 1024))
 
 
 # pyre-ignore[2]
