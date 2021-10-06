@@ -434,6 +434,44 @@ def _trim_keys(keys: List[str]) -> List[str]:
 torch.fx.wrap("_trim_keys")
 
 
+def _kjt_to_jt_dict(
+    stride: int,
+    keys: List[str],
+    length_per_key: List[int],
+    values: torch.Tensor,
+    lengths: torch.Tensor,
+    offsets: torch.Tensor,
+    weights: Optional[torch.Tensor],
+) -> Dict[str, JaggedTensor]:
+    jt_dict: Dict[str, JaggedTensor] = {}
+    values_list = torch.split(values, length_per_key)
+    lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+    if weights is not None:
+        weights_list = torch.split(weights, length_per_key)
+        for idx, key in enumerate(keys):
+            length = lengths_tuple[idx]
+            offset = _to_offsets(length)
+            jt_dict[key] = JaggedTensor(
+                lengths=length,
+                offsets=offset,
+                values=values_list[idx],
+                weights=weights_list[idx],
+            )
+    else:
+        for idx, key in enumerate(keys):
+            length = lengths_tuple[idx]
+            offset = _to_offsets(length)
+            jt_dict[key] = JaggedTensor(
+                lengths=length,
+                offsets=offset,
+                values=values_list[idx],
+            )
+    return jt_dict
+
+
+torch.fx.wrap("_kjt_to_jt_dict")
+
+
 class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
     """Represents an (optionally weighted) keyed jagged tensor
 
@@ -797,6 +835,17 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
             else self.weights()[start_offset:end_offset],
             lengths=self.lengths()[index * self._stride : (index + 1) * self._stride],
             offsets=None,
+        )
+
+    def to_dict(self) -> Dict[str, JaggedTensor]:
+        return _kjt_to_jt_dict(
+            self.stride(),
+            self.keys(),
+            self.length_per_key(),
+            self.values(),
+            self.lengths(),
+            self.offsets(),
+            self.weights_or_none(),
         )
 
     # pyre-ignore [56]
