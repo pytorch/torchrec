@@ -245,7 +245,7 @@ class SimpleDeepFMNN(nn.Module):
         ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
         ebc = EmbeddingBagCollection(config=ebc_config)
-        sparse_nn = SimpleSparseNN(
+        sparse_nn = SimpleDeepFMNN(
             embedding_bag_collection=ebc, hidden_layer_size=20, over_embedding_dim=5
         )
 

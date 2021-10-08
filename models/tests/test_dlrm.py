@@ -6,17 +6,17 @@ import unittest
 import torch
 from torch.testing import FileCheck  # @manual
 from torchrec.fx import symbolic_trace
+from torchrec.models.dlrm import (
+    SparseArch,
+    DenseArch,
+    InteractionArch,
+    DLRM,
+)
 from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
-)
-from torchrec.modules.sparsenn import (
-    SparseArch,
-    DenseArch,
-    InteractionArch,
-    SimpleSparseNN,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
@@ -235,7 +235,7 @@ class InteractionArchTest(unittest.TestCase):
         self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
 
 
-class SimpleSparseNNTest(unittest.TestCase):
+class DLRMTest(unittest.TestCase):
     def test_basic(self) -> None:
         torch.manual_seed(0)
         B = 2
@@ -253,7 +253,7 @@ class SimpleSparseNNTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
-        sparse_nn = SimpleSparseNN(
+        sparse_nn = DLRM(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],
@@ -296,7 +296,7 @@ class SimpleSparseNNTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config])
-        sparse_nn = SimpleSparseNN(
+        sparse_nn = DLRM(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],
@@ -320,7 +320,7 @@ class SimpleSparseNNTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=[])
         D_unused = 1
         with self.assertRaises(AssertionError):
-            SimpleSparseNN(
+            DLRM(
                 embedding_bag_collection=ebc,
                 dense_in_features=100,
                 dense_arch_layer_sizes=[20, D_unused],
@@ -340,7 +340,7 @@ class SimpleSparseNNTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config])
-        sparse_nn = SimpleSparseNN(
+        sparse_nn = DLRM(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],
@@ -379,7 +379,7 @@ class SimpleSparseNNTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
-        sparse_nn = SimpleSparseNN(
+        sparse_nn = DLRM(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],

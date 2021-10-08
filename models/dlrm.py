@@ -6,14 +6,11 @@ from typing import List, Tuple, Optional
 
 import torch
 from torch import nn
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.mlp import MLP
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
-)
-
-from .embedding_modules import (
-    EmbeddingBagCollection,
 )
 
 
@@ -239,12 +236,14 @@ class OverArch(nn.Module):
         return self.model(features)
 
 
-class SimpleSparseNN(nn.Module):
+class DLRM(nn.Module):
     """
-    Basic recsys module. Processes sparse features by
-    learning pooled embeddings for each feature. Learns the relationship between
-    dense features and sparse features by projecting dense features into the same
-    embedding space. Also, learns the pairwise relationships between sparse features.
+    Recsys model from "Deep Learning Recommendation Model for Personalization and
+    Recommendation Systems" (https://arxiv.org/abs/1906.00091). Processes sparse
+    features by learning pooled embeddings for each feature. Learns the relationship
+    between dense features and sparse features by projecting dense features into the
+    same embedding space. Also, learns the pairwise relationships between sparse
+    features.
 
     The module assumes all sparse features have the same embedding dimension
     (i.e, each EmbeddingBagConfig uses the same embedding_dim)
@@ -282,7 +281,7 @@ class SimpleSparseNN(nn.Module):
         ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
         ebc = EmbeddingBagCollection(config=ebc_config)
-        sparse_nn = SimpleSparseNN(
+        model = DLRM(
             embedding_bag_collection=ebc,
             dense_in_features=100,
             dense_arch_layer_sizes=[20],
@@ -302,7 +301,7 @@ class SimpleSparseNN(nn.Module):
             offsets=torch.tensor([0, 2, 4, 6, 8]),
         )
 
-        logits = sparse_nn(
+        logits = model(
             dense_features=features,
             sparse_features=sparse_features,
         )
