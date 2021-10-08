@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Callable, List, Union
+from typing import Callable, List, Optional, Union
 
 import torch
 from torch import nn
@@ -20,6 +20,7 @@ class Perceptron(torch.nn.Module):
         activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):
             the activation function to apply to the output of linear transformation.
             Default: torch.relu.
+        device: (Optional[torch.device]).
 
     Call Args:
         input (torch.Tensor): tensor of shape (B, I) where I is number of elements
@@ -50,12 +51,15 @@ class Perceptron(torch.nn.Module):
             torch.nn.Module,
             Callable[[torch.Tensor], torch.Tensor],
         ] = torch.relu,
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self._out_size = out_size
         self._in_size = in_size
-        self._linear: nn.Linear = nn.Linear(self._in_size, self._out_size, bias=bias)
+        self._linear: nn.Linear = nn.Linear(
+            self._in_size, self._out_size, bias=bias, device=device
+        )
         self._activation_fn: Callable[[torch.Tensor], torch.Tensor] = activation
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -80,6 +84,7 @@ class MLP(torch.nn.Module):
             between those activation modules. One use case is when all the activation modules share the same
             constructor arguments, but don't share the actual module parameters.
             Default: torch.relu.
+        device: (Optional[torch.device]).
 
     Call Args:
         input (torch.Tensor): tensor of shape (B, I) where I is number of elements
@@ -111,6 +116,7 @@ class MLP(torch.nn.Module):
             torch.nn.Module,
             Callable[[torch.Tensor], torch.Tensor],
         ] = torch.relu,
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
 
@@ -127,6 +133,7 @@ class MLP(torch.nn.Module):
                         layer_sizes[i],
                         bias=bias,
                         activation=extract_module_or_tensor_callable(activation),
+                        device=device,
                     )
                     for i in range(len(layer_sizes))
                 ]
@@ -139,7 +146,8 @@ class MLP(torch.nn.Module):
                             layer_sizes[i - 1] if i > 0 else in_size,
                             layer_sizes[i],
                             bias=bias,
-                            activation=SwishLayerNorm(layer_sizes[i]),
+                            activation=SwishLayerNorm(layer_sizes[i], device=device),
+                            device=device,
                         )
                         for i in range(len(layer_sizes))
                     ]

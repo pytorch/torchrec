@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+
 from itertools import combinations
+from math import comb
 from typing import List, Tuple, Optional
 
 import torch
 from torch import nn
+from torchrec.modules.mlp import MLP
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
@@ -77,13 +80,12 @@ class SparseArch(nn.Module):
 
 class DenseArch(nn.Module):
     """
-    Processes the dense features of SparseNN model. Output layer is sized to
-    the embedding_dimension of the EmbeddingBagCollection embeddings
+    Processes the dense features of SparseNN model.
 
     Constructor Args:
-        hidden_layer_size: int
-        embedding_dim: int - the same size of the embedding_dimension of sparseArch
-        device: torch.device
+        in_features: int - size of the input.
+        layer_sizes: List[int] - list of layer sizes.
+        device: (Optional[torch.device]).
 
     Call Args:
         features: torch.Tensor  - size B X num_features
@@ -94,24 +96,19 @@ class DenseArch(nn.Module):
     Example:
         >>> B = 20
         D = 3
-        dense_arch = DenseArch(hidden_layer_size=10, embedding_dim=D)
+        dense_arch = DenseArch(10, layer_sizes=[15, D])
         dense_embedded = dense_arch(torch.rand((B, 10)))
     """
 
     def __init__(
         self,
-        hidden_layer_size: int,
-        embedding_dim: int,
+        in_features: int,
+        layer_sizes: List[int],
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        if device is None:
-            device = torch.device("cpu")
-        self.model: nn.Module = nn.Sequential(
-            nn.LazyLinear(hidden_layer_size, device=device),
-            nn.ReLU(),
-            nn.LazyLinear(embedding_dim, device=device),
-            nn.ReLU(),
+        self.model: nn.Module = MLP(
+            in_features, layer_sizes, bias=True, activation="relu", device=device
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -123,11 +120,15 @@ class InteractionArch(nn.Module):
     Processes the output of both SparseArch (sparse_features) and DenseArch
     (dense_features). Returns the pairwise dot product of each sparse feature pair,
     the dot product of each sparse features with the output of the dense layer,
-    and the dense layer itself (all concatenated)
+    and the dense layer itself (all concatenated).
+
+    NOTE: The dimensionality of the dense_features (D) is expected to match the
+    dimensionality of the sparse_features so that the dot products between them can be
+    computed.
 
     Constructor Args:
         sparse_feature_names: List[str] - length of F
-        device: torch.device
+        device: (Optional[torch.device]).
 
     Call Args:
         dense_features: torch.Tensor  - size B X D
@@ -159,8 +160,6 @@ class InteractionArch(nn.Module):
         self, sparse_feature_names: List[str], device: Optional[torch.device] = None
     ) -> None:
         super().__init__()
-        if device is None:
-            device = torch.device("cpu")
         self.device = device
         self.sparse_feature_names: List[str] = sparse_feature_names
         self.sparse_combinations: List[Tuple[str, str]] = list(
@@ -199,32 +198,41 @@ class OverArch(nn.Module):
     Final Arch of SparseNN - simple MLP over OverArch
 
     Constructor Args:
-        over_embedding_dim: int
-        device: torch.device
+        in_features: int
+        layer_sizes: list[int]
+        device: (Optional[torch.device]).
 
     Call Args:
         features: torch.Tensor
 
     Returns:
-        torch.Tensor  - size B X 1
+        torch.Tensor  - size B X layer_sizes[-1]
 
     Example:
         >>> B = 20
         D = 3
-        over_arch = OverArch(over_embedding_dim=5)
+        over_arch = OverArch(10, [5, 1])
         logits = over_arch(torch.rand((B, 10)))
     """
 
     def __init__(
-        self, over_embedding_dim: int, device: Optional[torch.device] = None
+        self,
+        in_features: int,
+        layer_sizes: List[int],
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        if device is None:
-            device = torch.device("cpu")
+        if len(layer_sizes) <= 1:
+            raise ValueError("OverArch must have multiple layers.")
         self.model: nn.Module = nn.Sequential(
-            nn.LazyLinear(over_embedding_dim, device=device),
-            nn.ReLU(),
-            nn.Linear(over_embedding_dim, 1, device=device),
+            MLP(
+                in_features,
+                layer_sizes[:-1],
+                bias=True,
+                activation="relu",
+                device=device,
+            ),
+            nn.Linear(layer_sizes[-2], layer_sizes[-1], bias=True, device=device),
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -242,11 +250,14 @@ class SimpleSparseNN(nn.Module):
     (i.e, each EmbeddingBagConfig uses the same embedding_dim)
 
     Constructor Args:
-        embedding_bag_collection: EmbeddingBagCollection,
-        hidden_layer_size: int,
-        over_embedding_dim: int,
-        sparse_device: torch.device,
-        dense_device: torch.device
+        embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
+            used to define SparseArch.
+        dense_in_features (int): the dimensionality of the dense input features.
+        dense_arch_layer_sizes (list[int]): the layer sizes for the DenseArch.
+        over_arch_layer_sizes (list[int]): the layer sizes for the OverArch. NOTE: The
+            output dimension of the InteractionArch should not be manually specified
+            here.
+        dense_device: (Optional[torch.device]).
 
     Call Args:
         dense_features: torch.Tensor,
@@ -272,7 +283,10 @@ class SimpleSparseNN(nn.Module):
 
         ebc = EmbeddingBagCollection(config=ebc_config)
         sparse_nn = SimpleSparseNN(
-            embedding_bag_collection=ebc, hidden_layer_size=20, over_embedding_dim=5
+            embedding_bag_collection=ebc,
+            dense_in_features=100,
+            dense_arch_layer_sizes=[20],
+            over_arch_layer_sizes=[5, 1],
         )
 
         features = torch.rand((B, 100))
@@ -297,10 +311,10 @@ class SimpleSparseNN(nn.Module):
     def __init__(
         self,
         embedding_bag_collection: EmbeddingBagCollection,
-        hidden_layer_size: int,
-        over_embedding_dim: int,
+        dense_in_features: int,
+        dense_arch_layer_sizes: List[int],
+        over_arch_layer_sizes: List[int],
         dense_device: Optional[torch.device] = None,
-        sparse_device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         assert (
@@ -315,27 +329,34 @@ class SimpleSparseNN(nn.Module):
         embedding_dim: int = embedding_bag_collection.embedding_bag_configs[
             0
         ].embedding_dim
-
-        if dense_device is None:
-            dense_device = torch.device("cpu")
-        if sparse_device is None:
-            sparse_device = torch.device("cpu")
+        if dense_arch_layer_sizes[-1] != embedding_dim:
+            raise ValueError(
+                "embedding_bag_collection dimension and final dense arch layer size must match."
+            )
 
         feature_names = []
         for conf in embedding_bag_collection.embedding_bag_configs:
             for feat in conf.feature_names:
                 feature_names.append(feat)
 
+        over_in_features = (
+            embedding_dim + comb(len(feature_names), 2) + len(feature_names)
+        )
+
         self.sparse_arch = SparseArch(embedding_bag_collection)
         self.dense_arch = DenseArch(
-            hidden_layer_size=hidden_layer_size,
-            embedding_dim=embedding_dim,
+            in_features=dense_in_features,
+            layer_sizes=dense_arch_layer_sizes,
             device=dense_device,
         )
         self.inter_arch = InteractionArch(
             sparse_feature_names=feature_names, device=dense_device
         )
-        self.over_arch = OverArch(over_embedding_dim, device=dense_device)
+        self.over_arch = OverArch(
+            in_features=over_in_features,
+            layer_sizes=over_arch_layer_sizes,
+            device=dense_device,
+        )
 
     def forward(
         self,
