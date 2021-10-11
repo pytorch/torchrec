@@ -330,7 +330,8 @@ class DLRM(nn.Module):
         ].embedding_dim
         if dense_arch_layer_sizes[-1] != embedding_dim:
             raise ValueError(
-                "embedding_bag_collection dimension and final dense arch layer size must match."
+                f"embedding_bag_collection dimension ({embedding_dim}) and final dense "
+                "arch layer size ({dense_arch_layer_sizes[-1]}) must match."
             )
 
         feature_names = []
