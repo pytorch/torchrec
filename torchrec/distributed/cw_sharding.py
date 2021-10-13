@@ -24,7 +24,9 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
 
     def __init__(
         self,
-        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
     ) -> None:
@@ -32,7 +34,9 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
 
     def _shard(
         self,
-        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
     ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._pg.size()
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [

@@ -39,22 +39,32 @@ from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
     ParameterSharding,
+    ParameterStorage,
     ShardedModule,
     ShardingType,
     ShardedModuleContext,
     ShardedTensor,
+    ModuleSharder,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingBagCollectionInterface,
+)
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+from torchrec.quant.embedding_modules import (
+    EmbeddingBagCollection as QuantEmbeddingBagCollection,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 def create_embedding_sharding(
     sharding_type: str,
-    embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+    embedding_configs: List[
+        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+    ],
     pg: dist.ProcessGroup,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding:
@@ -84,10 +94,11 @@ def filter_state_dict(
 
 
 def _create_embedding_configs_by_sharding(
-    module: EmbeddingBagCollection,
+    module: EmbeddingBagCollectionInterface,
     pg: dist.ProcessGroup,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding]]]:
+    prefix: str,
+) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
     shared_feature: Dict[str, bool] = {}
     for embedding_config in module.embedding_bag_configs:
         if not embedding_config.feature_names:
@@ -99,8 +110,9 @@ def _create_embedding_configs_by_sharding(
                 shared_feature[feature_name] = True
 
     sharding_type_to_embedding_configs: Dict[
-        str, List[Tuple[EmbeddingTableConfig, ParameterSharding]]
+        str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]
     ] = {}
+    state_dict = module.state_dict()
     for config in module.embedding_bag_configs:
         table_name = config.name
         assert table_name in table_name_to_parameter_sharding
@@ -117,6 +129,10 @@ def _create_embedding_configs_by_sharding(
                 embedding_names.append(feature_name + "@" + config.name)
             else:
                 embedding_names.append(feature_name)
+
+        param_name = prefix + table_name + ".weight"
+        assert param_name in state_dict
+        param = state_dict[param_name]
 
         if parameter_sharding.sharding_type not in sharding_type_to_embedding_configs:
             sharding_type_to_embedding_configs[parameter_sharding.sharding_type] = []
@@ -135,6 +151,7 @@ def _create_embedding_configs_by_sharding(
                     weight_init_min=config.weight_init_min,
                 ),
                 parameter_sharding,
+                param,
             )
         )
     return sharding_type_to_embedding_configs
@@ -181,7 +198,7 @@ class ShardedEmbeddingBagCollection(
 
     def __init__(
         self,
-        module: EmbeddingBagCollection,
+        module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         pg: dist.ProcessGroup,
         fused_params: Optional[Dict[str, Any]] = None,
@@ -189,7 +206,7 @@ class ShardedEmbeddingBagCollection(
     ) -> None:
         super().__init__()
         sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
-            module, pg, table_name_to_parameter_sharding
+            module, pg, table_name_to_parameter_sharding, "embedding_bags."
         )
         self._sharding_type_to_sharding: Dict[str, EmbeddingSharding] = {
             sharding_type: create_embedding_sharding(
@@ -451,3 +468,53 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
     @property
     def module_type(self) -> Type[EmbeddingBagCollection]:
         return EmbeddingBagCollection
+
+
+class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollection]):
+    def shard(
+        self,
+        module: QuantEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        pg: dist.ProcessGroup,
+        device: Optional[torch.device] = None,
+    ) -> ShardedEmbeddingBagCollection:
+        return ShardedEmbeddingBagCollection(module, params, pg, None, device)
+
+    @property
+    def sharding_types(self) -> List[str]:
+        types = [
+            ShardingType.DATA_PARALLEL.value,
+            ShardingType.TABLE_WISE.value,
+            ShardingType.ROW_WISE.value,
+        ]
+        if torch.cuda.is_available():
+            # TWRW supported for CUDA only
+            types.append(ShardingType.TABLE_ROW_WISE.value)
+
+        return types
+
+    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+        return [
+            EmbeddingComputeKernel.BATCHED_QUANT.value,
+        ]
+
+    def storage_usage(
+        self, tensor: torch.Tensor, device: torch.device, compute_kernel: str
+    ) -> Dict[str, int]:
+        tensor_bytes = tensor.numel() * tensor.element_size() + tensor.shape[0] * 4
+        assert device.type in {"cuda", "cpu"}
+        storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
+        return {storage_map[device.type].value: tensor_bytes}
+
+    def shardable_parameters(
+        self, module: QuantEmbeddingBagCollection
+    ) -> Dict[str, nn.Parameter]:
+        return {
+            name.split(".")[-2]: param
+            for name, param in module.state_dict().items()
+            if name.endswith(".weight")
+        }
+
+    @property
+    def module_type(self) -> Type[QuantEmbeddingBagCollection]:
+        return QuantEmbeddingBagCollection

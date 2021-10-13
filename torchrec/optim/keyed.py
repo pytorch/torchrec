@@ -38,6 +38,7 @@ class KeyedOptimizer(optim.Optimizer):
         self.state: Mapping[Any, Any] = state
         self.param_groups: Collection[Mapping[str, Any]] = param_groups
         self.params = params
+        self.defaults: Dict[str, Any] = {}
 
         params_set = set(params.values())
         non_param_state_keys = [key for key in self.state if key not in params_set]
@@ -179,6 +180,7 @@ class CombinedOptimizer(KeyedOptimizer):
     def __init__(
         self, optims: List[Union[KeyedOptimizer, Tuple[str, KeyedOptimizer]]]
     ) -> None:
+        self.defaults: Dict[str, Any] = {}
         # Append empty optimizer key if not passed.
         self._optims: List[Tuple[str, KeyedOptimizer]] = []
         for key_value in optims:

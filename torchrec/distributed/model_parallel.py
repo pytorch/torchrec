@@ -10,6 +10,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding import (
     EmbeddingBagCollectionSharder,
+    QuantEmbeddingBagCollectionSharder,
     filter_state_dict,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner, sharder_name
@@ -22,9 +23,10 @@ from torchrec.distributed.utils import append_prefix
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 
-
+# pyre-ignore [9]
 default_sharders: List[ModuleSharder[nn.Module]] = [
     EmbeddingBagCollectionSharder(),
+    QuantEmbeddingBagCollectionSharder(),
 ]
 
 

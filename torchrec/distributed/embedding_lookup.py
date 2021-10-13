@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 import abc
-import dataclasses
+import copy
+import itertools
 from collections import OrderedDict
-from math import sqrt
 from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
 import torch
@@ -15,6 +15,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     PoolingMode,
     DenseTableBatchedEmbeddingBagsCodegen,
     SplitTableBatchedEmbeddingBagsCodegen,
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+    rounded_row_size_in_bytes,
 )
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
@@ -34,9 +36,8 @@ from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
-    EmbeddingBagConfig,
+    DATA_TYPE_NUM_BITS,
 )
-from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.optim.fused import FusedOptimizerModule, FusedOptimizer
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
@@ -188,6 +189,9 @@ class GroupedEmbedding(BaseEmbedding):
                 destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
+    def config(self) -> GroupedEmbeddingConfig:
+        return self._config
+
 
 class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
     def __init__(
@@ -304,7 +308,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
         return destination
 
 
-class BaseEmbeddingBag(EmbeddingBagCollectionInterface):
+class BaseEmbeddingBag(nn.Module):
     """
     abstract base class for grouped nn.EmbeddingBag
     """
@@ -318,6 +322,11 @@ class BaseEmbeddingBag(EmbeddingBagCollectionInterface):
     ) -> List[str]:
         destination = [] if destination is None else destination
         return destination
+
+    @property
+    @abc.abstractmethod
+    def config(self) -> GroupedEmbeddingConfig:
+        pass
 
 
 class GroupedEmbeddingBag(BaseEmbeddingBag):
@@ -454,19 +463,8 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                 destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
-    @property
-    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
-        keys = {field.name for field in dataclasses.fields(EmbeddingBagConfig)}
-        return [
-            EmbeddingBagConfig(
-                **{
-                    key: value
-                    for key, value in dataclasses.asdict(table_config).items()
-                    if key in keys
-                }
-            )
-            for table_config in self._config.embedding_tables
-        ]
+    def config(self) -> GroupedEmbeddingConfig:
+        return self._config
 
 
 class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
@@ -521,15 +519,13 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
 
     def init_parameters(self) -> None:
         # initialize embedding weights
-        assert len(self._num_embeddings) == len(
-            self.emb_module.split_embedding_weights()
-        )
+        assert len(self._num_embeddings) == len(self.split_embedding_weights())
         for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
             self._local_rows,
             self._local_cols,
             self._weight_init_mins,
             self._weight_init_maxs,
-            self.emb_module.split_embedding_weights(),
+            self.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)
             param.data.uniform_(
@@ -561,7 +557,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             destination._metadata = OrderedDict()
         for config, param in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
+            self.split_embedding_weights(),
         ):
             key = prefix + f"{config.name}.weight"
             assert config.local_rows == param.size(0)
@@ -580,6 +576,9 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
                 destination[key] = param
         return destination
 
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        return self.emb_module.split_embedding_weights()
+
     @property
     @abc.abstractmethod
     def emb_module(
@@ -587,22 +586,12 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
     ) -> Union[
         DenseTableBatchedEmbeddingBagsCodegen,
         SplitTableBatchedEmbeddingBagsCodegen,
+        IntNBitTableBatchedEmbeddingBagsCodegen,
     ]:
         ...
 
-    @property
-    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
-        keys = {field.name for field in dataclasses.fields(EmbeddingBagConfig)}
-        return [
-            EmbeddingBagConfig(
-                **{
-                    key: value
-                    for key, value in dataclasses.asdict(table_config).items()
-                    if key in keys
-                }
-            )
-            for table_config in self._config.embedding_tables
-        ]
+    def config(self) -> GroupedEmbeddingConfig:
+        return self._config
 
 
 class EmbeddingBagFusedOptimizer(FusedOptimizer):
@@ -755,16 +744,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     ) -> None:
         super().__init__(config, device)
 
-        def to_sparse_type(data_type: DataType) -> SparseType:
-            if data_type == DataType.FP32:
-                return SparseType.FP32
-            elif data_type == DataType.FP16:
-                return SparseType.FP16
-            elif data_type == DataType.INT8:
-                return SparseType.INT8
-            else:
-                raise ValueError(f"Invalid DataType {data_type}")
-
         def to_embedding_location(
             compute_kernel: EmbeddingComputeKernel,
         ) -> EmbeddingLocation:
@@ -795,7 +774,9 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
-                weights_precision=to_sparse_type(config.data_type),
+                weights_precision=BatchedFusedEmbeddingBag.to_sparse_type(
+                    config.data_type
+                ),
                 device=device,
                 **fused_params,
             )
@@ -805,6 +786,17 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         )
 
         self.init_parameters()
+
+    @staticmethod
+    def to_sparse_type(data_type: DataType) -> SparseType:
+        if data_type == DataType.FP32:
+            return SparseType.FP32
+        elif data_type == DataType.FP16:
+            return SparseType.FP16
+        elif data_type == DataType.INT8:
+            return SparseType.INT8
+        else:
+            raise ValueError(f"Invalid DataType {data_type}")
 
     @property
     def emb_module(
@@ -868,6 +860,161 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         )
 
 
+class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(config, device)
+
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
+            IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=[
+                    (
+                        "",
+                        local_rows,
+                        table.embedding_dim,
+                        QuantBatchedEmbeddingBag.to_sparse_type(config.data_type),
+                        EmbeddingLocation.DEVICE
+                        if (device is not None and device.type == "cuda")
+                        else EmbeddingLocation.HOST,
+                    )
+                    for local_rows, table in zip(
+                        self._local_rows, config.embedding_tables
+                    )
+                ],
+                pooling_mode=self._pooling,
+            )
+        )
+        if device is not None and device.type != "meta":
+            self._emb_module.initialize_weights()
+
+    @staticmethod
+    def to_sparse_type(data_type: DataType) -> SparseType:
+        if data_type == DataType.FP16:
+            return SparseType.FP16
+        elif data_type == DataType.INT8:
+            return SparseType.INT8
+        elif data_type == DataType.INT4:
+            return SparseType.INT4
+        elif data_type == DataType.INT2:
+            return SparseType.INT2
+        else:
+            raise ValueError(f"Invalid DataType {data_type}")
+
+    def init_parameters(self) -> None:
+        pass
+
+    @property
+    def emb_module(
+        self,
+    ) -> IntNBitTableBatchedEmbeddingBagsCodegen:
+        return self._emb_module
+
+    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+        values = self.emb_module(
+            indices=features.values().int(),
+            offsets=features.offsets().int(),
+            per_sample_weights=features.weights_or_none(),
+        )
+        return KeyedTensor(
+            keys=self._emb_names,
+            values=values,
+            length_per_key=self._lengths_per_emb,
+        )
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, weight in zip(
+            self._config.embedding_tables,
+            self.emb_module.split_embedding_weights(),
+        ):
+            yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
+
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        return [
+            weight
+            for weight, _ in self.emb_module.split_embedding_weights(
+                split_scale_shifts=False
+            )
+        ]
+
+    @classmethod
+    def from_float(cls, module: BaseEmbeddingBag) -> "QuantBatchedEmbeddingBag":
+        assert hasattr(
+            module, "qconfig"
+        ), "EmbeddingBagCollectionInterface input float module must have qconfig defined"
+
+        def _to_data_type(dtype: torch.dtype) -> DataType:
+            if dtype == torch.quint8 or dtype == torch.qint8:
+                return DataType.INT8
+            elif dtype == torch.quint4 or dtype == torch.qint4:
+                return DataType.INT4
+            elif dtype == torch.quint2 or dtype == torch.qint2:
+                return DataType.INT2
+            else:
+                raise Exception(f"Invalid data type {dtype}")
+
+        # pyre-ignore [16]
+        data_type = _to_data_type(module.qconfig.weight().dtype)
+        sparse_type = QuantBatchedEmbeddingBag.to_sparse_type(data_type)
+
+        state_dict = dict(
+            itertools.chain(module.named_buffers(), module.named_parameters())
+        )
+        device = next(iter(state_dict.values())).device
+
+        # Adjust config to quantized version.
+        # This obviously doesn't work for column-wise sharding.
+        # pyre-ignore [29]
+        config = copy.deepcopy(module.config())
+        config.data_type = data_type
+        for table in config.embedding_tables:
+            table.local_cols = rounded_row_size_in_bytes(table.local_cols, sparse_type)
+            if table.local_metadata is not None:
+                table.local_metadata.shard_lengths = [
+                    table.local_rows,
+                    table.local_cols,
+                ]
+            if table.global_metadata is not None:
+                for shard_meta in table.global_metadata.shards_metadata:
+                    if shard_meta != table.local_metadata:
+                        shard_meta.shard_lengths = [
+                            shard_meta.shard_lengths[0],
+                            rounded_row_size_in_bytes(
+                                shard_meta.shard_lengths[1], sparse_type
+                            ),
+                        ]
+                table.global_metadata.size = torch.Size(
+                    [
+                        table.global_metadata.size[0],
+                        sum(
+                            shard_meta.shard_lengths[1]
+                            for shard_meta in table.global_metadata.shards_metadata
+                        ),
+                    ]
+                )
+
+        ret = QuantBatchedEmbeddingBag(config=config, device=device)
+
+        # Quantize weights.
+        quant_weight_list = []
+        for _, weight in state_dict.items():
+            quantized_weights = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
+                weight, DATA_TYPE_NUM_BITS[data_type]
+            )
+            # weight and 4 byte scale shift (2xfp16)
+            quant_weight = quantized_weights[:, :-4]
+            scale_shift = quantized_weights[:, -4:]
+
+            quant_weight_list.append((quant_weight, scale_shift))
+        ret.emb_module.assign_embedding_weights(quant_weight_list)
+
+        return ret
+
+
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
     def __init__(
         self,
@@ -900,6 +1047,11 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
                 return GroupedEmbeddingBag(
                     config=config,
                     sparse=True,
+                    device=device,
+                )
+            elif config.compute_kernel == EmbeddingComputeKernel.BATCHED_QUANT:
+                return QuantBatchedEmbeddingBag(
+                    config=config,
                     device=device,
                 )
             else:

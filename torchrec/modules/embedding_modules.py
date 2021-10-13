@@ -45,6 +45,10 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     ) -> List[EmbeddingBagConfig]:
         pass
 
+    @abc.abstractproperty
+    def is_weighted(self) -> bool:
+        pass
+
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
@@ -117,7 +121,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
-        self.is_weighted = is_weighted
+        self._is_weighted = is_weighted
         # pyre-ignore[11]
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
@@ -168,17 +172,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         ):
             for feature_name in embedding_config.feature_names:
                 f = features[feature_name]
-                if self.is_weighted:
-                    res = embedding_bag(
-                        input=f.values(),
-                        offsets=f.offsets(),
-                        per_sample_weights=f.weights(),
-                    )
-                else:
-                    res = embedding_bag(
-                        input=f.values(),
-                        offsets=f.offsets(),
-                    )
+                res = embedding_bag(
+                    input=f.values(),
+                    offsets=f.offsets(),
+                    per_sample_weights=f.weights() if self._is_weighted else None,
+                )
                 pooled_embeddings.append(res)
         data = torch.cat(pooled_embeddings, dim=1)
         return KeyedTensor(
@@ -190,6 +188,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     @property
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
+
+    @property
+    def is_weighted(self) -> bool:
+        return self._is_weighted
 
 
 class EmbeddingCollection(nn.Module):

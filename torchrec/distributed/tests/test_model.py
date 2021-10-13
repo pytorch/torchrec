@@ -205,12 +205,20 @@ class TestDenseArch(nn.Module):
 
     def __init__(
         self,
+        num_float_features: Optional[int] = None,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         if device is None:
             device = torch.device("cpu")
-        self.linear: nn.modules.Linear = nn.LazyLinear(out_features=8, device=device)
+        if num_float_features is None:
+            self.linear: nn.modules.Linear = nn.LazyLinear(
+                out_features=8, device=device
+            )
+        else:
+            self.linear: nn.modules.Linear = nn.Linear(
+                in_features=num_float_features, out_features=8, device=device
+            )
 
     def forward(self, dense_input: torch.Tensor) -> torch.Tensor:
         return self.linear(dense_input)
@@ -238,6 +246,7 @@ class TestOverArch(nn.Module):
         self,
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
+        num_float_features: Optional[int] = None,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
@@ -249,7 +258,26 @@ class TestOverArch(nn.Module):
         self._weighted_features: List[str] = [
             feature for table in weighted_tables for feature in table.feature_names
         ]
-        self.linear: nn.modules.Linear = nn.LazyLinear(out_features=16, device=device)
+        if num_float_features is None:
+            self.linear: nn.modules.Linear = nn.LazyLinear(
+                out_features=16, device=device
+            )
+        else:
+            in_feautures = (
+                num_float_features
+                + sum(
+                    [table.embedding_dim * len(table.feature_names) for table in tables]
+                )
+                + sum(
+                    [
+                        table.embedding_dim * len(table.feature_names)
+                        for table in weighted_tables
+                    ]
+                )
+            )
+            self.linear: nn.modules.Linear = nn.Linear(
+                in_features=in_feautures, out_features=16, device=device
+            )
 
     def forward(
         self,
@@ -364,6 +392,7 @@ class TestSparseNN(TestSparseNNBase):
         tables: List[EmbeddingBagConfig],
         weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
         embedding_groups: Optional[Dict[str, List[str]]] = None,
+        num_float_features: Optional[int] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
     ) -> None:
@@ -377,9 +406,11 @@ class TestSparseNN(TestSparseNNBase):
         if weighted_tables is None:
             weighted_tables = []
 
-        self.dense = TestDenseArch(dense_device)
+        self.dense = TestDenseArch(num_float_features, dense_device)
         self.sparse = TestSparseArch(tables, weighted_tables, sparse_device)
-        self.over = TestOverArch(tables, weighted_tables, dense_device)
+        self.over = TestOverArch(
+            tables, weighted_tables, num_float_features, dense_device
+        )
 
     def forward(
         self,

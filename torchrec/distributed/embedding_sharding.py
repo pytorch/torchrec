@@ -118,6 +118,7 @@ def group_tables(
                         EmbeddingComputeKernel.SPARSE,
                         EmbeddingComputeKernel.BATCHED_DENSE,
                         EmbeddingComputeKernel.BATCHED_FUSED,
+                        EmbeddingComputeKernel.BATCHED_QUANT,
                     ]:
                         grouped_tables: List[ShardedEmbeddingTable] = []
                         grouped_score_tables: List[ShardedEmbeddingTable] = []

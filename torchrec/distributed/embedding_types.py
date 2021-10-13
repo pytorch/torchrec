@@ -7,8 +7,7 @@ from typing import List, Optional, Dict, Any, TypeVar
 
 import torch
 from torch import nn
-from torch.distributed._sharded_tensor import ShardedTensorMetadata
-from torch.distributed._sharding_spec import ShardMetadata
+from torch.distributed._sharded_tensor import ShardMetadata, ShardedTensorMetadata
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
@@ -42,6 +41,7 @@ class EmbeddingComputeKernel(Enum):
     BATCHED_FUSED = "batched_fused"
     BATCHED_FUSED_UVM = "batched_fused_uvm"
     BATCHED_FUSED_UVM_CACHING = "batched_fused_uvm_caching"
+    BATCHED_QUANT = "batched_quant"
 
 
 @dataclass

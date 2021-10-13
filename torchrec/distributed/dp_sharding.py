@@ -64,7 +64,9 @@ class DpEmbeddingSharding(EmbeddingSharding):
 
     def __init__(
         self,
-        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
@@ -93,7 +95,9 @@ class DpEmbeddingSharding(EmbeddingSharding):
 
     def _shard(
         self,
-        embedding_configs: List[Tuple[EmbeddingTableConfig, ParameterSharding]],
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
     ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._pg.size()
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
@@ -111,8 +115,8 @@ class DpEmbeddingSharding(EmbeddingSharding):
                         feature_names=config[0].feature_names,
                         pooling=config[0].pooling,
                         is_weighted=config[0].is_weighted,
-                        local_rows=config[0].num_embeddings,
-                        local_cols=config[0].embedding_dim,
+                        local_rows=config[2].size(0),
+                        local_cols=config[2].size(1),
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
                         local_metadata=None,
                         global_metadata=None,
