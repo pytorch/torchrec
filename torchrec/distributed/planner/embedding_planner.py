@@ -49,20 +49,19 @@ logger: logging.Logger = logging.getLogger(__name__)
 class EmbeddingShardingPlanner(ShardingPlanner):
     def __init__(
         self,
-        pg: dist.ProcessGroup,
+        world_size: int,
         device: torch.device,
         hints: Optional[Dict[str, ParameterHints]] = None,
         input_stats: Optional[Dict[str, ParameterInputStats]] = None,
         storage: Optional[Dict[str, int]] = None,
         cost_functions: Optional[List[Callable[[CostInput], int]]] = None,
     ) -> None:
-        self._world_size: int = dist.get_world_size(pg)
-        self._local_size: int = get_local_size()
+        self._world_size: int = world_size
+        self._local_size: int = get_local_size(world_size)
         self._hints: Dict[str, ParameterHints] = hints if hints else {}
         self._input_stats: Dict[str, ParameterInputStats] = (
             input_stats if input_stats else {}
         )
-        self._pg = pg
         self._device = device
 
         if cost_functions is None:
@@ -72,19 +71,20 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         else:
             self._cost_functions = cost_functions
 
-        self._topology: Topology = get_topology(pg, device, storage)
+        self._topology: Topology = get_topology(world_size, device, storage)
         self._counter: int = 1
 
     def collective_plan(
         self,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
+        pg: dist.ProcessGroup,
     ) -> ShardingPlan:
         """
         Call self.plan(...) on rank 0 and broadcast
         """
         return invoke_on_rank_and_broadcast_result(
-            self._pg,
+            pg,
             0,
             self.plan,
             module,

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 import math
-from typing import Any, Type, Dict, Optional, List, cast, Tuple
+from typing import Any, Type, Dict, Optional, List, cast
 
 import torch
-import torch.distributed as dist
 from torchrec.distributed.comm import get_local_size, get_num_groups
 from torchrec.distributed.planner.parameter_sharding import ParameterShardingFactory
 from torchrec.distributed.planner.types import (
@@ -253,13 +252,12 @@ def _get_storage(
 
 
 def get_topology(
-    pg: dist.ProcessGroup,
+    world_size: int,
     device: torch.device,
     storage_in_gb: Optional[Dict[str, int]],
 ) -> Topology:
-    world_size = dist.get_world_size(pg)
-    devices_per_host = get_local_size()
-    num_hosts = get_num_groups()
+    devices_per_host = get_local_size(world_size)
+    num_hosts = get_num_groups(world_size)
     compute_device = device.type
     storage = _get_storage(device, storage_in_gb)
     topology = Topology(

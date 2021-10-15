@@ -5,7 +5,6 @@ import os
 import unittest
 from typing import cast, Callable, Dict, List, Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
@@ -90,8 +89,8 @@ class ModelParallelTestBase(unittest.TestCase):
             sparse_device=torch.device("meta"),
         )
 
-        planner = EmbeddingShardingPlanner(pg, device, hints)
-        plan = planner.collective_plan(local_model, sharders)
+        planner = EmbeddingShardingPlanner(world_size, device, hints)
+        plan = planner.collective_plan(local_model, sharders, pg)
 
         local_model = DistributedModelParallel(
             local_model,

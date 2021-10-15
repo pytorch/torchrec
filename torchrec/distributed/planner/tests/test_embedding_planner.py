@@ -5,7 +5,6 @@ from typing import List
 from unittest.mock import MagicMock, patch, call
 
 import torch
-import torch.distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
 from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -99,8 +98,6 @@ class DPRWTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 class TestEmbeddingPlanner(unittest.TestCase):
     def setUp(self) -> None:
         # Mocks
-        dist.get_world_size = MagicMock(return_value=2)
-        self.pg = MagicMock()
         self.device = torch.device("cuda:0")
 
     @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
@@ -189,8 +186,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
 
         model = TestSparseNN(tables=tables, weighted_tables=[])
+        world_size = 2
         planner = EmbeddingShardingPlanner(
-            pg=self.pg, device=self.device, storage=storage
+            world_size=world_size, device=self.device, storage=storage
         )
 
         sharders = [TWSharder()]
@@ -200,7 +198,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 2308, Mean Pooling: 0, Emb Dims: 23, Shards: {'table_wise': 2}"
@@ -303,8 +301,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
         model = TestSparseNN(tables=tables, weighted_tables=[])
 
+        world_size = 2
         planner = EmbeddingShardingPlanner(
-            pg=self.pg, device=self.device, storage=storage
+            world_size=world_size, device=self.device, storage=storage
         )
         sharders = [DPTWSharder()]
         # pyre-ignore [6]
@@ -313,7 +312,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     "  Rank 0 -- HBM/DDR: 1.0/0.0, Cost: 5780, Mean Pooling: 0, Emb Dims: 16, Shards: {'table_wise': 1}"
@@ -394,8 +393,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
         model = TestSparseNN(tables=tables, weighted_tables=[])
 
+        world_size = 2
         planner = EmbeddingShardingPlanner(
-            pg=self.pg,
+            world_size=world_size,
             device=self.device,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
@@ -408,7 +408,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     "  Rank 0 -- HBM/DDR: 1.0/0.0, Cost: 8180, Mean Pooling: 0, Emb Dims: 48, Shards: {'table_wise': 1, 'data_parallel': 2}"
@@ -434,7 +434,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
             )
             for i in range(4)
         ]
-        dist.get_world_size = MagicMock(return_value=4)
         local_rows, block_size, last_rank = _rw_shard_table_rows(big_hash, 4)
         storage = {"hbm": 0.6}
 
@@ -536,8 +535,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
         model = TestSparseNN(tables=tables, weighted_tables=[])
 
+        world_size = 4
         planner = EmbeddingShardingPlanner(
-            pg=self.pg,
+            world_size=world_size,
             device=self.device,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
@@ -550,12 +550,12 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     f"  Rank {rank} -- HBM/DDR: 0.5/0.0, Cost: 31298, Mean Pooling: 0, Emb Dims: 64, Shards: {{'row_wise': 2, 'data_parallel': 2}}"
                 )
-                for rank in range(dist.get_world_size())
+                for rank in range(world_size)
             ],
         )
 
@@ -605,8 +605,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
 
         model = TestSparseNN(tables=tables, weighted_tables=[])
+        world_size = 2
         planner = EmbeddingShardingPlanner(
-            pg=self.pg,
+            world_size=world_size,
             device=self.device,
             storage=storage,
             hints={
@@ -623,7 +624,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
         self.assertEqual(output.plan, expected_plan)
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 25600, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
@@ -650,7 +651,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
             for i in range(4)
         ]
 
-        dist.get_world_size = MagicMock(return_value=4)
         block_size, residual = divmod(62, MIN_DIM)
 
         storage = {"hbm": 0.6}
@@ -721,8 +721,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         }
         model = TestSparseNN(tables=tables, weighted_tables=[])
 
+        world_size = 4
         planner = EmbeddingShardingPlanner(
-            pg=self.pg,
+            world_size=world_size,
             device=self.device,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
@@ -745,7 +746,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         # check logger
         self.assertEqual(
-            mock_logger.mock_calls[1 : dist.get_world_size() + 1],
+            mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
                     "  Rank 0 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"

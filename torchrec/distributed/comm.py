@@ -21,7 +21,7 @@ def _env2int(env_list: List[str], default: int = -1) -> int:
     return default
 
 
-def get_local_size() -> int:
+def get_local_size(world_size: int) -> int:
     """
     Get the local world size (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the size of workers on each node, or nproc_per_node
@@ -36,7 +36,6 @@ def get_local_size() -> int:
         8,
     )
 
-    world_size = dist.get_world_size()
     if local_size == -1 or world_size % local_size != 0:
         logging.warning(
             "Could not determine LOCAL_WORLD_SIZE from environment, falling back to WORLD_SIZE."
@@ -45,7 +44,7 @@ def get_local_size() -> int:
     return local_size
 
 
-def get_local_rank() -> int:
+def get_local_rank(world_size: int, rank: int) -> int:
     """
     Get the local rank of the local processes (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the rank of the worker on its node
@@ -59,30 +58,30 @@ def get_local_rank() -> int:
         ],
         -1,
     )
-    local_size = get_local_size()
+    local_size = get_local_size(world_size)
 
     if my_local_rank == -1 or my_local_rank >= local_size:
         logging.warning(
             "Could not determine LOCAL_RANK from environment, falling back to GLOBAL_RANK % LOCAL_SIZE."
         )
-        my_local_rank = dist.get_rank() % local_size
+        my_local_rank = rank % local_size
     return my_local_rank
 
 
-def get_group_rank() -> int:
+def get_group_rank(world_size: int, rank: int) -> int:
     """
     Get the group rank of the worker group. Also available with GROUP_RANK environment varible
     A number between 0 and get_num_groups() (See https://pytorch.org/docs/stable/elastic/run.html)
     """
-    return dist.get_rank() // get_local_size()
+    return rank // get_local_size(world_size)
 
 
-def get_num_groups() -> int:
+def get_num_groups(world_size: int) -> int:
     """
     Get the number of worker groups.
     Usually equivalent to max_nnodes (See https://pytorch.org/docs/stable/elastic/run.html)
     """
-    return dist.get_world_size() // get_local_size()
+    return world_size // get_local_size(world_size)
 
 
 def intra_and_cross_node_pg(
@@ -94,11 +93,12 @@ def intra_and_cross_node_pg(
     global _INTRA_PG  # intra node process group
     global _CROSS_PG  # cross node process group
 
+    my_size = dist.get_world_size()
     my_rank = dist.get_rank()
-    my_local_rank = get_local_rank()
-    local_size = get_local_size()
-    my_group_rank = get_group_rank()
-    group_count = get_num_groups()
+    my_local_rank = get_local_rank(my_size, my_rank)
+    local_size = get_local_size(my_size)
+    my_group_rank = get_group_rank(my_size, my_rank)
+    group_count = get_num_groups(my_size)
 
     logger.info(
         f"[{my_rank}] my_local_rank = {my_local_rank}, local_size = {local_size},"
