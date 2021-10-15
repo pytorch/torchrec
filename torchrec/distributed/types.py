@@ -294,6 +294,7 @@ class ShardingEnv:
     Provides abstraction over torch.distributed.ProcessGroup,
     which practically enables DistributedModelParallel to be used during inference.
     """
+
     def __init__(
         self, world_size: int, rank: int, pg: Optional[dist.ProcessGroup]
     ) -> None:
