@@ -31,8 +31,10 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 class PipelinedInput(abc.ABC):
     """
-    Input must implement this interface.
-    It's used to move input to GPU.
+    This interface contains two methods, one for moving an input to GPU, the other
+    one for synchronizing the moving in a CUDA stream with other CUDA streams.
+
+    torch.Tensor implements this interface so we can used it in most applications.
     """
 
     @abc.abstractmethod
