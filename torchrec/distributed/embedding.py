@@ -490,18 +490,20 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
     def sharding_types(self) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value]
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [
             EmbeddingComputeKernel.BATCHED_QUANT.value,
         ]
 
     def storage_usage(
-        self, tensor: torch.Tensor, device: torch.device, compute_kernel: str
+        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
     ) -> Dict[str, int]:
         tensor_bytes = tensor.numel() * tensor.element_size() + tensor.shape[0] * 4
-        assert device.type in {"cuda", "cpu"}
+        assert compute_device_type in {"cuda", "cpu"}
         storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
-        return {storage_map[device.type].value: tensor_bytes}
+        return {storage_map[compute_device_type].value: tensor_bytes}
 
     def shardable_parameters(
         self, module: QuantEmbeddingBagCollection

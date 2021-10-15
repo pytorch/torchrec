@@ -64,12 +64,12 @@ def _rw_shard_table_rows(hash_size: int, world_size: int) -> Tuple[List[int], in
 
 
 def _device_placement(
-    device: torch.device,
+    compute_device_type: str,
     rank: int,
     local_size: int,
 ) -> str:
-    param_device = device
-    if device.type == "cuda":
+    param_device = torch.device("cpu")
+    if compute_device_type == "cuda":
         param_device = torch.device("cuda", rank % local_size)
     return f"rank:{rank}/{param_device}"
 
@@ -78,7 +78,7 @@ class ParameterShardingFactory(abc.ABC):
     @staticmethod
     def shard_parameters(
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:
@@ -86,23 +86,23 @@ class ParameterShardingFactory(abc.ABC):
         sharding_type = sharding_option.sharding_type
         if sharding_type == ShardingType.TABLE_WISE.value:
             parameter_sharding = TwParameterSharding.shard_parameters(
-                param_info, device, world_size, local_size
+                param_info, compute_device_type, world_size, local_size
             )
         elif sharding_type == ShardingType.ROW_WISE.value:
             parameter_sharding = RwParameterSharding.shard_parameters(
-                param_info, device, world_size, local_size
+                param_info, compute_device_type, world_size, local_size
             )
         elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
             parameter_sharding = TwRwParameterSharding.shard_parameters(
-                param_info, device, world_size, local_size
+                param_info, compute_device_type, world_size, local_size
             )
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             parameter_sharding = CwParameterSharding.shard_parameters(
-                param_info, device, world_size, local_size
+                param_info, compute_device_type, world_size, local_size
             )
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
             parameter_sharding = DpParameterSharding.shard_parameters(
-                param_info, device, world_size, local_size
+                param_info, compute_device_type, world_size, local_size
             )
         else:
             raise ValueError(
@@ -116,7 +116,7 @@ class TwParameterSharding:
     def shard_parameters(
         cls,
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:
@@ -131,7 +131,7 @@ class TwParameterSharding:
                     tensor.shape[1],
                 ],
                 shard_offsets=[0, 0],
-                placement=_device_placement(device, rank, local_size),
+                placement=_device_placement(compute_device_type, rank, local_size),
             )
         ]
         return ParameterSharding(
@@ -147,7 +147,7 @@ class RwParameterSharding:
     def shard_parameters(
         cls,
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:
@@ -163,7 +163,7 @@ class RwParameterSharding:
                     tensor.shape[1],
                 ],
                 shard_offsets=[block_size * min(rank, last_rank), 0],
-                placement=_device_placement(device, rank, local_size),
+                placement=_device_placement(compute_device_type, rank, local_size),
             )
             for rank in range(world_size)
         ]
@@ -180,7 +180,7 @@ class TwRwParameterSharding:
     def shard_parameters(
         cls,
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:
@@ -203,7 +203,7 @@ class TwRwParameterSharding:
                     local_cols[rank],
                 ],
                 shard_offsets=[local_row_offsets[rank], 0],
-                placement=_device_placement(device, rank, local_size),
+                placement=_device_placement(compute_device_type, rank, local_size),
             )
             for rank in range(table_node * local_size, (table_node + 1) * local_size)
         ]
@@ -221,7 +221,7 @@ class CwParameterSharding:
     def shard_parameters(
         cls,
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:
@@ -250,7 +250,7 @@ class CwParameterSharding:
                     merged_sizes[i],
                 ],
                 shard_offsets=[0, offsets[i]],
-                placement=_device_placement(device, rank, local_size),
+                placement=_device_placement(compute_device_type, rank, local_size),
             )
             for i, rank in enumerate(merged_ranks)
         ]
@@ -267,7 +267,7 @@ class DpParameterSharding:
     def shard_parameters(
         cls,
         param_info: ParameterInfo,
-        device: torch.device,
+        compute_device_type: str,
         world_size: int,
         local_size: int,
     ) -> ParameterSharding:

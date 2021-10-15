@@ -103,7 +103,7 @@ class ShardingOption:
 @dataclass
 class CostInput:
     param: torch.Tensor
-    device: torch.device
+    compute_device_type: str
     compute_kernel: str
     sharding_type: str
     input_stats: Optional[ParameterInputStats]

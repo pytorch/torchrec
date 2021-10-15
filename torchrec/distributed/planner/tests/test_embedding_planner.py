@@ -4,7 +4,7 @@ import unittest
 from typing import List
 from unittest.mock import MagicMock, patch, call
 
-import torch
+from torch import distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
 from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -29,7 +29,9 @@ class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 
@@ -45,7 +47,9 @@ class DPCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 
@@ -58,7 +62,9 @@ class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 
@@ -74,7 +80,9 @@ class DPTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 
@@ -91,14 +99,18 @@ class DPRWTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 
 class TestEmbeddingPlanner(unittest.TestCase):
     def setUp(self) -> None:
         # Mocks
-        self.device = torch.device("cuda:0")
+        dist.get_world_size = MagicMock(return_value=2)
+        self.pg = MagicMock()
+        self.compute_device_type = "cuda"
 
     @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
     def test_allocation_planner_balanced(self, mock_logger: MagicMock) -> None:
@@ -188,7 +200,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
         model = TestSparseNN(tables=tables, weighted_tables=[])
         world_size = 2
         planner = EmbeddingShardingPlanner(
-            world_size=world_size, device=self.device, storage=storage
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
+            storage=storage,
         )
 
         sharders = [TWSharder()]
@@ -303,7 +317,9 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         world_size = 2
         planner = EmbeddingShardingPlanner(
-            world_size=world_size, device=self.device, storage=storage
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
+            storage=storage,
         )
         sharders = [DPTWSharder()]
         # pyre-ignore [6]
@@ -395,8 +411,8 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         world_size = 2
         planner = EmbeddingShardingPlanner(
-            world_size=world_size,
-            device=self.device,
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
             storage=storage,
@@ -537,8 +553,8 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         world_size = 4
         planner = EmbeddingShardingPlanner(
-            world_size=world_size,
-            device=self.device,
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
             storage=storage,
@@ -607,8 +623,8 @@ class TestEmbeddingPlanner(unittest.TestCase):
         model = TestSparseNN(tables=tables, weighted_tables=[])
         world_size = 2
         planner = EmbeddingShardingPlanner(
-            world_size=world_size,
-            device=self.device,
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
             storage=storage,
             hints={
                 "table_0": ParameterHints(
@@ -723,8 +739,8 @@ class TestEmbeddingPlanner(unittest.TestCase):
 
         world_size = 4
         planner = EmbeddingShardingPlanner(
-            world_size=world_size,
-            device=self.device,
+            world_size=dist.get_world_size(),
+            compute_device_type=self.compute_device_type,
             # pyre-fixme[6]: Expected `Optional[typing.Dict[str, int]]` for 3rd
             #  param but got `Dict[str, float]`.
             storage=storage,

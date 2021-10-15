@@ -90,7 +90,7 @@ class ModelParallelTestBase(unittest.TestCase):
             sparse_device=torch.device("meta"),
         )
 
-        planner = EmbeddingShardingPlanner(world_size, device, hints)
+        planner = EmbeddingShardingPlanner(world_size, "cuda", hints)
         plan = planner.collective_plan(local_model, sharders, pg)
 
         local_model = DistributedModelParallel(
