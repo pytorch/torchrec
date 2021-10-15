@@ -18,6 +18,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
     ShardedModule,
+    ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.optim.fused import FusedOptimizerModule
@@ -64,7 +65,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def __init__(
         self,
         module: nn.Module,
-        pg: Optional[dist.ProcessGroup] = None,
+        env: Optional[ShardingEnv] = None,
         device: Optional[torch.device] = None,
         plan: Optional[ShardingPlan] = None,
         sharders: List[ModuleSharder[nn.Module]] = default_sharders,
@@ -77,10 +78,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self.module = module
         self.init_parameters = init_parameters
 
-        if pg is None:
+        if env is None:
             pg = dist.GroupMember.WORLD
             assert pg is not None, "Process group is not initialized"
-        self._pg: dist.ProcessGroup = pg
+            env = ShardingEnv.from_process_group(pg)
+        self._env: ShardingEnv = env
 
         if device is None:
             device = torch.device("cpu")
@@ -93,9 +95,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         # 2. Call ShardingPlanner.collective_plan passing all found modules and corresponding sharders.
         if plan is None:
-            plan = EmbeddingShardingPlanner(
-                dist.get_world_size(self._pg), self.device
-            ).collective_plan(module, sharders, self._pg)
+            planner = EmbeddingShardingPlanner(self._env.world_size, self.device)
+            pg = self._env.process_group
+            if pg is not None:
+                plan = planner.collective_plan(module, sharders, pg)
+            else:
+                plan = planner.plan(module, sharders)
         self._plan: ShardingPlan = plan
 
         # 3. Replace modules w/ sharded versions,
@@ -159,7 +164,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 sharded_child = self._sharder_map[sharder_key].shard(
                     child,
                     sharded_params,
-                    self._pg,
+                    self._env,
                     self.device,
                 )
                 setattr(module, name, sharded_child)
@@ -174,6 +179,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def _init_ddp(self) -> None:
+        pg = self._env.process_group
+        if pg is None:
+            raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
         sharded_parameter_names = set(self._sharded_parameter_names(self.module))
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=self.module,
@@ -192,7 +200,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             DistributedDataParallel(
                 module=self.module.to(self.device),
                 device_ids=None if self.device.type == "cpu" else [self.device],
-                process_group=self._pg,
+                process_group=pg,
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
             ),

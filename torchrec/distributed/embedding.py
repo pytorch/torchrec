@@ -17,7 +17,6 @@ from typing import (
 )
 
 import torch
-import torch.distributed as dist
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
@@ -45,6 +44,7 @@ from torchrec.distributed.types import (
     ShardedModuleContext,
     ShardedTensor,
     ModuleSharder,
+    ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
@@ -65,21 +65,28 @@ def create_embedding_sharding(
     embedding_configs: List[
         Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
     ],
-    pg: dist.ProcessGroup,
+    env: ShardingEnv,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding:
-    if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwEmbeddingSharding(embedding_configs, pg, device)
-    elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwEmbeddingSharding(embedding_configs, pg, device)
-    elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpEmbeddingSharding(embedding_configs, pg, device)
-    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return TwRwEmbeddingSharding(embedding_configs, pg, device)
-    elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return CwEmbeddingSharding(embedding_configs, pg, device)
+    pg = env.process_group
+    if pg is not None:
+        if sharding_type == ShardingType.TABLE_WISE.value:
+            return TwEmbeddingSharding(embedding_configs, pg, device)
+        elif sharding_type == ShardingType.ROW_WISE.value:
+            return RwEmbeddingSharding(embedding_configs, pg, device)
+        elif sharding_type == ShardingType.DATA_PARALLEL.value:
+            return DpEmbeddingSharding(embedding_configs, env, device)
+        elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+            return TwRwEmbeddingSharding(embedding_configs, pg, device)
+        elif sharding_type == ShardingType.COLUMN_WISE.value:
+            return CwEmbeddingSharding(embedding_configs, pg, device)
+        else:
+            raise ValueError(f"Sharding not supported {sharding_type}")
     else:
-        raise ValueError(f"Sharding not supported {sharding_type}")
+        if sharding_type == ShardingType.DATA_PARALLEL.value:
+            return DpEmbeddingSharding(embedding_configs, env, device)
+        else:
+            raise ValueError(f"Sharding not supported {sharding_type}")
 
 
 def filter_state_dict(
@@ -95,7 +102,6 @@ def filter_state_dict(
 
 def _create_embedding_configs_by_sharding(
     module: EmbeddingBagCollectionInterface,
-    pg: dist.ProcessGroup,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     prefix: str,
 ) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
@@ -200,17 +206,17 @@ class ShardedEmbeddingBagCollection(
         self,
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
-            module, pg, table_name_to_parameter_sharding, "embedding_bags."
+            module, table_name_to_parameter_sharding, "embedding_bags."
         )
         self._sharding_type_to_sharding: Dict[str, EmbeddingSharding] = {
             sharding_type: create_embedding_sharding(
-                sharding_type, embedding_confings, pg, device
+                sharding_type, embedding_confings, env, device
             )
             for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
         }
@@ -450,11 +456,11 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
         self,
         module: EmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
         return ShardedEmbeddingBagCollection(
-            module, params, pg, self.fused_params, device
+            module, params, env, self.fused_params, device
         )
 
     def shardable_parameters(
@@ -475,23 +481,14 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
         self,
         module: QuantEmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
-        return ShardedEmbeddingBagCollection(module, params, pg, None, device)
+        return ShardedEmbeddingBagCollection(module, params, env, None, device)
 
     @property
     def sharding_types(self) -> List[str]:
-        types = [
-            ShardingType.DATA_PARALLEL.value,
-            ShardingType.TABLE_WISE.value,
-            ShardingType.ROW_WISE.value,
-        ]
-        if torch.cuda.is_available():
-            # TWRW supported for CUDA only
-            types.append(ShardingType.TABLE_ROW_WISE.value)
-
-        return types
+        return [ShardingType.DATA_PARALLEL.value]
 
     def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
         return [

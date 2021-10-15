@@ -15,6 +15,7 @@ from torchrec.distributed.types import (  # noqa
     ShardingPlanner,
     ShardedModule,
     ShardedTensor,
+    ShardingEnv,
 )
 from torchrec.distributed.utils import (  # noqa
     get_unsharded_module_names,

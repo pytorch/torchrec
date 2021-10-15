@@ -18,6 +18,7 @@ from torchrec.distributed.tests.test_model import (
 from torchrec.distributed.types import (
     ShardedTensor,
     ModuleSharder,
+    ShardingEnv,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
@@ -94,7 +95,7 @@ class ModelParallelTestBase(unittest.TestCase):
 
         local_model = DistributedModelParallel(
             local_model,
-            pg=pg,
+            env=ShardingEnv.from_process_group(pg),
             plan=plan,
             sharders=sharders,
             init_data_parallel=False,

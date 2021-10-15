@@ -30,6 +30,7 @@ from torchrec.distributed.types import (
     Awaitable,
     ParameterSharding,
     ShardedModuleContext,
+    ShardingEnv,
 )
 from torchrec.distributed.types import (
     ShardingType,
@@ -55,11 +56,11 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]
         self,
         module: EmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> TestShardedEmbeddingBagCollection:
         return TestShardedEmbeddingBagCollection(
-            module, params, pg, self.fused_params, device
+            module, params, env, self.fused_params, device
         )
 
     @property
@@ -227,7 +228,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         )
         distributed_model = DistributedModelParallel(
             unsharded_model,
-            pg=self.pg,
+            env=ShardingEnv.from_process_group(self.pg),
             init_data_parallel=False,
             device=self.device,
             # pyre-ignore [6]
@@ -254,7 +255,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         )
         distributed_model = DistributedModelParallel(
             unsharded_model,
-            pg=self.pg,
+            env=ShardingEnv.from_process_group(self.pg),
             init_data_parallel=False,
             device=self.device,
             # pyre-fixme [6]

@@ -28,6 +28,7 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardedTensor,
     ShardingType,
+    ShardingEnv,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.tests.utils import (
@@ -257,7 +258,7 @@ class ModelParallelTest(ModelParallelTestBase):
         cpu_model = MyModel(device="cpu", val=3.2)
         sharded_model = DistributedModelParallel(
             cpu_model,
-            pg=pg,
+            env=ShardingEnv.from_process_group(pg),
         )
         sharded_param = next(sharded_model.parameters())
         np.testing.assert_array_equal(
@@ -268,7 +269,7 @@ class ModelParallelTest(ModelParallelTestBase):
         meta_model = MyModel(device="meta", val=7.5)
         sharded_model = DistributedModelParallel(
             meta_model,
-            pg=pg,
+            env=ShardingEnv.from_process_group(pg),
         )
         sharded_param = next(sharded_model.parameters())
         np.testing.assert_array_equal(

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
-from typing import List, Optional, cast, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple
 
 import torch
-import torch.distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -24,7 +23,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
 )
-from torchrec.distributed.types import Awaitable, NoWait, ParameterSharding
+from torchrec.distributed.types import Awaitable, NoWait, ParameterSharding, ShardingEnv
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
@@ -67,12 +66,12 @@ class DpEmbeddingSharding(EmbeddingSharding):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
     ) -> None:
         super().__init__()
-        self._pg = pg
+        self._env = env
         self._device = device
         self._is_sequence = is_sequence
         sharded_tables_per_rank = self._shard(embedding_configs)
@@ -88,10 +87,10 @@ class DpEmbeddingSharding(EmbeddingSharding):
         ) = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[
             GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+        ] = self._grouped_embedding_configs_per_rank[env.rank]
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
-        ] = self._score_grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+        ] = self._score_grouped_embedding_configs_per_rank[env.rank]
 
     def _shard(
         self,
@@ -99,7 +98,7 @@ class DpEmbeddingSharding(EmbeddingSharding):
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
     ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._pg.size()
+        world_size = self._env.world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
         ]

@@ -289,6 +289,35 @@ class ShardedModuleContext:
     pass
 
 
+class ShardingEnv:
+    """
+    Provides abstraction over torch.distributed.ProcessGroup,
+    which practically enables DistributedModelParallel to be used during inference.
+    """
+    def __init__(
+        self, world_size: int, rank: int, pg: Optional[dist.ProcessGroup]
+    ) -> None:
+        self.world_size = world_size
+        self.rank = rank
+        self.process_group = pg
+
+    @classmethod
+    def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
+        """
+        Creates ProcessGroup-based sharding environment.
+        Typically used during training.
+        """
+        return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
+
+    @classmethod
+    def from_local(cls, world_size: int, rank: int) -> "ShardingEnv":
+        """
+        Creates a local host-based sharding environment.
+        Typically used during single host inference.
+        """
+        return cls(world_size, rank, None)
+
+
 class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     """
     All model-parallel modules implement this interface.
@@ -371,7 +400,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         self,
         module: M,
         params: Dict[str, ParameterSharding],
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: torch.device,
     ) -> ShardedModule[Any, Any, Any]:
         """

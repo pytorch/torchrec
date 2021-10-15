@@ -22,7 +22,7 @@ from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestEBCSharder,
 )
-from torchrec.distributed.types import ShardingType
+from torchrec.distributed.types import ShardingType, ShardingEnv
 from torchrec.distributed.utils import sharded_model_copy
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -85,20 +85,8 @@ def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
 
 class QuantModelParallelTest(unittest.TestCase):
     def setUp(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda:0")
-            backend = "nccl"
-            torch.cuda.set_device(self.device)
-        else:
-            self.device = torch.device("cpu")
-            backend = "gloo"
-        if not dist.is_initialized():
-            dist.init_process_group(backend=backend)
+        self.device = torch.device("cuda:0")
+        torch.cuda.set_device(self.device)
 
         num_features = 4
         num_weighted_features = 2
@@ -142,11 +130,13 @@ class QuantModelParallelTest(unittest.TestCase):
             # pyre-ignore [6]
             sharders=[
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.ROW_WISE.value,
+                    sharding_type=ShardingType.DATA_PARALLEL.value,
                     kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
                 )
             ],
             device=device,
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            init_data_parallel=False,
         )
 
     # pyre-fixme[56]
@@ -168,11 +158,13 @@ class QuantModelParallelTest(unittest.TestCase):
             # pyre-ignore [6]
             sharders=[
                 TestEBCSharder(
-                    sharding_type=ShardingType.ROW_WISE.value,
+                    sharding_type=ShardingType.DATA_PARALLEL.value,
                     kernel_type=EmbeddingComputeKernel.BATCHED_FUSED.value,
                 )
             ],
             device=device,
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            init_data_parallel=False,
         )
         with sharded_model_copy(device="cpu"):
             sharded_model_cpu = copy.deepcopy(sharded_model)
