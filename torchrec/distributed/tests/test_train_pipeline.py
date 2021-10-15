@@ -69,7 +69,9 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]
             ShardingType.TABLE_WISE.value,
         ]
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
 
 

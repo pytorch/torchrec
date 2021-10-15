@@ -447,7 +447,9 @@ class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [self._kernel_type]
 
     @property
@@ -472,7 +474,9 @@ class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
     Restricts to single impl.
     """
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         return [self._kernel_type]
 
     @property

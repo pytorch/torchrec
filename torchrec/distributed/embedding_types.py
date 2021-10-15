@@ -174,7 +174,9 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
 
         return types
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         ret = [
             EmbeddingComputeKernel.DENSE.value,
             EmbeddingComputeKernel.BATCHED_DENSE.value,
@@ -184,7 +186,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
                 EmbeddingComputeKernel.SPARSE.value,
             ]
-            if device.type in {"cuda"}:
+            if compute_device_type in {"cuda"}:
                 ret += [
                     EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
                     EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
@@ -196,7 +198,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         return self._fused_params
 
     def storage_usage(
-        self, tensor: torch.Tensor, device: torch.device, compute_kernel: str
+        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
     ) -> Dict[str, int]:
         """
         List of system resources and corresponding usage given a compute device and
@@ -207,12 +209,12 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
             EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
         }:
-            assert device.type in {"cuda"}
+            assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
         else:
-            assert device.type in {"cuda", "cpu"}
+            assert compute_device_type in {"cuda", "cpu"}
             storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
             return {
-                storage_map[device.type].value: tensor.element_size()
+                storage_map[compute_device_type].value: tensor.element_size()
                 * tensor.nelement()
             }

@@ -210,7 +210,7 @@ def param_sort_key(
 
 def to_plan(
     parameter_infos: List[ParameterInfo],
-    device: torch.device,
+    compute_device_type: str,
     world_size: int,
     local_size: int,
 ) -> ShardingPlan:
@@ -219,7 +219,7 @@ def to_plan(
         shards = plan.get(parameter_info.prefix, {})
         shards[parameter_info.name] = ParameterShardingFactory.shard_parameters(
             param_info=parameter_info,
-            device=device,
+            compute_device_type=compute_device_type,
             world_size=world_size,
             local_size=local_size,
         )
@@ -253,13 +253,18 @@ def _get_storage(
 
 def get_topology(
     world_size: int,
-    device: torch.device,
+    compute_device_type: str,
     storage_in_gb: Optional[Dict[str, int]],
 ) -> Topology:
     devices_per_host = get_local_size(world_size)
     num_hosts = get_num_groups(world_size)
-    compute_device = device.type
-    storage = _get_storage(device, storage_in_gb)
+    compute_device = compute_device_type
+    sample_device = (
+        torch.device("cuda", 0)
+        if compute_device_type == "cuda"
+        else torch.device("cpu")
+    )
+    storage = _get_storage(sample_device, storage_in_gb)
     topology = Topology(
         hosts=[
             HostInfo(
