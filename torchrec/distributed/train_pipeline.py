@@ -31,12 +31,19 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 class PipelinedInput(abc.ABC):
     """
-    This interface contains two methods, one for moving an input to GPU, the other
-    one for synchronizing the moving in a CUDA stream with other CUDA streams.
+    This interface contains two methods, one for moving an input across devices, the other
+    one for marking streams that operate the input.
 
-    torch.Tensor implements this interface so we can used it in most applications.
+    torch.Tensor implements this interface and we can used it in many applications.
+    Another example is torchrec.(Keyed)JaggedTensor, which we use as the input to
+    torchrec.EmbeddingBagCollection, which in turn is often the first layer of many models.
+    Some models take compound inputs, for example, hpc.torchrec.base_provider.ModelInput,
+    which should implement this interface.
     """
 
+    # Please be aware that accoarding to https://pytorch.org/docs/stable/generated/torch.Tensor.to.html,
+    # to might return self or a copy of self.  So please remember to use `to` with the assignment operator,
+    # for example, `in = in.to(new_device)`.
     @abc.abstractmethod
     def to(self, device: torch.device, non_blocking: bool) -> "PipelinedInput":
         ...
@@ -66,18 +73,24 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     if stream is None:
         return
     torch.cuda.current_stream().wait_stream(stream)
-    # since these tensors were allocated on a different stream,
-    # and are going to be used
-    # on the current, let caching allocator know
+    # As mentioned in https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html,
+    # PyTorch uses the "caching allocator" for memroy allocation for tensors. When a tensor is
+    # freed, its memory is likely to be reused by newly constructed tenosrs.  By default,
+    # this allocator traces whether a tensor is still in use by only the CUDA stream where it
+    # was created.   When a tensor is used by additional CUDA streams, we need to call record_stream
+    # to tell the allocator about all these streams.  Otherwise, the allocator might free the
+    # underlying memory of the tensor once it is no longer used by the creator stream.  This is
+    # a notable programming trick when we write programs using multi CUDA streams.
     cur_stream = torch.cuda.current_stream()
-
     batch.record_stream(cur_stream)
 
 
 class TrainPipelineBase(TrainPipeline[In, Out]):
     """
-    Performs a single step of a training loop
-    while doing CPU -> GPU transfer of inputs.
+    This class runs training iterations using a pipeline of two stages, each as a CUDA stream,
+    namely, the current (default) stream and self._memcpy_stream.  For each iteration,
+    self._memcpy_stream moves the input from host (CPU) memory to GPU memory, and the default
+    stream runs forward, backward, and optimization.
     """
 
     def __init__(
@@ -86,15 +99,12 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         optimizer: torch.optim.Optimizer,
         device: torch.device,
     ) -> None:
-        self._model: torch.nn.Module = model
+        self._model = model
         self._optimizer = optimizer
         self._device = device
-        if str(self._device) == "cpu":
-            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
-        else:
-            self._memcpy_stream: Optional[
-                torch.cuda.streams.Stream
-            ] = torch.cuda.Stream()
+        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
+            None if str(self._device) == "cpu" else torch.cuda.Stream()
+        )
         self._cur_batch: Optional[In] = None
         self._connected = False
 
@@ -105,7 +115,8 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
 
             with torch.no_grad():
-                # Init lazy modules if any.
+                # Init lazy modules if any.  An example lazy module is
+                # https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html
                 model = self._model
                 model(self._cur_batch)
 
@@ -132,12 +143,10 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         with record_function("## wait_for_batch ##"):
             _wait_for_batch(cur_batch, self._memcpy_stream)
 
-        # Forward
         with record_function("## forward ##"):
             (losses, output) = self._model(cur_batch)
 
         if self._model.training:
-            # Backward
             with record_function("## backward ##"):
                 torch.sum(losses, dim=0).backward()
 
