@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from torchrec.distributed.embedding import (
     EmbeddingBagCollectionSharder,
+    EmbeddingBagSharder,
 )
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.train_pipeline import PipelinedInput
@@ -430,6 +431,31 @@ class TestSparseNN(TestSparseNNBase):
 
 
 class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+    def __init__(self, sharding_type: str, kernel_type: str) -> None:
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    @property
+    def sharding_types(self) -> List[str]:
+        return [self._sharding_type]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+        return [self._kernel_type]
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return {"learning_rate": 0.1}
+
+
+class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
     def __init__(self, sharding_type: str, kernel_type: str) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type

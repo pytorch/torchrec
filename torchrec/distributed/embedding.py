@@ -17,6 +17,7 @@ from typing import (
 )
 
 import torch
+from torch import Tensor
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
@@ -47,7 +48,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
@@ -515,3 +516,236 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
     @property
     def module_type(self) -> Type[QuantEmbeddingBagCollection]:
         return QuantEmbeddingBagCollection
+
+
+class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
+    def __init__(
+        self,
+        awaitable: Awaitable[torch.Tensor],
+    ) -> None:
+        super().__init__()
+        self._awaitable = awaitable
+
+    def wait(self) -> torch.Tensor:
+        embedding = self._awaitable.wait()
+        return embedding
+
+
+class ShardedEmbeddingBag(
+    ShardedModule[
+        SparseFeatures,
+        torch.Tensor,
+        torch.Tensor,
+    ],
+    FusedOptimizerModule,
+):
+    """
+    Sharded implementation of nn.EmbeddingBag.
+    This is part of public API to allow for manual data dist pipelining.
+    """
+
+    def __init__(
+        self,
+        module: nn.EmbeddingBag,
+        table_name_to_parameter_sharding: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+
+        assert (
+            len(table_name_to_parameter_sharding) == 1
+        ), "expect 1 table, but got len(table_name_to_parameter_sharding)"
+        assert module.mode == "sum", "ShardedEmbeddingBag only supports sum pooling"
+
+        self._dummy_embedding_table_name = "dummy_embedding_table_name"
+        self._dummy_feature_name = "dummy_feature_name"
+        self.parameter_sharding: ParameterSharding = next(
+            iter(table_name_to_parameter_sharding.values())
+        )
+        embedding_table_config = EmbeddingTableConfig(
+            num_embeddings=module.num_embeddings,
+            embedding_dim=module.embedding_dim,
+            name=self._dummy_embedding_table_name,
+            feature_names=[self._dummy_feature_name],
+            pooling=PoolingType.SUM,
+            # We set is_weighted to True for now,
+            # if per_sample_weights is None in forward(),
+            # we could assign a all-one vector to per_sample_weights
+            is_weighted=True,
+            embedding_names=[self._dummy_feature_name],
+        )
+
+        self._embedding_sharding: EmbeddingSharding = create_embedding_sharding(
+            sharding_type=self.parameter_sharding.sharding_type,
+            embedding_configs=[
+                (
+                    embedding_table_config,
+                    self.parameter_sharding,
+                    next(iter(module.parameters())),
+                )
+            ],
+            env=env,
+            device=device,
+        )
+        self._input_dist: nn.Module = self._embedding_sharding.create_input_dist()
+        self._lookup: nn.Module = self._embedding_sharding.create_lookup(fused_params)
+        self._output_dist: nn.Module = (
+            self._embedding_sharding.create_pooled_output_dist()
+        )
+
+        # Get all fused optimizers and combine them.
+        optims = []
+        for _, module in self._lookup.named_modules():
+            if isinstance(module, FusedOptimizerModule):
+                # modify param keys to match EmbeddingBag
+                params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
+                for param_key, weight in module.fused_optimizer.params.items():
+                    params[param_key.split(".")[-1]] = weight
+                module.fused_optimizer.params = params
+                optims.append(("", module.fused_optimizer))
+        self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+
+    # pyre-ignore [14]
+    def input_dist(
+        self,
+        ctx: ShardedModuleContext,
+        input: Tensor,
+        offsets: Optional[Tensor] = None,
+        per_sample_weights: Optional[Tensor] = None,
+    ) -> Awaitable[SparseFeatures]:
+        if per_sample_weights is None:
+            per_sample_weights = torch.ones_like(input, dtype=torch.float)
+        features = KeyedJaggedTensor(
+            keys=[self._dummy_feature_name],
+            values=input,
+            offsets=offsets,
+            weights=per_sample_weights,
+        )
+        return self._input_dist(
+            SparseFeatures(
+                id_list_features=None,
+                id_score_list_features=features,
+            )
+        )
+
+    def compute(
+        self, ctx: ShardedModuleContext, dist_input: SparseFeatures
+    ) -> torch.Tensor:
+        return self._lookup(dist_input)
+
+    def output_dist(
+        self, ctx: ShardedModuleContext, output: torch.Tensor
+    ) -> LazyAwaitable[torch.Tensor]:
+        return EmbeddingAwaitable(
+            awaitable=self._output_dist(output),
+        )
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+        lookup_state_dict = self._lookup.state_dict(None, "", keep_vars)
+        # update key to match embeddingBag state_dict key
+        for key, item in lookup_state_dict.items():
+            new_key = prefix + key.split(".")[-1]
+            destination[new_key] = item
+        return destination
+
+    def named_modules(
+        self,
+        memo: Optional[Set[nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, nn.Module]]:
+        yield from [(prefix, self)]
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for name, parameter in self._lookup.named_parameters("", recurse):
+            # update name to match embeddingBag parameter name
+            yield append_prefix(prefix, name.split(".")[-1]), parameter
+
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        if self.parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
+            yield from []
+        else:
+            for name, _ in self._lookup.named_parameters(""):
+                yield append_prefix(prefix, name.split(".")[-1])
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for name, buffer in self._lookup.named_buffers("", recurse):
+            yield append_prefix(prefix, name.split(".")[-1]), buffer
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexpected_keys = []
+        # update key to match  embeddingBag state_dict key
+        for key, value in state_dict.items():
+            new_key = ".".join([self._dummy_embedding_table_name, key])
+            state_dict[new_key] = value
+            state_dict.pop(key)
+        missing, unexpected = self._lookup.load_state_dict(
+            state_dict,
+            strict,
+        )
+        missing_keys.extend(missing)
+        unexpected_keys.extend(unexpected)
+
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
+        )
+
+    def sparse_grad_parameter_names(
+        self,
+        destination: Optional[List[str]] = None,
+        prefix: str = "",
+    ) -> List[str]:
+        destination = [] if destination is None else destination
+        # pyre-ignore [29]
+        lookup_sparse_grad_parameter_names = self._lookup.sparse_grad_parameter_names(
+            None, ""
+        )
+        for name in lookup_sparse_grad_parameter_names:
+            destination.append(name.split(".")[-1])
+        return destination
+
+    @property
+    def fused_optimizer(self) -> KeyedOptimizer:
+        return self._optim
+
+
+class EmbeddingBagSharder(BaseEmbeddingSharder[M]):
+    """
+    This implementation uses non-fused nn.EmbeddingBag
+    """
+
+    def shard(
+        self,
+        module: nn.EmbeddingBag,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedEmbeddingBag:
+        return ShardedEmbeddingBag(module, params, env, self.fused_params, device)
+
+    def shardable_parameters(self, module: nn.EmbeddingBag) -> Dict[str, nn.Parameter]:
+        return {name: param for name, param in module.named_parameters()}
+
+    @property
+    def module_type(self) -> Type[nn.EmbeddingBag]:
+        return nn.EmbeddingBag

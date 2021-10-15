@@ -3,7 +3,8 @@
 import os
 import unittest
 from collections import OrderedDict
-from typing import List, Tuple, Optional, Dict, cast
+from enum import Enum
+from typing import List, Tuple, Optional, Dict, cast, Union
 
 import hypothesis.strategies as st
 import numpy as np
@@ -11,6 +12,10 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
+from torchrec.distributed.embedding import (
+    EmbeddingBagCollectionSharder,
+    EmbeddingBagSharder,
+)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
@@ -21,6 +26,7 @@ from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestSparseNNBase,
     TestEBCSharder,
+    TestEBSharder,
     ModelInput,
 )
 from torchrec.distributed.tests.test_model_parallel_base import ModelParallelTestBase
@@ -39,6 +45,22 @@ from torchrec.tests.utils import (
 )
 
 
+class SharderType(Enum):
+    EMBEDDING_BAG = "embedding_bag"
+    EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
+
+
+def create_test_sharder(
+    sharder_type: str, sharding_type: str, kernel_type: str
+) -> Union[TestEBSharder, TestEBCSharder]:
+    if sharder_type == SharderType.EMBEDDING_BAG.value:
+        return TestEBSharder(sharding_type, kernel_type)
+    elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
+        return TestEBCSharder(sharding_type, kernel_type)
+    else:
+        raise ValueError(f"Sharder not supported {sharder_type}")
+
+
 @skip_if_asan_class
 class ModelParallelTest(ModelParallelTestBase):
     @unittest.skipIf(
@@ -47,6 +69,12 @@ class ModelParallelTest(ModelParallelTestBase):
     )
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.ROW_WISE.value,
@@ -62,13 +90,13 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
-    def test_sharding_nccl_rw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_rw(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
         )
@@ -79,6 +107,12 @@ class ModelParallelTest(ModelParallelTestBase):
     )
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.DATA_PARALLEL.value,
@@ -88,20 +122,17 @@ class ModelParallelTest(ModelParallelTestBase):
             [
                 EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
-                # TODO debug and enable full test for sparse kernel
-                # EmbeddingComputeKernel.SPARSE.value,
-                # EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
-    def test_sharding_nccl_dp(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_dp(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
         )
@@ -112,6 +143,12 @@ class ModelParallelTest(ModelParallelTestBase):
     )
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
@@ -127,13 +164,13 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
-    def test_sharding_nccl_tw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_tw(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
         )
@@ -144,6 +181,12 @@ class ModelParallelTest(ModelParallelTestBase):
     )
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_ROW_WISE.value,
@@ -162,16 +205,15 @@ class ModelParallelTest(ModelParallelTestBase):
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
     def test_sharding_nccl_twrw(
         self,
+        sharder_type: str,
         sharding_type: str,
         kernel_type: str,
         local_size: int,
     ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
             world_size=2,
@@ -180,6 +222,12 @@ class ModelParallelTest(ModelParallelTestBase):
 
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
@@ -197,21 +245,26 @@ class ModelParallelTest(ModelParallelTestBase):
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
     def test_sharding_gloo_tw(
         self,
+        sharder_type: str,
         sharding_type: str,
         kernel_type: str,
     ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="gloo",
         )
 
     # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.DATA_PARALLEL.value,
@@ -228,13 +281,13 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
-    def test_sharding_gloo_dp(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_gloo_dp(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="gloo",
         )
@@ -312,7 +365,7 @@ class ModelParallelTest(ModelParallelTestBase):
 
     def _test_sharding(
         self,
-        sharders: List[TestEBCSharder],
+        sharders: List[ModuleSharder[nn.Module]],
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
@@ -329,8 +382,6 @@ class ModelParallelTest(ModelParallelTestBase):
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             embedding_groups=self.embedding_groups,
-            # pyre-fixme[6]: Expected `List[ModuleSharder[nn.Module]]` for 4th param
-            #  but got `List[TestEBCSharder]`.
             sharders=sharders,
             backend=backend,
             hints=hints,
@@ -426,15 +477,24 @@ class ModelParallelStateDictTest(unittest.TestCase):
             dmps.append(dmp)
         return (dmps, batch)
 
-    def test_load_state_dict(self) -> None:
-        models, batch = self._generate_dmps_and_batch()
+    # pyre-ignore[56]
+    @given(
+        sharders=st.sampled_from(
+            [
+                [EmbeddingBagCollectionSharder()],
+                [EmbeddingBagSharder()],
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_load_state_dict(self, sharders: List[ModuleSharder[nn.Module]]) -> None:
+        models, batch = self._generate_dmps_and_batch(sharders)
         m1, m2 = models
 
         # load the second's (m2's) with the first (m1's) state_dict
         m2.load_state_dict(
             cast("OrderedDict[str, torch.Tensor]", m1.state_dict()), strict=False
         )
-
         # validate the models are equivalent
         with torch.no_grad():
             loss1, pred1 = m1(batch)
@@ -456,8 +516,20 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 src = v2
             self.assertTrue(torch.equal(src, dst))
 
-    def test_load_state_dict_prefix(self) -> None:
-        (m1, m2), batch = self._generate_dmps_and_batch()
+    # pyre-ignore[56]
+    @given(
+        sharders=st.sampled_from(
+            [
+                [EmbeddingBagCollectionSharder()],
+                [EmbeddingBagSharder()],
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_load_state_dict_prefix(
+        self, sharders: List[ModuleSharder[nn.Module]]
+    ) -> None:
+        (m1, m2), batch = self._generate_dmps_and_batch(sharders)
 
         # load the second's (m2's) with the first (m1's) state_dict
         m2.load_state_dict(
@@ -482,20 +554,37 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 src = v2
             self.assertTrue(torch.equal(src, dst))
 
-    # pyre-ignore[56]
+    # pyre-fixme[56]
     @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+            ]
+        ),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.SPARSE.value,
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                # EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
-    def test_params_and_buffers(self, kernel_type: str) -> None:
-        (m, _), batch = self._generate_dmps_and_batch()
+    def test_params_and_buffers(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
+        sharders = [
+            create_test_sharder(sharder_type, sharding_type, kernel_type),
+        ]
+        # pyre-ignore[6]
+        (m, _), batch = self._generate_dmps_and_batch(sharders=sharders)
         state_dict_keys = set(m.state_dict().keys())
         param_keys = {key for (key, _) in m.named_parameters()}
         buffer_keys = {key for (key, _) in m.named_buffers()}

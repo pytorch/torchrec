@@ -50,6 +50,7 @@ def _load_state_dict(
     state_dict: "OrderedDict[str, torch.Tensor]",
 ) -> Tuple[List[str], List[str]]:
     missing_keys = []
+    unexpected_keys = list(state_dict.keys())
     for emb_module in emb_modules:
         for key, param in emb_module.state_dict().items():
             if key in state_dict:
@@ -65,10 +66,10 @@ def _load_state_dict(
                 else:
                     src_tensor = state_dict[key]
                 dst_tensor.detach().copy_(src_tensor)
+                unexpected_keys.remove(key)
             else:
                 missing_keys.append(cast(str, key))
-    unexepected_keys = list(state_dict.keys())
-    return missing_keys, unexepected_keys
+    return missing_keys, unexpected_keys
 
 
 class BaseEmbedding(abc.ABC, nn.Module):
