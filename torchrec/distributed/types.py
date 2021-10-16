@@ -439,7 +439,9 @@ class ModuleSharder(abc.ABC, Generic[M]):
         """
         return [ShardingType.DATA_PARALLEL.value]
 
-    def compute_kernels(self, sharding_type: str, device: torch.device) -> List[str]:
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
         """
         List of supported compute kernels for a given sharding_type and compute device.
         """
@@ -447,17 +449,18 @@ class ModuleSharder(abc.ABC, Generic[M]):
         return [ComputeKernel.DEFAULT.value]
 
     def storage_usage(
-        self, tensor: torch.Tensor, device: torch.device, compute_kernel: str
+        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
     ) -> Dict[str, int]:
         """
         List of system resources and corresponding usage given a compute device and
         compute kernel
         """
 
-        assert device.type in {"cuda", "cpu"}
+        assert compute_device_type in {"cuda", "cpu"}
         storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
         return {
-            storage_map[device.type].value: tensor.element_size() * tensor.nelement()
+            storage_map[compute_device_type].value: tensor.element_size()
+            * tensor.nelement()
         }
 
 

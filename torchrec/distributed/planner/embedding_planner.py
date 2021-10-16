@@ -50,7 +50,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
     def __init__(
         self,
         world_size: int,
-        device: torch.device,
+        compute_device_type: str = "cuda",
         hints: Optional[Dict[str, ParameterHints]] = None,
         input_stats: Optional[Dict[str, ParameterInputStats]] = None,
         storage: Optional[Dict[str, int]] = None,
@@ -62,7 +62,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._input_stats: Dict[str, ParameterInputStats] = (
             input_stats if input_stats else {}
         )
-        self._device = device
+        self._compute_device_type = compute_device_type
 
         if cost_functions is None:
             self._cost_functions: List[Callable[[CostInput], int]] = [
@@ -71,7 +71,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         else:
             self._cost_functions = cost_functions
 
-        self._topology: Topology = get_topology(world_size, device, storage)
+        self._topology: Topology = get_topology(
+            world_size, compute_device_type, storage
+        )
         self._counter: int = 1
 
     def collective_plan(
@@ -131,7 +133,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
         sharding_plan = to_plan(
             param_infos,
-            self._device,
+            self._compute_device_type,
             self._world_size,
             self._local_size,
         )
@@ -419,11 +421,14 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                         name, param, sharding_type
                     )
                     for compute_kernel in self._filter_compute_kernels(
-                        name, sharder.compute_kernels(sharding_type, self._device)
+                        name,
+                        sharder.compute_kernels(
+                            sharding_type, self._compute_device_type
+                        ),
                     ):
                         cost_input = CostInput(
                             param=param,
-                            device=self._device,
+                            compute_device_type=self._compute_device_type,
                             compute_kernel=compute_kernel,
                             sharding_type=sharding_type,
                             input_stats=self._input_stats.get(name, None),
@@ -440,7 +445,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                                 sharding_type=sharding_type,
                                 compute_kernel=compute_kernel,
                                 storage_usage=sharder.storage_usage(
-                                    param, self._device, compute_kernel
+                                    param, self._compute_device_type, compute_kernel
                                 ),
                                 _num_col_wise_shards=num_col_wise_shards,
                                 col_wise_shard_dim=shard_size,
