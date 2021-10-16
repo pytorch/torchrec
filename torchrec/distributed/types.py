@@ -296,11 +296,11 @@ class ShardingEnv:
     """
 
     def __init__(
-        self, world_size: int, rank: int, pg: Optional[dist.ProcessGroup]
+        self, world_size: int, rank: int, pg: Optional[dist.ProcessGroup] = None
     ) -> None:
         self.world_size = world_size
         self.rank = rank
-        self.process_group = pg
+        self.process_group: Optional[dist.ProcessGroup] = pg
 
     @classmethod
     def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
