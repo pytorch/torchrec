@@ -18,7 +18,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer = GradientClippingOptimizer(
-            optimizer=keyed_optimizer, max_gradient=0
+            optimizer=keyed_optimizer, max_gradient=0.0, clipping=GradientClipping.NORM
         )
 
         gradient_clipping_optimizer.zero_grad()
@@ -36,7 +36,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer = GradientClippingOptimizer(
-            optimizer=keyed_optimizer, max_gradient=1
+            optimizer=keyed_optimizer, max_gradient=1.0, clipping=GradientClipping.NORM
         )
 
         gradient_clipping_optimizer.zero_grad()
@@ -54,7 +54,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer = GradientClippingOptimizer(
-            optimizer=keyed_optimizer, max_gradient=1
+            optimizer=keyed_optimizer, max_gradient=1.0, clipping=GradientClipping.NORM
         )
 
         gradient_clipping_optimizer.zero_grad()
@@ -79,7 +79,9 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer = GradientClippingOptimizer(
-            optimizer=keyed_optimizer, max_gradient=max_gradient
+            optimizer=keyed_optimizer,
+            max_gradient=max_gradient,
+            clipping=GradientClipping.NORM,
         )
 
         gradient_clipping_optimizer.zero_grad()

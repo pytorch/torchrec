@@ -27,8 +27,8 @@ class GradientClippingOptimizer(OptimizerWrapper):
     def __init__(
         self,
         optimizer: KeyedOptimizer,
-        clipping: GradientClipping = GradientClipping.NORM,
-        max_gradient: float = 1.0,
+        clipping: GradientClipping = GradientClipping.NONE,
+        max_gradient: float = 0.1,
     ) -> None:
         super().__init__(optimizer)
         self._clipping = clipping
