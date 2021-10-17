@@ -98,7 +98,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist):
                 num_buckets=self._world_size,
                 block_sizes=self._id_list_feature_block_sizes_tensor,
                 output_permute=self._is_sequence,
-                bucketize_pos=False,
+                bucketize_pos=True,
             )
         else:
             id_list_features = None

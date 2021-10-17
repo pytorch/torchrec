@@ -396,6 +396,8 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                 values = features[feature_name].values()
                 offsets = features[feature_name].offsets()
                 weights = features[feature_name].weights_or_none()
+                if weights is not None and not torch.is_floating_point(weights):
+                    weights = None
                 pooled_embeddings.append(
                     emb_module(
                         input=values,
@@ -535,10 +537,13 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             )
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+        weights = features.weights_or_none()
+        if weights is not None and not torch.is_floating_point(weights):
+            weights = None
         values = self.emb_module(
             indices=features.values().long(),
             offsets=features.offsets().long(),
-            per_sample_weights=features.weights_or_none(),
+            per_sample_weights=weights,
         )
         return KeyedTensor(
             keys=self._emb_names,
