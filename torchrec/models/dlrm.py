@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-from itertools import combinations
 from math import comb
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
 import torch
 from torch import nn
@@ -124,8 +123,7 @@ class InteractionArch(nn.Module):
     computed.
 
     Constructor Args:
-        sparse_feature_names: List[str] - length of F
-        device: (Optional[torch.device]).
+        num_sparse_features: int - size F
 
     Call Args:
         dense_features: torch.Tensor  - size B X D
@@ -139,7 +137,7 @@ class InteractionArch(nn.Module):
         B = 10
         keys = ["f1", "f2"]
         F = len(keys)
-        inter_arch = InteractionArch(sparse_feature_names=keys)
+        inter_arch = InteractionArch(num_sparse_features=F)
 
         dense_features = torch.rand((B, D))
 
@@ -153,13 +151,9 @@ class InteractionArch(nn.Module):
         concat_dense = inter_arch(dense_features, sparse_features)
     """
 
-    def __init__(
-        self, sparse_feature_names: List[str], device: Optional[torch.device] = None
-    ) -> None:
+    def __init__(self, num_sparse_features: int) -> None:
         super().__init__()
-        self.device = device
-        self.sparse_feature_names: List[str] = sparse_feature_names
-        self.F: int = len(self.sparse_feature_names)
+        self.F = num_sparse_features
         self.triu_indices: torch.Tensor = torch.triu_indices(
             self.F + 1, self.F + 1, offset=1
         )
@@ -167,7 +161,7 @@ class InteractionArch(nn.Module):
     def forward(
         self, dense_features: torch.Tensor, sparse_features: KeyedTensor
     ) -> torch.Tensor:
-        if self.F == 0:
+        if self.F <= 0:
             return dense_features
         (B, D) = dense_features.shape
 
@@ -328,13 +322,15 @@ class DLRM(nn.Module):
                 "arch layer size ({dense_arch_layer_sizes[-1]}) must match."
             )
 
-        feature_names = []
-        for conf in embedding_bag_collection.embedding_bag_configs:
-            for feat in conf.feature_names:
-                feature_names.append(feat)
+        num_feature_names = sum(
+            [
+                len(conf.feature_names)
+                for conf in embedding_bag_collection.embedding_bag_configs
+            ]
+        )
 
         over_in_features = (
-            embedding_dim + comb(len(feature_names), 2) + len(feature_names)
+            embedding_dim + comb(num_feature_names, 2) + num_feature_names
         )
 
         self.sparse_arch = SparseArch(embedding_bag_collection)
@@ -343,9 +339,7 @@ class DLRM(nn.Module):
             layer_sizes=dense_arch_layer_sizes,
             device=dense_device,
         )
-        self.inter_arch = InteractionArch(
-            sparse_feature_names=feature_names, device=dense_device
-        )
+        self.inter_arch = InteractionArch(num_sparse_features=num_feature_names)
         self.over_arch = OverArch(
             in_features=over_in_features,
             layer_sizes=over_arch_layer_sizes,
