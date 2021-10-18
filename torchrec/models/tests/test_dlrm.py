@@ -2,6 +2,8 @@
 
 import math
 import unittest
+from itertools import combinations
+from typing import List
 
 import torch
 from torch.testing import FileCheck  # @manual
@@ -233,6 +235,136 @@ class InteractionArchTest(unittest.TestCase):
         concat_dense = inter_arch(dense_features, embeddings)
         #  B X (D + F + F choose 2)
         self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+
+    def test_fx_and_shape(self) -> None:
+        D = 3
+        B = 10
+        keys = ["f1", "f2"]
+        F = len(keys)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
+        gm = symbolic_trace(inter_arch)
+
+        dense_features = torch.rand((B, D))
+
+        embeddings = KeyedTensor(
+            keys=keys,
+            length_per_key=[D] * F,
+            values=torch.rand((B, D * F)),
+        )
+
+        concat_dense = gm(dense_features, embeddings)
+        #  B X (D + F + F choose 2)
+        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+
+    # TODO(T89043538): Auto-generate this test.
+    def test_fx_script(self) -> None:
+        D = 3
+        B = 10
+        keys = ["f1", "f2"]
+        F = len(keys)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
+        gm = symbolic_trace(inter_arch)
+        scripted_gm = torch.jit.script(gm)
+
+        dense_features = torch.rand((B, D))
+
+        embeddings = KeyedTensor(
+            keys=keys,
+            length_per_key=[D] * F,
+            values=torch.rand((B, D * F)),
+        )
+
+        concat_dense = scripted_gm(dense_features, embeddings)
+        #  B X (D + F + F choose 2)
+        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+
+    def test_correctness(self) -> None:
+        D = 11
+        B = 25
+        keys = ["f1", "f2", "f3", "f4", "f5", "f6"]
+        F = len(keys)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
+
+        dense_features = torch.rand((B, D))
+
+        embeddings = KeyedTensor(
+            keys=keys,
+            length_per_key=[D] * F,
+            values=torch.rand((B, D * F)),
+        )
+
+        concat_dense = inter_arch(dense_features, embeddings)
+        #  B X (D + F + F choose 2)
+        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+
+        expected = self._test_correctness_helper(
+            dense_features=dense_features,
+            sparse_features=embeddings,
+            sparse_feature_names=keys,
+        )
+        self.assertTrue(
+            torch.allclose(
+                concat_dense,
+                expected,
+                rtol=1e-4,
+                atol=1e-4,
+            )
+        )
+
+    def _test_correctness_helper(
+        self,
+        dense_features: torch.Tensor,
+        sparse_features: KeyedTensor,
+        sparse_feature_names: List[str],
+    ) -> torch.Tensor:
+        interactions: List[torch.Tensor] = []
+        # dense/sparse interaction
+        # size B X F
+        for feature_name in sparse_feature_names:
+            sparse_values = sparse_features[feature_name]
+            dots = torch.sum(sparse_values * dense_features, dim=1)
+            # dots is size B
+            interactions.append(dots)
+
+        # sparse/sparse interaction
+        # size B X (F choose 2)
+        for (f1, f2) in list(combinations(sparse_feature_names, 2)):
+            f1_values = sparse_features[f1]
+            f2_values = sparse_features[f2]
+            dots = torch.sum(f1_values * f2_values, dim=1)
+            interactions.append(dots)
+
+        interactions_tensor = torch.stack(interactions).transpose(1, 0)
+        return torch.cat((dense_features, interactions_tensor), dim=1)
+
+    def test_numerical_stability(self) -> None:
+        D = 3
+        B = 6
+        keys = ["f1", "f2"]
+        F = len(keys)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
+        torch.manual_seed(0)
+        dense_features = torch.randint(0, 10, (B, D))
+
+        embeddings = KeyedTensor(
+            keys=keys,
+            length_per_key=[D] * F,
+            values=torch.randint(0, 10, (B, D * F)),
+        )
+
+        concat_dense = inter_arch(dense_features, embeddings)
+        expected = torch.LongTensor(
+            [
+                [4, 9, 3, 61, 57, 63],
+                [0, 3, 9, 84, 27, 45],
+                [7, 3, 7, 34, 50, 25],
+                [3, 1, 6, 21, 50, 91],
+                [6, 9, 8, 125, 109, 74],
+                [6, 6, 8, 18, 80, 21],
+            ]
+        )
+
+        self.assertTrue(torch.equal(concat_dense, expected))
 
 
 class DLRMTest(unittest.TestCase):

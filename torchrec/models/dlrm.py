@@ -159,35 +159,29 @@ class InteractionArch(nn.Module):
         super().__init__()
         self.device = device
         self.sparse_feature_names: List[str] = sparse_feature_names
-        self.sparse_combinations: List[Tuple[str, str]] = list(
-            combinations(sparse_feature_names, 2)
+        self.F: int = len(self.sparse_feature_names)
+        self.triu_indices: torch.Tensor = torch.triu_indices(
+            self.F + 1, self.F + 1, offset=1
         )
 
     def forward(
         self, dense_features: torch.Tensor, sparse_features: KeyedTensor
     ) -> torch.Tensor:
-        if len(self.sparse_feature_names) == 0:
+        if self.F == 0:
             return dense_features
+        (B, D) = dense_features.shape
 
-        interactions: List[torch.Tensor] = []
-        # dense/sparse interaction
-        # size B X F
-        for feature_name in self.sparse_feature_names:
-            sparse_values = sparse_features[feature_name]
-            dots = torch.sum(sparse_values * dense_features, dim=1)
-            # dots is size B
-            interactions.append(dots)
+        sparse_values = sparse_features.values().reshape(B, self.F, D)
+        combined_values = torch.cat((dense_features.unsqueeze(1), sparse_values), dim=1)
 
-        # sparse/sparse interaction
-        # size B X (F choose 2)
-        for (f1, f2) in self.sparse_combinations:
-            f1_values = sparse_features[f1]
-            f2_values = sparse_features[f2]
-            dots = torch.sum(f1_values * f2_values, dim=1)
-            interactions.append(dots)
+        # dense/sparse + sparse/sparse interaction
+        # size B X (F + F choose 2)
+        interactions = torch.bmm(
+            combined_values, torch.transpose(combined_values, 1, 2)
+        )
+        interactions_flat = interactions[:, self.triu_indices[0], self.triu_indices[1]]
 
-        interactions_tensor = torch.stack(interactions).transpose(1, 0)
-        return torch.cat((dense_features, interactions_tensor), dim=1)
+        return torch.cat((dense_features, interactions_flat), dim=1)
 
 
 class OverArch(nn.Module):
