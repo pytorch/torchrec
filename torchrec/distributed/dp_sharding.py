@@ -22,6 +22,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
+    BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import Awaitable, NoWait, ParameterSharding, ShardingEnv
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
@@ -114,6 +115,7 @@ class DpEmbeddingSharding(EmbeddingSharding):
                         feature_names=config[0].feature_names,
                         pooling=config[0].pooling,
                         is_weighted=config[0].is_weighted,
+                        has_feature_processor=config[0].has_feature_processor,
                         local_rows=config[2].size(0),
                         local_cols=config[2].size(1),
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
@@ -131,22 +133,22 @@ class DpEmbeddingSharding(EmbeddingSharding):
     def create_lookup(
         self,
         fused_params: Optional[Dict[str, Any]],
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         if self._is_sequence:
-            module = GroupedEmbeddingsLookup(
+            return GroupedEmbeddingsLookup(
                 grouped_configs=self._grouped_embedding_configs,
                 fused_params=fused_params,
                 device=self._device,
             )
         else:
-            module = GroupedPooledEmbeddingsLookup(
+            return GroupedPooledEmbeddingsLookup(
                 grouped_configs=self._grouped_embedding_configs,
                 grouped_score_configs=self._score_grouped_embedding_configs,
                 fused_params=fused_params,
                 device=self._device,
+                feature_processor=feature_processor,
             )
-        # DDP is applied at top level only
-        return module
 
     def create_pooled_output_dist(self) -> DpPooledEmbeddingDist:
         return DpPooledEmbeddingDist()

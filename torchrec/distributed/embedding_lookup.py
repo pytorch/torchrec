@@ -25,6 +25,10 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     SparseFeatures,
     EmbeddingComputeKernel,
+    BaseGroupedFeatureProcessor,
+)
+from torchrec.distributed.grouped_position_weighted import (
+    GroupedPositionWeightedModule,
 )
 from torchrec.distributed.types import (
     Shard,
@@ -1028,6 +1032,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
@@ -1095,6 +1100,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
 
         self.grouped_configs = grouped_configs
         self.grouped_score_configs = grouped_score_configs
+        self._feature_processor = feature_processor
 
     def forward(
         self,
@@ -1110,7 +1116,17 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             id_list_features_by_group = sparse_features.id_list_features.split(
                 self._id_list_feature_splits,
             )
-            for emb_op, features in zip(self._emb_modules, id_list_features_by_group):
+            for config, emb_op, features in zip(
+                self.grouped_configs, self._emb_modules, id_list_features_by_group
+            ):
+                if (
+                    config.has_feature_processor
+                    and self._feature_processor is not None
+                    and isinstance(
+                        self._feature_processor, GroupedPositionWeightedModule
+                    )
+                ):
+                    features = self._feature_processor(features)
                 embeddings.append(emb_op(features).values())
         if len(self._score_emb_modules) > 0:
             assert sparse_features.id_score_list_features is not None

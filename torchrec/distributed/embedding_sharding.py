@@ -15,6 +15,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     EmbeddingComputeKernel,
     ShardedEmbeddingTable,
+    BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.embedding_configs import (
@@ -113,55 +114,60 @@ def group_tables(
         for data_type in DataType:
             for pooling in PoolingType:
                 for is_weighted in [True, False]:
-                    for compute_kernel in [
-                        EmbeddingComputeKernel.DENSE,
-                        EmbeddingComputeKernel.SPARSE,
-                        EmbeddingComputeKernel.BATCHED_DENSE,
-                        EmbeddingComputeKernel.BATCHED_FUSED,
-                        EmbeddingComputeKernel.BATCHED_QUANT,
-                    ]:
-                        grouped_tables: List[ShardedEmbeddingTable] = []
-                        grouped_score_tables: List[ShardedEmbeddingTable] = []
-                        for table in embedding_tables:
-                            if table.compute_kernel in [
-                                EmbeddingComputeKernel.BATCHED_FUSED_UVM,
-                                EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
-                            ]:
-                                compute_kernel_type = (
-                                    EmbeddingComputeKernel.BATCHED_FUSED
-                                )
-                            else:
-                                compute_kernel_type = table.compute_kernel
-                            if (
-                                table.data_type == data_type
-                                and table.pooling == pooling
-                                and table.is_weighted == is_weighted
-                                and compute_kernel_type == compute_kernel
-                            ):
-                                if table.is_weighted:
-                                    grouped_score_tables.append(table)
+                    for has_feature_processor in [True, False]:
+                        for compute_kernel in [
+                            EmbeddingComputeKernel.DENSE,
+                            EmbeddingComputeKernel.SPARSE,
+                            EmbeddingComputeKernel.BATCHED_DENSE,
+                            EmbeddingComputeKernel.BATCHED_FUSED,
+                            EmbeddingComputeKernel.BATCHED_QUANT,
+                        ]:
+                            grouped_tables: List[ShardedEmbeddingTable] = []
+                            grouped_score_tables: List[ShardedEmbeddingTable] = []
+                            for table in embedding_tables:
+                                if table.compute_kernel in [
+                                    EmbeddingComputeKernel.BATCHED_FUSED_UVM,
+                                    EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
+                                ]:
+                                    compute_kernel_type = (
+                                        EmbeddingComputeKernel.BATCHED_FUSED
+                                    )
                                 else:
-                                    grouped_tables.append(table)
-                        if grouped_tables:
-                            grouped_embedding_configs.append(
-                                GroupedEmbeddingConfig(
-                                    data_type=data_type,
-                                    pooling=pooling,
-                                    is_weighted=is_weighted,
-                                    compute_kernel=compute_kernel,
-                                    embedding_tables=grouped_tables,
+                                    compute_kernel_type = table.compute_kernel
+                                    if (
+                                        table.data_type == data_type
+                                        and table.pooling == pooling
+                                        and table.is_weighted == is_weighted
+                                        and table.has_feature_processor
+                                        == has_feature_processor
+                                        and compute_kernel_type == compute_kernel
+                                    ):
+                                        if table.is_weighted:
+                                            grouped_score_tables.append(table)
+                                        else:
+                                            grouped_tables.append(table)
+                            if grouped_tables:
+                                grouped_embedding_configs.append(
+                                    GroupedEmbeddingConfig(
+                                        data_type=data_type,
+                                        pooling=pooling,
+                                        is_weighted=is_weighted,
+                                        has_feature_processor=has_feature_processor,
+                                        compute_kernel=compute_kernel,
+                                        embedding_tables=grouped_tables,
+                                    )
                                 )
-                            )
-                        if grouped_score_tables:
-                            score_grouped_embedding_configs.append(
-                                GroupedEmbeddingConfig(
-                                    data_type=data_type,
-                                    pooling=pooling,
-                                    is_weighted=is_weighted,
-                                    compute_kernel=compute_kernel,
-                                    embedding_tables=grouped_score_tables,
+                            if grouped_score_tables:
+                                score_grouped_embedding_configs.append(
+                                    GroupedEmbeddingConfig(
+                                        data_type=data_type,
+                                        pooling=pooling,
+                                        is_weighted=is_weighted,
+                                        has_feature_processor=has_feature_processor,
+                                        compute_kernel=compute_kernel,
+                                        embedding_tables=grouped_score_tables,
+                                    )
                                 )
-                            )
         return grouped_embedding_configs, score_grouped_embedding_configs
 
     grouped_embedding_configs_by_rank: List[List[GroupedEmbeddingConfig]] = []
@@ -249,7 +255,9 @@ class EmbeddingSharding(abc.ABC):
 
     @abc.abstractmethod
     def create_lookup(
-        self, fused_params: Optional[Dict[str, Any]]
+        self,
+        fused_params: Optional[Dict[str, Any]],
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         pass
 

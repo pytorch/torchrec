@@ -27,6 +27,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
+    BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
@@ -48,6 +49,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
         id_list_feature_hash_sizes: List[int],
         id_score_list_feature_hash_sizes: List[int],
         device: Optional[torch.device] = None,
+        has_feature_processor: bool = False,
     ) -> None:
         super().__init__()
         assert (
@@ -111,6 +113,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
             device,
             self._num_cross_nodes,
         )
+        self._has_feature_processor = has_feature_processor
 
     def forward(
         self,
@@ -121,7 +124,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
                 num_buckets=self._local_size,
                 block_sizes=self._id_list_feature_block_sizes_tensor,
                 output_permute=False,
-                bucketize_pos=False,
+                bucketize_pos=self._has_feature_processor,
             )[0].permute(
                 self._id_list_sf_staggered_shuffle,
                 self._id_list_sf_staggerd_shuffle_tensor,
@@ -234,6 +237,12 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             for rank in range(self._world_size)
             if rank % self._local_size == 0
         ]
+        self._has_feature_processor: bool = False
+        for group_config in self._score_grouped_embedding_configs_per_node[
+            self._my_rank // self._local_size
+        ]:
+            if group_config.has_feature_processor:
+                self._has_feature_processor = True
 
     def _shard(
         self,
@@ -273,6 +282,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
                         feature_names=config[0].feature_names,
                         pooling=config[0].pooling,
                         is_weighted=config[0].is_weighted,
+                        has_feature_processor=config[0].has_feature_processor,
                         local_rows=shards[rank_idx].shard_lengths[0],
                         local_cols=config[0].embedding_dim,
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
@@ -305,11 +315,13 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
             id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
             device=self._device,
+            has_feature_processor=self._has_feature_processor,
         )
 
     def create_lookup(
         self,
         fused_params: Optional[Dict[str, Any]],
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs_per_rank[self._my_rank],
@@ -318,6 +330,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             ],
             fused_params=fused_params,
             device=self._device,
+            feature_processor=feature_processor,
         )
 
     def create_pooled_output_dist(self) -> BasePooledEmbeddingDist:

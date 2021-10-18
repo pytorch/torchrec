@@ -153,6 +153,7 @@ def _create_embedding_configs_by_sharding(
                     feature_names=copy.deepcopy(config.feature_names),
                     pooling=config.pooling,
                     is_weighted=module.is_weighted,
+                    has_feature_processor=False,
                     embedding_names=embedding_names,
                     weight_init_max=config.weight_init_max,
                     weight_init_min=config.weight_init_min,

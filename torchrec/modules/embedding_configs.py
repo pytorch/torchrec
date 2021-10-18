@@ -38,7 +38,6 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
 
 @dataclass
 class BaseEmbeddingConfig:
-    # FKA EmbeddingTableConfig
     num_embeddings: int
     embedding_dim: int
     name: str = ""
@@ -67,16 +66,15 @@ class BaseEmbeddingConfig:
 class EmbeddingTableConfig(BaseEmbeddingConfig):
     pooling: PoolingType = PoolingType.SUM
     is_weighted: bool = False
+    has_feature_processor: bool = False
     embedding_names: List[str] = field(default_factory=list)
 
 
 @dataclass
 class EmbeddingBagConfig(BaseEmbeddingConfig):
-    # FKA PooledEmbeddingTableConfig
     pooling: PoolingType = PoolingType.SUM
 
 
 @dataclass
 class EmbeddingConfig(BaseEmbeddingConfig):
-    # FKA SequenceEmbeddingTableConfig
     pass

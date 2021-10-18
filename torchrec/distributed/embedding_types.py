@@ -87,6 +87,7 @@ class GroupedEmbeddingConfig:
     data_type: DataType
     pooling: PoolingType
     is_weighted: bool
+    has_feature_processor: bool
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
 
@@ -218,3 +219,22 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 storage_map[compute_device_type].value: tensor.element_size()
                 * tensor.nelement()
             }
+
+
+class BaseGroupedFeatureProcessor(nn.Module):
+    """
+    abstract base class for grouped feature processor
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> KeyedJaggedTensor:
+        pass
+
+    def sparse_grad_parameter_names(
+        self, destination: Optional[List[str]] = None, prefix: str = ""
+    ) -> List[str]:
+        destination = [] if destination is None else destination
+        return destination

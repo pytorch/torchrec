@@ -64,6 +64,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
                         feature_names=config[0].feature_names,
                         pooling=config[0].pooling,
                         is_weighted=config[0].is_weighted,
+                        has_feature_processor=config[0].has_feature_processor,
                         local_rows=config[0].num_embeddings,
                         local_cols=shards[i].shard_lengths[1],
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),

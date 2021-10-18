@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
+    BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
@@ -167,6 +168,7 @@ class TwEmbeddingSharding(EmbeddingSharding):
                     feature_names=config[0].feature_names,
                     pooling=config[0].pooling,
                     is_weighted=config[0].is_weighted,
+                    has_feature_processor=config[0].has_feature_processor,
                     local_rows=config[0].num_embeddings,
                     local_cols=config[0].embedding_dim,
                     compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
@@ -189,6 +191,7 @@ class TwEmbeddingSharding(EmbeddingSharding):
     def create_lookup(
         self,
         fused_params: Optional[Dict[str, Any]],
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         if self._is_sequence:
             return GroupedEmbeddingsLookup(
@@ -202,6 +205,7 @@ class TwEmbeddingSharding(EmbeddingSharding):
                 grouped_score_configs=self._score_grouped_embedding_configs,
                 fused_params=fused_params,
                 device=self._device,
+                feature_processor=feature_processor,
             )
 
     def create_pooled_output_dist(self) -> TwPooledEmbeddingDist:
