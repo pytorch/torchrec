@@ -130,13 +130,16 @@ class GroupedEmbedding(BaseEmbedding):
             )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        indices_dict: Dict[str, torch.Tensor] = {}
+        indices_list = torch.split(features.values(), features.length_per_key())
+        for key, indices in zip(features.keys(), indices_list):
+            indices_dict[key] = indices
         unpooled_embeddings: List[torch.Tensor] = []
         for embedding_config, emb_module in zip(
             self._config.embedding_tables, self._emb_modules
         ):
             for feature_name in embedding_config.feature_names:
-                values = features[feature_name].values()
-                unpooled_embeddings.append(emb_module(input=values))
+                unpooled_embeddings.append(emb_module(input=indices_dict[feature_name]))
         return torch.cat(unpooled_embeddings, dim=0)
 
     def state_dict(
