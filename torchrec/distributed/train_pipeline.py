@@ -13,6 +13,7 @@ from typing import (
     Any,
     Dict,
     List,
+    Set,
 )
 
 import torch
@@ -24,7 +25,6 @@ from torchrec.distributed.types import (
     Awaitable,
     ShardedModuleContext,
 )
-from torchrec.distributed.utils import get_unsharded_module_names
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -322,6 +322,46 @@ def _get_node_args(node: Node) -> Tuple[List[ArgInfo], int]:
     return arg_info_list, num_found
 
 
+def _get_unsharded_module_names_helper(
+    model: torch.nn.Module,
+    path: str,
+    unsharded_module_names: Set[str],
+) -> bool:
+    sharded_children = set()
+    for name, child in model.named_children():
+        curr_path = path + name
+        if isinstance(child, ShardedModule):
+            sharded_children.add(name)
+        else:
+            child_sharded = _get_unsharded_module_names_helper(
+                child,
+                curr_path + ".",
+                unsharded_module_names,
+            )
+            if child_sharded:
+                sharded_children.add(name)
+
+    if len(sharded_children) > 0:
+        for name, _ in model.named_children():
+            if name not in sharded_children:
+                unsharded_module_names.add(path + name)
+
+    return len(sharded_children) > 0
+
+
+def _get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
+    """
+    Returns a list of top level modules do not contain any sharded sub modules.
+    """
+    unsharded_module_names: Set[str] = set()
+    _get_unsharded_module_names_helper(
+        model,
+        "",
+        unsharded_module_names,
+    )
+    return list(unsharded_module_names)
+
+
 def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
     context: TrainPipelineContext,
@@ -341,7 +381,7 @@ def _rewrite_model(  # noqa C901
             sharded_modules[name] = m
 
     # Trace a model.
-    tracer = Tracer(get_unsharded_module_names(model))
+    tracer = Tracer(_get_unsharded_module_names(model))
     graph = tracer.trace(model)
 
     # Select sharded modules, which are top-level in the forward call graph,
