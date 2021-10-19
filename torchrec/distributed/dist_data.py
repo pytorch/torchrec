@@ -72,6 +72,25 @@ def _split_lengths(
 
 
 class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
+    """
+    Awaitable for KJT all2all
+
+    Constructor Args:
+        pg  (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        input (KeyedJaggedTensor): Input KJT tensor
+        splits (List[int]): List of len(pg.size()) which indicates how many features to send to
+            each pg.rank().  It is assumed the KeyedJaggedTensor is ordered by destination rank.
+            Same for all ranks.
+        keys (List[str]): KJT keys after all2all
+        recat (torch.Tensor): recat tensor for reordering tensor order after all2all
+
+    Call Args:
+       None
+
+    Returns:
+        Synced KJT after all2all
+    """
+
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -163,6 +182,7 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
     def wait(self) -> KeyedJaggedTensor:
         if self._workers == 1:
             # TODO: add callback logic to awaitable type directly
+            self._input.sync()
             return (
                 self._callback(self._input)
                 if self._callback is not None
