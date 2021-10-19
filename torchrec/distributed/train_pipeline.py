@@ -216,7 +216,8 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
         request = self._context.input_dist_requests[self._name]
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
-            data = request.wait()
+            with torch.cuda.stream(self._dist_stream):
+                data = request.wait()
 
         if self._dist_stream is not None:
             torch.cuda.current_stream().wait_stream(self._dist_stream)
