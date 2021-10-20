@@ -671,30 +671,47 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         _offset_per_key = self.offset_per_key()
         for segment in segments:
             end = start + segment
-            keys: List[str] = self._keys[start:end]
             end_offset = _offset_per_key[end]
-            split_length_per_key = _length_per_key[start:end]
-            if len(keys) == 0:
+            keys: List[str] = self._keys[start:end]
+            if segment == len(self._keys):
+                # no torch slicing required
+                split_list.append(
+                    KeyedJaggedTensor(
+                        keys=_trim_keys(self._keys) if trim else self._keys,
+                        values=self._values,
+                        weights=self.weights_or_none(),
+                        lengths=self._lengths,
+                        offsets=self._offsets,
+                        stride=self._stride,
+                        length_per_key=self._length_per_key,
+                        offset_per_key=self._offset_per_key,
+                        index_per_key=self._index_per_key,
+                    )
+                )
+            elif segment == 0:
                 split_list.append(
                     KeyedJaggedTensor(
                         keys=keys,
                         values=torch.tensor(
-                            [], device=self.device(), dtype=self.values().dtype
+                            [], device=self.device(), dtype=self._values.dtype
                         ),
                         weights=None
                         if self.weights_or_none() is None
                         else torch.tensor(
-                            [], device=self.device(), dtype=self.weights().dtype
+                            [],
+                            device=self.device(),
+                            dtype=self.weights().dtype,
                         ),
                         lengths=torch.tensor([], device=self.device(), dtype=torch.int),
                         offsets=torch.tensor([], device=self.device(), dtype=torch.int),
-                        stride=self.stride(),
+                        stride=self._stride,
                         length_per_key=None,
                         offset_per_key=None,
                         index_per_key=None,
                     )
                 )
             else:
+                split_length_per_key = _length_per_key[start:end]
                 split_list.append(
                     KeyedJaggedTensor(
                         keys=_trim_keys(keys) if trim else keys,
