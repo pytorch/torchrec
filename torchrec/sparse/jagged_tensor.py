@@ -750,7 +750,7 @@ class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
         for index in indices:
             key = self._keys[index]
             count = seen.get(key, 0)
-            permuted_keys.append(f"{key}@copy_{count}" if count else key)
+            permuted_keys.append(key)
             permuted_lengths_sum += length_per_key[index]
             permuted_length_per_key.append(length_per_key[index])
             seen[key] = count + 1

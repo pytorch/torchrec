@@ -593,7 +593,7 @@ class TestKeyedJaggedTensor(unittest.TestCase):
 
         self.assertEqual(
             permuted_jag_tensor.keys(),
-            ["index_1", "index_0", "index_2", "index_1@copy_1", "index_1@copy_2"],
+            ["index_1", "index_0", "index_2", "index_1", "index_1"],
         )
         self.assertEqual(
             permuted_jag_tensor.offset_per_key(),
