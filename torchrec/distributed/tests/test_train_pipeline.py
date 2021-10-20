@@ -63,8 +63,7 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]
             module, params, env, self.fused_params, device
         )
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
             ShardingType.TABLE_WISE.value,
         ]

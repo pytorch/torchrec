@@ -4,7 +4,6 @@ import unittest
 from typing import List
 from unittest.mock import MagicMock, patch, call
 
-from torch import distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
 from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -21,8 +20,7 @@ from torchrec.modules.embedding_modules import (
 
 
 class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.COLUMN_WISE.value]
 
     """
@@ -36,8 +34,7 @@ class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class DPCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
             ShardingType.COLUMN_WISE.value,
             ShardingType.DATA_PARALLEL.value,
@@ -54,8 +51,7 @@ class DPCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_WISE.value]
 
     """
@@ -69,8 +65,7 @@ class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class DPTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
             ShardingType.TABLE_WISE.value,
             ShardingType.DATA_PARALLEL.value,
@@ -87,12 +82,27 @@ class DPTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class DPRWTWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
             ShardingType.TABLE_WISE.value,
             ShardingType.DATA_PARALLEL.value,
             ShardingType.ROW_WISE.value,
+        ]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
+class TWRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [
+            ShardingType.TABLE_ROW_WISE.value,
         ]
 
     """
@@ -217,6 +227,72 @@ class TestEmbeddingPlanner(unittest.TestCase):
                 ),
                 call.info(
                     "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 2307, Mean Pooling: 0, Emb Dims: 23, Shards: {'table_wise': 2}"
+                ),
+            ],
+        )
+
+    @patch("torchrec.distributed.planner.embedding_planner.logger", create=True)
+    def test_twrw_no_constraints(self, mock_logger: MagicMock) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100 + i,
+                embedding_dim=10 + i,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1)
+        ]
+        expected_plan = {
+            "sparse.ebc": {
+                "table_0": ParameterSharding(
+                    sharding_type=ShardingType.TABLE_ROW_WISE.value,
+                    compute_kernel="dense",
+                    ranks=[1],
+                    sharding_spec=EnumerableShardingSpec(
+                        shards=[
+                            ShardMetadata(
+                                shard_lengths=[
+                                    tables[0].num_embeddings // 2,
+                                    tables[0].embedding_dim,
+                                ],
+                                shard_offsets=[0, 0],
+                                placement="rank:0/cuda:0",
+                            ),
+                            ShardMetadata(
+                                shard_lengths=[
+                                    tables[0].num_embeddings // 2,
+                                    tables[0].embedding_dim,
+                                ],
+                                shard_offsets=[50, 0],
+                                placement="rank:1/cuda:1",
+                            ),
+                        ]
+                    ),
+                ),
+            }
+        }
+
+        model = TestSparseNN(tables=tables, weighted_tables=[])
+        world_size = 2
+        planner = EmbeddingShardingPlanner(
+            world_size=world_size,
+            compute_device_type=self.compute_device_type,
+        )
+
+        sharders = [TWRWSharder()]
+        # pyre-ignore [6]
+        output = planner.plan(model, sharders)
+        self.assertEqual(output.plan, expected_plan)
+
+        # check logger
+        self.assertEqual(
+            mock_logger.mock_calls[1 : world_size + 1],
+            [
+                call.info(
+                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 1500, Mean Pooling: 0, Emb Dims: 10, Shards: {'table_row_wise': 1}"
+                ),
+                call.info(
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 1500, Mean Pooling: 0, Emb Dims: 10, Shards: {'table_row_wise': 1}"
                 ),
             ],
         )

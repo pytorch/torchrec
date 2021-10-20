@@ -162,14 +162,13 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
     def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
         self._fused_params = fused_params
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
             ShardingType.ROW_WISE.value,
         ]
-        if torch.cuda.is_available():
+        if compute_device_type in {"cuda"}:
             # TWRW supported for CUDA only
             types.append(ShardingType.TABLE_ROW_WISE.value)
 

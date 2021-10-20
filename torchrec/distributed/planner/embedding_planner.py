@@ -415,7 +415,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             for name, param in sharder.shardable_parameters(child_module).items():
                 sharding_options = []
                 for sharding_type in self._filter_sharding_types(
-                    name, sharder.sharding_types
+                    name, sharder.sharding_types(self._compute_device_type)
                 ):
                     num_col_wise_shards, shard_size = self._get_num_col_wise_shards(
                         name, param, sharding_type

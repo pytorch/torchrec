@@ -488,8 +488,7 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
     ) -> ShardedEmbeddingBagCollection:
         return ShardedEmbeddingBagCollection(module, params, env, None, device)
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value]
 
     def compute_kernels(

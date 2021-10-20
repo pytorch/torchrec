@@ -37,8 +37,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [self._sharding_type]
 
     def compute_kernels(

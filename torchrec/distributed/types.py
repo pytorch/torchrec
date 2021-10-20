@@ -432,8 +432,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         """
         return dict(module.named_parameters())
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         """
         List of supported sharding types. See ShardingType for well-known examples.
         """

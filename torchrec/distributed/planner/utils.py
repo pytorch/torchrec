@@ -21,7 +21,8 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 
-MAX_DDR_STORAGE: int = 4 * 1024 * 1024 * 1024 * 1024  # 4 TB
+DEFAULT_DDR_STORAGE: int = 4 * 1024 * 1024 * 1024 * 1024  # 4 TB
+DEFAULT_HBM_STORAGE: int = 32 * 1024 * 1024 * 1024  # 32 GB
 MIN_DIM: int = 32
 
 SHARDING_PREFERENCE: Dict[str, int] = {
@@ -228,14 +229,14 @@ def to_plan(
 
 
 def _get_storage(
-    device: torch.device, storage_in_gb: Optional[Dict[str, int]]
+    compute_device: str, storage_in_gb: Optional[Dict[str, int]]
 ) -> Dict[str, int]:
     if storage_in_gb is None:
         storage_in_gb = {}
 
     hbm = storage_in_gb.get("hbm", None)
-    if hbm is None and device.type == "cuda":
-        hbm = torch.cuda.get_device_properties(device).total_memory
+    if hbm is None and compute_device == "cuda":
+        hbm = DEFAULT_HBM_STORAGE
     elif hbm is None:
         hbm = 0
     else:
@@ -243,7 +244,7 @@ def _get_storage(
 
     ddr = storage_in_gb.get("ddr", None)
     if ddr is None:
-        ddr = MAX_DDR_STORAGE
+        ddr = DEFAULT_DDR_STORAGE
 
     return {
         "hbm": hbm,
@@ -259,12 +260,7 @@ def get_topology(
     devices_per_host = get_local_size(world_size)
     num_hosts = get_num_groups(world_size)
     compute_device = compute_device_type
-    sample_device = (
-        torch.device("cuda", 0)
-        if compute_device_type == "cuda"
-        else torch.device("cpu")
-    )
-    storage = _get_storage(sample_device, storage_in_gb)
+    storage = _get_storage(compute_device_type, storage_in_gb)
     topology = Topology(
         hosts=[
             HostInfo(

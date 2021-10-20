@@ -439,8 +439,7 @@ class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     Restricts sharding to single type only.
     """
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [self._sharding_type]
 
     """
@@ -466,8 +465,7 @@ class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
     Restricts sharding to single type only.
     """
 
-    @property
-    def sharding_types(self) -> List[str]:
+    def sharding_types(self, compute_device_type: str) -> List[str]:
         return [self._sharding_type]
 
     """
