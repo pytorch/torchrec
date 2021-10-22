@@ -13,7 +13,6 @@ from typing import (
     List,
     Type,
     Iterator,
-    Tuple,
 )
 
 from torch.distributed._sharding_spec import ShardingSpec
