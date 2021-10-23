@@ -10,14 +10,14 @@ from torchrec.distributed.embedding import (
     EmbeddingBagSharder,
 )
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
-from torchrec.distributed.train_pipeline import PipelinedInput
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.types import Pipelineable
 
 
 @dataclass
-class ModelInput(PipelinedInput):
+class ModelInput(Pipelineable):
     float_features: torch.Tensor
     idlist_features: KeyedJaggedTensor
     idscore_features: KeyedJaggedTensor

@@ -16,6 +16,7 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     ShardedEmbeddingTable,
     BaseGroupedFeatureProcessor,
+    SparseFeaturesList,
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.embedding_configs import (
@@ -23,10 +24,11 @@ from torchrec.modules.embedding_configs import (
     DataType,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.types import Multistreamable
 
 
 @dataclass
-class SequenceShardingContext:
+class SequenceShardingContext(Multistreamable):
     """
     SequenceEmbeddingAll2all has the same comm pattern as KJTAll2all.
     Stores KJTAll2all context and reuse it in SequenceEmbeddingAll2all.
@@ -44,6 +46,14 @@ class SequenceShardingContext:
     output_splits: List[int] = field(default_factory=list)
     unbucketize_permute_tensor: Optional[torch.Tensor] = None
     lengths_after_input_dist: Optional[torch.Tensor] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        if self.features_before_input_dist is not None:
+            self.features_before_input_dist.record_stream(stream)
+        if self.unbucketize_permute_tensor is not None:
+            self.unbucketize_permute_tensor.record_stream(stream)
+        if self.lengths_after_input_dist is not None:
+            self.lengths_after_input_dist.record_stream(stream)
 
 
 class SparseFeaturesAllToAllAwaitable(Awaitable[SparseFeatures]):
@@ -185,7 +195,7 @@ def group_tables(
     )
 
 
-class SparseFeaturesListAwaitable(Awaitable[List[SparseFeatures]]):
+class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
     def __init__(
         self,
         awaitables: List[Awaitable[SparseFeatures]],
@@ -193,8 +203,8 @@ class SparseFeaturesListAwaitable(Awaitable[List[SparseFeatures]]):
         super().__init__()
         self.awaitables = awaitables
 
-    def wait(self) -> List[SparseFeatures]:
-        return [w.wait() for w in self.awaitables]
+    def wait(self) -> SparseFeaturesList:
+        return SparseFeaturesList([w.wait() for w in self.awaitables])
 
 
 class BaseSparseFeaturesDist(abc.ABC, nn.Module):

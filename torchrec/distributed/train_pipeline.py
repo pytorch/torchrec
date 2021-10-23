@@ -21,41 +21,15 @@ from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import (
-    Awaitable,
-    ShardedModuleContext,
-)
+from torchrec.distributed.types import Awaitable, ShardedModuleContext
+from torchrec.types import Pipelineable, Multistreamable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class PipelinedInput(abc.ABC):
-    """
-    This interface contains two methods, one for moving an input across devices, the other
-    one for marking streams that operate the input.
-
-    torch.Tensor implements this interface and we can used it in many applications.
-    Another example is torchrec.(Keyed)JaggedTensor, which we use as the input to
-    torchrec.EmbeddingBagCollection, which in turn is often the first layer of many models.
-    Some models take compound inputs, for example, hpc.torchrec.base_provider.ModelInput,
-    which should implement this interface.
-    """
-
-    # Please be aware that accoarding to https://pytorch.org/docs/stable/generated/torch.Tensor.to.html,
-    # to might return self or a copy of self.  So please remember to use `to` with the assignment operator,
-    # for example, `in = in.to(new_device)`.
-    @abc.abstractmethod
-    def to(self, device: torch.device, non_blocking: bool) -> "PipelinedInput":
-        ...
-
-    @abc.abstractmethod
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        ...
-
-
-In = TypeVar("In", bound=PipelinedInput)
+In = TypeVar("In", bound=Pipelineable)
 Out = TypeVar("Out")
-DistIn = TypeVar("DistIn")
+DistIn = TypeVar("DistIn", bound=Multistreamable)
 DistOut = TypeVar("DistOut")
 
 
@@ -66,6 +40,9 @@ class TrainPipeline(abc.ABC, Generic[In, Out]):
 
 
 def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
+    assert isinstance(
+        batch, (torch.Tensor, Pipelineable)
+    ), f"{type(batch)} must implement Pipelineable interface"
     return cast(In, batch.to(device=device, non_blocking=non_blocking))
 
 
@@ -82,6 +59,9 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     # underlying memory of the tensor once it is no longer used by the creator stream.  This is
     # a notable programming trick when we write programs using multi CUDA streams.
     cur_stream = torch.cuda.current_stream()
+    assert isinstance(
+        batch, (torch.Tensor, Multistreamable)
+    ), f"{type(batch)} must implement Multistreamable interface"
     batch.record_stream(cur_stream)
 
 
@@ -216,18 +196,24 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
         request = self._context.input_dist_requests[self._name]
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
+            # Finish waiting on the dist_stream,
+            # in case some delayed stream scheduling happens during the wait() call.
             with torch.cuda.stream(self._dist_stream):
                 data = request.wait()
 
+        # Make sure that both result of input_dist and context
+        # are properly transferred to the current stream.
         if self._dist_stream is not None:
             torch.cuda.current_stream().wait_stream(self._dist_stream)
             cur_stream = torch.cuda.current_stream()
-            if isinstance(data, list):
-                for d in data:
-                    d.record_stream(cur_stream)
-            else:
-                data.record_stream(cur_stream)
-            # self._context.module_contexts[self._name].record_stream(cur_stream)
+
+            assert isinstance(
+                data, (torch.Tensor, Multistreamable)
+            ), f"{type(data)} must implement Multistreamable interface"
+            data.record_stream(cur_stream)
+
+            ctx = self._context.module_contexts[self._name]
+            ctx.record_stream(cur_stream)
 
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data

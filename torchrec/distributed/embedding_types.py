@@ -3,7 +3,7 @@
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import List, Optional, Dict, Any, TypeVar
+from typing import List, Optional, Dict, Any, TypeVar, Iterator
 
 import torch
 from torch import nn
@@ -19,6 +19,7 @@ from torchrec.modules.embedding_configs import (
     EmbeddingTableConfig,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.types import Multistreamable
 
 
 @unique
@@ -45,7 +46,7 @@ class EmbeddingComputeKernel(Enum):
 
 
 @dataclass
-class SparseFeatures:
+class SparseFeatures(Multistreamable):
     id_list_features: Optional[KeyedJaggedTensor] = None
     id_score_list_features: Optional[KeyedJaggedTensor] = None
 
@@ -54,6 +55,27 @@ class SparseFeatures:
             self.id_list_features.record_stream(stream)
         if self.id_score_list_features is not None:
             self.id_score_list_features.record_stream(stream)
+
+
+class SparseFeaturesList(Multistreamable):
+    def __init__(self, features: List[SparseFeatures]) -> None:
+        self.features = features
+
+    def __len__(self) -> int:
+        return len(self.features)
+
+    def __setitem__(self, key: int, item: SparseFeatures) -> None:
+        self.features[key] = item
+
+    def __getitem__(self, key: int) -> SparseFeatures:
+        return self.features[key]
+
+    def __iter__(self) -> Iterator[SparseFeatures]:
+        return iter(self.features)
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        for feature in self.features:
+            feature.record_stream(stream)
 
 
 @dataclass

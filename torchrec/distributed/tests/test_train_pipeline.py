@@ -15,7 +15,7 @@ from torchrec.distributed.embedding import (
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
+    SparseFeaturesList,
 )
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
@@ -47,7 +47,7 @@ class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
         self,
         ctx: ShardedModuleContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[List[SparseFeatures]]:
+    ) -> Awaitable[SparseFeaturesList]:
         return super().input_dist(ctx, features)
 
 

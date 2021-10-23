@@ -31,6 +31,7 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
     BaseEmbeddingLookup,
+    SparseFeaturesList,
 )
 from torchrec.distributed.rw_sharding import RwEmbeddingSharding
 from torchrec.distributed.tw_sharding import TwEmbeddingSharding
@@ -193,7 +194,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
 
 class ShardedEmbeddingBagCollection(
     ShardedModule[
-        List[SparseFeatures],
+        SparseFeaturesList,
         List[torch.Tensor],
         KeyedTensor,
     ],
@@ -301,7 +302,7 @@ class ShardedEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: ShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[List[SparseFeatures]]:
+    ) -> Awaitable[SparseFeaturesList]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
@@ -333,7 +334,7 @@ class ShardedEmbeddingBagCollection(
             return SparseFeaturesListAwaitable(awaitables)
 
     def compute(
-        self, ctx: ShardedModuleContext, dist_input: List[SparseFeatures]
+        self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
     ) -> List[torch.Tensor]:
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
@@ -349,7 +350,7 @@ class ShardedEmbeddingBagCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: ShardedModuleContext, input: List[SparseFeatures]
+        self, ctx: ShardedModuleContext, input: SparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingCollectionAwaitable(
             awaitables=[

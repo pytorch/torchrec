@@ -2,7 +2,6 @@
 
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
-    PipelinedInput,
     TrainPipeline,
     TrainPipelineBase,
     TrainPipelineSparseDist,

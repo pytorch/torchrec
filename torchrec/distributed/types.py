@@ -45,6 +45,7 @@ from torch.distributed._sharded_tensor import (  # noqa
     ShardedTensorMetadata,
 )
 from torch.distributed._sharding_spec import ShardMetadata  # noqa
+from torchrec.types import Multistreamable
 
 
 class ShardingType(Enum):
@@ -87,7 +88,7 @@ class ComputeKernel(Enum):
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
 Out = TypeVar("Out")
-CompIn = TypeVar("CompIn")
+CompIn = TypeVar("CompIn", bound=Multistreamable)
 DistOut = TypeVar("DistOut")
 
 
@@ -284,8 +285,17 @@ class ParameterSharding:
 
 
 @dataclass
-class ShardedModuleContext:
+class ShardedModuleContext(Multistreamable):
     pass
+
+
+class EmptyContext(ShardedModuleContext):
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        pass
+
+    # pyre-ignore [2]
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise NotImplementedError()
 
 
 class ShardingEnv:
@@ -332,7 +342,7 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
     def create_context(self) -> ShardedModuleContext:
-        return ShardedModuleContext()
+        return EmptyContext()
 
     @abc.abstractmethod
     def input_dist(

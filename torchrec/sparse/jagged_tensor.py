@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import abc
 from typing import Optional, List, Dict, Tuple
 
 import torch
 import torch.fx
+from torchrec.types import Pipelineable
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -126,7 +128,11 @@ def _jagged_values_string(
     )
 
 
-class JaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
+class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
+    pass
+
+
+class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) jagged tensor
 
     A `JaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
@@ -472,7 +478,7 @@ def _kjt_to_jt_dict(
 torch.fx.wrap("_kjt_to_jt_dict")
 
 
-class KeyedJaggedTensor(metaclass=torch.fx.ProxyableClassMeta):
+class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) keyed jagged tensor
 
     A `JaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
@@ -970,7 +976,7 @@ def _keyed_values_string(values: torch.Tensor) -> str:
     )
 
 
-class KeyedTensor(metaclass=torch.fx.ProxyableClassMeta):
+class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """
     KeyedTensor holds a concatenated list of dense tensors
     each of which can be accessed by a key.
@@ -1086,6 +1092,21 @@ class KeyedTensor(metaclass=torch.fx.ProxyableClassMeta):
         keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
     ) -> List[torch.Tensor]:
         return _regroup_keyed_tensors(keyed_tensors, groups)
+
+    # pyre-ignore [56]
+    @torch.jit.unused
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        self._values.record_stream(stream)
+
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KeyedTensor":
+        return KeyedTensor(
+            keys=self._keys,
+            length_per_key=self._length_per_key,
+            values=self._values.to(device, non_blocking=non_blocking),
+            key_dim=self._key_dim,
+            offset_per_key=self._offset_per_key,
+            index_per_key=self._index_per_key,
+        )
 
     def __str__(self) -> str:
         if len(self._keys) == 0:
