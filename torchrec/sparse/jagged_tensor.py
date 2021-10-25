@@ -636,11 +636,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return self._stride
 
     def _key_indices(self) -> Dict[str, int]:
-        _index_per_key = _maybe_compute_index_per_key(
+        _index_per_key: Dict[str, int] = _maybe_compute_index_per_key(
             self._keys,
             self._index_per_key,
         )
-        self._index_per_key: Dict[str, int] = _index_per_key
+        self._index_per_key = _index_per_key
         return _index_per_key
 
     def length_per_key(self) -> List[int]:
