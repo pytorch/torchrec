@@ -19,6 +19,9 @@ from typing import (
 import torch
 from torch import Tensor
 from torch import nn
+from torch.distributed._sharding_spec import (
+    EnumerableShardingSpec,
+)
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
 from torchrec.distributed.dp_sharding import DpEmbeddingSharding
@@ -71,6 +74,8 @@ def create_embedding_sharding(
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding:
     pg = env.process_group
+    if device is not None and device.type == "meta":
+        replace_placement_with_meta_device(embedding_configs)
     if pg is not None:
         if sharding_type == ShardingType.TABLE_WISE.value:
             return TwEmbeddingSharding(embedding_configs, pg, device)
@@ -89,6 +94,35 @@ def create_embedding_sharding(
             return DpEmbeddingSharding(embedding_configs, env, device)
         else:
             raise ValueError(f"Sharding not supported {sharding_type}")
+
+
+def replace_placement_with_meta_device(
+    embedding_configs: List[
+        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+    ]
+) -> None:
+    """Placement device and tensor device could be unmatched in some
+    scenarios, e.g. passing meta device to DMP and passing cuda
+    to EmbeddingShardingPlanner. We need to make device consistent
+    after getting sharding planner.
+    """
+    for config in embedding_configs:
+        sharding_spec = config[1].sharding_spec
+        if sharding_spec is None:
+            continue
+        if isinstance(sharding_spec, EnumerableShardingSpec):
+            for shard_metadata in sharding_spec.shards:
+                placement = shard_metadata.placement
+                if isinstance(placement, str):
+                    placement = torch.distributed._remote_device(placement)
+                assert isinstance(placement, torch.distributed._remote_device)
+                placement._device = torch.device("meta")
+                shard_metadata.placement = placement
+        else:
+            # We only support EnumerableShardingSpec at present.
+            raise RuntimeError(
+                f"Unsupported ShardingSpec {type(sharding_spec)} with meta device"
+            )
 
 
 def filter_state_dict(

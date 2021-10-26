@@ -21,6 +21,7 @@ from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
     default_sharders,
 )
+from torchrec.distributed.planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import ParameterHints
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
@@ -476,6 +477,67 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 dmp.init_data_parallel()
             dmps.append(dmp)
         return (dmps, batch)
+
+    def test_meta_device_dmp_state_dict(self) -> None:
+        env = ShardingEnv.from_process_group(dist.GroupMember.WORLD)
+
+        m1 = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+        )
+        # dmp with real device
+        dmp1 = DistributedModelParallel(
+            module=m1,
+            init_data_parallel=False,
+            init_parameters=False,
+            sharders=default_sharders,
+            device=self.device,
+            env=env,
+            plan=EmbeddingShardingPlanner(
+                world_size=env.world_size,
+                compute_device_type=self.device.type,
+            ).plan(m1, default_sharders),
+        )
+
+        m2 = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+        )
+        # dmp with meta device
+        dmp2 = DistributedModelParallel(
+            module=m2,
+            init_data_parallel=False,
+            init_parameters=False,
+            sharders=default_sharders,
+            device=torch.device("meta"),
+            env=env,
+            plan=EmbeddingShardingPlanner(
+                world_size=env.world_size,
+                compute_device_type=self.device.type,
+            ).plan(m2, default_sharders),
+        )
+
+        sd1 = dmp1.state_dict()
+        for key, v2 in dmp2.state_dict().items():
+            v1 = sd1[key]
+            if isinstance(v2, nn.parameter.UninitializedParameter) and isinstance(
+                v1, nn.parameter.UninitializedParameter
+            ):
+                continue
+            if isinstance(v2, ShardedTensor):
+                self.assertTrue(isinstance(v1, ShardedTensor))
+                assert len(v2.local_shards()) == 1
+                dst = v2.local_shards()[0].tensor
+            else:
+                dst = v2
+            if isinstance(v1, ShardedTensor):
+                assert len(v1.local_shards()) == 1
+                src = v1.local_shards()[0].tensor
+            else:
+                src = v1
+            self.assertEqual(src.size(), dst.size())
 
     # pyre-ignore[56]
     @given(
