@@ -83,7 +83,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._optimizer = optimizer
         self._device = device
         self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-            None if str(self._device) == "cpu" else torch.cuda.Stream()
+            torch.cuda.Stream() if device.type == "cuda" else None
         )
         self._cur_batch: Optional[In] = None
         self._connected = False
@@ -418,14 +418,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._optimizer = optimizer
         self._device = device
         # use two data streams to support two concurrent batches
-        if str(self._device) == "cpu":
-            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
-            self._data_stream: Optional[torch.cuda.streams.Stream] = None
-        else:
+        if device.type == "cuda":
             self._memcpy_stream: Optional[
                 torch.cuda.streams.Stream
             ] = torch.cuda.Stream()
             self._data_stream: Optional[torch.cuda.streams.Stream] = torch.cuda.Stream()
+        else:
+            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
+            self._data_stream: Optional[torch.cuda.streams.Stream] = None
         self._batch_i: Optional[In] = None
         self._batch_ip1: Optional[In] = None
         self._batch_ip2: Optional[In] = None
