@@ -227,13 +227,16 @@ class ShardedEmbeddingBagCollection(
         self._is_weighted: bool = module.is_weighted
         self._device = device
         self._create_lookups(fused_params)
-        self._create_output_dist()
+        self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
+        self._embedding_names: List[str] = []
+        self._embedding_dims: List[int] = []
         self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
 
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
+        self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
 
         # Get all fused optimizers and combine them.
@@ -291,9 +294,6 @@ class ShardedEmbeddingBagCollection(
             self._lookups.append(sharding.create_lookup(fused_params))
 
     def _create_output_dist(self) -> None:
-        self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
-        self._embedding_names: List[str] = []
-        self._embedding_dims: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_pooled_output_dist())
             self._embedding_names.extend(sharding.embedding_names())
@@ -341,6 +341,9 @@ class ShardedEmbeddingBagCollection(
     def output_dist(
         self, ctx: ShardedModuleContext, output: List[torch.Tensor]
     ) -> LazyAwaitable[KeyedTensor]:
+        if self._has_uninitialized_output_dist:
+            self._create_output_dist()
+            self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
@@ -352,6 +355,9 @@ class ShardedEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: SparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
+        if self._has_uninitialized_output_dist:
+            self._create_output_dist()
+            self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
