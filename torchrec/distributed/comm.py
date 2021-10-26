@@ -4,6 +4,7 @@ import logging
 import os
 from typing import List, Tuple, Optional
 
+import torch
 import torch.distributed as dist
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -85,11 +86,15 @@ def get_num_groups(world_size: int) -> int:
 
 
 def intra_and_cross_node_pg(
+    device: Optional[torch.device] = None,
     backend: str = "nccl",
-) -> Tuple[dist.ProcessGroup, dist.ProcessGroup]:
+) -> Tuple[Optional[dist.ProcessGroup], Optional[dist.ProcessGroup]]:
     """
     This function creates sub process groups (intra and cross node)
     """
+    if device is not None and device.type == "meta":
+        return None, None
+
     global _INTRA_PG  # intra node process group
     global _CROSS_PG  # cross node process group
 
@@ -128,5 +133,4 @@ def intra_and_cross_node_pg(
 
     dist.barrier()
 
-    # pyre-ignore [7]: Incompatible return type
     return _INTRA_PG, _CROSS_PG

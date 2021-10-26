@@ -2,12 +2,15 @@
 
 import itertools
 import math
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, cast
 
 import torch
 import torch.distributed as dist
 from torch.distributed._sharding_spec import ShardMetadata
-from torchrec.distributed.comm import intra_and_cross_node_pg
+from torchrec.distributed.comm import (
+    intra_and_cross_node_pg,
+    get_local_size,
+)
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsReduceScatter,
     PooledEmbeddingsAllToAll,
@@ -201,14 +204,16 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
                 "TABLE_ROW_WISE sharding does not support sequence embeddings."
             )
         self._pg = pg
+        self._world_size: int = self._pg.size()
+        self._my_rank: int = self._pg.rank()
         self._device = device
         self._is_sequence = is_sequence
-        intra_pg, cross_pg = intra_and_cross_node_pg()
-        self._intra_pg: dist.ProcessGroup = intra_pg
-        self._cross_pg: dist.ProcessGroup = cross_pg
-        self._world_size: int = self._pg.size()
-        self._local_size: int = self._intra_pg.size()
-        self._my_rank: int = self._pg.rank()
+        intra_pg, cross_pg = intra_and_cross_node_pg(device)
+        self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
+        self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
+        self._local_size: int = (
+            intra_pg.size() if intra_pg else get_local_size(self._world_size)
+        )
 
         sharded_tables_per_rank = self._shard(embedding_configs)
         self._grouped_embedding_configs_per_rank: List[
@@ -307,7 +312,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return TwRwSparseFeaturesDist(
             pg=self._pg,
-            intra_pg=self._intra_pg,
+            intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,
             id_list_features_per_rank=id_list_features_per_rank,
@@ -335,8 +340,8 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
 
     def create_pooled_output_dist(self) -> BasePooledEmbeddingDist:
         return TwRwEmbeddingDist(
-            cross_pg=self._cross_pg,
-            intra_pg=self._intra_pg,
+            cross_pg=cast(dist.ProcessGroup, self._cross_pg),
+            intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
             device=self._device,
         )
