@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
 import abc
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import Optional, List, Dict, Tuple
 
 import torch
 from torch import nn
-from torchrec.distributed.planner.new.constants import HBM_CAP_DEFAULT, DDR_CAP_DEFAULT
+from torchrec.distributed.planner.new.constants import (
+    HBM_CAP_DEFAULT,
+    DDR_CAP_DEFAULT,
+    DEFAULT_POOLING_FACTOR,
+)
 from torchrec.distributed.types import ModuleSharder
 
 # ---- TOPOLOGY ---- #
@@ -104,14 +108,14 @@ class ShardingOption:
 
     @property
     def fqn(self) -> str:
-        return self.module[0] + "." + self.name
+        return self.module[0]
 
     @property
-    def num_of_shards(self) -> int:
+    def num_shards(self) -> int:
         return len(self.shard_lengths) if self.shard_lengths else 0
 
     @property
-    def num_of_inputs(self) -> int:
+    def num_inputs(self) -> int:
         return len(self.input_lengths)
 
 
@@ -135,7 +139,9 @@ class InputStats:
     a given tensor
     """
 
-    pooling_factors: List[float] = [1.0]
+    pooling_factors: List[float] = field(
+        default_factory=lambda: [DEFAULT_POOLING_FACTOR]
+    )
 
 
 # ---- PLANNER COMPONENTS ---- #
