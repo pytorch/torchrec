@@ -630,6 +630,7 @@ class All2All_Seq_Req(Function):
         myreq.a2ai = a2ai
         myreq.wait_function = All2All_Seq_Req_Wait
         ctx.myreq = myreq
+        ctx.pg = pg
         ctx.my_rank = my_rank
         ctx.world_size = world_size
         return sharded_output_embeddings
@@ -678,6 +679,7 @@ class All2All_Seq_Req_Wait(Function):
         myreq.req.wait()
         myreq.req = None
         myreq.tensor = None
+        ctx.pg = pg
         ctx.myreq = myreq
         return sharded_output_embeddings.view(-1, D)
 
@@ -687,6 +689,7 @@ class All2All_Seq_Req_Wait(Function):
     def backward(ctx, sharded_grad_output: Tensor) -> Tuple[None, None, Tensor]:
         myreq = ctx.myreq
         a2ai = ctx.a2ai
+        pg = ctx.pg
         input_splits = a2ai.output_splits
         output_splits = a2ai.input_splits
         sharded_grad_input = torch.empty(
@@ -700,6 +703,7 @@ class All2All_Seq_Req_Wait(Function):
                 input=sharded_grad_output.view(-1),
                 output_split_sizes=output_splits,
                 input_split_sizes=input_splits,
+                group=pg,
                 async_op=True,
             )
         myreq.req = req
