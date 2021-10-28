@@ -620,6 +620,12 @@ class ShardedEmbeddingBag(
             embedding_names=[self._dummy_feature_name],
         )
 
+        if self.parameter_sharding.sharding_type == ShardingType.TABLE_WISE.value:
+            # TODO: enable it with correct semantics, see T104397332
+            raise RuntimeError(
+                "table-wise sharding on a single EmbeddingBag is not supported yet"
+            )
+
         self._embedding_sharding: EmbeddingSharding = create_embedding_sharding(
             sharding_type=self.parameter_sharding.sharding_type,
             embedding_configs=[

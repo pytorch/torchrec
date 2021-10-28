@@ -2,7 +2,7 @@
 import abc
 import itertools
 import math
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
 import torch
 from torch.distributed._sharding_spec import EnumerableShardingSpec, ShardMetadata
@@ -171,6 +171,7 @@ class RwParameterSharding:
             sharding_type=sharding_option.sharding_type,
             compute_kernel=sharding_option.compute_kernel,
             ranks=sharding_option.ranks,
+            block_size=block_size,
             sharding_spec=EnumerableShardingSpec(shards),
         )
 
@@ -212,6 +213,7 @@ class TwRwParameterSharding:
             sharding_type=sharding_option.sharding_type,
             compute_kernel=sharding_option.compute_kernel,
             ranks=sharding_option.ranks,
+            block_size=math.ceil(tensor.shape[0] / local_size),
             sharding_spec=EnumerableShardingSpec(shards),
         )
 
@@ -229,7 +231,7 @@ class CwParameterSharding:
         tensor = param_info.param
         # pyre-fixme [6]
         ranks = sorted(sharding_option.ranks)
-        block_size = sharding_option.col_wise_shard_dim
+        block_size = cast(int, sharding_option.col_wise_shard_dim)
         num_col_wise_shards, residual = divmod(tensor.shape[1], block_size)
         sizes = [block_size] * num_col_wise_shards
         if residual > 0:
@@ -258,6 +260,7 @@ class CwParameterSharding:
             sharding_type=sharding_option.sharding_type,
             compute_kernel=sharding_option.compute_kernel,
             ranks=merged_ranks,
+            block_size=block_size,
             sharding_spec=EnumerableShardingSpec(shards),
         )
 
