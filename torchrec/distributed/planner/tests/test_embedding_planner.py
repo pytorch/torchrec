@@ -248,7 +248,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.TABLE_ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=[1],
-                    block_size=50,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -534,7 +533,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=None,
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -576,7 +574,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=None,
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -673,7 +670,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                         0,
                         1,
                     ],
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -707,7 +703,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
             hints={
                 "table_0": ParameterHints(
                     sharding_types=[ShardingType.COLUMN_WISE.value],
-                    col_wise_shard_dim=64,
+                    col_wise_shard_dim=32,
                 ),
             },
         )
@@ -721,10 +717,10 @@ class TestEmbeddingPlanner(unittest.TestCase):
             mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
-                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 12800, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 25600, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
                 ),
                 call.info(
-                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 12800, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 25600, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
                 ),
             ],
         )
@@ -745,9 +741,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
             for i in range(4)
         ]
 
-        num_shards, residual = divmod(62, MIN_DIM)
-        if residual > 0:
-            num_shards += 1
+        block_size, residual = divmod(62, MIN_DIM)
 
         storage = {"hbm": 0.6}
 
@@ -757,7 +751,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.COLUMN_WISE.value,
                     compute_kernel="dense",
                     ranks=[0, 1],
-                    block_size=MIN_DIM,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -783,7 +776,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.COLUMN_WISE.value,
                     compute_kernel="dense",
                     ranks=[2, 3],
-                    block_size=MIN_DIM,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(

@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any, TypeVar, Iterator
 
 import torch
 from torch import nn
-from torch.distributed._sharded_tensor import ShardMetadata
+from torch.distributed._sharded_tensor import ShardMetadata, ShardedTensorMetadata
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
@@ -82,14 +82,12 @@ class SparseFeaturesList(Multistreamable):
 class ShardedConfig:
     local_rows: int = 0
     local_cols: int = 0
-    # The block size of sharding dim on each shard.
-    # mainly used in cw, not applicable in tw/dp
-    block_size: int = 0
 
 
 @dataclass
 class ShardedMetaConfig(ShardedConfig):
     local_metadata: Optional[ShardMetadata] = None
+    global_metadata: Optional[ShardedTensorMetadata] = None
 
 
 @dataclass
@@ -113,51 +111,47 @@ class GroupedEmbeddingConfig:
     is_weighted: bool
     has_feature_processor: bool
     compute_kernel: EmbeddingComputeKernel
-    # a global logical view of the grouped embedding tables (including the tables that
-    # does not exist locally, i.e. tw, tw-rw sharding)
-    global_embedding_tables: List[ShardedEmbeddingTable]
-    # a local grouped embedding tables that are being created on this rank
-    local_embedding_tables: List[ShardedEmbeddingTable]
+    embedding_tables: List[ShardedEmbeddingTable]
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             feature_hash_sizes.extend(table.num_features() * [table.num_embeddings])
         return feature_hash_sizes
 
     def num_features(self) -> int:
         num_features = 0
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             num_features += table.num_features()
         return num_features
 
     def dim_sum(self) -> int:
         dim_sum = 0
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             dim_sum += table.num_features() * table.local_cols
         return dim_sum
 
     def feature_names(self) -> List[str]:
         feature_names = []
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             feature_names.extend(table.feature_names)
         return feature_names
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             embedding_dims.extend([table.local_cols] * table.num_features())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
         embedding_names = []
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             embedding_names.extend(table.embedding_names)
         return embedding_names
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata: List[Optional[ShardMetadata]] = []
-        for table in self.local_embedding_tables:
+        for table in self.embedding_tables:
             for _ in table.feature_names:
                 embedding_shard_metadata.append(table.local_metadata)
         return embedding_shard_metadata

@@ -31,6 +31,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
+    ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
 )
@@ -216,6 +217,12 @@ class RwEmbeddingSharding(EmbeddingSharding):
             # pyre-fixme [16]
             shards = config[1].sharding_spec.shards
 
+            # construct the global sharded_tensor_metadata
+            global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+            )
+
             for rank in range(world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
@@ -230,9 +237,9 @@ class RwEmbeddingSharding(EmbeddingSharding):
                         has_feature_processor=config[0].has_feature_processor,
                         local_rows=shards[rank].shard_lengths[0],
                         local_cols=config[0].embedding_dim,
-                        block_size=config[1].block_size,
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
                         local_metadata=shards[rank],
+                        global_metadata=global_metadata,
                         weight_init_max=config[0].weight_init_max,
                         weight_init_min=config[0].weight_init_min,
                     )

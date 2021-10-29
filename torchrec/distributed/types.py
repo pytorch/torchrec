@@ -281,12 +281,6 @@ class ParameterSharding:
     ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
     """
     ranks: Optional[List[int]] = None
-
-    """
-    The block size of sharding dim on each shard.
-    mainly used in cw, not applicable in tw/dp
-    """
-    block_size: int = 0
     sharding_spec: Optional[ShardingSpec] = None
 
 
