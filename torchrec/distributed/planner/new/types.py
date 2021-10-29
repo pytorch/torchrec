@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Tuple
 import torch
 from torch import nn
 from torchrec.distributed.planner.new.constants import (
+    CROSS_NODE_BANDWIDTH,
+    INTRA_NODE_BANDWIDTH,
     HBM_CAP_DEFAULT,
     DDR_CAP_DEFAULT,
     DEFAULT_POOLING_FACTOR,
@@ -38,6 +40,9 @@ class Topology:
         compute_device: str,
         hbm_cap: Optional[int] = None,
         ddr_cap: Optional[int] = None,
+        local_world_size: Optional[int] = None,
+        intra_host_bw: int = INTRA_NODE_BANDWIDTH,
+        inter_host_bw: int = CROSS_NODE_BANDWIDTH,
     ) -> None:
         # validate input
         assert compute_device in [
@@ -63,6 +68,12 @@ class Topology:
                 )
             )
 
+        self._local_world_size: int = (
+            local_world_size if local_world_size else world_size
+        )
+        self._intra_host_bw = intra_host_bw
+        self._inter_host_bw = inter_host_bw
+
     @property
     def compute_device(self) -> str:
         return self._compute_device
@@ -77,7 +88,26 @@ class Topology:
 
     @property
     def local_world_size(self) -> int:
-        return self._world_size
+        return self._local_world_size
+
+    @property
+    def intra_host_bw(self) -> int:
+        return self._intra_host_bw
+
+    @property
+    def inter_host_bw(self) -> int:
+        return self._inter_host_bw
+
+    def __repr__(self) -> str:
+        topology_repr: str = f"world_size={self._world_size} \n"
+        topology_repr += f"compute_device={self._compute_device}\n"
+        topology_repr += "devices=\n"
+        for idx, device in enumerate(self._devices):
+            topology_repr += f"\tdevice {idx} {device}\n"
+        topology_repr += f"local_world_size={self._local_world_size} \n"
+        topology_repr += f"intra_host_bw={self._intra_host_bw} \n"
+        topology_repr += f"inter_host_bw={self._inter_host_bw} \n"
+        return topology_repr
 
 
 # ---- INPUT / OUTPUT ----- #

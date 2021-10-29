@@ -16,11 +16,11 @@ from torchrec.distributed.planner.new.enumerators import (
     _get_tw_shard_io_sizes,
     _get_dp_shard_io_sizes,
 )
-from torchrec.distributed.planner.new.topology import SMCTopology
 from torchrec.distributed.planner.new.types import (
     InputStats,
     PlannerConstraints,
     Storage,
+    Topology,
 )
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ShardingType
@@ -260,7 +260,7 @@ class TestEnumerators(unittest.TestCase):
         ]
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = ShardingEnumerator(
-            topology=SMCTopology(
+            topology=Topology(
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
@@ -403,7 +403,7 @@ class TestEnumerators(unittest.TestCase):
         }
 
         enumerator = ShardingEnumerator(
-            topology=SMCTopology(
+            topology=Topology(
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
