@@ -119,10 +119,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             module=module,
             sharders=sharders,
         )
-        unplaced_param_infos: List[Tuple[ParamSortKey, ParameterInfo]] = [
-            (param_sort_key(param_info, self._world_size), param_info)
-            for param_info in param_infos
-        ]
+        unplaced_param_infos: List[Tuple[ParamSortKey, ParameterInfo]] = [(param_sort_key(param_info, self._world_size), param_info) for param_info in param_infos     ]
         placed_param_infos: List[Tuple[ParamSortKey, ParameterInfo]] = []
 
         heapq.heapify(unplaced_param_infos)
@@ -175,14 +172,13 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             ]
             emb_dims = [param_info.param.shape[1]]
             if shard.sharding_type == ShardingType.ROW_WISE.value:
-                pooling_factor = [pooling_factor[0] / self._world_size] * len(ranks)
+                pooling_factor = [
+                    pooling_factor[0] / self._world_size] * len(ranks)
                 emb_dims = emb_dims * len(ranks)
             elif shard.sharding_type == ShardingType.TABLE_ROW_WISE.value:
                 # pyre-ignore [16]
                 host_id = shard.ranks[0] // self._local_size
-                ranks = list(
-                    range(host_id * self._local_size, (host_id + 1) * self._local_size)
-                )
+                ranks = list(range(host_id * self._local_size, (host_id + 1) * self._local_size))
                 pooling_factor = [pooling_factor[0] / self._local_size] * len(ranks)
                 emb_dims = emb_dims * len(ranks)
             elif shard.sharding_type == ShardingType.COLUMN_WISE.value:
