@@ -74,7 +74,7 @@ class TestEmbeddingWTCostCalculator(unittest.TestCase):
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): sharding_option.shard_costs
+            ): [shard.cost for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
         self.assertEqual(expected_costs, costs)
@@ -142,7 +142,7 @@ class TestEmbeddingWTCostCalculator(unittest.TestCase):
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): sharding_option.shard_costs
+            ): [shard.cost for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
         self.assertEqual(expected_costs, costs)

@@ -275,12 +275,17 @@ class TestEnumerators(unittest.TestCase):
         sharding_options = self.enumerator.run(self.model, [DPSharder()])
 
         for sharding_option in sharding_options:
-            assert sharding_option.sharding_type == ShardingType.DATA_PARALLEL.value
-            assert (
-                sharding_option.shard_lengths
-                == [list(sharding_option.tensor.shape)] * self.world_size
+            self.assertEqual(
+                sharding_option.sharding_type, ShardingType.DATA_PARALLEL.value
             )
-            assert sharding_option.shard_offsets == [[0, 0]] * self.world_size
+            self.assertEqual(
+                [shard.length for shard in sharding_option.shards],
+                [list(sharding_option.tensor.shape)] * self.world_size,
+            )
+            self.assertEqual(
+                [shard.offset for shard in sharding_option.shards],
+                [[0, 0]] * self.world_size,
+            )
 
             input_sizes, output_sizes = _get_dp_shard_io_sizes(
                 batch_size=self.batch_size,
@@ -307,16 +312,22 @@ class TestEnumerators(unittest.TestCase):
                 Storage(hbm=storage_size, ddr=0) for storage_size in storage_sizes
             ]
 
-            assert sharding_option.shard_storage == expected_storage
+            self.assertEqual(
+                [shard.storage for shard in sharding_option.shards], expected_storage
+            )
 
     def test_tw_sharding(self) -> None:
         # pyre-ignore[6]
         sharding_options = self.enumerator.run(self.model, [TWSharder()])
 
         for sharding_option in sharding_options:
-            assert sharding_option.sharding_type == ShardingType.TABLE_WISE.value
-            assert sharding_option.shard_lengths == [list(sharding_option.tensor.shape)]
-            assert sharding_option.shard_offsets == [[0, 0]]
+            self.assertEqual(
+                sharding_option.sharding_type, ShardingType.TABLE_WISE.value
+            )
+            self.assertEqual(
+                sharding_option.shards[0].length, list(sharding_option.tensor.shape)
+            )
+            self.assertEqual(sharding_option.shards[0].offset, [0, 0])
 
             input_sizes, output_sizes = _get_tw_shard_io_sizes(
                 batch_size=self.batch_size,
@@ -334,8 +345,9 @@ class TestEnumerators(unittest.TestCase):
 
             storage_size = input_sizes[0] + output_sizes[0] + tensor_size
 
-            assert sharding_option.shard_storage is not None
-            assert sharding_option.shard_storage == [Storage(hbm=storage_size, ddr=0)]
+            self.assertEqual(
+                sharding_option.shards[0].storage, Storage(hbm=storage_size, ddr=0)
+            )
 
     def test_rw_sharding(self) -> None:
         # pyre-ignore[6]
@@ -343,15 +355,15 @@ class TestEnumerators(unittest.TestCase):
 
         for i, sharding_option in enumerate(sharding_options):
             assert sharding_option.sharding_type == ShardingType.ROW_WISE.value
-            assert sharding_option.shard_lengths is not None
-            assert (
-                sum([shard_length[0] for shard_length in sharding_option.shard_lengths])
-                == sharding_option.tensor.shape[0]
-            )
-
-            assert sharding_option.shard_lengths == EXPECTED_RW_SHARD_LENGTHS[i]
-            assert sharding_option.shard_offsets == EXPECTED_RW_SHARD_OFFSETS[i]
-            assert sharding_option.shard_storage == EXPECTED_RW_SHARD_STORAGE[i]
+            assert [
+                shard.length for shard in sharding_option.shards
+            ] == EXPECTED_RW_SHARD_LENGTHS[i]
+            assert [
+                shard.offset for shard in sharding_option.shards
+            ] == EXPECTED_RW_SHARD_OFFSETS[i]
+            assert [
+                shard.storage for shard in sharding_option.shards
+            ] == EXPECTED_RW_SHARD_STORAGE[i]
 
     def test_twrw_sharding(self) -> None:
         # pyre-ignore[6]
@@ -359,14 +371,15 @@ class TestEnumerators(unittest.TestCase):
 
         for i, sharding_option in enumerate(sharding_options):
             assert sharding_option.sharding_type == ShardingType.TABLE_ROW_WISE.value
-            assert sharding_option.shard_lengths is not None
-            assert (
-                sum([shard_length[0] for shard_length in sharding_option.shard_lengths])
-                == sharding_option.tensor.shape[0]
-            )
-            assert sharding_option.shard_lengths == EXPECTED_TWRW_SHARD_LENGTHS[i]
-            assert sharding_option.shard_offsets == EXPECTED_TWRW_SHARD_OFFSETS[i]
-            assert sharding_option.shard_storage == EXPECTED_TWRW_SHARD_STORAGE[i]
+            assert [
+                shard.length for shard in sharding_option.shards
+            ] == EXPECTED_TWRW_SHARD_LENGTHS[i]
+            assert [
+                shard.offset for shard in sharding_option.shards
+            ] == EXPECTED_TWRW_SHARD_OFFSETS[i]
+            assert [
+                shard.storage for shard in sharding_option.shards
+            ] == EXPECTED_TWRW_SHARD_STORAGE[i]
 
     def test_cw_sharding(self) -> None:
         # pyre-ignore[6]
@@ -374,14 +387,15 @@ class TestEnumerators(unittest.TestCase):
 
         for i, sharding_option in enumerate(sharding_options):
             assert sharding_option.sharding_type == ShardingType.COLUMN_WISE.value
-            assert sharding_option.shard_lengths is not None
-            assert (
-                sum([shard_length[1] for shard_length in sharding_option.shard_lengths])
-                == sharding_option.tensor.shape[1]
-            )
-            assert sharding_option.shard_lengths == EXPECTED_CW_SHARD_LENGTHS[i]
-            assert sharding_option.shard_offsets == EXPECTED_CW_SHARD_OFFSETS[i]
-            assert sharding_option.shard_storage == EXPECTED_CW_SHARD_STORAGE[i]
+            assert [
+                shard.length for shard in sharding_option.shards
+            ] == EXPECTED_CW_SHARD_LENGTHS[i]
+            assert [
+                shard.offset for shard in sharding_option.shards
+            ] == EXPECTED_CW_SHARD_OFFSETS[i]
+            assert [
+                shard.storage for shard in sharding_option.shards
+            ] == EXPECTED_CW_SHARD_STORAGE[i]
 
     def test_filtering(self) -> None:
         constraint = PlannerConstraints(

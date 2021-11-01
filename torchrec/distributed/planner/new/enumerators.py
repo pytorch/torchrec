@@ -9,15 +9,16 @@ from torchrec.distributed.planner.new.constants import (
     DEFAULT_CW_DIM,
     DEFAULT_POOLING_FACTOR,
     BIGINT_DTYPE,
-    PartitionByType,
 )
 from torchrec.distributed.planner.new.types import (
     PlannerConstraints,
     InputStats,
     Enumerator,
     ShardingOption,
+    Shard,
     Storage,
     Topology,
+    PartitionByType,
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
@@ -75,6 +76,18 @@ class ShardingEnumerator(Enumerator):
                             col_wise_shard_dim,
                         )
                         input_lengths = self._get_input_lengths(fqn)
+                        shard_storages = get_shard_storages(
+                            sharder,
+                            sharding_type,
+                            param,
+                            self._compute_device,
+                            compute_kernel,
+                            shard_lengths,
+                            self._batch_size,
+                            self._world_size,
+                            self._local_world_size,
+                            input_lengths,
+                        )
                         sharding_options.append(
                             ShardingOption(
                                 name=name,
@@ -87,20 +100,12 @@ class ShardingEnumerator(Enumerator):
                                 compute_kernel=compute_kernel,
                                 sharding_type=sharding_type,
                                 partition_by=get_partition_by_type(sharding_type),
-                                shard_lengths=shard_lengths,
-                                shard_offsets=shard_offsets,
-                                shard_storage=get_shard_storage(
-                                    sharder,
-                                    sharding_type,
-                                    param,
-                                    self._compute_device,
-                                    compute_kernel,
-                                    shard_lengths,
-                                    self._batch_size,
-                                    self._world_size,
-                                    self._local_world_size,
-                                    input_lengths,
-                                ),
+                                shards=[
+                                    Shard(length=length, offset=offset, storage=storage)
+                                    for length, offset, storage in zip(
+                                        shard_lengths, shard_offsets, shard_storages
+                                    )
+                                ],
                             )
                         )
 
@@ -230,7 +235,7 @@ def _get_cw_shard_lengths_and_offsets(
     return shard_lengths, shard_offsets
 
 
-def get_shard_storage(
+def get_shard_storages(
     sharder: ModuleSharder[nn.Module],
     sharding_type: str,
     tensor: torch.Tensor,
@@ -248,6 +253,8 @@ def get_shard_storage(
 
     tensor_sizes = [
         storage * math.prod(length) / math.prod(tensor.shape)
+        if sharding_type != ShardingType.DATA_PARALLEL.value
+        else storage
         for length in shard_lengths
     ]
 

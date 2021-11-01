@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import abc
 from dataclasses import field, dataclass
+from enum import Enum
 from typing import Optional, List, Dict, Tuple
 
 import torch
@@ -13,23 +16,33 @@ from torchrec.distributed.planner.new.constants import (
     DDR_CAP_DEFAULT,
     DEFAULT_POOLING_FACTOR,
 )
-from torchrec.distributed.types import ModuleSharder
+from torchrec.distributed.types import ModuleSharder, ShardingPlan
 
 # ---- TOPOLOGY ---- #
 
 
-@dataclass
+@dataclass(repr=True, order=True)
 class Storage:
-    # In bytes
     hbm: int
     ddr: int
+
+    def __add__(self, new: Storage) -> Storage:
+        return Storage(
+            hbm=self.hbm + new.hbm,
+            ddr=self.ddr + new.ddr,
+        )
+
+    def __sub__(self, new: Storage) -> Storage:
+        return Storage(
+            hbm=self.hbm - new.hbm,
+            ddr=self.ddr - new.ddr,
+        )
 
 
 @dataclass
 class DeviceHardware:
     rank: int
-    storage_capacity: Storage
-    storage_remaining: Storage
+    storage: Storage
     cost: int = 0
 
 
@@ -63,8 +76,7 @@ class Topology:
             self._devices.append(
                 DeviceHardware(
                     rank=rank,
-                    storage_capacity=Storage(hbm=hbm_per_device, ddr=ddr_per_device),
-                    storage_remaining=Storage(hbm=hbm_per_device, ddr=ddr_per_device),
+                    storage=Storage(hbm=hbm_per_device, ddr=ddr_per_device),
                 )
             )
 
@@ -114,6 +126,15 @@ class Topology:
 
 
 @dataclass
+class Shard:
+    length: List[int]
+    offset: List[int]
+    storage: Storage
+    cost: Optional[float] = None
+    rank: Optional[int] = None
+
+
+@dataclass
 class ShardingOption:
     name: str
     tensor: torch.Tensor
@@ -127,26 +148,38 @@ class ShardingOption:
     compute_kernel: str
     # main cost/ranker value
     cost: Optional[float] = None
-
     # relevant to planner output, must be populated if sharding option
     # part of final solution
-    shard_lengths: Optional[List[List[int]]] = None  # from enumerator
-    shard_offsets: Optional[List[List[int]]] = None  # from enumerator
-    shard_storage: Optional[List[Storage]] = None  # from enumerator
-    shard_costs: Optional[List[float]] = None  # from cost calculator
-    shard_ranks: Optional[List[int]] = None  # from placer
+    shards: List[Shard] = field(default_factory=list)
 
     @property
     def fqn(self) -> str:
         return self.module[0]
 
     @property
+    def path(self) -> str:
+        return self.module[0].rsplit(".", 1)[0]
+
+    @property
     def num_shards(self) -> int:
-        return len(self.shard_lengths) if self.shard_lengths else 0
+        return len(self.shards)
 
     @property
     def num_inputs(self) -> int:
         return len(self.input_lengths)
+
+
+class PartitionByType(Enum):
+    """
+    Well-known partition types
+    """
+
+    # Partitioning based on device
+    DEVICE = "device"
+    # Partitioning based on host
+    HOST = "host"
+    # Uniform, (ie. fixed layout)
+    UNIFORM = "uniform"
 
 
 @dataclass
@@ -174,16 +207,14 @@ class InputStats:
     )
 
 
+class PartitionError(Exception):
+    ...
+
+
 # ---- PLANNER COMPONENTS ---- #
 
 
-class PlannerComponent(abc.ABC):
-    """
-    Base Class
-    """
-
-
-class Enumerator(PlannerComponent):
+class Enumerator(abc.ABC):
     """
     Generate all relevant sharding options for give nn.Module,
     input stats and user constraints
@@ -206,7 +237,7 @@ class Enumerator(PlannerComponent):
         ...
 
 
-class CostCalc(PlannerComponent):
+class CostCalc(abc.ABC):
     """
     calc costs, requires fully specificed sharding option (ie. ranks/lengths)
     """
@@ -254,7 +285,7 @@ class RankStack(abc.ABC):
         ...
 
 
-class Ranker(PlannerComponent):
+class Ranker(abc.ABC):
     """
     Given a calculator, topology and sharding options, populate a
     RankStack and return it
@@ -269,7 +300,7 @@ class Ranker(PlannerComponent):
         ...
 
 
-class Partitioner(PlannerComponent):
+class Partitioner(abc.ABC):
     """
     Parition
 
@@ -278,12 +309,16 @@ class Partitioner(PlannerComponent):
     """
 
     @abc.abstractmethod
-    def run(self, sharding_options: List[ShardingOption], toplogy: Topology) -> None:
+    def run(
+        self,
+        sharding_options: List[ShardingOption],
+        topology: Topology,
+    ) -> None:
         # modifies sharding_options and topology in-place
         ...
 
 
-class Placer(PlannerComponent):
+class Placer(abc.ABC):
     """
     Controls actual placement via:
     1) calls to rank stack
@@ -294,15 +329,12 @@ class Placer(PlannerComponent):
 
     @abc.abstractmethod
     def __init__(
-        self, topology: Topology, partitioner: Optional[Dict[str, Partitioner]]
+        self,
+        topology: Topology,
+        partitioner: Partitioner,
     ) -> None:
         ...
 
     @abc.abstractmethod
-    def run(self, rank_stack: RankStack) -> Dict[str, ShardingOption]:
-        ...
-
-    @abc.abstractmethod
-    def stats(self) -> None:
-        # reports stats as a side effect
+    def run(self, rank_stack: RankStack) -> ShardingPlan:
         ...

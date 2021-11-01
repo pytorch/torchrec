@@ -287,8 +287,7 @@ class EmbeddingWTCostCalculator(CostCalc):
 
     def run(self, sharding_option: ShardingOption) -> None:
         shard_costs = cost_func_emb_wall_time(
-            # pyre-ignore [6]: Incompatible parameter type
-            shard_lengths=sharding_option.shard_lengths,
+            shard_lengths=[shard.length for shard in sharding_option.shards],
             compute_kernel=sharding_option.compute_kernel,
             compute_device=self._topology.compute_device,
             sharding_type=sharding_option.sharding_type,
@@ -308,6 +307,7 @@ class EmbeddingWTCostCalculator(CostCalc):
             has_output_dist=False if sharding_option.downstream_modules else True,
         )
 
-        sharding_option.shard_costs = shard_costs
+        for shard, cost in zip(sharding_option.shards, shard_costs):
+            shard.cost = cost
         # set costs to sum of shard costs
         sharding_option.cost = sum(shard_costs)
