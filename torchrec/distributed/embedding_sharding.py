@@ -144,18 +144,18 @@ def group_tables(
                                     )
                                 else:
                                     compute_kernel_type = table.compute_kernel
-                                    if (
-                                        table.data_type == data_type
-                                        and table.pooling == pooling
-                                        and table.is_weighted == is_weighted
-                                        and table.has_feature_processor
-                                        == has_feature_processor
-                                        and compute_kernel_type == compute_kernel
-                                    ):
-                                        if table.is_weighted:
-                                            grouped_score_tables.append(table)
-                                        else:
-                                            grouped_tables.append(table)
+                                if (
+                                    table.data_type == data_type
+                                    and table.pooling == pooling
+                                    and table.is_weighted == is_weighted
+                                    and table.has_feature_processor
+                                    == has_feature_processor
+                                    and compute_kernel_type == compute_kernel
+                                ):
+                                    if table.is_weighted:
+                                        grouped_score_tables.append(table)
+                                    else:
+                                        grouped_tables.append(table)
                             if grouped_tables:
                                 grouped_embedding_configs.append(
                                     GroupedEmbeddingConfig(
