@@ -179,7 +179,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         Note that `lengths` is still of shape (B,).
         """
-        mask2d = torch.arange(values.size(1)).expand(
+        mask2d = torch.arange(values.size(1), device=values.device).expand(
             values.size(0), -1
         ) < lengths.unsqueeze(-1)
         return JaggedTensor(
