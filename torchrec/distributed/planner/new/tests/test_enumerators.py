@@ -44,46 +44,91 @@ EXPECTED_RW_SHARD_OFFSETS = [
 
 EXPECTED_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84448, ddr=0),
-        Storage(hbm=84448, ddr=0),
-        Storage(hbm=84448, ddr=0),
-        Storage(hbm=84448, ddr=0),
+        Storage(hbm=85008, ddr=0),
+        Storage(hbm=85008, ddr=0),
+        Storage(hbm=85008, ddr=0),
+        Storage(hbm=85008, ddr=0),
+        Storage(hbm=84928, ddr=0),
+        Storage(hbm=84928, ddr=0),
+        Storage(hbm=84928, ddr=0),
+        Storage(hbm=84928, ddr=0),
     ],
     [
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=510992, ddr=0),
-        Storage(hbm=510992, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512192, ddr=0),
+        Storage(hbm=512032, ddr=0),
+        Storage(hbm=512032, ddr=0),
     ],
     [
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
+        Storage(hbm=515600, ddr=0),
     ],
     [
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1339904, ddr=0),
-        Storage(hbm=1339904, ddr=0),
-        Storage(hbm=1339904, ddr=0),
-        Storage(hbm=1339904, ddr=0),
-        Storage(hbm=1339904, ddr=0),
-        Storage(hbm=1339904, ddr=0),
+        Storage(hbm=1342784, ddr=0),
+        Storage(hbm=1342784, ddr=0),
+        Storage(hbm=1342464, ddr=0),
+        Storage(hbm=1342464, ddr=0),
+        Storage(hbm=1342464, ddr=0),
+        Storage(hbm=1342464, ddr=0),
+        Storage(hbm=1342464, ddr=0),
+        Storage(hbm=1342464, ddr=0),
     ],
 ]
+
+
+EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
+    [
+        Storage(hbm=84176, ddr=832),
+        Storage(hbm=84176, ddr=832),
+        Storage(hbm=84176, ddr=832),
+        Storage(hbm=84176, ddr=832),
+        Storage(hbm=84160, ddr=768),
+        Storage(hbm=84160, ddr=768),
+        Storage(hbm=84160, ddr=768),
+        Storage(hbm=84160, ddr=768),
+    ],
+    [
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510400, ddr=1792),
+        Storage(hbm=510368, ddr=1664),
+        Storage(hbm=510368, ddr=1664),
+    ],
+    [
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=513296, ddr=2304),
+    ],
+    [
+        Storage(hbm=1341968, ddr=816),
+        Storage(hbm=1341968, ddr=816),
+        Storage(hbm=1341696, ddr=768),
+        Storage(hbm=1341696, ddr=768),
+        Storage(hbm=1341696, ddr=768),
+        Storage(hbm=1341696, ddr=768),
+        Storage(hbm=1341696, ddr=768),
+        Storage(hbm=1341696, ddr=768),
+    ],
+]
+
 
 EXPECTED_TWRW_SHARD_LENGTHS = [
     [[25, 10], [25, 10], [25, 10], [25, 10]],
@@ -101,28 +146,28 @@ EXPECTED_TWRW_SHARD_OFFSETS = [
 
 EXPECTED_TWRW_SHARD_STORAGE = [
     [
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
+        Storage(hbm=88016, ddr=0),
+        Storage(hbm=88016, ddr=0),
+        Storage(hbm=88016, ddr=0),
+        Storage(hbm=88016, ddr=0),
     ],
     [
-        Storage(hbm=530624, ddr=0),
-        Storage(hbm=530624, ddr=0),
-        Storage(hbm=530544, ddr=0),
-        Storage(hbm=530544, ddr=0),
+        Storage(hbm=532864, ddr=0),
+        Storage(hbm=532864, ddr=0),
+        Storage(hbm=532704, ddr=0),
+        Storage(hbm=532704, ddr=0),
     ],
     [
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
+        Storage(hbm=539680, ddr=0),
+        Storage(hbm=539680, ddr=0),
+        Storage(hbm=539680, ddr=0),
+        Storage(hbm=539680, ddr=0),
     ],
     [
-        Storage(hbm=1369248, ddr=0),
-        Storage(hbm=1369248, ddr=0),
-        Storage(hbm=1369088, ddr=0),
-        Storage(hbm=1369088, ddr=0),
+        Storage(hbm=1374528, ddr=0),
+        Storage(hbm=1374528, ddr=0),
+        Storage(hbm=1374208, ddr=0),
+        Storage(hbm=1374208, ddr=0),
     ],
 ]
 
@@ -141,17 +186,17 @@ EXPECTED_CW_SHARD_OFFSETS = [
 ]
 
 EXPECTED_CW_SHARD_STORAGE = [
-    [Storage(hbm=102304, ddr=0)],
-    [Storage(hbm=347584, ddr=0), Storage(hbm=447648, ddr=0)],
+    [Storage(hbm=106304, ddr=0)],
+    [Storage(hbm=351104, ddr=0), Storage(hbm=452928, ddr=0)],
     [
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=366208, ddr=0),
+        Storage(hbm=319936, ddr=0),
+        Storage(hbm=319936, ddr=0),
+        Storage(hbm=371968, ddr=0),
     ],
     [
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=745600, ddr=0),
+        Storage(hbm=618688, ddr=0),
+        Storage(hbm=618688, ddr=0),
+        Storage(hbm=753920, ddr=0),
     ],
 ]
 
@@ -163,7 +208,7 @@ class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
 
 
 class RWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
@@ -174,6 +219,16 @@ class RWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         return [EmbeddingComputeKernel.DENSE.value]
+
+
+class UVMCachingRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.ROW_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value]
 
 
 class TWRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
@@ -203,7 +258,7 @@ class DPSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
 
 
 class AllTypesSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
@@ -239,8 +294,12 @@ class TestEnumerators(unittest.TestCase):
         self.constraints = {
             "sparse.ebc.table_0": PlannerConstraints(min_partition=20),
             "sparse.ebc.table_1": PlannerConstraints(min_partition=8),
-            "sparse.ebc.table_2": PlannerConstraints(min_partition=9),
-            "sparse.ebc.table_3": PlannerConstraints(min_partition=12),
+            "sparse.ebc.table_2": PlannerConstraints(
+                min_partition=9, caching_ratio=0.36
+            ),
+            "sparse.ebc.table_3": PlannerConstraints(
+                min_partition=12, caching_ratio=0.85
+            ),
         }
         self.input_stats = {
             "sparse.ebc.table_0": InputStats(),
@@ -287,13 +346,16 @@ class TestEnumerators(unittest.TestCase):
                 [[0, 0]] * self.world_size,
             )
 
+            input_data_type_size = BIGINT_DTYPE
+            output_data_type_size = sharding_option.tensor.element_size()
+
             input_sizes, output_sizes = _get_dp_shard_io_sizes(
                 batch_size=self.batch_size,
                 input_lengths=self.input_stats[sharding_option.fqn].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 num_shards=self.world_size,
-                input_data_type_size=int(BIGINT_DTYPE),
-                output_data_type_size=sharding_option.tensor.element_size(),
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
             )
 
             tensor_sizes = [
@@ -301,10 +363,28 @@ class TestEnumerators(unittest.TestCase):
                 * sharding_option.tensor.element_size()
             ] * self.world_size
 
+            gradient_sizes = (
+                [
+                    input_sizes[0]
+                    * sharding_option.tensor.shape[1]
+                    * output_data_type_size
+                    / input_data_type_size
+                ]
+                * self.world_size
+                if sharding_option.compute_kernel == EmbeddingComputeKernel.SPARSE.value
+                else tensor_sizes
+            )
+
+            optimizer_sizes = [tensor_size * 2 for tensor_size in tensor_sizes]
+
             storage_sizes = [
-                input_size + tensor_size + output_size
-                for input_size, tensor_size, output_size in zip(
-                    input_sizes, tensor_sizes, output_sizes
+                input_size + tensor_size + output_size + gradient_size + optimizer_size
+                for input_size, tensor_size, output_size, gradient_size, optimizer_size in zip(
+                    input_sizes,
+                    tensor_sizes,
+                    output_sizes,
+                    gradient_sizes,
+                    optimizer_sizes,
                 )
             ]
 
@@ -329,21 +409,41 @@ class TestEnumerators(unittest.TestCase):
             )
             self.assertEqual(sharding_option.shards[0].offset, [0, 0])
 
+            input_data_type_size = BIGINT_DTYPE
+            output_data_type_size = sharding_option.tensor.element_size()
+
             input_sizes, output_sizes = _get_tw_shard_io_sizes(
                 batch_size=self.batch_size,
                 world_size=self.world_size,
                 input_lengths=self.input_stats[sharding_option.fqn].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
-                input_data_type_size=int(BIGINT_DTYPE),
-                output_data_type_size=sharding_option.tensor.element_size(),
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
             )
 
             tensor_size = (
                 math.prod(sharding_option.tensor.shape)
                 * sharding_option.tensor.element_size()
             )
+            gradient_size = (
+                (
+                    input_sizes[0]
+                    * sharding_option.tensor.shape[1]
+                    * output_data_type_size
+                    / input_data_type_size
+                )
+                if sharding_option.compute_kernel == EmbeddingComputeKernel.SPARSE.value
+                else tensor_size
+            )
+            optimizer_size = 0
 
-            storage_size = input_sizes[0] + output_sizes[0] + tensor_size
+            storage_size = (
+                input_sizes[0]
+                + output_sizes[0]
+                + tensor_size
+                + gradient_size
+                + optimizer_size
+            )
 
             self.assertEqual(
                 sharding_option.shards[0].storage, Storage(hbm=storage_size, ddr=0)
@@ -354,48 +454,79 @@ class TestEnumerators(unittest.TestCase):
         sharding_options = self.enumerator.run(self.model, [RWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
-            assert sharding_option.sharding_type == ShardingType.ROW_WISE.value
-            assert [
-                shard.length for shard in sharding_option.shards
-            ] == EXPECTED_RW_SHARD_LENGTHS[i]
-            assert [
-                shard.offset for shard in sharding_option.shards
-            ] == EXPECTED_RW_SHARD_OFFSETS[i]
-            assert [
-                shard.storage for shard in sharding_option.shards
-            ] == EXPECTED_RW_SHARD_STORAGE[i]
+            self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
+            self.assertEqual(
+                [shard.length for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_LENGTHS[i],
+            )
+            self.assertEqual(
+                [shard.offset for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_OFFSETS[i],
+            )
+            self.assertEqual(
+                [shard.storage for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_STORAGE[i],
+            )
+
+    def test_uvm_caching_rw_sharding(self) -> None:
+        # pyre-ignore[6]
+        sharding_options = self.enumerator.run(self.model, [UVMCachingRWSharder()])
+        for i, sharding_option in enumerate(sharding_options):
+            self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
+            self.assertEqual(
+                [shard.length for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_LENGTHS[i],
+            )
+            self.assertEqual(
+                [shard.offset for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_OFFSETS[i],
+            )
+            self.assertEqual(
+                [shard.storage for shard in sharding_option.shards],
+                EXPECTED_UVM_CACHING_RW_SHARD_STORAGE[i],
+            )
 
     def test_twrw_sharding(self) -> None:
         # pyre-ignore[6]
         sharding_options = self.enumerator.run(self.model, [TWRWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
-            assert sharding_option.sharding_type == ShardingType.TABLE_ROW_WISE.value
-            assert [
-                shard.length for shard in sharding_option.shards
-            ] == EXPECTED_TWRW_SHARD_LENGTHS[i]
-            assert [
-                shard.offset for shard in sharding_option.shards
-            ] == EXPECTED_TWRW_SHARD_OFFSETS[i]
-            assert [
-                shard.storage for shard in sharding_option.shards
-            ] == EXPECTED_TWRW_SHARD_STORAGE[i]
+            self.assertEqual(
+                sharding_option.sharding_type, ShardingType.TABLE_ROW_WISE.value
+            )
+            self.assertEqual(
+                [shard.length for shard in sharding_option.shards],
+                EXPECTED_TWRW_SHARD_LENGTHS[i],
+            )
+            self.assertEquals(
+                [shard.offset for shard in sharding_option.shards],
+                EXPECTED_TWRW_SHARD_OFFSETS[i],
+            )
+            self.assertEquals(
+                [shard.storage for shard in sharding_option.shards],
+                EXPECTED_TWRW_SHARD_STORAGE[i],
+            )
 
     def test_cw_sharding(self) -> None:
         # pyre-ignore[6]
         sharding_options = self.enumerator.run(self.model, [CWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
-            assert sharding_option.sharding_type == ShardingType.COLUMN_WISE.value
-            assert [
-                shard.length for shard in sharding_option.shards
-            ] == EXPECTED_CW_SHARD_LENGTHS[i]
-            assert [
-                shard.offset for shard in sharding_option.shards
-            ] == EXPECTED_CW_SHARD_OFFSETS[i]
-            assert [
-                shard.storage for shard in sharding_option.shards
-            ] == EXPECTED_CW_SHARD_STORAGE[i]
+            self.assertEqual(
+                sharding_option.sharding_type, ShardingType.COLUMN_WISE.value
+            )
+            self.assertEqual(
+                [shard.length for shard in sharding_option.shards],
+                EXPECTED_CW_SHARD_LENGTHS[i],
+            )
+            self.assertEqual(
+                [shard.offset for shard in sharding_option.shards],
+                EXPECTED_CW_SHARD_OFFSETS[i],
+            )
+            self.assertEqual(
+                [shard.storage for shard in sharding_option.shards],
+                EXPECTED_CW_SHARD_STORAGE[i],
+            )
 
     def test_filtering(self) -> None:
         constraint = PlannerConstraints(
@@ -445,12 +576,15 @@ class TestEnumerators(unittest.TestCase):
             set(sharder.compute_kernels("", "")) - expected_compute_kernels
         )
 
-        assert len(sharding_options) == self.num_tables * len(
-            expected_sharding_types
-        ) * len(expected_compute_kernels)
+        self.assertEqual(
+            len(sharding_options),
+            self.num_tables
+            * len(expected_sharding_types)
+            * len(expected_compute_kernels),
+        )
 
         for sharding_option in sharding_options:
-            assert sharding_option.sharding_type in expected_sharding_types
-            assert sharding_option.sharding_type not in unexpected_sharding_types
-            assert sharding_option.compute_kernel in expected_compute_kernels
-            assert sharding_option.compute_kernel not in unexpected_compute_kernels
+            self.assertIn(sharding_option.sharding_type, expected_sharding_types)
+            self.assertNotIn(sharding_option.sharding_type, unexpected_sharding_types)
+            self.assertIn(sharding_option.compute_kernel, expected_compute_kernels)
+            self.assertNotIn(sharding_option.compute_kernel, unexpected_compute_kernels)

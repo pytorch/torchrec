@@ -15,11 +15,11 @@ CROSS_NODE_BANDWIDTH: int = 12
 DEFAULT_CW_DIM: int = 32
 DEFAULT_POOLING_FACTOR: float = 1.0
 
-BIGINT_DTYPE: float = 8.0
+BIGINT_DTYPE: int = 8
 
 DDR_MEM_BW: int = 51
 HBM_MEM_BW: int = 897
-CACHING_FACTOR: float = 0.2
+DEFAULT_CACHING_RATIO: float = 0.2
 
 
 KERNEL_LOOKUP_BW: Dict[Tuple[str, str], float] = {
@@ -35,5 +35,5 @@ KERNEL_LOOKUP_BW: Dict[Tuple[str, str], float] = {
     ("cuda", EmbeddingComputeKernel.BATCHED_FUSED.value): 1.5 * HBM_MEM_BW,
     ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM.value): 1.5 * DDR_MEM_BW,
     ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value): 1.5
-    * (CACHING_FACTOR * HBM_MEM_BW + (1 - CACHING_FACTOR) * DDR_MEM_BW),
+    * (DEFAULT_CACHING_RATIO * HBM_MEM_BW + (1 - DEFAULT_CACHING_RATIO) * DDR_MEM_BW),
 }
