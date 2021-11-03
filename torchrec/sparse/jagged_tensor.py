@@ -15,11 +15,9 @@ except OSError:
 
 
 def _cumsum(o: List[int]) -> List[int]:
-    ret = [0]
-    total = 0
-    for i in o:
-        total += i
-        ret.append(total)
+    ret = [0] * (len(o) + 1)
+    for i in range(len(o)):
+        ret[i + 1] = ret[i] + o[i]
     return ret
 
 
@@ -40,9 +38,6 @@ def _maybe_compute_lengths(
     return lengths
 
 
-torch.fx.wrap("_maybe_compute_lengths")
-
-
 def _maybe_compute_offsets(
     lengths: Optional[torch.Tensor], offsets: Optional[torch.Tensor]
 ) -> torch.Tensor:
@@ -52,24 +47,15 @@ def _maybe_compute_offsets(
     return offsets
 
 
-torch.fx.wrap("_maybe_compute_offsets")
-
-
 def _get_weights_or_throw(weights: Optional[torch.Tensor]) -> torch.Tensor:
     assert weights is not None, "This (Keyed)JaggedTensor doesn't have weights."
     return weights
-
-
-torch.fx.wrap("_get_weights_or_throw")
 
 
 def _assert_offsets_or_lengths_is_provided(
     offsets: Optional[torch.Tensor], lengths: Optional[torch.Tensor]
 ) -> None:
     assert offsets is not None or lengths is not None, "Must provide lengths or offsets"
-
-
-torch.fx.wrap("_assert_offsets_or_lengths_is_provided")
 
 
 def _regroup_keyed_tensors(
@@ -282,9 +268,6 @@ def _assert_tensor_has_no_elements_or_has_integers(
     ], "{} must be of integer type, but got {}".format(tensor_name, tensor.dtype)
 
 
-torch.fx.wrap("_assert_tensor_has_no_elements_or_has_integers")
-
-
 def _maybe_compute_index_per_key(
     keys: List[str],
     index_per_key: Optional[Dict[str, int]],
@@ -292,51 +275,6 @@ def _maybe_compute_index_per_key(
     if index_per_key is None:
         index_per_key = {key: i for i, key in enumerate(keys)}
     return index_per_key
-
-
-torch.fx.wrap("_maybe_compute_index_per_key")
-
-
-def _maybe_compute_lengths_kjt(
-    device: torch.device,
-    lengths: Optional[torch.Tensor],
-    offsets: Optional[torch.Tensor],
-    length_per_key: List[int],
-) -> torch.Tensor:
-    if lengths is None:
-        if offsets is not None:
-            lengths = _to_lengths(offsets)
-        else:
-            lengths = torch.tensor(
-                length_per_key,
-                device=device,
-                dtype=torch.int,
-            )
-    return lengths
-
-
-torch.fx.wrap("_maybe_compute_lengths_kjt")
-
-
-def _maybe_compute_offsets_kjt(
-    device: torch.device,
-    lengths: Optional[torch.Tensor],
-    offsets: Optional[torch.Tensor],
-    length_per_key: List[int],
-) -> torch.Tensor:
-    if offsets is None:
-        if lengths is not None:
-            offsets = _to_offsets(lengths)
-        else:
-            offsets = torch.tensor(
-                _cumsum(length_per_key),
-                device=device,
-                dtype=torch.int,
-            )
-    return offsets
-
-
-torch.fx.wrap("_maybe_compute_offsets_kjt")
 
 
 def _maybe_compute_stride_kjt(
@@ -355,9 +293,6 @@ def _maybe_compute_stride_kjt(
         else:
             stride = 1
     return stride
-
-
-torch.fx.wrap("_maybe_compute_stride_kjt")
 
 
 def _maybe_compute_length_per_key(
@@ -384,9 +319,6 @@ def _maybe_compute_length_per_key(
     return length_per_key
 
 
-torch.fx.wrap("_maybe_compute_length_per_key")
-
-
 def _maybe_compute_offset_per_key(
     keys: List[str],
     stride: int,
@@ -396,17 +328,14 @@ def _maybe_compute_offset_per_key(
     offsets: Optional[torch.Tensor],
 ) -> Tuple[List[int], List[int]]:
     if length_per_key is None:
-        _length: List[int] = _maybe_compute_length_per_key(
+        _length_per_key: List[int] = _maybe_compute_length_per_key(
             keys, stride, length_per_key, lengths, offsets
         )
-        length_per_key = _length
-        offset_per_key = _cumsum(length_per_key)
+        return _length_per_key, _cumsum(_length_per_key)
     elif offset_per_key is None:
-        offset_per_key = _cumsum(length_per_key)
-    return length_per_key, offset_per_key
-
-
-torch.fx.wrap("_maybe_compute_offset_per_key")
+        return length_per_key, _cumsum(length_per_key)
+    else:
+        return length_per_key, offset_per_key
 
 
 def _jagged_tensor_string(
@@ -447,9 +376,6 @@ def _trim_keys(keys: List[str]) -> List[str]:
     return trimed_keys
 
 
-torch.fx.wrap("_trim_keys")
-
-
 def _kjt_to_jt_dict(
     stride: int,
     keys: List[str],
@@ -483,9 +409,6 @@ def _kjt_to_jt_dict(
                 values=values_list[idx],
             )
     return jt_dict
-
-
-torch.fx.wrap("_kjt_to_jt_dict")
 
 
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
@@ -973,9 +896,6 @@ def _maybe_compute_offset_per_key_kt(
     if offset_per_key is None:
         offset_per_key = _cumsum(length_per_key)
     return offset_per_key
-
-
-torch.fx.wrap("_maybe_compute_offset_per_key_kt")
 
 
 def _keyed_values_string(values: torch.Tensor) -> str:
