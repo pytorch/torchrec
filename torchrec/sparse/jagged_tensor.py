@@ -75,6 +75,16 @@ torch.fx.wrap("_assert_offsets_or_lengths_is_provided")
 def _regroup_keyed_tensors(
     keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
 ) -> List[torch.Tensor]:
+    # Shortcut for no re-grouping
+    if len(keyed_tensors) == len(groups):
+        match = True
+        for kt, group in zip(keyed_tensors, groups):
+            if kt.keys() != group:
+                match = False
+                break
+        if match:
+            return [kt.values() for kt in keyed_tensors]
+
     embedding_dicts = [keyed_tensor.to_dict() for keyed_tensor in keyed_tensors]
     lengths = [keyed_tensor.length_per_key() for keyed_tensor in keyed_tensors]
     indices = [keyed_tensor._key_indices() for keyed_tensor in keyed_tensors]
