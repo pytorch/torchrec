@@ -498,11 +498,11 @@ class TestEnumerators(unittest.TestCase):
                 [shard.length for shard in sharding_option.shards],
                 EXPECTED_TWRW_SHARD_LENGTHS[i],
             )
-            self.assertEquals(
+            self.assertEqual(
                 [shard.offset for shard in sharding_option.shards],
                 EXPECTED_TWRW_SHARD_OFFSETS[i],
             )
-            self.assertEquals(
+            self.assertEqual(
                 [shard.storage for shard in sharding_option.shards],
                 EXPECTED_TWRW_SHARD_STORAGE[i],
             )

@@ -216,12 +216,12 @@ def _get_rw_shard_lengths_and_offsets(
     num_devices = min(num_devices, hash_size)
 
     block_size = math.floor(hash_size / num_devices)
-    shard_lengths = []
+    shard_lengths: List[List[int]] = []
     for i in range(num_devices):
         shard_lengths.append(
             [block_size + (1 if hash_size % num_devices > i else 0), columns]
         )
-    shard_offsets = [[0, 0]]
+    shard_offsets: List[List[int]] = [[0, 0]]
     for i in range(num_devices - 1):
         shard_offsets.append([shard_lengths[i][0] + shard_offsets[i][0], 0])
 
@@ -233,15 +233,17 @@ def _get_cw_shard_lengths_and_offsets(
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
-    block_size = min(
+    block_size: int = min(
         col_wise_shard_dim if col_wise_shard_dim else DEFAULT_CW_DIM, hash_size
     )
     num_col_wise_shards, residual = divmod(hash_size, block_size)
 
-    shard_lengths = [[rows, block_size]] * (num_col_wise_shards - 1)
+    shard_lengths: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
     shard_lengths.append([rows, block_size + residual])
 
-    shard_offsets = [[0, block_size * rank] for rank in range(num_col_wise_shards)]
+    shard_offsets: List[List[int]] = [
+        [0, block_size * rank] for rank in range(num_col_wise_shards)
+    ]
     return shard_lengths, shard_offsets
 
 
@@ -274,14 +276,14 @@ def get_shard_storages(
     )
 
     tensor_storage = sharder.storage_usage(tensor, compute_device, compute_kernel)
-    hbm_storage = tensor_storage.get("hbm", 0)
-    ddr_storage = tensor_storage.get("ddr", 0)
+    hbm_storage: int = tensor_storage.get("hbm", 0)
+    ddr_storage: int = tensor_storage.get("ddr", 0)
 
     if compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value:
         hbm_storage = round(ddr_storage * caching_ratio)
         ddr_storage = ddr_storage - hbm_storage
 
-    hbm_specific_sizes = _get_storage_specific_sizes(
+    hbm_specific_sizes: List[int] = _get_storage_specific_sizes(
         storage=hbm_storage,
         shape=tensor.shape,
         shard_lengths=shard_lengths,
@@ -292,7 +294,7 @@ def get_shard_storages(
         input_data_type_size=input_data_type_size,
         output_data_type_size=output_data_type_size,
     )
-    ddr_specific_sizes = _get_storage_specific_sizes(
+    ddr_specific_sizes: List[int] = _get_storage_specific_sizes(
         storage=ddr_storage,
         shape=tensor.shape,
         shard_lengths=shard_lengths,
@@ -304,7 +306,7 @@ def get_shard_storages(
         output_data_type_size=output_data_type_size,
     )
 
-    hbm_sizes = [
+    hbm_sizes: List[int] = [
         input_size + output_size + hbm_specific_size if compute_device == "cuda" else 0
         for input_size, output_size, hbm_specific_size in zip(
             input_sizes,
@@ -312,7 +314,7 @@ def get_shard_storages(
             hbm_specific_sizes,
         )
     ]
-    ddr_sizes = [
+    ddr_sizes: List[int] = [
         input_size + output_size + ddr_specific_size
         if compute_device == "cpu"
         else ddr_specific_size
@@ -401,11 +403,12 @@ def _get_dp_shard_io_sizes(
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
-    input_sizes = [
-        batch_size * int(sum(input_lengths)) * input_data_type_size
+    input_sizes: List[int] = [
+        # pyre-ignore
+        math.ceil(batch_size * sum(input_lengths) * input_data_type_size)
     ] * num_shards
 
-    output_sizes = [
+    output_sizes: List[int] = [
         batch_size * emb_dim * len(input_lengths) * output_data_type_size
     ] * num_shards
 
@@ -420,11 +423,12 @@ def _get_tw_shard_io_sizes(
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
-    input_sizes = [
-        batch_size * world_size * int(sum(input_lengths)) * input_data_type_size
+    input_sizes: List[int] = [
+        # pyre-ignore
+        math.ceil(batch_size * world_size * sum(input_lengths) * input_data_type_size)
     ]
 
-    output_sizes = [
+    output_sizes: List[int] = [
         batch_size * world_size * emb_dim * len(input_lengths) * output_data_type_size
     ]
 
@@ -439,11 +443,12 @@ def _get_cw_shard_io_sizes(
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
-    input_sizes = [
-        batch_size * world_size * int(sum(input_lengths)) * input_data_type_size
+    input_sizes: List[int] = [
+        # pyre-ignore
+        math.ceil(batch_size * world_size * sum(input_lengths) * input_data_type_size)
     ] * len(shard_lengths)
 
-    output_sizes = [
+    output_sizes: List[int] = [
         (
             batch_size
             * world_size
@@ -465,16 +470,18 @@ def _get_rw_shard_io_sizes(
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
-    input_sizes = [
-        int(
+    input_sizes: List[int] = [
+        math.ceil(
             batch_size
             * world_size
-            * (sum(input_lengths) / world_size)
+            # pyre-ignore
+            * sum(input_lengths)
+            / world_size
             * input_data_type_size
         )
     ] * len(shard_lengths)
 
-    output_sizes = [
+    output_sizes: List[int] = [
         (
             batch_size
             * world_size
@@ -497,16 +504,18 @@ def _get_twrw_shard_io_sizes(
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
-    input_sizes = [
-        int(
+    input_sizes: List[int] = [
+        math.ceil(
             batch_size
             * world_size
-            * (sum(input_lengths) / local_world_size)
+            # pyre-ignore
+            * sum(input_lengths)
+            / local_world_size
             * input_data_type_size
         )
     ] * len(shard_lengths)
 
-    output_sizes = [
+    output_sizes: List[int] = [
         (
             batch_size
             * world_size
@@ -530,15 +539,15 @@ def _get_storage_specific_sizes(
     input_sizes: List[int],
     input_data_type_size: int,
     output_data_type_size: int,
-) -> List[float]:
-    tensor_sizes = [
+) -> List[int]:
+    tensor_sizes: List[int] = [
         math.ceil(storage * math.prod(length) / math.prod(shape))
         if sharding_type != ShardingType.DATA_PARALLEL.value
         else storage
         for length in shard_lengths
     ]
 
-    gradient_sizes = tensor_sizes
+    gradient_sizes: List[int] = tensor_sizes
     if compute_kernel == EmbeddingComputeKernel.SPARSE.value and on_device:
         gradient_sizes = [
             math.ceil(
@@ -550,7 +559,7 @@ def _get_storage_specific_sizes(
             for input_size, shard_length in zip(input_sizes, shard_lengths)
         ]
 
-    optimizer_sizes = [
+    optimizer_sizes: List[int] = [
         tensor_size * 2 if sharding_type == ShardingType.DATA_PARALLEL.value else 0
         for tensor_size in tensor_sizes
     ]
