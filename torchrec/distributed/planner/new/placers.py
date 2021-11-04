@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import copy
-from typing import List, Tuple, cast
+from typing import Optional, List, Tuple, cast
 
 from torch.distributed._sharding_spec import EnumerableShardingSpec, ShardMetadata
 from torchrec.distributed.planner.new.constants import MAX_SIZE
@@ -12,6 +12,7 @@ from torchrec.distributed.planner.new.types import (
     Placer,
     RankStack,
     PartitionError,
+    PlacerStats,
 )
 from torchrec.distributed.types import ShardingPlan, ParameterSharding, ShardingType
 
@@ -63,10 +64,14 @@ class EmbeddingPlacer(Placer):
     def __init__(self, topology: Topology, partitioner: Partitioner) -> None:
         self._topology = topology
         self._partitioner = partitioner
+        self._sharding_solution: Optional[List[ShardingOption]] = None
+        self._topology_solution: Optional[Topology] = None
         self._counter = 0
+        self._num_errors = 0
 
     def run(self, rank_stack: RankStack) -> ShardingPlan:
         sharding_solution = None
+        topology_solution = None
         min_cost = MAX_SIZE
         while rank_stack:
             sharding_options = rank_stack.bulk_pop()
@@ -77,13 +82,17 @@ class EmbeddingPlacer(Placer):
                 cost = max([device.cost for device in topology_candidate.devices])
                 if cost < min_cost:
                     sharding_solution = sharding_candidate
+                    topology_solution = topology_candidate
                     min_cost = cost
             except PartitionError:
-                pass
+                self._num_errors += 1
+
             self._counter += 1
             self._backtrack(rank_stack, sharding_options)
 
         if sharding_solution:
+            self._sharding_solution = sharding_solution
+            self._topology_solution = topology_solution
             return _to_sharding_plan(
                 sharding_options=sharding_solution, topology=self._topology
             )
@@ -93,8 +102,18 @@ class EmbeddingPlacer(Placer):
                 "  1) Increase the number of devices\n"
                 "  2) Reduce the model size\n"
                 "  3) Remove planner constraints that might be reducing search space\n"
-                f"------ attempted {self._counter} iteration(s))  ------"
+                f"------ attempted {self._counter} iteration(s))  ------\n"
+                f"------ encountered {self._num_errors} error(s))  ------\n"
             )
+
+    @property
+    def stats(self) -> PlacerStats:
+        return PlacerStats(
+            num_iterations=self._counter,
+            num_errors=self._num_errors,
+            topology_solution=self._topology_solution,
+            sharding_solution=self._sharding_solution,
+        )
 
     def _partition(
         self, sharding_options: List[ShardingOption]

@@ -3,7 +3,6 @@
 import math
 from typing import Any, Type, Dict, Optional, List, cast
 
-import torch
 from torchrec.distributed.comm import get_local_size, get_num_groups
 from torchrec.distributed.planner.parameter_sharding import ParameterShardingFactory
 from torchrec.distributed.planner.types import (
@@ -40,6 +39,10 @@ def gb_to_bytes(gb: float) -> int:
 
 def bytes_to_gb(num_bytes: int) -> float:
     return float(num_bytes / (1024 * 1024 * 1024))
+
+
+def bytes_to_tb(num_bytes: int) -> float:
+    return float(num_bytes / (1024 * 1024 * 1024 * 1024))
 
 
 # pyre-ignore[2]

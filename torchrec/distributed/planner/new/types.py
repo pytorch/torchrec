@@ -211,6 +211,14 @@ class PartitionError(Exception):
     ...
 
 
+@dataclass
+class PlacerStats:
+    num_iterations: int
+    num_errors: int
+    topology_solution: Optional[Topology]
+    sharding_solution: Optional[List[ShardingOption]]
+
+
 # ---- PLANNER COMPONENTS ---- #
 
 
@@ -337,4 +345,25 @@ class Placer(abc.ABC):
 
     @abc.abstractmethod
     def run(self, rank_stack: RankStack) -> ShardingPlan:
+        ...
+
+    @property
+    @abc.abstractmethod
+    def stats(self) -> PlacerStats:
+        ...
+
+
+class Stats(abc.ABC):
+    """
+    Log statistics related to the sharding plan
+    """
+
+    @abc.abstractmethod
+    def run(
+        self,
+        sharding_plan: ShardingPlan,
+        topology: Topology,
+        placer_stats: PlacerStats,
+        input_stats: Optional[Dict[str, InputStats]] = None,
+    ) -> None:
         ...
