@@ -411,6 +411,22 @@ def _kjt_to_jt_dict(
     return jt_dict
 
 
+def _merge_weights_or_none(
+    a_weights: Optional[torch.Tensor],
+    b_weights: Optional[torch.Tensor],
+) -> Optional[torch.Tensor]:
+    assert not (
+        (a_weights is None) ^ (b_weights is None)
+    ), "Can only merge weighted or unweighted KJTs."
+    if a_weights is None:
+        return None
+    # pyre-ignore[6]
+    return torch.cat([a_weights, b_weights], dim=0)
+
+
+torch.fx.wrap("_merge_weights_or_none")
+
+
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) keyed jagged tensor
 
@@ -437,7 +453,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     keys: List[int] = ["Feature0", "Feature1"], which corresponds to each value of dim_0
     index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1: 1}, index for key in keys
     offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset
-
 
 
     Implementation is torch.jit.script-able
@@ -506,6 +521,30 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             stride=stride,
         )
         return kjt.sync()
+
+    @staticmethod
+    def concat_sync(
+        a: "KeyedJaggedTensor",
+        b: "KeyedJaggedTensor",
+    ) -> "KeyedJaggedTensor":
+        if a.stride() != b.stride():
+            raise ValueError(
+                f"Can only merge KJTs of the same stride ({a.stride()}, {b.stride()})."
+            )
+        length_per_key = (
+            a._length_per_key + b._length_per_key
+            if a._length_per_key is not None and b._length_per_key is not None
+            else None
+        )
+
+        return KeyedJaggedTensor(
+            keys=a.keys() + b.keys(),
+            values=torch.cat([a.values(), b.values()], dim=0),
+            weights=_merge_weights_or_none(a.weights_or_none(), b.weights_or_none()),
+            lengths=torch.cat([a.lengths(), b.lengths()], dim=0),
+            stride=a.stride(),
+            length_per_key=length_per_key,
+        ).sync()
 
     @staticmethod
     def empty(
