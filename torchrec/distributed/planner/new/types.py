@@ -21,7 +21,7 @@ from torchrec.distributed.types import ModuleSharder, ShardingPlan
 # ---- TOPOLOGY ---- #
 
 
-@dataclass(repr=True, order=True)
+@dataclass(repr=True, order=True, eq=True)
 class Storage:
     hbm: int
     ddr: int

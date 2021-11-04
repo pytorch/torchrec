@@ -213,15 +213,30 @@ def get_shard_lengths_and_offsets(
 def _get_rw_shard_lengths_and_offsets(
     hash_size: int, num_devices: int, columns: int
 ) -> Tuple[List[List[int]], List[List[int]]]:
-    num_devices = min(num_devices, hash_size)
+    # Set prefix of shard_lengths to be  ceil(hash_size/num_devices). For exmaple
+    # if hash_size = 10, num_devices = 3, we will allocate the rows as
+    # 3,3,3,1 (rather than 3,3,2,2). This is due to implementation in RWSharding that sets
+    # block_size_lists to be ceil. The balanced way is harder to support on GPU. For more details
+    # see https://fb.quip.com/xbgbAchCTOL0
+    # Also consider the example of hash_size = 5, num_devices = 4. The expected rows per rank is
+    # [2,2,1,0].
+    num_devices: int = min(num_devices, hash_size)
 
-    block_size = math.floor(hash_size / num_devices)
+    block_size: int = math.ceil(hash_size / num_devices)
+    last_rank: int = hash_size // block_size
+    last_block_size: int = hash_size - block_size * last_rank
     shard_lengths: List[List[int]] = []
-    for i in range(num_devices):
-        shard_lengths.append(
-            [block_size + (1 if hash_size % num_devices > i else 0), columns]
-        )
-    shard_offsets: List[List[int]] = [[0, 0]]
+
+    for rank in range(num_devices):
+        if rank < last_rank:
+            local_row: int = block_size
+        elif rank == last_rank:
+            local_row: int = last_block_size
+        else:
+            local_row: int = 0
+        shard_lengths.append([local_row, columns])
+    shard_offsets = [[0, 0]]
+
     for i in range(num_devices - 1):
         shard_offsets.append([shard_lengths[i][0] + shard_offsets[i][0], 0])
 
