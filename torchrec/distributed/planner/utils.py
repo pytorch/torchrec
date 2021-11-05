@@ -41,10 +41,6 @@ def bytes_to_gb(num_bytes: int) -> float:
     return float(num_bytes / (1024 * 1024 * 1024))
 
 
-def bytes_to_tb(num_bytes: int) -> float:
-    return float(num_bytes / (1024 * 1024 * 1024 * 1024))
-
-
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
     return t.__module__ + "." + t.__name__
