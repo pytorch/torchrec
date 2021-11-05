@@ -7,7 +7,7 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 MAX_SIZE: int = (1 << 63) - 1
 
 HBM_CAP_DEFAULT: int = 32 * 1024 * 1024 * 1024  # 32 GB
-DDR_CAP_DEFAULT: int = 2 * 1024 * 1024 * 1024 * 1024  # 2 TB
+DDR_CAP_DEFAULT: int = 128 * 1024 * 1024 * 1024  # 128 GB
 
 INTRA_NODE_BANDWIDTH: int = 600
 CROSS_NODE_BANDWIDTH: int = 12

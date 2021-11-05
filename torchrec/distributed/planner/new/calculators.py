@@ -310,4 +310,4 @@ class EmbeddingWTCostCalculator(CostCalc):
         for shard, cost in zip(sharding_option.shards, shard_costs):
             shard.cost = cost
         # set costs to sum of shard costs
-        sharding_option.cost = sum(shard_costs)
+        sharding_option.cost = max(shard_costs)

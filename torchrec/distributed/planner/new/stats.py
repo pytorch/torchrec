@@ -134,8 +134,8 @@ class EmbeddingShardingStats(Stats):
         """
         ranks = list(range(world_size))
         pooling_factor = [
-            sum(input_stats[sharding_option.fqn].pooling_factors)
-            if input_stats and input_stats.get(sharding_option.fqn)
+            sum(input_stats[sharding_option.name].pooling_factors)
+            if input_stats and input_stats.get(sharding_option.name)
             else 0.0
         ]
         emb_dims = [sharding_option.tensor.shape[1]]

@@ -13,8 +13,35 @@ from torchrec.distributed.planner.new.types import (
     RankStack,
     PartitionError,
     PlacerStats,
+    Shard,
 )
 from torchrec.distributed.types import ShardingPlan, ParameterSharding, ShardingType
+
+
+def _merge_shards_by_dim(shards: List[Shard], dim: int) -> List[Shard]:
+    # merges shards down to one per rank along dimension.
+    # Will recompute shard offsets
+    merged_shards = []
+    shards = sorted(shards, key=lambda x: x.rank)
+
+    current_rank = -1
+    current_shard: Optional[Shard] = None
+    current_dim_offset = 0
+    for shard in shards:
+        if shard.rank != current_rank:
+            current_shard = copy.deepcopy(shard)
+            current_shard.offset[dim] = current_dim_offset
+            merged_shards.append(current_shard)
+            current_rank = shard.rank
+        else:
+            # pyre-ignore [16]
+            current_shard.length[dim] += shard.length[dim]
+            # pyre-ignore [16]
+            current_shard.storage += shard.storage
+            # pyre-ignore [16]
+            current_shard.cost += shard.cost
+        current_dim_offset += shard.length[dim]
+    return merged_shards
 
 
 def _to_sharding_plan(
@@ -36,10 +63,17 @@ def _to_sharding_plan(
 
     plan = {}
     for sharding_option in sharding_options:
+        shards = sharding_option.shards
+        sharding_type = sharding_option.sharding_type
+        if sharding_type == ShardingType.COLUMN_WISE.value:
+            shards = _merge_shards_by_dim(shards, 1)
+            if len(shards) == 1:
+                sharding_type = ShardingType.TABLE_WISE.value
+
         module_plan = plan.get(sharding_option.path, {})
         module_plan[sharding_option.name] = ParameterSharding(
             sharding_spec=None
-            if sharding_option.sharding_type == ShardingType.DATA_PARALLEL.value
+            if sharding_type == ShardingType.DATA_PARALLEL.value
             else EnumerableShardingSpec(
                 [
                     ShardMetadata(
@@ -49,12 +83,12 @@ def _to_sharding_plan(
                             compute_device, cast(int, shard.rank), local_size
                         ),
                     )
-                    for shard in sharding_option.shards
+                    for shard in shards
                 ]
             ),
-            sharding_type=sharding_option.sharding_type,
+            sharding_type=sharding_type,
             compute_kernel=sharding_option.compute_kernel,
-            ranks=[cast(int, shard.rank) for shard in sharding_option.shards],
+            ranks=[cast(int, shard.rank) for shard in shards],
         )
         plan[sharding_option.path] = module_plan
     return ShardingPlan(plan)
@@ -70,11 +104,11 @@ class EmbeddingPlacer(Placer):
         self._num_errors = 0
 
     def run(self, rank_stack: RankStack) -> ShardingPlan:
+        sharding_options = rank_stack.bulk_pop()
         sharding_solution = None
         topology_solution = None
         min_cost = MAX_SIZE
-        while rank_stack:
-            sharding_options = rank_stack.bulk_pop()
+        while sharding_options:
             try:
                 sharding_candidate, topology_candidate = self._partition(
                     sharding_options
@@ -88,7 +122,7 @@ class EmbeddingPlacer(Placer):
                 self._num_errors += 1
 
             self._counter += 1
-            self._backtrack(rank_stack, sharding_options)
+            sharding_options = self._backtrack(rank_stack, sharding_options)
 
         if sharding_solution:
             self._sharding_solution = sharding_solution
@@ -129,14 +163,14 @@ class EmbeddingPlacer(Placer):
 
     def _backtrack(
         self, rank_stack: RankStack, sharding_options: List[ShardingOption]
-    ) -> None:
+    ) -> List[ShardingOption]:
         # attempt to remove sharding option with highest single shard storage cost
         sharding_options.sort(
             key=lambda x: (
-                sum([shard.storage.hbm for shard in x.shards]),
                 max([shard.storage.hbm for shard in x.shards]),
-                sum([shard.storage.ddr for shard in x.shards]),
+                sum([shard.storage.hbm for shard in x.shards]),
                 max([shard.storage.ddr for shard in x.shards]),
+                sum([shard.storage.ddr for shard in x.shards]),
             ),
             reverse=True,
         )
@@ -148,4 +182,7 @@ class EmbeddingPlacer(Placer):
 
         if idx < len(sharding_options):
             del sharding_options[idx]
-            rank_stack.bulk_push(sharding_options)
+            sharding_options.append(rank_stack.pop())
+            return sharding_options
+
+        return []

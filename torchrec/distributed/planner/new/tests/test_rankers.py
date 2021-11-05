@@ -107,19 +107,19 @@ class TestFlatRanker(unittest.TestCase):
                 ),
                 (
                     "table_0",
-                    "table_wise",
+                    "row_wise",
                     "batched_fused",
                 ),
             ],
             [
                 (
                     "table_0",
-                    "table_wise",
+                    "row_wise",
                     "batched_fused",
                 ),
                 (
                     "table_1",
-                    "table_wise",
+                    "row_wise",
                     "batched_fused",
                 ),
             ],

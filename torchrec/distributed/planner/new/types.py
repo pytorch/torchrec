@@ -154,11 +154,11 @@ class ShardingOption:
 
     @property
     def fqn(self) -> str:
-        return self.module[0]
+        return self.module[0] + "." + self.name
 
     @property
     def path(self) -> str:
-        return self.module[0].rsplit(".", 1)[0]
+        return self.module[0]
 
     @property
     def num_shards(self) -> int:

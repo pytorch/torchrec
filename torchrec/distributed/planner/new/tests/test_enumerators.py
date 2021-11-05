@@ -292,20 +292,16 @@ class TestEnumerators(unittest.TestCase):
         self.world_size = 8
         self.local_world_size = 4
         self.constraints = {
-            "sparse.ebc.table_0": PlannerConstraints(min_partition=20),
-            "sparse.ebc.table_1": PlannerConstraints(min_partition=8),
-            "sparse.ebc.table_2": PlannerConstraints(
-                min_partition=9, caching_ratio=0.36
-            ),
-            "sparse.ebc.table_3": PlannerConstraints(
-                min_partition=12, caching_ratio=0.85
-            ),
+            "table_0": PlannerConstraints(min_partition=20),
+            "table_1": PlannerConstraints(min_partition=8),
+            "table_2": PlannerConstraints(min_partition=9, caching_ratio=0.36),
+            "table_3": PlannerConstraints(min_partition=12, caching_ratio=0.85),
         }
         self.input_stats = {
-            "sparse.ebc.table_0": InputStats(),
-            "sparse.ebc.table_1": InputStats(pooling_factors=[1, 3, 5]),
-            "sparse.ebc.table_2": InputStats(pooling_factors=[8, 2]),
-            "sparse.ebc.table_3": InputStats(pooling_factors=[2, 1, 3, 7]),
+            "table_0": InputStats(),
+            "table_1": InputStats(pooling_factors=[1, 3, 5]),
+            "table_2": InputStats(pooling_factors=[8, 2]),
+            "table_3": InputStats(pooling_factors=[2, 1, 3, 7]),
         }
         self.num_tables = 4
         tables = [
@@ -351,7 +347,7 @@ class TestEnumerators(unittest.TestCase):
 
             input_sizes, output_sizes = _get_dp_shard_io_sizes(
                 batch_size=self.batch_size,
-                input_lengths=self.input_stats[sharding_option.fqn].pooling_factors,
+                input_lengths=self.input_stats[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 num_shards=self.world_size,
                 input_data_type_size=input_data_type_size,
@@ -415,7 +411,7 @@ class TestEnumerators(unittest.TestCase):
             input_sizes, output_sizes = _get_tw_shard_io_sizes(
                 batch_size=self.batch_size,
                 world_size=self.world_size,
-                input_lengths=self.input_stats[sharding_option.fqn].pooling_factors,
+                input_lengths=self.input_stats[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
@@ -541,10 +537,10 @@ class TestEnumerators(unittest.TestCase):
             ],
         )
         constraints = {
-            "sparse.ebc.table_0": constraint,
-            "sparse.ebc.table_1": constraint,
-            "sparse.ebc.table_2": constraint,
-            "sparse.ebc.table_3": constraint,
+            "table_0": constraint,
+            "table_1": constraint,
+            "table_2": constraint,
+            "table_3": constraint,
         }
 
         enumerator = ShardingEnumerator(

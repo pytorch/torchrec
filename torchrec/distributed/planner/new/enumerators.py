@@ -56,18 +56,17 @@ class ShardingEnumerator(Enumerator):
                 continue
 
             for name, param in sharder.shardable_parameters(child_module).items():
-                fqn = self._fqn(child_path, name)
                 for sharding_type in self._filter_sharding_types(
-                    fqn, sharder.sharding_types(self._compute_device)
+                    name, sharder.sharding_types(self._compute_device)
                 ):
                     for compute_kernel in self._filter_compute_kernels(
-                        fqn,
+                        name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
 
                         col_wise_shard_dim = (
-                            self._constraints[fqn].min_partition
-                            if self._constraints and self._constraints.get(fqn)
+                            self._constraints[name].min_partition
+                            if self._constraints and self._constraints.get(name)
                             else None
                         )
                         shard_lengths, shard_offsets = get_shard_lengths_and_offsets(
@@ -77,10 +76,10 @@ class ShardingEnumerator(Enumerator):
                             sharding_type,
                             col_wise_shard_dim,
                         )
-                        input_lengths = self._get_input_lengths(fqn)
+                        input_lengths = self._get_input_lengths(name)
                         caching_ratio = (
-                            self._constraints[fqn].caching_ratio
-                            if self._constraints and self._constraints.get(fqn)
+                            self._constraints[name].caching_ratio
+                            if self._constraints and self._constraints.get(name)
                             else None
                         )
                         shard_storages = get_shard_storages(
@@ -102,7 +101,7 @@ class ShardingEnumerator(Enumerator):
                             ShardingOption(
                                 name=name,
                                 tensor=param,
-                                module=(fqn, child_module),
+                                module=(child_path, child_module),
                                 upstream_modules=[],
                                 downstream_modules=[],
                                 input_lengths=input_lengths,
@@ -121,13 +120,10 @@ class ShardingEnumerator(Enumerator):
 
         return sharding_options
 
-    def _fqn(self, path: str, name: str) -> str:
-        return path + "." + name
-
-    def _filter_sharding_types(self, fqn: str, sharding_types: List[str]) -> List[str]:
-        if not self._constraints or not self._constraints.get(fqn):
+    def _filter_sharding_types(self, name: str, sharding_types: List[str]) -> List[str]:
+        if not self._constraints or not self._constraints.get(name):
             return sharding_types
-        constraints: PlannerConstraints = self._constraints[fqn]
+        constraints: PlannerConstraints = self._constraints[name]
         if not constraints.sharding_types:
             return sharding_types
         constrained_sharding_types: List[str] = constraints.sharding_types
@@ -136,16 +132,16 @@ class ShardingEnumerator(Enumerator):
 
         if not sharding_types:
             raise RuntimeError(
-                f"No available sharding types after applying user provided constraints for {fqn}"
+                f"No available sharding types after applying user provided constraints for {name}"
             )
         return sharding_types
 
     def _filter_compute_kernels(
-        self, fqn: str, compute_kernels: List[str]
+        self, name: str, compute_kernels: List[str]
     ) -> List[str]:
-        if not self._constraints or not self._constraints.get(fqn):
+        if not self._constraints or not self._constraints.get(name):
             return compute_kernels
-        constraints: PlannerConstraints = self._constraints[fqn]
+        constraints: PlannerConstraints = self._constraints[name]
         if not constraints.compute_kernels:
             return compute_kernels
         constrained_compute_kernels: List[str] = constraints.compute_kernels
@@ -154,14 +150,14 @@ class ShardingEnumerator(Enumerator):
 
         if not compute_kernels:
             raise RuntimeError(
-                f"No available compute kernels after applying user provided constraints for {fqn}"
+                f"No available compute kernels after applying user provided constraints for {name}"
             )
         return compute_kernels
 
-    def _get_input_lengths(self, fqn: str) -> List[float]:
+    def _get_input_lengths(self, name: str) -> List[float]:
         return (
-            self._input_stats[fqn].pooling_factors
-            if self._input_stats
+            self._input_stats[name].pooling_factors
+            if self._input_stats and self._input_stats.get(name)
             else [DEFAULT_POOLING_FACTOR]
         )
 

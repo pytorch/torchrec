@@ -144,8 +144,10 @@ def uniform_partition(
 def _group_sharding_options(
     sharding_options: List[ShardingOption],
 ) -> Dict[str, List[ShardingOption]]:
-    partition_by_groups = {enum.value: [] for enum in PartitionByType}
+    partition_by_groups = {}
     for sharding_option in sharding_options:
+        if sharding_option.partition_by not in partition_by_groups:
+            partition_by_groups[sharding_option.partition_by] = []
         partition_by_groups[sharding_option.partition_by].append(sharding_option)
     return partition_by_groups
 
