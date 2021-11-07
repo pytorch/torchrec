@@ -523,7 +523,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return kjt.sync()
 
     @staticmethod
-    def concat_sync(
+    def concat(
         a: "KeyedJaggedTensor",
         b: "KeyedJaggedTensor",
     ) -> "KeyedJaggedTensor":
@@ -544,7 +544,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             lengths=torch.cat([a.lengths(), b.lengths()], dim=0),
             stride=a.stride(),
             length_per_key=length_per_key,
-        ).sync()
+        )
 
     @staticmethod
     def empty(

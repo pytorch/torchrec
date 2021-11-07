@@ -263,7 +263,7 @@ class TestJaggedTensor(unittest.TestCase):
         # TODO: T88149179
         self.assertTrue(torch.equal(j_offset.offsets(), j_lens.offsets().int()))
 
-    def test_concat_sync(self) -> None:
+    def test_concat(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
         keys = ["index_0", "index_1", "index_2"]
         lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0, 0, 1, 0])
@@ -273,7 +273,7 @@ class TestJaggedTensor(unittest.TestCase):
             keys=keys,
             lengths=lengths,
         )
-        kjt_actual = KeyedJaggedTensor.concat_sync(
+        kjt_actual = KeyedJaggedTensor.concat(
             a=KeyedJaggedTensor.from_lengths_sync(
                 values=values[:4],
                 keys=keys[:1],
