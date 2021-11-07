@@ -78,6 +78,9 @@ class KeyedOptimizer(optim.Optimizer):
 
         return {"state": ret_state, "param_groups": ret_groups}
 
+    def post_load_state_dict(self) -> None:
+        pass
+
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """
         This implementation is much stricter than the one in torch.Optimizer:
@@ -167,6 +170,8 @@ class KeyedOptimizer(optim.Optimizer):
                 if k != "params":
                     group[k] = deepcopy(new_group[k])
 
+        self.post_load_state_dict()
+
     # pyre-ignore [2]
     def add_param_group(self, param_group: Any) -> None:
         raise NotImplementedError()
@@ -243,6 +248,10 @@ class CombinedOptimizer(KeyedOptimizer):
                 ret[param] = state
         return ret
 
+    def post_load_state_dict(self) -> None:
+        for _, opt in self._optims:
+            opt.post_load_state_dict()
+
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
     """
@@ -291,9 +300,14 @@ class OptimizerWrapper(KeyedOptimizer):
     def state_dict(self) -> Dict[str, Any]:
         return self._optimizer.state_dict()
 
+    def post_load_state_dict(self) -> None:
+        self._optimizer.post_load_state_dict()
+
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         self._optimizer.load_state_dict(state_dict)
         # Reassign references because self._optimizer receives new state and param_group
         # references after load_state_dict.
         self.state = self._optimizer.state
         self.param_groups = self._optimizer.param_groups
+
+        self.post_load_state_dict()

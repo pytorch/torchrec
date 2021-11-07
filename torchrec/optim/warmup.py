@@ -4,7 +4,7 @@ import logging
 import math
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import List, Any
+from typing import List, Any, Tuple
 
 import torch
 from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
@@ -97,26 +97,31 @@ class WarmupOptimizer(OptimizerWrapper):
         self._warmup_param: torch.nn.Parameter = torch.nn.Parameter()
         # pyre-ignore [16]
         self.params[param_name] = self._warmup_param
+        # for fused optimizer we will do first backward() pass before calling step()
+        self._set_lr(0, 0)
 
-    def zero_grad(self, set_to_none: bool = False) -> None:
-        super().zero_grad(set_to_none=set_to_none)
+    def _set_lr(self, iter_: int, stage_id: int) -> None:
+        lr = self._lr * _get_multiplier(self._stages[stage_id], iter_)
+        for param_group in self.param_groups:
+            # pyre-ignore [16]
+            param_group[self._lr_param] = lr
 
-        if self._warmup_param in self.state:
-            iter_, stage_id = self.state[self._warmup_param]["warmup"].tolist()
-            for param_group in self.param_groups:
-                lr = self._lr * _get_multiplier(self._stages[stage_id], iter_)
-                # pyre-ignore [16]
-                param_group[self._lr_param] = lr
-
-    # pyre-ignore [2]
-    def step(self, closure: Any = None) -> None:
-        super().step(closure)
-
+    def _get_warmup_state(self) -> Tuple[int, int]:
         if self._warmup_param in self.state:
             iter_, stage_id = self.state[self._warmup_param]["warmup"].tolist()
         else:
             iter_ = 0
             stage_id = 0
+        return iter_, stage_id
+
+    def post_load_state_dict(self) -> None:
+        iter_, stage_id = self._get_warmup_state()
+        self._set_lr(iter_, stage_id)
+
+    # pyre-ignore [2]
+    def step(self, closure: Any = None) -> None:
+        super().step(closure)
+        iter_, stage_id = self._get_warmup_state()
 
         iter_ += 1
         if iter_ > self._stages[stage_id].max_iters and stage_id + 1 < len(
@@ -129,6 +134,7 @@ class WarmupOptimizer(OptimizerWrapper):
                 "switching to "
                 f"{self._stages[stage_id]}"
             )
+        self._set_lr(iter_, stage_id)
 
         # pyre-ignore [16]
         self.state[self._warmup_param] = {
