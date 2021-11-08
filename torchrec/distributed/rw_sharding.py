@@ -22,6 +22,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSequenceEmbeddingDist,
     SequenceShardingContext,
     BaseEmbeddingLookup,
+    bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
@@ -93,11 +94,12 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist):
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeatures]:
         if self._num_id_list_features > 0:
+            assert sparse_features.id_list_features is not None
             (
                 id_list_features,
                 self.unbucketize_permute_tensor,
-                # pyre-ignore [16]
-            ) = sparse_features.id_list_features.bucketize(
+            ) = bucketize_kjt_before_all2all(
+                sparse_features.id_list_features,
                 num_buckets=self._world_size,
                 block_sizes=self._id_list_feature_block_sizes_tensor,
                 output_permute=self._is_sequence,
@@ -107,10 +109,9 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist):
             id_list_features = None
 
         if self._num_id_score_list_features > 0:
-            (
-                id_score_list_features,
-                _,
-            ) = sparse_features.id_score_list_features.bucketize(
+            assert sparse_features.id_score_list_features is not None
+            id_score_list_features, _ = bucketize_kjt_before_all2all(
+                sparse_features.id_score_list_features,
                 num_buckets=self._world_size,
                 block_sizes=self._id_score_list_feature_block_sizes_tensor,
                 output_permute=False,

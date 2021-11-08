@@ -24,6 +24,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSparseFeaturesDist,
     EmbeddingSharding,
     BaseEmbeddingLookup,
+    bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
@@ -123,7 +124,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeatures]:
         bucketized_sparse_features = SparseFeatures(
-            id_list_features=sparse_features.id_list_features.bucketize(
+            id_list_features=bucketize_kjt_before_all2all(
+                sparse_features.id_list_features,
                 num_buckets=self._local_size,
                 block_sizes=self._id_list_feature_block_sizes_tensor,
                 output_permute=False,
@@ -134,7 +136,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
             )
             if sparse_features.id_list_features is not None
             else None,
-            id_score_list_features=sparse_features.id_score_list_features.bucketize(
+            id_score_list_features=bucketize_kjt_before_all2all(
+                sparse_features.id_score_list_features,
                 num_buckets=self._local_size,
                 block_sizes=self._id_score_list_feature_block_sizes_tensor,
                 output_permute=False,

@@ -322,6 +322,7 @@ class KJTAllToAll(nn.Module):
                 assert len(input.keys()) == 0
                 return NoWait(input)
             else:
+                assert len(input.keys()) == sum(self._splits)
                 rank = dist.get_rank(self._pg)
                 local_keys = input.keys()[
                     self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]

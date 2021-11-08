@@ -363,19 +363,6 @@ def _jagged_tensor_string(
     )
 
 
-def _trim_keys(keys: List[str]) -> List[str]:
-    trimed_keys: List[str] = []
-    trimed_key_dict: Dict[str, bool] = {}
-    for key in keys:
-        trimed_key = key.split("@")[0]
-        assert (
-            trimed_key not in trimed_key_dict
-        ), f"{trimed_key} vs {trimed_key_dict} and all keys {keys}"
-        trimed_keys.append(trimed_key)
-        trimed_key_dict[trimed_key] = True
-    return trimed_keys
-
-
 def _kjt_to_jt_dict(
     stride: int,
     keys: List[str],
@@ -639,9 +626,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._offset_per_key = _offset_per_key
         return _offset_per_key
 
-    def split(
-        self, segments: List[int], trim: bool = True
-    ) -> List["KeyedJaggedTensor"]:
+    def split(self, segments: List[int]) -> List["KeyedJaggedTensor"]:
         split_list: List[KeyedJaggedTensor] = []
         start = 0
         start_offset = 0
@@ -655,7 +640,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 # no torch slicing required
                 split_list.append(
                     KeyedJaggedTensor(
-                        keys=_trim_keys(self._keys) if trim else self._keys,
+                        keys=self._keys,
                         values=self._values,
                         weights=self.weights_or_none(),
                         lengths=self._lengths,
@@ -692,7 +677,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 split_length_per_key = _length_per_key[start:end]
                 split_list.append(
                     KeyedJaggedTensor(
-                        keys=_trim_keys(keys) if trim else keys,
+                        keys=keys,
                         values=self._values[start_offset:end_offset],
                         weights=None
                         if self.weights_or_none() is None
@@ -757,66 +742,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             index_per_key=None,
         )
         return kjt
-
-    def bucketize(
-        self,
-        num_buckets: int,
-        block_sizes: torch.Tensor,
-        output_permute: bool = False,
-        bucketize_pos: bool = False,
-    ) -> Tuple["KeyedJaggedTensor", Optional[torch.Tensor]]:
-        """
-        Bucketize the `values` in KeyedJaggedTensor into `num_buckets` buckets, `lengths` are readjusted based on the bucketization results.
-
-        Args:
-            num_buckets (int): The number of buckets to bucketize the values into.
-            block_sizes: (torch.Tensor): The bucket sizes for the keyed dimension.
-            output_permute (bool): Output the memory location mapping from the unbucketized values to bucketized values or not.
-            bucketize_pos (bool):  Output the changed position of the bucketized values or not.
-        Returns:
-            The bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized values.
-        """
-        num_features = len(self.keys())
-        assert (
-            block_sizes.numel() == num_features
-        ), f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received."
-
-        # kernel expects them to be same type, cast to avoid type mismatch
-        block_sizes_new_type = block_sizes.type(self.values().type())
-        (
-            bucketized_lengths,
-            bucketized_indices,
-            bucketized_weights,
-            pos,
-            unbucketize_permute,
-        ) = torch.ops.fbgemm.block_bucketize_sparse_features(
-            self.lengths().view(-1),
-            self.values(),
-            bucketize_pos=bucketize_pos,
-            sequence=output_permute,
-            block_sizes=block_sizes_new_type,
-            my_size=num_buckets,
-            weights=self.weights_or_none(),
-        )
-        bucketized_keys: List[str] = []
-        for bucket in range(num_buckets):
-            for key in self.keys():
-                bucketized_keys.append(f"{key}@bucket_{bucket}")
-
-        return (
-            KeyedJaggedTensor(
-                keys=bucketized_keys,
-                values=bucketized_indices,
-                weights=pos if bucketize_pos else bucketized_weights,
-                lengths=bucketized_lengths.view(-1),
-                offsets=None,
-                stride=self.stride(),
-                length_per_key=None,
-                offset_per_key=None,
-                index_per_key=None,
-            ),
-            unbucketize_permute,
-        )
 
     def __getitem__(self, key: str) -> JaggedTensor:
         offset_per_key = self.offset_per_key()

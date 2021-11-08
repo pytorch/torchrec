@@ -77,6 +77,67 @@ class SparseFeaturesAllToAllAwaitable(Awaitable[SparseFeatures]):
         )
 
 
+def bucketize_kjt_before_all2all(
+    kjt: KeyedJaggedTensor,
+    num_buckets: int,
+    block_sizes: torch.Tensor,
+    output_permute: bool = False,
+    bucketize_pos: bool = False,
+) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
+    """
+    Bucketize the `values` in KeyedJaggedTensor into `num_buckets` buckets,
+    `lengths` are readjusted based on the bucketization results.
+
+    Note: This function should be used only for row-wise sharding before calling SparseFeaturesAllToAll
+
+    Args:
+        num_buckets (int): The number of buckets to bucketize the values into.
+        block_sizes: (torch.Tensor): The bucket sizes for the keyed dimension.
+        output_permute (bool): Output the memory location mapping from the unbucketized values to bucketized values or not.
+        bucketize_pos (bool):  Output the changed position of the bucketized values or not.
+    Returns:
+        The bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized values.
+    """
+    num_features = len(kjt.keys())
+    assert (
+        block_sizes.numel() == num_features
+    ), f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received."
+
+    # kernel expects them to be same type, cast to avoid type mismatch
+    block_sizes_new_type = block_sizes.type(kjt.values().type())
+    (
+        bucketized_lengths,
+        bucketized_indices,
+        bucketized_weights,
+        pos,
+        unbucketize_permute,
+    ) = torch.ops.fbgemm.block_bucketize_sparse_features(
+        kjt.lengths().view(-1),
+        kjt.values(),
+        bucketize_pos=bucketize_pos,
+        sequence=output_permute,
+        block_sizes=block_sizes_new_type,
+        my_size=num_buckets,
+        weights=kjt.weights_or_none(),
+    )
+
+    return (
+        KeyedJaggedTensor(
+            # duplicate keys will be resolved by AllToAll
+            keys=kjt.keys() * num_buckets,
+            values=bucketized_indices,
+            weights=pos if bucketize_pos else bucketized_weights,
+            lengths=bucketized_lengths.view(-1),
+            offsets=None,
+            stride=kjt.stride(),
+            length_per_key=None,
+            offset_per_key=None,
+            index_per_key=None,
+        ),
+        unbucketize_permute,
+    )
+
+
 class SparseFeaturesAllToAll(nn.Module):
     def __init__(
         self,
