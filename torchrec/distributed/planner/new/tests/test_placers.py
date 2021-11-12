@@ -5,8 +5,8 @@ from typing import List, cast
 
 import torch
 from torch import nn
-from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.new.calculators import EmbeddingWTCostCalculator
 from torchrec.distributed.planner.new.enumerators import ShardingEnumerator
 from torchrec.distributed.planner.new.partitioners import GreedyCostPartitioner

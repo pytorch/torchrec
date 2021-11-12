@@ -9,13 +9,13 @@ import torch
 import torch.distributed as dist
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding import (
-    ShardedEmbeddingBagCollection,
-    EmbeddingBagCollectionSharder,
-)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
+)
+from torchrec.distributed.embeddingbag import (
+    ShardedEmbeddingBagCollection,
+    EmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,

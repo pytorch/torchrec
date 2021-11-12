@@ -13,11 +13,9 @@ import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import Verbosity, given, settings
-from torchrec.distributed.embedding import (
-    EmbeddingBagCollectionSharder,
-    EmbeddingBagSharder,
-)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.embeddingbag import EmbeddingBagSharder
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
     default_sharders,

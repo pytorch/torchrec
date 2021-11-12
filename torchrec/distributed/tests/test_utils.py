@@ -10,10 +10,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 import torch.distributed as dist
-from torchrec.distributed.embedding import (
+from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
+from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.utils import get_unsharded_module_names
