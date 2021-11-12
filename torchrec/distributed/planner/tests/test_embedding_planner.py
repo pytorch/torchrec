@@ -5,8 +5,8 @@ from typing import List
 from unittest.mock import MagicMock, patch, call
 
 from torch.distributed._sharding_spec import ShardMetadata, EnumerableShardingSpec
-from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.embedding_planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.parameter_sharding import _rw_shard_table_rows
 from torchrec.distributed.planner.types import ParameterHints

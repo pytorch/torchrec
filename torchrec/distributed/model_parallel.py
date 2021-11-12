@@ -8,10 +8,9 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
-from torchrec.distributed.embedding import (
+from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     QuantEmbeddingBagCollectionSharder,
-    filter_state_dict,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner, sharder_name
 from torchrec.distributed.types import (
@@ -21,6 +20,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
+from torchrec.distributed.utils import filter_state_dict
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 
@@ -53,7 +53,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         device: this device, defaults to cpu,
         plan: plan to use when sharding, defaults to EmbeddingShardingPlanner.collective_plan(),
         sharders: ModuleSharders available to shard with, defaults to EmbeddingBagCollectionSharder(),
-        init_data_parallel: data-parallel modules can be lazy, i.e. they delay parameter initialization until the first forward pass. Pass True if that's a case to delay initialization of data parallel modules. Do first forward pass and then call DistributedModelParallel.init_data_parallel().
+        init_data_parallel: data-parallel modules can be lazy, i.e. they delay parameter initialization until
+        the first forward pass. Pass True if that's a case to delay initialization of data parallel modules.
+        Do first forward pass and then call DistributedModelParallel.init_data_parallel().
         init_parameters: initialize parameters for modules still on meta device.
 
     Call Args:

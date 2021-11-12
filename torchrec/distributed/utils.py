@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from collections import OrderedDict
 from typing import List, Set, Union
 
 import torch
@@ -11,6 +12,17 @@ def append_prefix(prefix: str, name: str) -> str:
         return prefix + "." + name
     else:
         return prefix + name
+
+
+def filter_state_dict(
+    state_dict: "OrderedDict[str, torch.Tensor]", name: str
+) -> "OrderedDict[str, torch.Tensor]":
+    rtn_dict = OrderedDict()
+    for key, value in state_dict.items():
+        if key.startswith(name):
+            # + 1 to length is to remove the '.' after the key
+            rtn_dict[key[len(name) + 1 :]] = value
+    return rtn_dict
 
 
 def _get_unsharded_module_names_helper(

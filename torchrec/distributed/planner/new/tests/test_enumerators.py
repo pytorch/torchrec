@@ -4,10 +4,10 @@ import math
 import unittest
 from typing import List
 
-from torchrec.distributed.embedding import EmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
 )
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.new.constants import (
     BIGINT_DTYPE,
 )

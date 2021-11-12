@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
 import copy
-import os
 import unittest
 from typing import List
 
 import torch
-import torch.distributed as dist
 from torch import nn
 from torch import quantization as quant
-from torchrec.distributed.embedding import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingBag,
     BatchedFusedEmbeddingBag,
@@ -17,6 +14,9 @@ from torchrec.distributed.embedding_lookup import (
     QuantBatchedEmbeddingBag,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import (
+    QuantEmbeddingBagCollectionSharder,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
@@ -29,7 +29,6 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )
-from torchrec.tests.utils import get_free_port
 
 
 class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):

@@ -2,7 +2,7 @@
 
 import unittest
 
-from torchrec.distributed.embedding import (
+from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.planner.new.calculators import EmbeddingWTCostCalculator

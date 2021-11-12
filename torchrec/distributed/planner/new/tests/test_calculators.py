@@ -2,10 +2,10 @@
 
 import unittest
 
-from torchrec.distributed.embedding import (
+from torchrec.distributed.embedding_types import EmbeddingTableConfig
+from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.planner.new.calculators import EmbeddingWTCostCalculator
 from torchrec.distributed.planner.new.enumerators import ShardingEnumerator
 from torchrec.distributed.planner.new.types import Topology
