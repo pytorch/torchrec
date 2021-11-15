@@ -253,7 +253,11 @@ class Calculator(abc.ABC):
     """
 
     @abc.abstractmethod
-    def __init__(self, topology: Topology) -> None:
+    def __init__(
+        self,
+        topology: Topology,
+        constraints: Optional[Dict[str, PlannerConstraints]] = None,
+    ) -> None:
         ...
 
     @abc.abstractmethod

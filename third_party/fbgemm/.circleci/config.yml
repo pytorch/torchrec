@@ -1,0 +1,53 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: buildpack-deps:xenial
+    steps:
+      - checkout
+      - run:
+          name: Pull submodules
+          command: |
+            git submodule update --init --recursive
+
+      - run:
+          name: Install prerequisites
+          command: |
+            set -e
+            apt-get update -y
+            apt-get update
+            apt-get -qq install cmake -y
+
+      - run:
+          name: Build FBGEMM static lib
+          command: |
+            set -e
+            mkdir build_static
+            cd build_static
+            cmake -DCMAKE_INSTALL_PREFIX=/root/project/install -DFBGEMM_LIBRARY_TYPE=static ../
+            make
+            make install
+
+      - run:
+          name: Test FBGEMM static lib
+          command: |
+            set -e
+            cd build_static
+            ctest --verbose
+
+      - run:
+          name: Build FBGEMM shared lib
+          command: |
+            set -e
+            mkdir build_shared
+            cd build_shared
+            cmake -DCMAKE_INSTALL_PREFIX=/root/project/install -DFBGEMM_LIBRARY_TYPE=shared ../
+            make
+            make install
+
+      - run:
+          name: Test FBGEMM shared lib
+          command: |
+            set -e
+            cd build_shared
+            ctest --verbose
