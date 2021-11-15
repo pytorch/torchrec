@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 
-from typing import Tuple, List
+from typing import Dict, Optional, Tuple, List
 
 from torchrec.distributed.planner.new.constants import (
     BIGINT_DTYPE,
-    KERNEL_LOOKUP_BW,
     INTRA_NODE_BANDWIDTH,
     CROSS_NODE_BANDWIDTH,
+    kernel_bw_lookup,
 )
-from torchrec.distributed.planner.new.types import Calculator, Topology, ShardingOption
+from torchrec.distributed.planner.new.types import (
+    PlannerConstraints,
+    Calculator,
+    Topology,
+    ShardingOption,
+)
 from torchrec.distributed.types import ShardingType
 
 
@@ -27,6 +32,7 @@ def cost_func_emb_wall_time(
     bw_inter_host: int,
     has_input_dist: bool = True,
     has_output_dist: bool = True,
+    caching_ratio: Optional[float] = None,
 ) -> List[float]:
     """
     Attempts to model costs as a function of relative wall times.
@@ -54,7 +60,7 @@ def cost_func_emb_wall_time(
     """
     shard_costs = []
     B = 1.0 * world_size * batch_size  # global batch size
-    device_bw = KERNEL_LOOKUP_BW[(compute_device, compute_kernel)]
+    device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
 
     for hash_size, emb_dim in shard_lengths:
 
@@ -287,11 +293,21 @@ class EmbeddingWTCostCalculator(Calculator):
     Embedding Wall Time Cost Calculator
     """
 
-    def __init__(self, topology: Topology) -> None:
+    def __init__(
+        self,
+        topology: Topology,
+        constraints: Optional[Dict[str, PlannerConstraints]] = None,
+    ) -> None:
         self._topology = topology
+        self._constraints = constraints
 
     def run(self, sharding_options: List[ShardingOption]) -> None:
         for sharding_option in sharding_options:
+            caching_ratio = (
+                self._constraints[sharding_option.name].caching_ratio
+                if self._constraints and self._constraints.get(sharding_option.name)
+                else None
+            )
             shard_costs = cost_func_emb_wall_time(
                 shard_lengths=[shard.length for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
@@ -311,6 +327,7 @@ class EmbeddingWTCostCalculator(Calculator):
                 ),
                 has_input_dist=True if sharding_option.upstream_modules else False,
                 has_output_dist=False if sharding_option.downstream_modules else True,
+                caching_ratio=caching_ratio,
             )
             for shard, cost in zip(sharding_option.shards, shard_costs):
                 shard.cost = cost

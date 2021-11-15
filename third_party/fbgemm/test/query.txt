@@ -1,0 +1,35 @@
+scuba --e="SELECT
+    SUM(1, sample_weight) AS agg0,
+    COUNT(1),
+    AVG( cpu_time_ns , COALESCE(sample_rate, weight)) AS  agg1 ,
+     operator_type  AS  optype ,
+     input_dims  AS  inputs ,
+     output_dims  AS outputs,
+     arguments AS args
+FROM
+     caffe2_operator_stats
+WHERE
+    1534429960 <=  time
+    AND  time  <= 1534440759
+    AND (
+        ( operator_type ) IN (
+            'Conv',
+            'ConvTranspose',
+            'FC',
+            'FbFCPacked',
+            'FCTransposed',
+          )
+    )
+    and arguments is not null
+    and arguments != '{}'
+    and arguments != 'null'
+
+GROUP BY
+     optype ,
+     inputs ,
+     outputs ,
+     args
+ORDER BY
+     agg1  DESC
+LIMIT
+    10000" --format=csv

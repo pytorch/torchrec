@@ -1,0 +1,35 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+# All rights reserved.
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+workspace(name = "fbgemm")
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel_skylib",
+    urls = [
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.0.2/bazel-skylib-1.0.2.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "com_google_googletest",
+    strip_prefix = "googletest-cd6b9ae3243985d4dc725abd513a874ab4161f3e",
+    urls = [
+        "https://github.com/google/googletest/archive/cd6b9ae3243985d4dc725abd513a874ab4161f3e.tar.gz",
+    ],
+)
+
+new_local_repository(
+    name = "cpuinfo",
+    build_file = "third_party/cpuinfo.BUILD",
+    path = "third_party/cpuinfo",
+)
+
+new_local_repository(
+    name = "asmjit",
+    build_file = "third_party/asmjit.BUILD",
+    path = "third_party/asmjit",
+)

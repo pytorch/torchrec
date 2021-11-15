@@ -60,7 +60,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             ),
         )
         self._calculator: Calculator = components.get(
-            "calculator", EmbeddingWTCostCalculator(topology=topology)
+            "calculator",
+            EmbeddingWTCostCalculator(topology=topology, constraints=constraints),
         )
         self._partitioners: List[Partitioner] = components.get(
             "paritioners", [GreedyCostPartitioner()]
