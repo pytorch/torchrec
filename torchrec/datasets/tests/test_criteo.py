@@ -1,82 +1,25 @@
 #!/usr/bin/env python3
 
 import contextlib
-import csv
 import os
 import random
 import tempfile
-import unittest
-from typing import List, Any, Dict, Generator
+from typing import Optional, List, Any, Dict
 
+import numpy as np
 from torch.utils.data import DataLoader
+from torchrec.datasets.criteo import (
+    BinaryCriteoUtils,
+    InMemoryBinaryCriteoIterDataPipe,
+    INT_FEATURE_COUNT,
+    CAT_FEATURE_COUNT,
+)
 from torchrec.datasets.criteo import criteo_kaggle, criteo_terabyte
+from torchrec.datasets.tests.criteo_test_utils import CriteoTest
+from torchrec.datasets.utils import Batch
 
 
-class _CriteoTest(unittest.TestCase):
-    INT_FEATURE_COUNT = 13
-    CAT_FEATURE_COUNT = 26
-
-    LABEL_VAL_RANGE = (0, 1)
-    INT_VAL_RANGE = (0, 100)
-    CAT_VAL_RANGE = (0, 1000)
-
-    @classmethod
-    @contextlib.contextmanager
-    def _create_dataset_tsv(
-        cls,
-        num_rows: int = 10,
-        train: bool = True,
-        filename: str = "criteo",
-    ) -> Generator[str, None, None]:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, filename)
-            with open(path, "w") as f:
-                rows = []
-                for _ in range(num_rows):
-                    row = []
-                    if train:
-                        row.append(str(random.randint(*cls.LABEL_VAL_RANGE)))
-                    row += [
-                        *(
-                            str(random.randint(*cls.INT_VAL_RANGE))
-                            for _ in range(cls.INT_FEATURE_COUNT)
-                        ),
-                        *(
-                            (
-                                "%x"
-                                % abs(hash(str(random.randint(*cls.CAT_VAL_RANGE))))
-                            ).zfill(8)[:8]
-                            for _ in range(cls.CAT_FEATURE_COUNT)
-                        ),
-                    ]
-                    rows.append(row)
-                # pyre-ignore[6]
-                cf = csv.writer(f, delimiter="\t")
-                cf.writerows(rows)
-            yield path
-
-    def _validate_sample(self, sample: Dict[str, Any], train: bool = True) -> None:
-        if train:
-            self.assertEqual(
-                len(sample), self.INT_FEATURE_COUNT + self.CAT_FEATURE_COUNT + 1
-            )
-            label_val = sample["label"]
-            self.assertTrue(
-                self.LABEL_VAL_RANGE[0] <= label_val <= self.LABEL_VAL_RANGE[1]
-            )
-        else:
-            self.assertEqual(
-                len(sample), self.INT_FEATURE_COUNT + self.CAT_FEATURE_COUNT
-            )
-        for idx in range(self.INT_FEATURE_COUNT):
-            int_val = sample[f"int_{idx}"]
-            self.assertTrue(self.INT_VAL_RANGE[0] <= int_val <= self.INT_VAL_RANGE[1])
-        for idx in range(self.CAT_FEATURE_COUNT):
-            cat_val = int(sample[f"cat_{idx}"], 16)
-            self.assertTrue(0 <= cat_val <= 16 ** 8 - 1)
-
-
-class CriteoTerabyteTest(_CriteoTest):
+class CriteoTerabyteTest(CriteoTest):
     def test_single_file(self) -> None:
         with self._create_dataset_tsv() as dataset_pathname:
             dataset = criteo_terabyte((dataset_pathname,))
@@ -95,7 +38,7 @@ class CriteoTerabyteTest(_CriteoTest):
             self.assertEqual(len(list(iter(dataset))), 30)
 
 
-class CriteoKaggleTest(_CriteoTest):
+class CriteoKaggleTest(CriteoTest):
     def test_train_file(self) -> None:
         with self._create_dataset_tsv() as path:
             dataset = criteo_kaggle(path)
@@ -111,7 +54,7 @@ class CriteoKaggleTest(_CriteoTest):
             self.assertEqual(len(list(iter(dataset))), 10)
 
 
-class CriteoDataLoaderTest(_CriteoTest):
+class CriteoDataLoaderTest(CriteoTest):
     def _validate_dataloader_sample(
         self,
         sample: Dict[str, List[Any]],  # pyre-ignore[2]
@@ -171,3 +114,140 @@ class CriteoDataLoaderTest(_CriteoTest):
 
     def test_single_worker(self) -> None:
         self._test_dataloader(batch_size=16, num_tsvs=2, num_rows_per_tsv=16)
+
+
+class TestBinaryCriteoUtils(CriteoTest):
+    def test_tsv_to_npys(self) -> None:
+        num_rows = 10
+        with self._create_dataset_tsv(num_rows=num_rows) as in_file:
+            out_files = [tempfile.NamedTemporaryFile(delete=False) for _ in range(3)]
+            for out_file in out_files:
+                out_file.close()
+
+            BinaryCriteoUtils.tsv_to_npys(
+                in_file, out_files[0].name, out_files[1].name, out_files[2].name
+            )
+
+            dense = np.load(out_files[0].name)
+            sparse = np.load(out_files[1].name)
+            labels = np.load(out_files[2].name)
+
+            self.assertEqual(dense.shape, (num_rows, INT_FEATURE_COUNT))
+            self.assertEqual(dense.dtype, np.float32)
+            self.assertEqual(sparse.shape, (num_rows, CAT_FEATURE_COUNT))
+            self.assertEqual(sparse.dtype, np.int32)
+            self.assertEqual(labels.shape, (num_rows, 1))
+            self.assertEqual(labels.dtype, np.int32)
+
+            for out_file in out_files:
+                os.remove(out_file.name)
+
+    def test_get_shape_from_npy(self) -> None:
+        num_rows = 10
+        with self._create_dataset_npys(num_rows=num_rows) as (
+            dense_path,
+            sparse_path,
+            labels_path,
+        ):
+            dense_shape = BinaryCriteoUtils.get_shape_from_npy(dense_path)
+            sparse_shape = BinaryCriteoUtils.get_shape_from_npy(sparse_path)
+            labels_shape = BinaryCriteoUtils.get_shape_from_npy(labels_path)
+            self.assertEqual(dense_shape, (num_rows, INT_FEATURE_COUNT))
+            self.assertEqual(sparse_shape, (num_rows, CAT_FEATURE_COUNT))
+            self.assertEqual(labels_shape, (num_rows, 1))
+
+    def test_get_file_idx_to_row_range(self) -> None:
+        lengths = [14, 17, 20]
+        world_size = 3
+        expected = [{0: (0, 13), 1: (0, 2)}, {1: (3, 16), 2: (0, 2)}, {2: (3, 19)}]
+
+        for i in range(world_size):
+            self.assertEqual(
+                expected[i],
+                BinaryCriteoUtils.get_file_idx_to_row_range(
+                    lengths=lengths,
+                    rank=i,
+                    world_size=world_size,
+                ),
+            )
+
+    def test_load_npy_range(self) -> None:
+        num_rows = 10
+        start_row = 2
+        num_rows_to_select = 4
+        with self._create_dataset_npys(
+            num_rows=num_rows, generate_sparse=False, generate_labels=False
+        ) as (dense_path,):
+            full = np.load(dense_path)
+            partial = BinaryCriteoUtils.load_npy_range(
+                dense_path, start_row=start_row, num_rows=num_rows_to_select
+            )
+            np.testing.assert_array_equal(
+                full[start_row : start_row + num_rows_to_select], partial
+            )
+
+
+class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
+    def _validate_batch(
+        self, batch: Batch, batch_size: int, hashes: Optional[List[int]] = None
+    ) -> None:
+        self.assertEqual(
+            tuple(batch.dense_features.size()), (batch_size, INT_FEATURE_COUNT)
+        )
+        self.assertEqual(
+            tuple(batch.sparse_features.values().size()),
+            (batch_size * CAT_FEATURE_COUNT,),
+        )
+        self.assertEqual(tuple(batch.labels.size()), (batch_size,))
+        if hashes is not None:
+            hashes_np = np.array(hashes).reshape((CAT_FEATURE_COUNT, 1))
+            self.assertTrue(
+                np.all(
+                    batch.sparse_features.values().reshape(
+                        (CAT_FEATURE_COUNT, batch_size)
+                    )
+                    < hashes_np
+                )
+            )
+
+    def _test_dataset(
+        self, rows_per_file: List[int], batch_size: int, world_size: int
+    ) -> None:
+        with contextlib.ExitStack() as stack:
+            files = [
+                stack.enter_context(self._create_dataset_npys(num_rows=num_rows))
+                for num_rows in rows_per_file
+            ]
+            hashes = [i + 1 for i in range(CAT_FEATURE_COUNT)]
+
+            lens = []
+            for rank in range(world_size):
+                datapipe = InMemoryBinaryCriteoIterDataPipe(
+                    dense_paths=[f[0] for f in files],
+                    sparse_paths=[f[1] for f in files],
+                    labels_paths=[f[2] for f in files],
+                    batch_size=batch_size,
+                    rank=rank,
+                    world_size=world_size,
+                    hashes=hashes,
+                )
+                datapipe_len = len(datapipe)
+
+                len_ = 0
+                for x in datapipe:
+                    self._validate_batch(x, batch_size=batch_size)
+                    len_ += 1
+
+                # Check that dataset __len__ matches true length.
+                self.assertEqual(datapipe_len, len_)
+                lens.append(len_)
+
+            # Ensure all ranks' datapipes return the same number of batches.
+            self.assertEqual(len(set(lens)), 1)
+
+    def test_dataset_small_files(self) -> None:
+        self._test_dataset([1] * 20, 4, 2)
+
+    def test_dataset_random_sized_files(self) -> None:
+        random.seed(0)
+        self._test_dataset([random.randint(1, 100) for _ in range(100)], 16, 3)

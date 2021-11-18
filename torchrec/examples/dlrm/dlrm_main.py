@@ -9,10 +9,15 @@ from pyre_extensions import none_throws
 from torch import distributed as dist
 from torch.utils.data import DataLoader
 from torchrec import EmbeddingBagCollection
-from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
+from torchrec.datasets.criteo import (
+    DEFAULT_CAT_NAMES,
+    DEFAULT_INT_NAMES,
+    InMemoryBinaryCriteoIterDataPipe,
+)
 from torchrec.datasets.random import RandomRecDataset
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.examples.dlrm.data.dlrm_dataloader import get_dataloader
 from torchrec.examples.dlrm.modules.dlrm_train import DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
@@ -97,7 +102,14 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         action="store_true",
         help="Use pinned memory when loading data.",
     )
-    parser.set_defaults(pin_memory=False)
+    parser.add_argument(
+        "--in_memory_binary_criteo_path",
+        type=str,
+        default=None,
+        help="Path to a folder containing the binary (npy) files for the Criteo dataset."
+        " When supplied, InMemoryBinaryCriteoIterDataPipe is used.",
+    )
+    parser.set_defaults(pin_memory=None)
     return parser.parse_args(argv)
 
 
@@ -125,23 +137,8 @@ def main(argv: List[str]) -> None:
         num_embeddings_per_feature = None
         num_embeddings = args.num_embeddings
 
-    dataloader = DataLoader(
-        RandomRecDataset(
-            keys=DEFAULT_CAT_NAMES,
-            batch_size=args.batch_size,
-            hash_size=num_embeddings,
-            hash_sizes=num_embeddings_per_feature,
-            manual_seed=args.seed,
-            ids_per_feature=1,
-            num_dense=len(DEFAULT_INT_NAMES),
-        ),
-        batch_size=None,
-        batch_sampler=None,
-        pin_memory=args.pin_memory,
-        num_workers=args.num_workers,
-    )
-    iterator = iter(dataloader)
-    # TODO add criteo support and add random_dataloader arg
+    # TODO add CriteoIterDataPipe support and add random_dataloader arg
+    iterator = iter(get_dataloader(args, backend))
 
     eb_configs = [
         EmbeddingBagConfig(
