@@ -44,7 +44,7 @@ def greedy_partition(
             for shard_idx in range(sharding_option.num_shards):
                 shard_idxes.append((option_idx, shard_idx))
 
-    def to_comparable(order_shard_idx: Tuple[int, int]) -> Tuple[float, Storage]:
+    def _to_comparable(order_shard_idx: Tuple[int, int]) -> Tuple[float, Storage]:
         sharding_option: ShardingOption = sharding_options[order_shard_idx[0]]
         return (
             cast(float, sharding_option.shards[order_shard_idx[1]].cost),
@@ -52,7 +52,7 @@ def greedy_partition(
         )
 
     sorted_shard_idxes = sorted(
-        shard_idxes, key=lambda order_shard_idx: to_comparable(order_shard_idx)
+        shard_idxes, key=lambda order_shard_idx: _to_comparable(order_shard_idx)
     )
 
     partitions = [[] for p in range(num_partitions)]
@@ -162,6 +162,56 @@ class GreedyCostPartitioner(Partitioner):
         sharding_options: List[ShardingOption],
         topology: Topology,
     ) -> None:
+        """
+        Places sharding options on topology based on each sharding option's partition_by attribute.
+        Topology storage and costs are updated at the end of the placement.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of populated sharding options.
+            topology (Topology): device topology.
+
+        Returns:
+            None.
+
+        Example:
+
+        sharding_options = [
+                            ShardingOption(partition_by="uniform",
+                                    shards=[
+                                        Shards(storage=1, cost=1),
+                                        Shards(storage=1, cost=1),
+                                    ]),
+                            ShardingOption(partition_by="uniform",
+                                    shards=[
+                                        Shards(storage=2, cost=2),
+                                        Shards(storage=2, cost=2),
+                                    ]),
+                            ShardingOption(partition_by="device",
+                                    shards=[
+                                        Shards(storage=3, cost=3),
+                                        Shards(storage=3, cost=3),
+                                    ])
+                            ShardingOption(partition_by="device",
+                                    shards=[
+                                        Shards(storage=4, cost=4),
+                                        Shards(storage=4, cost=4),
+                                    ])
+                            ]
+        topology = Topology(world_size=2)
+
+        First [sharding_options[0],sharding_options[1]] will be placed on topology with the uniform strategy, resulting in
+
+        topology.devices[0].cost = (1,1)
+        topology.devices[1].cost = (2,2)
+
+        Finally sharding_options[2],sharding_options[3]] will be placed on topology with the device strategy (see doc string of partition_by_device for more details).
+
+        topology.devices[0].cost = (1,1) + (4,4)
+        topology.devices[1].cost = (2,2) + (3,3)
+
+        The topology updates are actually done after the end of all the placements (the othering in the example is just for clarity).
+        """
+
         # pyre-ignore[16]
         self._topology = topology
         grouped_sharding_options = _group_sharding_options(sharding_options)
