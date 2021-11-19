@@ -27,6 +27,19 @@ from torchrec.distributed.types import ModuleSharder, ShardingType
 
 
 class EmbeddingEnumerator(Enumerator):
+    """
+    Generates embedding sharding options for given nn.Module, considering provided user
+    constraints and input stats.
+
+    Constructor Args:
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, PlannerConstraints]]): dict of parameter name
+            to provided PlannerConstraints.
+        input_stats (Optional[Dict[str, InputStats]]): dict of parameter name to
+            provided InputStats.
+
+    """
+
     def __init__(
         self,
         topology: Topology,
@@ -43,6 +56,18 @@ class EmbeddingEnumerator(Enumerator):
     def run(
         self, module: nn.Module, sharders: List[ModuleSharder[nn.Module]]
     ) -> List[ShardingOption]:
+        """
+        Generates relevant sharding options given module and sharders.
+
+        Args:
+            module (nn.Module): module to be sharded.
+            sharders (List[ModuleSharder[nn.Module]]): provided sharders for module.
+
+        Returns:
+            List[ShardingOption]: valid sharding options with values populated except
+                for cost.
+
+        """
         sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
@@ -67,7 +92,10 @@ class EmbeddingEnumerator(Enumerator):
                             if self._constraints and self._constraints.get(name)
                             else None
                         )
-                        shard_lengths, shard_offsets = get_shard_lengths_and_offsets(
+                        (
+                            shard_lengths,
+                            shard_offsets,
+                        ) = calculate_shard_lengths_and_offsets(
                             tensor=param,
                             world_size=self._world_size,
                             local_world_size=self._local_world_size,
@@ -80,7 +108,7 @@ class EmbeddingEnumerator(Enumerator):
                             if self._constraints and self._constraints.get(name)
                             else None
                         )
-                        shard_storages = get_shard_storages(
+                        shard_storages = calculate_shard_storages(
                             sharder=sharder,
                             sharding_type=sharding_type,
                             tensor=param,
@@ -161,6 +189,17 @@ class EmbeddingEnumerator(Enumerator):
 
 
 def get_partition_by_type(sharding_type: str) -> str:
+    """
+    Gets corresponding partition by type for provided sharding type.
+
+    Args:
+        sharding_type (str): sharding type string.
+
+    Returns:
+        str: the corresponding PartitionByType value.
+
+    """
+
     device_sharding_types = {
         ShardingType.TABLE_WISE.value,
         ShardingType.COLUMN_WISE.value,
@@ -181,13 +220,34 @@ def get_partition_by_type(sharding_type: str) -> str:
     raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
 
 
-def get_shard_lengths_and_offsets(
+def calculate_shard_lengths_and_offsets(
     tensor: torch.Tensor,
     world_size: int,
     local_world_size: int,
     sharding_type: str,
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
+    """
+    Calculates lengths and offsets for tensor sharded according to provided sharding
+    type.
+
+    Args:
+        tensor (torch.Tensor): tensor to be sharded.
+        world_size (int): total number of devices in topology.
+        local_world_size (int): total number of devices in host group topology.
+        sharding_type (str): provided ShardingType value.
+        col_wise_shard_dim (Optional[int]): dimension for column wise sharding split.
+
+    Returns:
+        Tuple[List[List[int]], List[List[int]]]: shard lengths, represented as a list of
+            the dimensions of the sharded tensor on each device, and shard offsets,
+            represented as a list of coordinates of placement on each device.
+
+    Raises:
+        ValueError: If `sharding_type` is not a valid ShardingType.
+
+    """
+
     (rows, columns) = tensor.shape
 
     if sharding_type == ShardingType.DATA_PARALLEL.value:
@@ -195,16 +255,18 @@ def get_shard_lengths_and_offsets(
     elif sharding_type == ShardingType.TABLE_WISE.value:
         return [[rows, columns]], [[0, 0]]
     elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return _get_cw_shard_lengths_and_offsets(columns, rows, col_wise_shard_dim)
+        return _calculate_cw_shard_lengths_and_offsets(
+            columns, rows, col_wise_shard_dim
+        )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return _get_rw_shard_lengths_and_offsets(rows, world_size, columns)
+        return _calculate_rw_shard_lengths_and_offsets(rows, world_size, columns)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return _get_rw_shard_lengths_and_offsets(rows, local_world_size, columns)
+        return _calculate_rw_shard_lengths_and_offsets(rows, local_world_size, columns)
 
     raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
 
 
-def _get_rw_shard_lengths_and_offsets(
+def _calculate_rw_shard_lengths_and_offsets(
     hash_size: int, num_devices: int, columns: int
 ) -> Tuple[List[List[int]], List[List[int]]]:
     # Set prefix of shard_lengths to be  ceil(hash_size/num_devices). For exmaple
@@ -237,7 +299,7 @@ def _get_rw_shard_lengths_and_offsets(
     return shard_lengths, shard_offsets
 
 
-def _get_cw_shard_lengths_and_offsets(
+def _calculate_cw_shard_lengths_and_offsets(
     hash_size: int,
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
@@ -256,7 +318,7 @@ def _get_cw_shard_lengths_and_offsets(
     return shard_lengths, shard_offsets
 
 
-def get_shard_storages(
+def calculate_shard_storages(
     sharder: ModuleSharder[nn.Module],
     sharding_type: str,
     tensor: torch.Tensor,
@@ -269,10 +331,32 @@ def get_shard_storages(
     input_lengths: List[float],
     caching_ratio: float,
 ) -> List[Storage]:
+    """
+    Calculates estimated storage sizes for each sharded tensor, comprised of input,
+    output, tensor, gradient, and optimizer sizes.
+
+    Args:
+        sharder (ModuleSharder[nn.Module]): sharder for module that supports sharding.
+        sharding_type (str): provided ShardingType value.
+        tensor (torch.Tensor): tensor to be sharded.
+        compute_device (str): compute device to be used.
+        compute_kernel (str): compute kernel to be used.
+        shard_lengths (List[List[int]]): list of dimensions of each sharded tensor.
+        batch_size (int): batch size to be used.
+        world_size (int): total number of devices in topology.
+        local_world_size (int): total number of devices in host group topology.
+        input_lengths (List[float]): average input lengths synonymous with pooling
+            factors.
+        caching_ratio (float): ratio of HBM to DDR memory for UVM caching.
+
+    Returns:
+        List[Storage]: storage object for each device in topology
+
+    """
     input_data_type_size = BIGINT_DTYPE
     output_data_type_size = tensor.element_size()
 
-    input_sizes, output_sizes = _get_shard_io_sizes(
+    input_sizes, output_sizes = _calculate_shard_io_sizes(
         sharding_type=sharding_type,
         batch_size=batch_size,
         world_size=world_size,
@@ -292,7 +376,7 @@ def get_shard_storages(
         hbm_storage = round(ddr_storage * caching_ratio)
         ddr_storage = ddr_storage - hbm_storage
 
-    hbm_specific_sizes: List[int] = _get_storage_specific_sizes(
+    hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=hbm_storage,
         shape=tensor.shape,
         shard_lengths=shard_lengths,
@@ -303,7 +387,7 @@ def get_shard_storages(
         input_data_type_size=input_data_type_size,
         output_data_type_size=output_data_type_size,
     )
-    ddr_specific_sizes: List[int] = _get_storage_specific_sizes(
+    ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
         shape=tensor.shape,
         shard_lengths=shard_lengths,
@@ -343,7 +427,7 @@ def get_shard_storages(
     ]
 
 
-def _get_shard_io_sizes(
+def _calculate_shard_io_sizes(
     sharding_type: str,
     batch_size: int,
     world_size: int,
@@ -355,7 +439,7 @@ def _get_shard_io_sizes(
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
     if sharding_type == ShardingType.DATA_PARALLEL.value:
-        return _get_dp_shard_io_sizes(
+        return _calculate_dp_shard_io_sizes(
             batch_size=batch_size,
             input_lengths=input_lengths,
             emb_dim=emb_dim,
@@ -364,7 +448,7 @@ def _get_shard_io_sizes(
             output_data_type_size=output_data_type_size,
         )
     elif sharding_type == ShardingType.TABLE_WISE.value:
-        return _get_tw_shard_io_sizes(
+        return _calculate_tw_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             input_lengths=input_lengths,
@@ -373,7 +457,7 @@ def _get_shard_io_sizes(
             output_data_type_size=output_data_type_size,
         )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return _get_cw_shard_io_sizes(
+        return _calculate_cw_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             input_lengths=input_lengths,
@@ -382,7 +466,7 @@ def _get_shard_io_sizes(
             output_data_type_size=output_data_type_size,
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return _get_rw_shard_io_sizes(
+        return _calculate_rw_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             input_lengths=input_lengths,
@@ -391,7 +475,7 @@ def _get_shard_io_sizes(
             output_data_type_size=output_data_type_size,
         )
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return _get_twrw_shard_io_sizes(
+        return _calculate_twrw_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             local_world_size=local_world_size,
@@ -404,7 +488,7 @@ def _get_shard_io_sizes(
         raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
 
 
-def _get_dp_shard_io_sizes(
+def _calculate_dp_shard_io_sizes(
     batch_size: int,
     input_lengths: List[float],
     emb_dim: int,
@@ -424,7 +508,7 @@ def _get_dp_shard_io_sizes(
     return input_sizes, output_sizes
 
 
-def _get_tw_shard_io_sizes(
+def _calculate_tw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     input_lengths: List[float],
@@ -444,7 +528,7 @@ def _get_tw_shard_io_sizes(
     return input_sizes, output_sizes
 
 
-def _get_cw_shard_io_sizes(
+def _calculate_cw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     input_lengths: List[float],
@@ -471,7 +555,7 @@ def _get_cw_shard_io_sizes(
     return input_sizes, output_sizes
 
 
-def _get_rw_shard_io_sizes(
+def _calculate_rw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     input_lengths: List[float],
@@ -504,7 +588,7 @@ def _get_rw_shard_io_sizes(
     return input_sizes, output_sizes
 
 
-def _get_twrw_shard_io_sizes(
+def _calculate_twrw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     local_world_size: int,
@@ -538,7 +622,7 @@ def _get_twrw_shard_io_sizes(
     return input_sizes, output_sizes
 
 
-def _get_storage_specific_sizes(
+def _calculate_storage_specific_sizes(
     storage: int,
     shape: torch.Size,
     shard_lengths: List[List[int]],

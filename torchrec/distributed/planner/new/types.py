@@ -227,8 +227,8 @@ class PlacerStats:
 
 class Enumerator(abc.ABC):
     """
-    Generate all relevant sharding options for given nn.Module,
-    input stats and user constraints
+    Generates all relevant sharding options for given nn.Module,
+    input stats, and user constraints
     """
 
     @abc.abstractmethod
@@ -249,7 +249,7 @@ class Enumerator(abc.ABC):
 
 class Calculator(abc.ABC):
     """
-    Calculate costs, requires fully specified sharding options
+    Calculates costs, requires fully specified sharding options
     (ie. ranks/lengths)
     """
 

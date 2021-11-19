@@ -13,8 +13,8 @@ from torchrec.distributed.planner.new.constants import (
 )
 from torchrec.distributed.planner.new.enumerators import (
     EmbeddingEnumerator,
-    _get_tw_shard_io_sizes,
-    _get_dp_shard_io_sizes,
+    _calculate_tw_shard_io_sizes,
+    _calculate_dp_shard_io_sizes,
 )
 from torchrec.distributed.planner.new.types import (
     InputStats,
@@ -345,7 +345,7 @@ class TestEnumerators(unittest.TestCase):
             input_data_type_size = BIGINT_DTYPE
             output_data_type_size = sharding_option.tensor.element_size()
 
-            input_sizes, output_sizes = _get_dp_shard_io_sizes(
+            input_sizes, output_sizes = _calculate_dp_shard_io_sizes(
                 batch_size=self.batch_size,
                 input_lengths=self.input_stats[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
@@ -408,7 +408,7 @@ class TestEnumerators(unittest.TestCase):
             input_data_type_size = BIGINT_DTYPE
             output_data_type_size = sharding_option.tensor.element_size()
 
-            input_sizes, output_sizes = _get_tw_shard_io_sizes(
+            input_sizes, output_sizes = _calculate_tw_shard_io_sizes(
                 batch_size=self.batch_size,
                 world_size=self.world_size,
                 input_lengths=self.input_stats[sharding_option.name].pooling_factors,
