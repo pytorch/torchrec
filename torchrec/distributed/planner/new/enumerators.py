@@ -33,9 +33,9 @@ class EmbeddingEnumerator(Enumerator):
 
     Constructor Args:
         topology (Topology): device topology.
-        constraints (Optional[Dict[str, PlannerConstraints]]): dict of parameter name
+        constraints (Optional[Dict[str, PlannerConstraints]]): dict of parameter names
             to provided PlannerConstraints.
-        input_stats (Optional[Dict[str, InputStats]]): dict of parameter name to
+        input_stats (Optional[Dict[str, InputStats]]): dict of parameter names to
             provided InputStats.
 
     """

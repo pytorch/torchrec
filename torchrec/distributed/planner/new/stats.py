@@ -23,6 +23,10 @@ STATS_BAR = f"#{'---------------------------------------------------------------
 
 
 class EmbeddingStats(Stats):
+    """
+    Stats for a sharding planner execution.
+    """
+
     def run(
         self,
         sharding_plan: ShardingPlan,
@@ -30,6 +34,21 @@ class EmbeddingStats(Stats):
         placer_stats: PlacerStats,
         input_stats: Optional[Dict[str, InputStats]] = None,
     ) -> None:
+        """
+        Log stats for a given sharding plan to stdout.
+
+        Provide a tabular view of stats for the given sharding plan with per device
+        storage usage (HBM and DDR), cost, input (pooling factors), output (embedding
+        dimension), and number and type of shards.
+
+        Args:
+            sharding_plan (ShardingPlan): sharding plan chosen by the ShardingPlanner.
+            topology (Topology): device topology.
+            placer_stats (PlacerStats): stats from the placer.
+            input_stats (Optional[Dict[str, InputStats]]): dict of parameter names to
+                provided InputStats.
+
+        """
         shard_by_fqn = {
             module_name + "." + param_name: value
             for module_name, param_dict in sharding_plan.plan.items()
