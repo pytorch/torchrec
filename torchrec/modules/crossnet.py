@@ -332,7 +332,7 @@ class LowRankMixtureCrossNet(torch.nn.Module):
             torch.nn.ModuleList(
                 [
                     torch.nn.Linear(self._in_features, 1, bias=False)
-                    for i in range(self._num_layers)
+                    for i in range(self._num_experts)
                 ]
             )
             if self._num_experts > 1

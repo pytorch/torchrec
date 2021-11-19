@@ -126,9 +126,9 @@ class TestLowRankMixtureCrossNet(unittest.TestCase):
         output = dcn(input)
         expected_output = torch.Tensor(
             [
-                [1.6171, -0.3217],
-                [-2.7060, 0.5359],
-                [-1.2054, -1.3132],
+                [1.7045, -0.2848],
+                [-2.5357, 0.5811],
+                [-0.9467, -1.3091],
             ]
         )
         self.assertTrue(torch.allclose(output, expected_output, rtol=1e-4, atol=1e-4))
@@ -153,7 +153,6 @@ class TestLowRankMixtureCrossNet(unittest.TestCase):
                 [-2.5836, -1.8124],
             ]
         )
-        print(output)
         self.assertTrue(torch.allclose(output, expected_output, rtol=1e-4, atol=1e-4))
 
     def test_fx_script_cross_net(self) -> None:
