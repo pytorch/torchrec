@@ -396,9 +396,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     This pipeline overlaps device transfer, and ShardedModule.input_dist() with
     forward and backward. This helps hiding all2all latency while preserving
     the training forward / backward ordering.
-    stage 3: forward, backward
-    stage 2: ShardedModule.input_dist()
-    stage 1: device transfer
+    stage 3: forward, backward - uses default CUDA stream
+    stage 2: ShardedModule.input_dist() - uses data_dist CUDA stream
+    stage 1: device transfer - uses memcpy CUDA stream
 
     ShardedModule.input_dist() is only done for top-level modules in the call graph.
     To be considered a top-level module,
@@ -422,10 +422,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._memcpy_stream: Optional[
                 torch.cuda.streams.Stream
             ] = torch.cuda.Stream()
-            self._data_stream: Optional[torch.cuda.streams.Stream] = torch.cuda.Stream()
+            self._data_dist_stream: Optional[
+                torch.cuda.streams.Stream
+            ] = torch.cuda.Stream()
         else:
             self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
-            self._data_stream: Optional[torch.cuda.streams.Stream] = None
+            self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
         self._batch_i: Optional[In] = None
         self._batch_ip1: Optional[In] = None
         self._batch_ip2: Optional[In] = None
@@ -450,10 +452,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
                 # Try to pipeline input data dist.
                 self._pipelined_modules = _rewrite_model(
-                    model, self._context, self._data_stream
+                    model, self._context, self._data_dist_stream
                 )
 
-        with torch.cuda.stream(self._data_stream):
+        with torch.cuda.stream(self._data_dist_stream):
             _wait_for_batch(batch_i, self._memcpy_stream)
             _start_data_dist(self._pipelined_modules, batch_i, self._context)
 
@@ -483,14 +485,15 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         batch_ip1 = cast(In, self._batch_ip1)
 
         with record_function("## wait_for_batch ##"):
-            _wait_for_batch(batch_i, self._data_stream)
+            _wait_for_batch(batch_i, self._data_dist_stream)
 
         # Forward
         with record_function("## forward ##"):
             (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
 
+        # Data Distribution
         with record_function("## sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_stream):
+            with torch.cuda.stream(self._data_dist_stream):
                 _wait_for_batch(batch_ip1, self._memcpy_stream)
                 _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
 
