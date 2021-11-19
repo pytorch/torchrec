@@ -306,7 +306,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        module.load_state_dict(state_dict, strict=strict)
         missing_keys = []
         unexpected_keys = []
         if isinstance(module, ShardedModule):
