@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 
+#Sphinx Documentation Text (for user-facing classes only)
+
+"""
+.. fb:display_title::
+    CrossNet API
+=====
+
+These modules do X:Y:Z
+    * Class Cross Net does X
+    * Class Low Cross Net does Y
+    * Class .....
+
+"""
+
 from typing import Optional, Callable, Union
 
 import torch
@@ -16,19 +30,21 @@ class CrossNet(torch.nn.Module):
     In this module, the crossing operations are defined based on a full rank matrix (NxN),
     such that crossing effect can cover all bits on each layer. On each layer l, the tensor
     is transformed into:
-        x_{l+1} = x_0 * (W_l x x_l + b_l) + x_l
-    where W_l is a square matrix (NxN), "*" means element-wise multiplication, "x" means
+
+    .. math ::    x_{l+1} = x_0 * (W_l x x_l + b_l) + x_l
+
+    where `W_l` is a square matrix (NxN), "*" means element-wise multiplication, "x" means
     matrix multiplication.
 
     Constructor Args:
-        in_features (int): the dimension of the input.
-        num_layers (int): the number of layers in the module.
+        * in_features (int): the dimension of the input.
+        * num_layers (int): the number of layers in the module.
 
     Call Args:
-        input (torch.Tensor): tensor with shape [batch_size, in_features]
+        * input (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Returns:
-        output (torch.Tensor): tensor with shape [batch_size, in_features]
+        * output (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Example:
         >>> batch_size = 3
@@ -77,26 +93,28 @@ class CrossNet(torch.nn.Module):
 class LowRankCrossNet(torch.nn.Module):
     r"""
     Low Rank Cross net is a high-efficient cross net. Instead of using full rank cross matrix (NxN)
-    at each layer, it will use two kernels W (`N`x`r`) and V (`r`x`N`), where `r << N`, to simplify the matrix
+    at each layer, it will use two kernels :math:`W (N' * r')` and :math:`V (r' * N')`, where `r << N`, to simplify the matrix
     multiplication.
 
-    On each layer l, the tensor is transformed into
-        x_{l+1} = x_0 * (W_l x (V_l x x_l) + b_l) + x_l
-    where W_l is either a vector, "*" means element-wise multiplication, and "x" means matrix multiplication.
+    On each layer l, the tensor is transformed into:
+
+    .. math::    x_{l+1} = x_0 * (W_l x (V_l x x_l) + b_l) + x_l
+
+    where `W_l` is either a vector, "*" means element-wise multiplication, and "x" means matrix multiplication.
 
     Note that, rank `r` should be chosen smartly. Usually, we should expect `r < N/2` to have computation saving; we should
-    expect `r` ~= N/4 to perserve the accuracy of full rank cross net.
+    expect `r ~= N/4` to perserve the accuracy of full rank cross net.
 
     Constructor Args:
-        in_features (int): the dimension of the input.
-        num_layers (int): the number of layers in the module.
-        low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
+        * in_features (int): the dimension of the input.
+        * num_layers (int): the number of layers in the module.
+        * low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
 
     Call Args:
-        input (torch.Tensor): tensor with shape [batch_size, in_features]
+        * input (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Returns:
-        output (torch.Tensor): tensor with shape [batch_size, in_features]
+        * output (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Example:
         >>> batch_size = 3
@@ -174,18 +192,20 @@ class VectorCrossNet(torch.nn.Module):
     to further reduce computational cost and cut the number of learnable parameter number.
 
     On each layer l, the tensor is transformed into
-        x_{l+1} = x_0 * (W_l . x_l + b_l) + x_l
-    where W_l is either a vector, "*" means element-wise multiplication; "." means dot operations.
+
+    .. math::    x_{l+1} = x_0 * (W_l . x_l + b_l) + x_l
+
+    where `W_l` is either a vector, "*" means element-wise multiplication; "." means dot operations.
 
     Constructor Args:
-        in_features (int): the dimension of the input.
-        num_layers (int): the number of layers in the module.
+        * in_features (int): the dimension of the input.
+        * num_layers (int): the number of layers in the module.
 
     Call Args:
-        input (torch.Tensor): tensor with shape [batch_size, in_features]
+        * input (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Returns:
-        output (torch.Tensor): tensor with shape [batch_size, in_features]
+        * output (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Example:
         >>> batch_size = 3
@@ -242,31 +262,34 @@ class LowRankMixtureCrossNet(torch.nn.Module):
 
     LowRankMixtureCrossNet defines the learnable crossing parameter per layer as low-rank matrix (Nxr) together
     with mixture of expert. Compared to LowRankCrossNet, instead of relying on one single expert to learn
-    feature crosses, this module leverages such `K` experts, each learning feature interactions in a
+    feature crosses, this module leverages such `K` experts; each learning feature interactions in a
     different subspaces, and adaptively combine the learned crosses using a gating mechanism that depends
     on input `x`.
 
-    On each layer l, the tensor is transformed into
-        x_{l+1} = MoE(expert_i foreach i in K experts) + x_l
-    and each expert i is defined as:
-        expert_i = x_0 * (U_l_i x g(C_l_i x g(V_l_i x x_l)) + b_l)
-    where U_l_i (N, r), C_l_i (r, r), and V_l_i (r, N) are low-rank matrix, "*" means element-wise multiplication,
+    On each layer l, the tensor is transformed into:
+
+    .. math::    x_{l+1} = MoE(expert_i foreach i in K experts) + x_l
+
+    and each :math:`expert_i` is defined as:
+
+    .. math::    expert_i = x_0 * (U_l_i x g(C_l_i x g(V_l_i x x_l)) + b_l)
+
+    where `U_l_i (N, r)`, `C_l_i (r, r)` and `V_l_i (r, N)` are low-rank matrix, "*" means element-wise multiplication,
     "x" means matrix multiplication, and g(.) is the non-linear activation function.
 
     One optimization is when num_expert is 1, the gate evaluation and MOE will be skipped for computation saving.
 
     Constructor Args:
-        in_features (int): the dimension of the input.
-        num_layers (int): the number of layers in the module.
-        low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
-        activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]): the non-linear activation
-            function, used in defining experts. Default is relu.
+        * in_features (int): the dimension of the input.
+        * num_layers (int): the number of layers in the module.
+        * low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
+        * activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]): the non-linear activation function, used in defining experts. Default is relu.
 
     Call Args:
-        input (torch.Tensor): tensor with shape [batch_size, in_features]
+        * input (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Returns:
-        output (torch.Tensor): tensor with shape [batch_size, in_features]
+        * output (torch.Tensor): tensor with shape [batch_size, in_features]
 
     Example:
         >>> batch_size = 3
