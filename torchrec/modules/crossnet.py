@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#Sphinx Documentation Text (for user-facing classes only)
+# Sphinx Documentation Text (for user-facing classes only)
 
 """
 .. fb:display_title::
