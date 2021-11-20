@@ -110,7 +110,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 length_per_key.append(emb_config.embedding_dim)
 
         return KeyedTensor(
-            keys=features.keys(),
+            keys=keys,
             values=torch.cat(pooled_embeddings, dim=1),
             length_per_key=length_per_key,
         )

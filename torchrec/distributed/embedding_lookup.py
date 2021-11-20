@@ -950,6 +950,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                     )
                 ],
                 pooling_mode=self._pooling,
+                feature_table_map=self._feature_table_map,
             )
         )
         if device is not None and device.type != "meta":
@@ -982,7 +983,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
             indices=features.values().int(),
             offsets=features.offsets().int(),
             per_sample_weights=features.weights_or_none(),
-        )
+        ).float()
         return KeyedTensor(
             keys=self._emb_names,
             values=values,
