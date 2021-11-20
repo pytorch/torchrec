@@ -229,7 +229,7 @@ class RwEmbeddingSharding(EmbeddingSharding):
                         pooling=config[0].pooling,
                         is_weighted=config[0].is_weighted,
                         has_feature_processor=config[0].has_feature_processor,
-                        local_rows=shards[rank].shard_lengths[0],
+                        local_rows=shards[rank].shard_sizes[0],
                         local_cols=config[0].embedding_dim,
                         block_size=config[1].block_size,
                         compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),

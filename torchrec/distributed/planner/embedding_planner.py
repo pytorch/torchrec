@@ -190,7 +190,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             elif shard.sharding_type == ShardingType.COLUMN_WISE.value:
                 ranks = shard.ranks
                 emb_dims = [
-                    shard.shard_lengths[1]
+                    shard.shard_sizes[1]
                     # pyre-ignore [16]
                     for shard in shard.sharding_spec.shards
                 ]

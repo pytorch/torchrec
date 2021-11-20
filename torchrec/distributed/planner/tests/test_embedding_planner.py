@@ -141,7 +141,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     tables[0].embedding_dim,
                                 ],
@@ -158,7 +158,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[1].num_embeddings,
                                     tables[1].embedding_dim,
                                 ],
@@ -175,7 +175,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[2].num_embeddings,
                                     tables[2].embedding_dim,
                                 ],
@@ -192,7 +192,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[3].num_embeddings,
                                     tables[3].embedding_dim,
                                 ],
@@ -252,7 +252,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings // 2,
                                     tables[0].embedding_dim,
                                 ],
@@ -260,7 +260,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings // 2,
                                     tables[0].embedding_dim,
                                 ],
@@ -317,7 +317,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     2,
                                     10,
                                 ],
@@ -325,7 +325,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     2,
                                     10,
                                 ],
@@ -333,7 +333,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:1/cuda:1",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     1,
                                     10,
                                 ],
@@ -341,7 +341,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     0,
                                     10,
                                 ],
@@ -393,7 +393,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     tables[0].embedding_dim,
                                 ],
@@ -410,7 +410,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[1].num_embeddings,
                                     tables[1].embedding_dim,
                                 ],
@@ -427,7 +427,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[2].num_embeddings,
                                     tables[2].embedding_dim,
                                 ],
@@ -444,7 +444,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[3].num_embeddings,
                                     tables[3].embedding_dim,
                                 ],
@@ -509,7 +509,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     tables[0].embedding_dim,
                                 ],
@@ -526,7 +526,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[1].num_embeddings,
                                     tables[1].embedding_dim,
                                 ],
@@ -606,7 +606,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[0],
                                     tables[0].embedding_dim,
                                 ],
@@ -614,7 +614,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[1],
                                     tables[0].embedding_dim,
                                 ],
@@ -622,7 +622,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:1/cuda:1",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[2],
                                     tables[0].embedding_dim,
                                 ],
@@ -630,7 +630,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[3],
                                     tables[0].embedding_dim,
                                 ],
@@ -648,7 +648,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[0],
                                     tables[1].embedding_dim,
                                 ],
@@ -656,7 +656,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[1],
                                     tables[1].embedding_dim,
                                 ],
@@ -664,7 +664,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:1/cuda:1",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[2],
                                     tables[1].embedding_dim,
                                 ],
@@ -672,7 +672,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     local_rows[3],
                                     tables[1].embedding_dim,
                                 ],
@@ -745,7 +745,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     block_size,
                                 ],
@@ -753,7 +753,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     block_size,
                                 ],
@@ -829,7 +829,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     MIN_DIM,
                                 ],
@@ -837,7 +837,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:0/cuda:0",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[0].num_embeddings,
                                     residual,
                                 ],
@@ -855,7 +855,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[1].num_embeddings,
                                     MIN_DIM,
                                 ],
@@ -863,7 +863,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
                                 placement="rank:2/cuda:2",
                             ),
                             ShardMetadata(
-                                shard_lengths=[
+                                shard_sizes=[
                                     tables[1].num_embeddings,
                                     residual,
                                 ],

@@ -659,10 +659,10 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                 # manually create a row-wise offset
                 offset = (
                     metadata.shard_offsets[1] // table_config.block_size
-                ) * metadata.shard_lengths[0]
+                ) * metadata.shard_sizes[0]
 
             rw_shard = ShardMetadata(
-                shard_lengths=[metadata.shard_lengths[0]],
+                shard_sizes=[metadata.shard_sizes[0]],
                 shard_offsets=[offset],
                 placement=metadata.placement,
             )

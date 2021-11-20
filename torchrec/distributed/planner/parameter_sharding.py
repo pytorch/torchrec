@@ -126,7 +126,7 @@ class TwParameterSharding:
         rank = sharding_option.ranks[0]
         shards = [
             ShardMetadata(
-                shard_lengths=[
+                shard_sizes=[
                     tensor.shape[0],
                     tensor.shape[1],
                 ],
@@ -158,7 +158,7 @@ class RwParameterSharding:
         )
         shards = [
             ShardMetadata(
-                shard_lengths=[
+                shard_sizes=[
                     local_rows[rank],
                     tensor.shape[1],
                 ],
@@ -199,7 +199,7 @@ class TwRwParameterSharding:
         )
         shards = [
             ShardMetadata(
-                shard_lengths=[
+                shard_sizes=[
                     local_rows[rank],
                     local_cols[rank],
                 ],
@@ -247,7 +247,7 @@ class CwParameterSharding:
         offsets = [0] + list(itertools.accumulate(merged_sizes))[:-1]
         shards = [
             ShardMetadata(
-                shard_lengths=[
+                shard_sizes=[
                     tensor.shape[0],
                     merged_sizes[i],
                 ],

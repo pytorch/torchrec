@@ -78,7 +78,7 @@ def _to_sharding_plan(
             else EnumerableShardingSpec(
                 [
                     ShardMetadata(
-                        shard_lengths=shard.length,
+                        shard_sizes=shard.length,
                         shard_offsets=shard.offset,
                         placement=_placement(
                             compute_device, cast(int, shard.rank), local_size

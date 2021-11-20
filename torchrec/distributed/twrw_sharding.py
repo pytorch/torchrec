@@ -289,7 +289,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
                     shard_idx = rank - (table_node * local_size)
                     table.embedding_names = config[0].embedding_names
                     table.feature_names = config[0].feature_names
-                    table.local_rows = shards[shard_idx].shard_lengths[0]
+                    table.local_rows = shards[shard_idx].shard_sizes[0]
                     table.local_cols = config[0].embedding_dim
                     table.local_metadata = shards[shard_idx]
                     table.weight_init_max = config[0].weight_init_max
