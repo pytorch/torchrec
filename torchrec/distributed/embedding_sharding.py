@@ -30,15 +30,16 @@ from torchrec.types import Multistreamable
 @dataclass
 class SequenceShardingContext(Multistreamable):
     """
-    SequenceEmbeddingAll2all has the same comm pattern as KJTAll2all.
-    Stores KJTAll2all context and reuse it in SequenceEmbeddingAll2all.
+    SequenceEmbeddingAllToAll has the same comm pattern as KJTAllToAll.
+    Stores KJTAllToAll context and reuses it in SequenceEmbeddingAllToAll.
 
-    features_before_input_dist: stores the original KJT before input dist
-    input_splits: stores the input splits of KJT ALl2all
-    input_splits: stores the output splits of KJT ALl2all
+    features_before_input_dist: stores the original KJT before input dist.
+    input_splits: stores the input splits of KJT AlltoAll.
+    output_splits: stores the output splits of KJT AlltoAll.
     unbucketize_permute_tensor: stores the permute order of
-        KJT bucketize (forrow-wise sharding only)
-    lengths_after_input_dist: stores the KJT length after input dist
+        KJT bucketize (for row-wise sharding only).
+    lengths_after_input_dist: stores the KJT length after input dist.
+
     """
 
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
@@ -57,6 +58,17 @@ class SequenceShardingContext(Multistreamable):
 
 
 class SparseFeaturesAllToAllAwaitable(Awaitable[SparseFeatures]):
+    """
+    Awaitable of sparse features redistributed with AlltoAll collective.
+
+    Constructor Args:
+        id_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]): awaitable
+            of sharded id list features.
+        id_score_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]):
+            awaitable of sharded id score list features.
+
+    """
+
     def __init__(
         self,
         id_list_features_awaitable: Optional[Awaitable[KeyedJaggedTensor]],
@@ -67,6 +79,13 @@ class SparseFeaturesAllToAllAwaitable(Awaitable[SparseFeatures]):
         self._id_score_list_features_awaitable = id_score_list_features_awaitable
 
     def wait(self) -> SparseFeatures:
+        """
+        Syncs sparse features after AlltoAll.
+
+        Returns:
+            SparseFeatures: synced sparse features.
+
+        """
         return SparseFeatures(
             id_list_features=self._id_list_features_awaitable.wait()
             if self._id_list_features_awaitable is not None
@@ -85,18 +104,25 @@ def bucketize_kjt_before_all2all(
     bucketize_pos: bool = False,
 ) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
     """
-    Bucketize the `values` in KeyedJaggedTensor into `num_buckets` buckets,
+    Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
     `lengths` are readjusted based on the bucketization results.
 
-    Note: This function should be used only for row-wise sharding before calling SparseFeaturesAllToAll
+    Note: This function should be used only for row-wise sharding before calling
+    SparseFeaturesAllToAll.
 
     Args:
-        num_buckets (int): The number of buckets to bucketize the values into.
-        block_sizes: (torch.Tensor): The bucket sizes for the keyed dimension.
-        output_permute (bool): Output the memory location mapping from the unbucketized values to bucketized values or not.
-        bucketize_pos (bool):  Output the changed position of the bucketized values or not.
+        num_buckets (int): number of buckets to bucketize the values into.
+        block_sizes: (torch.Tensor): bucket sizes for the keyed dimension.
+        output_permute (bool): output the memory location mapping from the unbucketized
+            values to bucketized values or not.
+        bucketize_pos (bool): output the changed position of the bucketized values or
+            not.
+
     Returns:
-        The bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized values.
+        Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized
+            `KeyedJaggedTensor` and the optional permute mapping from the unbucketized
+            values to bucketized value.
+
     """
     num_features = len(kjt.keys())
     assert (
@@ -139,6 +165,92 @@ def bucketize_kjt_before_all2all(
 
 
 class SparseFeaturesAllToAll(nn.Module):
+    """
+    Redistributes sparse features to a ProcessGroup utilizing an AlltoAll collective.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): process group for AlltoAll communication.
+        id_list_features_per_rank (List[int]): number of id list features to send to
+            each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features to
+            send to each rank
+        device (Optional[torch.device]): device on which buffers will be allocated.
+        stagger (int): stagger value to apply to recat tensor, see _recat function for
+            more detail.
+
+    Call Args:
+        sparse_features (SparseFeatures): sparse features to redistribute.
+
+    Returns:
+        Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+
+    Example:
+        >>> id_list_features_per_rank = [2, 1]
+        >>> id_score_list_features_per_rank = [1, 3]
+        >>> sfa2a = SparseFeaturesAllToAll(
+                pg,
+                id_list_features_per_rank,
+                id_score_list_features_per_rank
+            )
+        >>> awaitable = sfa2a(rank0_input: SparseFeatures)
+
+        where:
+            rank0_input.id_list_features is KeyedJaggedTensor holding
+
+                    0           1           2
+            'A'    [A.V0]       None        [A.V1, A.V2]
+            'B'    None         [B.V0]      [B.V1]
+            'C'    [C.V0]       [C.V1]      None
+
+            rank1_input.id_score_list_features is KeyedJaggedTensor holding
+
+                    0           1           2
+            'A'     [A.V3]      [A.V4]      None
+            'B'     None        [B.V2]      [B.V3, B.V4]
+            'C'     [C.V2]      [C.V3]      None
+
+            rank0_input.id_list_features is KeyedJaggedTensor holding
+
+                    0           1           2
+            'A'    [A.V0]       None        [A.V1, A.V2]
+            'B'    None         [B.V0]      [B.V1]
+            'C'    [C.V0]       [C.V1]      None
+            'D'    None         [D.V0]      None
+
+            rank1_input.id_score_list_features is KeyedJaggedTensor holding
+
+                    0           1           2
+            'A'     [A.V3]      [A.V4]      None
+            'B'     None        [B.V2]      [B.V3, B.V4]
+            'C'     [C.V2]      [C.V3]      None
+            'D'     [D.V1]      [D.V2]      [D.V3, D.V4]
+
+        >>> rank0_output: SparseFeatures = awaitable.wait()
+
+            rank0_output.id_list_features is KeyedJaggedTensor holding
+
+                    0           1           2           3           4           5
+            'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+            'B'     None        [B.V0]    [B.V1]        None        [B.V2]     [B.V3, B.V4]
+
+            rank1_output.id_score_list_features is KeyedJaggedTensor holding
+                    0           1           2           3           4           5
+            'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
+
+            rank1_output.id_list_features is KeyedJaggedTensor holding
+
+                    0           1           2           3           4           5
+            'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+
+            rank1_output.id_score_list_features is KeyedJaggedTensor holding
+
+                    0           1           2           3           4           5
+            'B'     None        [B.V0]      [B.V1]      None        [B.V2]      [B.V3, B.V4]
+            'C'     [C.V0]       [C.V1]      None       [C.V2]      [C.V3]      None
+            'D      None         [D.V0]      None       [D.V1]      [D.V2]      [D.V3, D.V4]
+
+    """
+
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -159,6 +271,16 @@ class SparseFeaturesAllToAll(nn.Module):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeatures]:
+        """
+        Sends sparse features to relevant ProcessGroup ranks.
+
+        Call Args:
+            sparse_features (SparseFeatures): sparse features to distribute.
+
+        Returns:
+            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+
+        """
         return SparseFeaturesAllToAllAwaitable(
             id_list_features_awaitable=self._id_list_features_all2all.forward(
                 sparse_features.id_list_features
@@ -173,10 +295,22 @@ class SparseFeaturesAllToAll(nn.Module):
         )
 
 
-# group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
 ) -> Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
+    """
+    Group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
+
+    Args:
+        tables_per_rank (List[List[ShardedEmbeddingTable]]): list of sharding embedding
+            tables per rank.
+
+    Returns:
+        Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
+            per rank list of GroupedEmbeddingConfig for unscored and scored features.
+
+    """
+
     def _group_tables_per_rank(
         embedding_tables: List[ShardedEmbeddingTable],
     ) -> Tuple[List[GroupedEmbeddingConfig], List[GroupedEmbeddingConfig]]:
@@ -272,6 +406,14 @@ def group_tables(
 
 
 class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
+    """
+    Awaitable of SparseFeaturesList.
+
+    Constructor Args:
+        awaitables: (List[Awaitable[SparseFeatures]])
+
+    """
+
     def __init__(
         self,
         awaitables: List[Awaitable[SparseFeatures]],
@@ -280,12 +422,20 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
         self.awaitables = awaitables
 
     def wait(self) -> SparseFeaturesList:
+        """
+        Syncs sparse features in SparseFeaturesList.
+
+        Returns:
+            SparseFeaturesList: synced SparseFeaturesList.
+
+        """
         return SparseFeaturesList([w.wait() for w in self.awaitables])
 
 
 class BaseSparseFeaturesDist(abc.ABC, nn.Module):
     """
     Converts input from data-parallel to model-parallel.
+
     """
 
     @abc.abstractmethod
@@ -298,8 +448,8 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module):
 
 class BasePooledEmbeddingDist(abc.ABC, nn.Module):
     """
-    Converts output of pooled EmbeddingLookup
-    from model-parallel to data-parallel.
+    Converts output of pooled EmbeddingLookup from model-parallel to data-parallel.
+
     """
 
     @abc.abstractmethod
@@ -309,8 +459,8 @@ class BasePooledEmbeddingDist(abc.ABC, nn.Module):
 
 class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
     """
-    Converts output of sequence EmbeddingLookup
-    from model-parallel to data-parallel.
+    Converts output of sequence EmbeddingLookup from model-parallel to data-parallel.
+
     """
 
     pass
@@ -324,7 +474,9 @@ class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
 
 class EmbeddingSharding(abc.ABC):
     """
-    Used to implement different sharding type for EmbeddingBagCollection, e.g. table_wise.
+    Used to implement different sharding types for EmbeddingBagCollection, e.g.
+    table_wise.
+
     """
 
     @abc.abstractmethod

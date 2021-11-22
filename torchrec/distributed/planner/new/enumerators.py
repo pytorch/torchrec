@@ -269,13 +269,19 @@ def calculate_shard_lengths_and_offsets(
 def _calculate_rw_shard_lengths_and_offsets(
     hash_size: int, num_devices: int, columns: int
 ) -> Tuple[List[List[int]], List[List[int]]]:
-    # Set prefix of shard_lengths to be  ceil(hash_size/num_devices). For exmaple
-    # if hash_size = 10, num_devices = 3, we will allocate the rows as
-    # 3,3,3,1 (rather than 3,3,2,2). This is due to implementation in RWSharding that sets
-    # block_size_lists to be ceil. The balanced way is harder to support on GPU. For more details
-    # see https://fb.quip.com/xbgbAchCTOL0
-    # Also consider the example of hash_size = 5, num_devices = 4. The expected rows per rank is
-    # [2,2,1,0].
+    """
+    Sets prefix of shard_lengths to be ceil(hash_size/num_devices).
+
+    For example if hash_size = 10, num_devices = 3, we will allocate the rows as 3,3,3,1
+    (rather than 3,3,2,2).
+    This is due to implementation in RW sharding that sets block_size_lists to be ceil.
+    The balanced way is harder to support on GPU. For more details see
+    https://fb.quip.com/xbgbAchCTOL0
+
+    Also consider the example of hash_size = 5, num_devices = 4. The expected rows per
+    rank is [2,2,1,0].
+    """
+
     num_devices: int = min(num_devices, hash_size)
 
     block_size: int = math.ceil(hash_size / num_devices)
