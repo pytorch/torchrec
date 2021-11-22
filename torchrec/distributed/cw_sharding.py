@@ -66,7 +66,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
                     table.embedding_names = config[0].embedding_names
                     table.feature_names = config[0].feature_names
                     table.local_rows = config[0].num_embeddings
-                    table.local_cols = config[0].embedding_dim
+                    table.local_cols = shards[shard_idx].shard_sizes[1]
                     table.local_metadata = shards[shard_idx]
 
                 tables_per_rank[rank].append(table)
