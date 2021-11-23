@@ -39,24 +39,27 @@ def cost_func_emb_wall_time(
     Only models forward costs (ignores backward costs)
     The computation cost estimation is based on EmbeddingBagCollectionSharder
     (pooledEmbedding)
+    Note: the computation of the output cost will count len(input_length) times due to pooling.
 
-    shard_lengths: the list of (local_rows, local_cols) pf each shard
-    input_lengths: the list of the average number of lookups of each input query feature
-    bw_intra_host: the bandwidth within the single host like multiple threads
-    bw_inter_host: the bandwidth between two hosts like multiple machines
-    input_dist:
-        tw_sharding: https://fburl.com/code/uxueh8wh
-        rw_sharding: https://fburl.com/code/zemh4rzw
-        cw_sharding: same as tw, consider as multiple tables (cw_emb_dim * num_sharding = tw_emb_dim)
-        twrw_sharding: https://fburl.com/code/vrweq0ri
-    output_dist:
-        tw_sharding: https://fburl.com/code/ete7schi
-        rw_sharding: https://fburl.com/code/gl9186u1
-        cw_sharding: same as tw, consider as multiple tables (cw_emb_dim * num_sharding = tw_emb_dim)
-        twrw_sharding: https://fburl.com/code/z9nyjflj
+    Args:
+        shard_lengths (List[List[int]]): the list of (local_rows, local_cols) pf each shard.
+        compute_kernel (str): comput kernel.
+        compute_device (str): compute device.
+        sharding_type (str): tw, rw, cw, twrw, dp.
+        batch_size (int): the size of each batch.
+        world_size (int): the number of devices for all hosts.
+        local_world_size (int): the number of the device for each host.
+        input_lengths (List[float]): the list of the average number of lookups of each input query feature.
+        input_data_type_size (float): the data type size of the distributed data_parallel input.
+        output_data_type_size (float): the data type size of the distributed data_parallel output.
+        bw_intra_host (int): the bandwidth within the single host like multiple threads.
+        bw_inter_host (int): the bandwidth between two hosts like multiple machines.
+        has_input_dist (bool = True): if we need input distributed.
+        has_output_dist (bool = True): if we need output distributed.
+        caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth of device.
 
-    Note: the computation of the output cost will count len(input_length) due to pooling
-
+    Returns:
+        List[float]: the list of cost for each shard.
     """
     shard_costs = []
     B = 1.0 * world_size * batch_size  # global batch size
@@ -290,7 +293,13 @@ def _get_dp_sharding_cost(
 
 class EmbeddingWTCostCalculator(Calculator):
     """
-    Embedding Wall Time Cost Calculator
+    Calculate embedding wall time cost for given topology and constraints.
+
+    Constructor Args:
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, PlannerConstraints]]): dict of parameter name
+            to provided PlannerConstraints.
+
     """
 
     def __init__(
@@ -302,6 +311,14 @@ class EmbeddingWTCostCalculator(Calculator):
         self._constraints = constraints
 
     def run(self, sharding_options: List[ShardingOption]) -> None:
+
+        """
+        Generates the list of costs for each shard for each sharding_option.
+
+        Args:
+            sharding_options: list of ShardingOption.
+
+        """
         for sharding_option in sharding_options:
             caching_ratio = (
                 self._constraints[sharding_option.name].caching_ratio
