@@ -111,6 +111,21 @@ class EmbeddingPlacer(Placer):
         self._num_errors = 0
 
     def run(self, sharding_options: List[ShardingOption]) -> ShardingPlan:
+        """
+        Gets the ShardingPlan with minimum max(device.cost).
+
+        It traverses all possible self._rankers, sharding options from self._rankers and
+        self._partitioners. For every (ranker, sharding_options, partitioner) combination,
+        the patitioner tries to place the sharding options on topology. It computes the
+        max(device.cost), and continue with next sharding_options poped from ranker.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of all possible sharding options
+                for each parameter.
+
+        Returns:
+            ShardingPlan: sharding plan with minimum cost.
+        """
         min_cost = MAX_SIZE
         sharding_solution = None
         topology_solution = None
