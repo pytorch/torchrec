@@ -188,6 +188,8 @@ M = TypeVar("M", bound=nn.Module)
 
 class BaseEmbeddingSharder(ModuleSharder[M]):
     def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__()
+
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:

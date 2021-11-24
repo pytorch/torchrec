@@ -407,6 +407,9 @@ class ModuleSharder(abc.ABC, Generic[M]):
     e.g. EmbeddingBagCollection.
     """
 
+    def __init__(self) -> None:
+        torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
+
     @abc.abstractclassmethod
     # pyre-ignore [3]
     def shard(

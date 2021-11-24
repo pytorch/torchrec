@@ -24,11 +24,12 @@ from torchrec.distributed.utils import filter_state_dict
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 
-# pyre-ignore [9]
-default_sharders: List[ModuleSharder[nn.Module]] = [
-    EmbeddingBagCollectionSharder(),
-    QuantEmbeddingBagCollectionSharder(),
-]
+
+def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
+    return [
+        cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
+    ]
 
 
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
@@ -70,7 +71,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         env: Optional[ShardingEnv] = None,
         device: Optional[torch.device] = None,
         plan: Optional[ShardingPlan] = None,
-        sharders: List[ModuleSharder[nn.Module]] = default_sharders,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         init_data_parallel: bool = True,
         init_parameters: bool = True,
     ) -> None:
@@ -91,6 +92,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         self.device: torch.device = device
 
+        if sharders is None:
+            sharders = get_default_sharders()
         self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }

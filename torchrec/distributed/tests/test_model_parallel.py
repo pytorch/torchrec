@@ -18,7 +18,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagSharder
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
-    default_sharders,
+    get_default_sharders,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import ParameterHints
@@ -434,8 +434,11 @@ class ModelParallelStateDictTest(unittest.TestCase):
         ]
 
     def _generate_dmps_and_batch(
-        self, sharders: List[ModuleSharder[nn.Module]] = default_sharders
+        self, sharders: Optional[List[ModuleSharder[nn.Module]]] = None
     ) -> Tuple[List[DistributedModelParallel], ModelInput]:
+        if sharders is None:
+            sharders = get_default_sharders()
+
         _, local_batch = ModelInput.generate(
             batch_size=self.batch_size,
             world_size=1,
@@ -482,13 +485,13 @@ class ModelParallelStateDictTest(unittest.TestCase):
             module=m1,
             init_data_parallel=False,
             init_parameters=False,
-            sharders=default_sharders,
+            sharders=get_default_sharders(),
             device=self.device,
             env=env,
             plan=EmbeddingShardingPlanner(
                 world_size=env.world_size,
                 compute_device_type=self.device.type,
-            ).plan(m1, default_sharders),
+            ).plan(m1, get_default_sharders()),
         )
 
         m2 = TestSparseNN(
@@ -502,13 +505,13 @@ class ModelParallelStateDictTest(unittest.TestCase):
             module=m2,
             init_data_parallel=False,
             init_parameters=False,
-            sharders=default_sharders,
+            sharders=get_default_sharders(),
             device=torch.device("meta"),
             env=env,
             plan=EmbeddingShardingPlanner(
                 world_size=env.world_size,
                 compute_device_type=self.device.type,
-            ).plan(m2, default_sharders),
+            ).plan(m2, get_default_sharders()),
         )
 
         sd1 = dmp1.state_dict()
