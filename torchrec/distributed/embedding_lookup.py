@@ -3,6 +3,7 @@
 import abc
 import copy
 import itertools
+import logging
 from collections import OrderedDict
 from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
@@ -48,6 +49,8 @@ from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
 )
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _load_state_dict(
@@ -657,9 +660,7 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
             if sharding_dim == 1:
                 # for column-wise sharding, we still create row-wise sharded metadata for optimizer
                 # manually create a row-wise offset
-                offset = (
-                    metadata.shard_offsets[1] // table_config.block_size
-                ) * metadata.shard_sizes[0]
+                offset = table_config.shard_idx * metadata.shard_sizes[0]
 
             rw_shard = ShardMetadata(
                 shard_sizes=[metadata.shard_sizes[0]],
@@ -675,11 +676,7 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
             if sharding_dim == 1:
                 # for column-wise sharding, we create len_shards base on
                 # the block size of the table
-                len_shards, res = divmod(
-                    table_config.embedding_dim, table_config.block_size
-                )
-                if res > 0:
-                    len_shards += 1
+                len_shards = table_config.num_shards
             else:
                 len_shards = 1
             return len_shards

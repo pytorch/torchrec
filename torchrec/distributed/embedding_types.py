@@ -83,8 +83,12 @@ class ShardedConfig:
     local_rows: int = 0
     local_cols: int = 0
     # The block size of sharding dim on each shard.
-    # mainly used in cw, not applicable in tw/dp
     block_size: int = 0
+    # Following two are mainly used in cw, not applicable in tw/dp
+    # Number of total shards.
+    num_shards: int = 0
+    # Index of current shard.
+    shard_idx: int = 0
 
 
 @dataclass

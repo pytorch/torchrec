@@ -58,6 +58,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
                     is_weighted=config[0].is_weighted,
                     has_feature_processor=config[0].has_feature_processor,
                     block_size=config[1].block_size,
+                    num_shards=len(placed_ranks),
                     compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
                 )
 
@@ -68,6 +69,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
                     table.local_rows = config[0].num_embeddings
                     table.local_cols = shards[shard_idx].shard_sizes[1]
                     table.local_metadata = shards[shard_idx]
+                    table.shard_idx = shard_idx
 
                 tables_per_rank[rank].append(table)
 
