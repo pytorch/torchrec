@@ -41,6 +41,52 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
 class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
+    """
+    Bucketizes sparse features in TWRW fashion and then redistributes with to AlltoAll
+    collective operation.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
+            communication.
+        num_id_list_features (int):
+        num_id_score_list_features (int):
+        id_list_features_per_rank (List[int]): number of id list features to send to
+            each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features to
+            send to each rank
+        id_list_feature_hash_sizes (List[int]): hash size of id list features.
+        id_score_list_feature_hash_sizes (List[int]): has size of id score list features.
+        device (Optional[torch.device]): device on which buffers will be allocated.
+        has_feature_processor (bool):
+
+    Example:
+        3 features
+        2 hosts with 2 devices each
+
+        Bucketize each feature into 2 buckets
+        Staggered shuffle with feature splits [2, 1]
+        AlltoAll operation
+
+        Note: result of staggered shuffle and AlltoAll operation look the same after
+        reordering in AlltoAll
+
+        Result:
+            host 0 device 0:
+                feature 0 bucket 0
+                feature 1 bucket 0
+
+            host 0 device 1:
+                feature 0 bucket 1
+                feature 1 bucket 1
+
+            host 1 device 0:
+                feature 2 bucket 0
+
+            host 1 device 1:
+                feature 2 bucket 1
+    """
+
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -94,7 +140,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
             ),
         )
         self.register_buffer(
-            "_id_list_sf_staggerd_shuffle_tensor",
+            "_id_list_sf_staggered_shuffle_tensor",
             torch.tensor(
                 self._id_list_sf_staggered_shuffle,
                 device=device,
@@ -122,6 +168,19 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeatures]:
+        """
+        Bucketizes sparse feature values into local world size number of buckets,
+        performs staggered shuffle on the sparse features, and then performs AlltoAll
+        operation.
+
+        Call Args:
+            sparse_features (SparseFeatures): sparse features to bucketize and
+                redistribute.
+
+        Returns:
+            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+
+        """
         bucketized_sparse_features = SparseFeatures(
             id_list_features=bucketize_kjt_before_all2all(
                 sparse_features.id_list_features,
@@ -131,7 +190,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
                 bucketize_pos=self._has_feature_processor,
             )[0].permute(
                 self._id_list_sf_staggered_shuffle,
-                self._id_list_sf_staggerd_shuffle_tensor,
+                self._id_list_sf_staggered_shuffle_tensor,
             )
             if sparse_features.id_list_features is not None
             else None,
@@ -151,6 +210,11 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
         return self._dist(bucketized_sparse_features)
 
     def _staggered_shuffle(self, features_per_rank: List[int]) -> List[int]:
+        """
+        Reorders sparse data such that data is in contiguous blocks and correctly ordered
+        for global TWRW layout.
+
+        """
         nodes = self._world_size // self._local_size
         features_per_node = [
             features_per_rank[node * self._local_size] for node in range(nodes)
@@ -167,6 +231,22 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
 
 
 class TwRwEmbeddingDist(BasePooledEmbeddingDist):
+    """
+    Redistributes pooled embedding tensor in TWRW fashion by performing a reduce-scatter
+    operation row wise on the host level and then an AlltoAll operation table wise on
+    the global level.
+
+    Constructor Args:
+        cross_pg (dist.ProcessGroup): global level ProcessGroup for AlltoAll
+            communication.
+        intra_pg (dist.ProcessGroup): host level ProcessGroup for reduce-scatter
+            communication.
+        dim_sum_per_node (List[int]): number of features (sum of dimensions) of the
+            embedding for each host.
+        device (Optional[torch.device]): device on which buffers will be allocated.
+
+    """
+
     def __init__(
         self,
         cross_pg: dist.ProcessGroup,
@@ -183,12 +263,24 @@ class TwRwEmbeddingDist(BasePooledEmbeddingDist):
         )
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+        """
+        Performs reduce-scatter pooled operation on pooled embeddings tensor followed by
+        AlltoAll pooled operation.
+
+        Call Args:
+            local_embs (torch.Tensor): pooled embeddings tensor to distribute.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
+
+        """
         return self._cross_dist(self._intra_dist(local_embs).wait())
 
 
 class TwRwEmbeddingSharding(EmbeddingSharding):
     """
-    Shards embedding bags table-wise then row-wise
+    Shards embedding bags table-wise then row-wise.
+
     """
 
     def __init__(
