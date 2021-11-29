@@ -26,7 +26,7 @@ num_features: number of dense features
 
 class SparseArch(nn.Module):
     """
-    Processes the Sparse Features of SparseNN. Does Embedding Lookup for all
+    Processes the Sparse Features of DLRM. Does Embedding Lookup for all
     EmbeddingBag and Embedding features of each collection.
 
     Constructor Args:
@@ -76,7 +76,7 @@ class SparseArch(nn.Module):
 
 class DenseArch(nn.Module):
     """
-    Processes the dense features of SparseNN model.
+    Processes the dense features of DLRM model.
 
     Constructor Args:
         in_features: int - size of the input.
@@ -180,7 +180,7 @@ class InteractionArch(nn.Module):
 
 class OverArch(nn.Module):
     """
-    Final Arch of SparseNN - simple MLP over OverArch
+    Final Arch of DLRM - simple MLP over OverArch.
 
     Constructor Args:
         in_features: int

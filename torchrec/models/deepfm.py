@@ -11,7 +11,7 @@ from torchrec.sparse.jagged_tensor import KeyedTensor
 
 class SparseArch(nn.Module):
     """
-    Processes the Sparse Features of SparseNN. Does Embedding Lookup for all
+    Processes the Sparse Features of DeepFMNN model. Does Embedding Lookup for all
     EmbeddingBag and Embedding features of each collection.
 
     Constructor Args:
