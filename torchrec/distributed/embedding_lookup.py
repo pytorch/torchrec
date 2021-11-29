@@ -643,43 +643,54 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
         self._pg = pg
         self._fused_optim_rowwise: bool = False
+        self._fused_optim_partial_rowwise: bool = False
         if self._emb_module.optimizer in [
             OptimType.ROWWISE_ADAGRAD,
             OptimType.EXACT_ROWWISE_ADAGRAD,
+            OptimType.EXACT_ROWWISE_WEIGHTED_ADAGRAD,
+        ]:
+            self._fused_optim_rowwise = True
+        if self._emb_module.optimizer in [
             OptimType.PARTIAL_ROWWISE_ADAM,
             OptimType.PARTIAL_ROWWISE_LAMB,
         ]:
-            self._fused_optim_rowwise = True
+            self._fused_optim_partial_rowwise = True
 
-        def to_rowwise_sharded_metadata(
+        def to_rowwise_momentum_sharded_metadata(
+            rowwise: bool,
             metadata: ShardMetadata,
             sharding_dim: int,
             table_config: ShardedEmbeddingTable,
         ) -> ShardMetadata:
-            offset = metadata.shard_offsets[0]
-            if sharding_dim == 1:
-                # for column-wise sharding, we still create row-wise sharded metadata for optimizer
-                # manually create a row-wise offset
-                offset = table_config.shard_idx * metadata.shard_sizes[0]
+            if rowwise:
+                offset = metadata.shard_offsets[0]
+                if sharding_dim == 1:
+                    # for column-wise sharding, we still create row-wise sharded metadata for optimizer
+                    # manually create a row-wise offset
+                    offset = table_config.shard_idx * metadata.shard_sizes[0]
 
-            rw_shard = ShardMetadata(
-                shard_sizes=[metadata.shard_sizes[0]],
-                shard_offsets=[offset],
-                placement=metadata.placement,
-            )
-
-            return rw_shard
-
-        def to_rowwise_num_shards(
-            sharding_dim: int, table_config: ShardedEmbeddingTable
-        ) -> int:
-            if sharding_dim == 1:
-                # for column-wise sharding, we create len_shards base on
-                # the block size of the table
-                len_shards = table_config.num_shards
+                return ShardMetadata(
+                    shard_sizes=[metadata.shard_sizes[0]],
+                    shard_offsets=[offset],
+                    placement=metadata.placement,
+                )
             else:
-                len_shards = 1
-            return len_shards
+                return metadata
+
+        def to_rowwise_momentum_size(
+            rowwise: bool, sharding_dim: int, table_config: ShardedEmbeddingTable
+        ) -> List[int]:
+            if rowwise:
+                if sharding_dim == 1:
+                    # for column-wise sharding, we create len_shards base on
+                    # the block size of the table
+                    len_shards = table_config.num_shards
+                else:
+                    len_shards = 1
+
+                return [table_config.num_embeddings * len_shards]
+            else:
+                return [table_config.num_embeddings, table_config.embedding_dim]
 
         # pyre-ignore [33]
         state: Dict[Any, Any] = {}
@@ -718,14 +729,12 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                     and global_config.local_cols != 0
                     else 0
                 )
-                if self._fused_optim_rowwise:
-                    len_rw_shards = to_rowwise_num_shards(sharding_dim, global_config)
-                    momentum_size = [global_config.num_embeddings * len_rw_shards]
-                else:
-                    momentum_size = [
-                        global_config.num_embeddings,
-                        global_config.embedding_dim,
-                    ]
+                momentum1_size = to_rowwise_momentum_size(
+                    self._fused_optim_rowwise, sharding_dim, global_config
+                )
+                momentum2_size = to_rowwise_momentum_size(
+                    self._fused_optim_partial_rowwise, sharding_dim, global_config
+                )
 
                 if has_local_shards:
                     config_idx = config.local_embedding_tables.index(global_config)
@@ -737,29 +746,35 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                     assert global_config.local_metadata is not None
                     momentum1_key = f"{global_config.name}.momentum1"
 
-                    local_metadata = (
-                        to_rowwise_sharded_metadata(
-                            global_config.local_metadata, sharding_dim, global_config
-                        )
-                        if self._fused_optim_rowwise
-                        else global_config.local_metadata
+                    momentum1_local_metadata = to_rowwise_momentum_sharded_metadata(
+                        self._fused_optim_rowwise,
+                        global_config.local_metadata,
+                        sharding_dim,
+                        global_config,
                     )
 
                     momentum1 = sharded_tensor.init_from_local_shards(
-                        [Shard(optimizer_states[0], local_metadata)],
-                        momentum_size,
+                        [Shard(optimizer_states[0], momentum1_local_metadata)],
+                        momentum1_size,
                         process_group=self._pg,
                     )
                     state[weight][momentum1_key] = momentum1
 
                     # momentum2
                     if has_momentum2:
-                        assert table_config.local_rows == optimizer_states[1].size(0)
+                        assert global_config.local_rows == optimizer_states[1].size(0)
+                        assert global_config.local_metadata is not None
                         momentum2_key = f"{table_config.name}.momentum2"
+                        momentum2_local_metadata = to_rowwise_momentum_sharded_metadata(
+                            self._fused_optim_partial_rowwise,
+                            global_config.local_metadata,
+                            sharding_dim,
+                            global_config,
+                        )
 
                         momentum2 = sharded_tensor.init_from_local_shards(
-                            [Shard(optimizer_states[1], local_metadata)],
-                            momentum_size,
+                            [Shard(optimizer_states[1], momentum2_local_metadata)],
+                            momentum2_size,
                             process_group=self._pg,
                         )
                         state[weight][momentum2_key] = momentum2
@@ -769,14 +784,14 @@ class EmbeddingBagFusedOptimizer(FusedOptimizer):
                     # momentum1
                     sharded_tensor.init_from_local_shards(
                         [],
-                        momentum_size,
+                        momentum1_size,
                         process_group=self._pg,
                     )
 
                     if has_momentum2:
                         sharded_tensor.init_from_local_shards(
                             [],
-                            momentum_size,
+                            momentum2_size,
                             process_group=self._pg,
                         )
 
