@@ -56,6 +56,30 @@ def _default_row_mapper(example: List[str]) -> Dict[str, Union[int, str]]:
 
 
 class CriteoIterDataPipe(IterDataPipe):
+    """
+    IterDataPipe that can be used to stream either the Criteo 1TB Click Logs Dataset
+    (https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/) or the
+    Kaggle/Criteo Display Advertising Dataset
+    (https://www.kaggle.com/c/criteo-display-ad-challenge/) from the source TSV
+    files.
+
+    Args:
+        paths (Iterable[str]): local paths to TSV files that constitute the Criteo
+            dataset.
+        row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each
+            split TSV line.
+        open_kw: options to pass to underlying invocation of
+            iopath.common.file_io.PathManager.open.
+
+    Example:
+        >>> datapipe = CriteoIterDataPipe(
+        >>>     ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
+        >>> )
+        >>> datapipe = dp.iter.Batcher(datapipe, 100)
+        >>> datapipe = dp.iter.Collator(datapipe)
+        >>> batch = next(iter(datapipe))
+    """
+
     def __init__(
         self,
         paths: Iterable[str],
@@ -96,9 +120,12 @@ def criteo_terabyte(
 ) -> IterDataPipe:
     """`Criteo 1TB Click Logs <https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/>`_ Dataset
     Args:
-        paths (str): local paths to TSV files that constitute the Criteo 1TB dataset.
-        row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each split TSV line.
-        open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.
+        paths (Iterable[str]): local paths to TSV files that constitute the Criteo 1TB
+            dataset.
+        row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each
+            split TSV line.
+        open_kw: options to pass to underlying invocation of
+            iopath.common.file_io.PathManager.open.
 
     Example:
         >>> datapipe = criteo_terabyte(

@@ -122,6 +122,33 @@ class _RandomRecBatch:
 
 
 class RandomRecDataset(IterableDataset[Batch]):
+    """
+    Random iterable dataset used to generate batches for recommender systems
+    (RecSys). Currently produces unweighted sparse features only. TODO: Add
+    weighted sparse features.
+
+    Args:
+        keys (List[str]): List of feature names for sparse features.
+        batch_size (int): batch size.
+        hash_size (Optional[int]): Max sparse id value. All sparse IDs will be taken
+            modulo this value.
+        hash_sizes (Optional[List[int]]): Max sparse id value per feature in keys. Each
+            sparse ID will be taken modulo the corresponding value from this argument.
+        ids_per_feature (int): Number of IDs per sparse feature.
+        num_dense (int): Number of dense features.
+        manual_seed (int): Seed for deterministic behavior.
+
+    Example:
+        >>> dataset = RandomRecDataset(
+        >>>     keys=["feat1", "feat2"],
+        >>>     batch_size=16,
+        >>>     hash_size=100_000,
+        >>>     ids_per_feature=1,
+        >>>     num_dense=13,
+        >>> ),
+        >>> example = next(iter(dataset))
+    """
+
     def __init__(
         self,
         keys: List[str],
