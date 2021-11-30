@@ -244,6 +244,8 @@ def _get_storage(
     ddr = storage_in_gb.get("ddr", None)
     if ddr is None:
         ddr = DEFAULT_DDR_STORAGE
+    else:
+        ddr = gb_to_bytes(ddr)
 
     return {
         "hbm": hbm,
