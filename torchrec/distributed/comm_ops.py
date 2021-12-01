@@ -35,6 +35,14 @@ def set_gradient_division(val: bool) -> None:
 
 
 class Request(Awaitable[W]):
+    """
+    Defines a collective operation request for a process group on a tensor.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): The process group the request is for.
+
+    """
+
     def __init__(self, pg: dist.ProcessGroup) -> None:
         super().__init__()
         self.pg: dist.ProcessGroup = pg
@@ -46,6 +54,10 @@ class Request(Awaitable[W]):
         self.wait_function = None  # type: ignore
 
     def wait(self) -> W:
+        """
+        Calls the wait function for this request.
+
+        """
         ret = self.wait_function.apply(self.pg, self, self.tensor)
         self.req = None
         self.tensor = None
@@ -54,22 +66,24 @@ class Request(Awaitable[W]):
 
 @dataclass
 class All2AllPooledInfo(object):
-    """The data class that collects the attributes when calling the
-       alltoall_pooled operation.
+    """
+    The data class that collects the attributes when calling the alltoall_pooled
+    operation.
 
     Attributes:
-        dim_sum_per_rank (list[Int]): number of features (sum of dimensions)
-            of the embedding in each rank
-        dim_sum_per_rank_tensor: (tensor, optional): the tensor version of
+        dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
+            embedding in each rank.
+        dim_sum_per_rank_tensor (Optional[Tensor]): the tensor version of
             `dim_sum_per_rank`, this is only used by the fast kernel of
-            `_recat_pooled_embedding_grad_out`
-        cumsum_dim_sum_per_rank_tensor (tensor, optional): cumulative sum of
+            `_recat_pooled_embedding_grad_out`.
+        cumsum_dim_sum_per_rank_tensor (Optional[Tensor]): cumulative sum of
             dim_sum_per_rank, this is only used by the fast kernel of
-            `_recat_pooled_embedding_grad_out`
-        mixed_dim: (bool): the flag whether the input is mixed
+            `_recat_pooled_embedding_grad_out`.
+        mixed_dim (bool): the flag whether the input is mixed
             dimensioned or not.
-        D : (int, optional): embedding dimension of the embedding table
-        B_local: (int, optional): local batch size before scattering
+        D (int): embedding dimension of the embedding table.
+        B_local (int): local batch size before scattering.
+
     """
 
     dim_sum_per_rank: List[int]
@@ -82,17 +96,21 @@ class All2AllPooledInfo(object):
 
 @dataclass
 class All2AllSequenceInfo(object):
-    """The data class that collects the attributes when calling the
-       alltoall_sequence operation.
+    """
+    The data class that collects the attributes when calling the alltoall_sequence
+    operation.
 
     Attributes:
-        embedding_dim (int): embedding dimension
-        lengths_after_sparse_data_all2all (tensor): lengths of sparse features after all2all
-        forward_recat_tensor (tensor): recat tensor for forward
-        backward_recat_tensor (tensor): recat tensor for backward
-        input_splits (tensor): input splits
-        output_splits (tensor): output splits
-        lengths_sparse_before_features_all2all (tensor): lengths of sparse features before all2all
+        embedding_dim (int): embedding dimension.
+        lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
+            AlltoAll.
+        forward_recat_tensor (Tensor): recat tensor for forward.
+        backward_recat_tensor (Tensor): recat tensor for backward.
+        input_splits (List[int]): input splits.
+        output_splits (List[int]): output splits.
+        lengths_sparse_before_features_all2all (Optional[Tensor]): lengths of sparse
+            features before AlltoAll.
+
     """
 
     embedding_dim: int
@@ -106,22 +124,23 @@ class All2AllSequenceInfo(object):
 
 @dataclass
 class All2AllVInfo(object):
-    """The data class that collects the attributes when calling the
-       alltoallv operation.
+    """
+    The data class that collects the attributes when calling the alltoallv operation.
 
     Attributes:
-        dim_sum_per_rank (list[Int]): number of features (sum of dimensions)
-            of the embedding in each rank
-        B_global: (int): The global batch size for each rank
-        B_local: (int, optional): local batch size before scattering
-        B_local_list: (List[int]): local batch sizes for each embedding table
-            locally (in my current rank)
-        D_local_list : (List[Int]): embedding dimension of each embedding table
-            locally (in my current rank)
-        input_split_sizes (list[Int]): The input split sizes for each rank, this
-            remembers how to split the input when doing the all_to_all_single operation
-        output_split_sizes (list[Int]): The output split sizes for each rank, this
-            remembers how to fill the output when doing the all_to_all_single operation
+        dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
+            embedding in each rank.
+        B_global (int): global batch size for each rank.
+        B_local (int): local batch size before scattering.
+        B_local_list: (List[int]): local batch sizes for each embedding table locally
+            (in my current rank).
+        D_local_list (List[int]): embedding dimension of each embedding table locally
+            (in my current rank).
+        input_split_sizes (List[int]): The input split sizes for each rank, this
+            remembers how to split the input when doing the all_to_all_single operation.
+        output_split_sizes (List[int]): The output split sizes for each rank, this
+            remembers how to fill the output when doing the all_to_all_single operation.
+
     """
 
     dims_sum_per_rank: List[int]
@@ -135,13 +154,15 @@ class All2AllVInfo(object):
 
 @dataclass
 class ReduceScatterInfo(object):
-    """The data class that collects the attributes when calling the
-       reduce_scatter_pooled operation.
+    """
+    The data class that collects the attributes when calling the reduce_scatter_pooled
+    operation.
 
     Attributes:
-        input_sizes (List[int]) : the sizes of the input tensors, this remembers
-            the sizes of the input tensors when running the backward pass and
-            producing the gradient
+        input_sizes (List[int]): the sizes of the input tensors. This remembers the
+            sizes of the input tensors when running the backward pass and producing the
+            gradient.
+
     """
 
     input_sizes: List[int]
@@ -169,33 +190,32 @@ def alltoall_pooled(
     group: Optional[dist.ProcessGroup] = None,
 ) -> Awaitable[Tensor]:
     """
-    Perform alltoall operation for a single pooled embedding tensor. Each process splits
-    the input pooled embeddings tensor based on the world size, and then scatters the
-    split list to all processes in the group. Then concatenate the received tensors from
-    all the processes in the group and return single output tensor.
+    Performs AlltoAll operation for a single pooled embedding tensor. Each process
+    splits the input pooled embeddings tensor based on the world size, and then scatters
+    the split list to all processes in the group. Then concatenates the received tensors
+    from all processes in the group and returns a single output tensor.
 
     Args:
-        a2a_pooled_embs_tensor (tensor): input pooled embeddings. Must be pooled
+        a2a_pooled_embs_tensor (Tensor): input pooled embeddings. Must be pooled
             together before passing into this function. Usually with the shape of
             B x T x D, where B - batch size, T - number of embedding tables,
-            D - embedding dimension. When `mixed_dim=True`, the input shape should
-            be B x D_local_sum, where D_local_sum is the dimension sum of all the
-            local embedding tables.
-        dim_sum_per_rank (list[Int]): number of features (sum of dimensions)
-            of the embedding in each rank
-        mixed_dim: (bool, optional): the flag whether the input is mixed
-            dimensioned or not.
-        dim_sum_per_rank_tensor: (tensor, optional): the tensor version of
+            D - embedding dimension. When `mixed_dim=True`, the input shape should be
+            B x D_local_sum, where D_local_sum is the dimension sum of all the local
+            embedding tables.
+        dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
+            embedding in each rank.
+        mixed_dim (bool): the flag whether the input is mixed dimensioned or not.
+        dim_sum_per_rank_tensor (Optional[Tensor]): the tensor version of
             `dim_sum_per_rank`, this is only used by the fast kernel of
-            `_recat_pooled_embedding_grad_out`
-        cumsum_dim_sum_per_rank_tensor (tensor, optional): cumulative sum of
+            `_recat_pooled_embedding_grad_out`.
+        cumsum_dim_sum_per_rank_tensor (Optional[Tensor]): cumulative sum of
             dim_sum_per_rank, this is only used by the fast kernel of
-            `_recat_pooled_embedding_grad_out`
-        group (ProcessGroup, optional): The process group to work on. If None,
-            the default process group will be used.
+            `_recat_pooled_embedding_grad_out`.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
 
     Returns:
-        Async work handle (Awaitable), which can be `wait()` later to get the result
+        Async work handle (Awaitable), which can be `wait()` later to get the resulting
         tensor.
 
     .. warning::
@@ -220,8 +240,6 @@ def alltoall_pooled(
     return myreq
 
 
-# a2a operator for (T * B * L_i, D) tensors
-# not support mixed dimensions
 def alltoall_sequence(
     # (T, B, L_i * D) flattened
     a2a_sequence_embs_tensor: Tensor,
@@ -233,24 +251,30 @@ def alltoall_sequence(
     group: Optional[dist.ProcessGroup] = None,
 ) -> Awaitable[Tensor]:
     """
-    Perform alltoall operation for sequence embeddings. Each process splits input
-    tensor base on the world size, and then scatters the split list to all processes
-    in a group. Then concatenate the received tensors from all the processes in the
-    group and return single output tensor.
+    Performs AlltoAll operation for sequence embeddings. Each process splits the input
+    tensor based on the world size, and then scatters the split list to all processes in
+    the group. Then concatenates the received tensors from all processes in the group
+    and returns a single output tensor.
+
+    Note:
+        AlltoAll operator for (T * B * L_i, D) tensors.
+        Does not support mixed dimensions.
 
     Args:
-        a2a_sequence_embs_tensor (tensor): input embeddings. Usually with the shape
-            of (T * B * L_i, D), where B - batch size, T - number of embedding tables,
+        a2a_sequence_embs_tensor (Tensor): input embeddings. Usually with the shape of
+            (T * B * L_i, D), where B - batch size, T - number of embedding tables,
             D - embedding dimension.
-        embedding_dim: embedding dimension
-        lengths_after_sparse_data_all2all (tensor): lengths of sparse features after all2all
-        forward_recat_tensor (tensor): recat tensor for forward
-        backward_recat_tensor (tensor): recat tensor for backward
-        input_splits (tensor): input splits
-        output_splits (tensor): output splits
+        forward_recat_tensor (Tensor): recat tensor for forward.
+        backward_recat_tensor (Tensor): recat tensor for backward.
+        lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
+            AlltoAll.
+        input_splits (Tensor): input splits.
+        output_splits (Tensor): output splits.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
 
     Returns:
-        Async work handle (Awaitable), which can be `wait()` later to get the result
+        Async work handle (Awaitable), which can be `wait()` later to get the resulting
         tensor.
 
     .. warning::
@@ -286,22 +310,23 @@ def alltoallv(
     group: Optional[dist.ProcessGroup] = None,
 ) -> Awaitable[List[Tensor]]:
     """
-    Perform alltoallv operation for a list of input embeddings. Each process scatters
-    the list to all processes in a group.
+    Performs alltoallv operation for a list of input embeddings. Each process scatters
+    the list to all processes in the group.
 
     Args:
-        input (list[tensor]): List of tensors to scatter one per rank. The tensors
-            in the list usually have different lengths. If output_split
-        out_split (list[Int], optional): output split sizes (or dims sum per rank),
-            if not specified, we will use `per_rank_split_lengths` to construct a output
+        input (List[Tensor]): list of tensors to scatter, one per rank. The tensors in
+            the list usually have different lengths.
+        out_split (Optional[List[int]]): output split sizes (or dim_sum_per_rank), if
+            not specified, we will use `per_rank_split_lengths` to construct a output
             split with the assumption that all the embs have the same dimension.
-        per_rank_split_lengths: (list[Int], optional): split lengths per rank.
-            If not specified, the `output_split` must be specified.
-        group (ProcessGroup, optional): The process group to work on. If None,
-            the default process group will be used.
+        per_rank_split_lengths (Optional[List[int]]): split lengths per rank. If not
+            specified, the `out_split` must be specified.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+
     Returns:
-        Async work handle (Awaitable), which can be `wait()` later to get the result
-        list of tensor.
+        Async work handle (Awaitable), which can be `wait()` later to get the resulting
+        list of tensors.
 
     .. warning::
         `alltoallv` is experimental and subject to change.
@@ -345,6 +370,25 @@ def reduce_scatter_pooled(
     inputs: List[Tensor],
     group: Optional[dist.ProcessGroup] = None,
 ) -> Awaitable[Tensor]:
+    """
+    Performs reduce-scatter operation for a pooled embeddings tensor split into world
+    size number of chunks. The result of the reduce operation gets scattered to all
+    processes in the group. Then concatenates the received tensors from all processes in
+    the group and returns a single output tensor.
+
+    Args:
+        inputs (List[Tensor]): list of tensors to scatter, one per rank.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+
+    Returns:
+        Async work handle (Awaitable), which can be `wait()` later to get the resulting
+        tensor.
+
+    .. warning::
+        `reduce_scatter_pooled` is experimental and subject to change.
+
+    """
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
@@ -581,7 +625,7 @@ class All2All_Seq_Req(Function):
         myreq: Request[Tensor],
         a2ai: All2AllSequenceInfo,
         sharded_input_embeddings: Tensor,
-    ) -> torch.Tensor:
+    ) -> Tensor:
         world_size = dist.get_world_size(pg)
         my_rank = dist.get_rank(pg)
         D = a2ai.embedding_dim
@@ -770,9 +814,8 @@ class All2Allv_Req(Function):
 class All2Allv_Wait(Function):
     @staticmethod
     # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
-    # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
-    def forward(ctx, pg: dist.ProcessGroup, myreq, output):
+    def forward(ctx, pg: dist.ProcessGroup, myreq, output) -> Tuple[Tensor]:
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
         myreq.req.wait()
@@ -856,9 +899,13 @@ class ReduceScatter_Req(Function):
 class ReduceScatter_Wait(Function):
     @staticmethod
     # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
-    # pyre-fixme[3]: Return type must be annotated.
-    # pyre-fixme[2]: Parameter must be annotated.
-    def forward(ctx, pg: dist.ProcessGroup, myreq: Request[Tensor], output: Tensor):
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        output: Tensor,
+    ) -> Tensor:
         myreq.req.wait()
         myreq.req = None
         myreq.tensor = None

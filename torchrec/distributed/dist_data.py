@@ -459,8 +459,8 @@ class PooledEmbeddingsAllToAll(nn.Module):
 
 class PooledEmbeddingsReduceScatter(nn.Module):
     """
-    The module class that wraps reduce-scatter communication primitive
-    for pooled embedding communication in row-wise and twrw sharding.
+    The module class that wraps reduce-scatter communication primitive for pooled
+    embedding communication in row-wise and twrw sharding.
 
     For pooled embeddings, we have a local model-parallel output tensor with a layout of
     [num_buckets x batch_size, dimension]. We need to sum over num_buckets dimension
