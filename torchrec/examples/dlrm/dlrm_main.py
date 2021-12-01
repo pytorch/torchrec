@@ -120,6 +120,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Path to a folder containing the binary (npy) files for the Criteo dataset."
         " When supplied, InMemoryBinaryCriteoIterDataPipe is used.",
     )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=15.0,
+        help="Learning rate.",
+    )
     parser.set_defaults(pin_memory=None)
     return parser.parse_args(argv)
 
@@ -360,7 +366,7 @@ def main(argv: List[str]) -> None:
     )
     optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
-        lambda params: torch.optim.SGD(params, lr=0.01),
+        lambda params: torch.optim.SGD(params, lr=args.learning_rate),
     )
 
     train_pipeline = TrainPipelineSparseDist(
