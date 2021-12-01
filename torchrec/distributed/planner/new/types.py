@@ -24,6 +24,10 @@ from torchrec.distributed.types import ModuleSharder, ShardingPlan
 
 @dataclass(repr=True, order=True, eq=True)
 class Storage:
+    """
+    Representation of the storage capacities of a hardware used in training."
+    """
+
     hbm: int
     ddr: int
 
@@ -42,6 +46,10 @@ class Storage:
 
 @dataclass
 class DeviceHardware:
+    """
+    Reprensentation of a device in a process group. Cost is an estimation of network, CPU, and storage usages.
+    """
+
     rank: int
     storage: Storage
     cost: int = 0
@@ -59,6 +67,9 @@ class Topology:
         inter_host_bw: int = CROSS_NODE_BANDWIDTH,
         batch_size: int = BATCH_SIZE,
     ) -> None:
+        """
+        Representation of a network of devices in a cluster.
+        """
         # validate input
         assert compute_device in [
             "cpu",
@@ -133,6 +144,10 @@ class Topology:
 
 @dataclass
 class Shard:
+    """
+    Representation of a subset of an embedding table. Length and offset fully deterine the tensors in the shard. 'storage' is an estimation of how much it takes to store the shard with an estimation 'cost'.
+    """
+
     length: List[int]
     offset: List[int]
     storage: Storage
@@ -142,6 +157,10 @@ class Shard:
 
 @dataclass
 class ShardingOption:
+    """
+    One way of sharding an embedding table.
+    """
+
     name: str
     tensor: torch.Tensor
     module: Tuple[str, nn.Module]
@@ -211,11 +230,19 @@ class InputStats:
 
 
 class PartitionError(Exception):
+    """
+    ABC for errors from partitioner
+    """
+
     ...
 
 
 @dataclass
 class PlacerStats:
+    """
+    Statistics to log from the Placer
+    """
+
     num_iterations: int
     num_errors: int
     topology_solution: Optional[Topology]
@@ -244,6 +271,9 @@ class Enumerator(abc.ABC):
     def run(
         self, module: nn.Module, sharders: List[ModuleSharder[nn.Module]]
     ) -> List[ShardingOption]:
+        """
+        See class description.
+        """
         ...
 
 
@@ -263,7 +293,9 @@ class Calculator(abc.ABC):
 
     @abc.abstractmethod
     def run(self, sharding_options: List[ShardingOption]) -> None:
-        # actual costs
+        """
+        See class description.
+        """
         ...
 
 
@@ -275,28 +307,39 @@ class RankStack(abc.ABC):
 
     @abc.abstractmethod
     def pop(self) -> ShardingOption:
-        # pop next sharding option, no more than one sharding option per tensor
-        # should be returned
+        """
+        pop next sharding option, no more than one sharding option per tensor
+        should be returned
+        """
         ...
 
     @abc.abstractmethod
     def push(self, sharding_option: ShardingOption) -> None:
-        # push back shading_option, rerank as necessary
+        """
+        push back shading_option, rerank as necessary
+        """
+
         ...
 
     @abc.abstractmethod
     def remove(self, sharding_option: ShardingOption) -> bool:
-        # remove a given sharding_option from consideration
+        """
+        remove a given sharding_option from consideration
+        """
         ...
 
     @abc.abstractmethod
     def bulk_pop(self) -> List[ShardingOption]:
-        # pop any remaining sharing options
+        """
+        pop any remaining sharing options
+        """
         ...
 
     @abc.abstractmethod
     def bulk_push(self, sharding_options: List[ShardingOption]) -> None:
-        # push a list of sharding options
+        """
+        push a list of sharding options
+        """
         ...
 
 
@@ -308,6 +351,9 @@ class Ranker(abc.ABC):
 
     @abc.abstractmethod
     def run(self, sharding_options: List[ShardingOption]) -> RankStack:
+        """
+        See class description.
+        """
         ...
 
 
@@ -325,7 +371,9 @@ class Partitioner(abc.ABC):
         sharding_options: List[ShardingOption],
         topology: Topology,
     ) -> None:
-        # modifies sharding_options and topology in-place
+        """
+        See class description. This method modifies sharding_options and topology in-place
+        """
         ...
 
 
@@ -349,11 +397,18 @@ class Placer(abc.ABC):
 
     @abc.abstractmethod
     def run(self, sharding_options: List[ShardingOption]) -> ShardingPlan:
+        """
+        See class description.
+
+        """
         ...
 
     @property
     @abc.abstractmethod
     def stats(self) -> PlacerStats:
+        """
+        Get stats of the sharding options produced.
+        """
         ...
 
 
@@ -370,4 +425,7 @@ class Stats(abc.ABC):
         placer_stats: PlacerStats,
         input_stats: Optional[Dict[str, InputStats]] = None,
     ) -> None:
+        """
+        See class description
+        """
         ...
