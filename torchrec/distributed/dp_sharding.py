@@ -29,6 +29,11 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
 class DpSparseFeaturesDist(BaseSparseFeaturesDist):
+    """
+    Distributes sparse features (input) to be data-parallel.
+
+    """
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -36,30 +41,74 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeatures]:
+        """
+        No-op as sparse features are already distributed in data-parallel fashion.
+
+        Call Args:
+            sparse_features (SparseFeatures): input sparse features.
+
+        Returns:
+            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+
+        """
         return NoWait(sparse_features)
 
 
 class DpPooledEmbeddingDist(BasePooledEmbeddingDist):
+    """
+    Distributes pooled embeddings to be data-parallel.
+
+    """
+
     def __init__(self) -> None:
         super().__init__()
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+        """
+        No-op as pooled embeddings are already distributed in data-parallel fashion.
+
+        Call Args:
+            local_embs (torch.Tensor): output sequence embeddings.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
+
+        """
+
         return NoWait(local_embs)
 
 
 class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
+    """
+    Distributes sequence embeddings to be data-parallel.
+
+    """
+
     def __init__(self) -> None:
         super().__init__()
 
     def forward(
         self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
     ) -> Awaitable[torch.Tensor]:
+        """
+        No-op as sequence embeddings are already distributed in data-parallel fashion.
+
+        Call Args:
+            local_embs (torch.Tensor): output sequence embeddings.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
+
+        """
+
         return NoWait(local_embs)
 
 
 class DpEmbeddingSharding(EmbeddingSharding):
     """
-    Use data-parallel, no table sharding
+    Shards embedding bags using data-parallel, with no table sharding i.e.. a given
+    embedding table is replicated across all ranks.
+
     """
 
     def __init__(

@@ -18,7 +18,9 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 class CwEmbeddingSharding(TwEmbeddingSharding):
     """
-    Shards embedding bags table-wise, i.e.. a given embedding table is entirely placed on a selected rank.
+    Shards embedding bags column-wise, i.e.. a given embedding table is distributed by
+    specified number of columns and table slices are placed on all ranks.
+
     """
 
     def __init__(
