@@ -17,7 +17,11 @@ class MainTest(unittest.TestCase):
         main(
             [
                 "--limit_train_batches",
-                "5",
+                "10",
+                "--limit_val_batches",
+                "8",
+                "--limit_test_batches",
+                "6",
                 "--over_arch_layer_sizes",
                 "8,1",
                 "--dense_arch_layer_sizes",
@@ -25,7 +29,7 @@ class MainTest(unittest.TestCase):
                 "--embedding_dim",
                 "8",
                 "--num_embeddings",
-                "64",
+                "8",
             ]
         )
 
@@ -49,11 +53,11 @@ class MainTest(unittest.TestCase):
 
     @classmethod
     def _run_trainer_criteo_in_memory(cls) -> None:
-        with CriteoTest._create_dataset_npys(num_rows=100) as (in_dense_file, _, _):
+        with CriteoTest._create_dataset_npys(
+            num_rows=50, filenames=[f"day_{i}" for i in range(24)]
+        ) as files:
             main(
                 [
-                    "--limit_train_batches",
-                    "5",
                     "--over_arch_layer_sizes",
                     "8,1",
                     "--dense_arch_layer_sizes",
@@ -65,7 +69,9 @@ class MainTest(unittest.TestCase):
                     "--batch_size",
                     "2",
                     "--in_memory_binary_criteo_path",
-                    os.path.dirname(in_dense_file),
+                    os.path.dirname(files[0]),
+                    "--epochs",
+                    "2",
                 ]
             )
 

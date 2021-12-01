@@ -6,9 +6,10 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Any, Dict, Generator, Tuple
+from typing import Any, Dict, Generator, Tuple, Optional, List
 
 import numpy as np
+from pyre_extensions import none_throws
 from torchrec.datasets.criteo import (
     INT_FEATURE_COUNT,
     CAT_FEATURE_COUNT,
@@ -89,39 +90,49 @@ class CriteoTest(unittest.TestCase):
     def _create_dataset_npys(
         cls,
         num_rows: int = 10,
-        filename: str = "criteo",
+        filename: Optional[str] = "criteo",
+        filenames: Optional[List[str]] = None,
         generate_dense: bool = True,
         generate_sparse: bool = True,
         generate_labels: bool = True,
     ) -> Generator[Tuple[str, ...], None, None]:
         with tempfile.TemporaryDirectory() as tmpdir:
 
+            if filenames is None:
+                filenames = [filename]
+
             paths = []
+            for filename in filenames:
+                filename = none_throws(filename)
 
-            if generate_dense:
-                dense_path = os.path.join(tmpdir, filename + "_dense.npy")
-                dense = np.random.random((num_rows, INT_FEATURE_COUNT)).astype(
-                    np.float32
-                )
-                np.save(dense_path, dense)
-                paths.append(dense_path)
+                if generate_dense:
+                    dense_path = os.path.join(tmpdir, filename + "_dense.npy")
+                    dense = np.random.random((num_rows, INT_FEATURE_COUNT)).astype(
+                        np.float32
+                    )
+                    np.save(dense_path, dense)
+                    paths.append(dense_path)
 
-            if generate_sparse:
-                sparse_path = os.path.join(tmpdir, filename + "_sparse.npy")
-                sparse = np.random.randint(
-                    *cls.CAT_VAL_RANGE,
-                    size=(num_rows, CAT_FEATURE_COUNT),
-                    dtype=np.int32,
-                )
-                np.save(sparse_path, sparse)
-                paths.append(sparse_path)
+                if generate_sparse:
+                    sparse_path = os.path.join(tmpdir, filename + "_sparse.npy")
+                    sparse = np.random.randint(
+                        cls.CAT_VAL_RANGE[0],
+                        cls.CAT_VAL_RANGE[1] + 1,
+                        size=(num_rows, CAT_FEATURE_COUNT),
+                        dtype=np.int32,
+                    )
+                    np.save(sparse_path, sparse)
+                    paths.append(sparse_path)
 
-            if generate_labels:
-                labels_path = os.path.join(tmpdir, filename + "_labels.npy")
-                labels = np.random.randint(
-                    *cls.LABEL_VAL_RANGE, size=(num_rows, 1), dtype=np.int32
-                )
-                np.save(labels_path, labels)
-                paths.append(labels_path)
+                if generate_labels:
+                    labels_path = os.path.join(tmpdir, filename + "_labels.npy")
+                    labels = np.random.randint(
+                        cls.LABEL_VAL_RANGE[0],
+                        cls.LABEL_VAL_RANGE[1] + 1,
+                        size=(num_rows, 1),
+                        dtype=np.int32,
+                    )
+                    np.save(labels_path, labels)
+                    paths.append(labels_path)
 
             yield tuple(paths)
