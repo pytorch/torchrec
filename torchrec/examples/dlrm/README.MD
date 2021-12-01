@@ -29,6 +29,7 @@ You can also use [torchrun](https://pytorch.org/docs/stable/elastic/run.html).
 **Results**
 
 |Configuration|Collective Size of Embedding Tables (GiB)|Number of GPUs|Local Batch Size|Global Batch Size|AUROC over Val Set After 1 Epoch|AUROC Over Test Set After 1 Epoch|Train Records/Second|Time to Train 1 Epoch | Unique Flags |
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
 |MLPerf|97.36|8|8192|65536|0.7736921906471252|0.7684569954872131|5497159.68 rec/s| 12m43s | `--batch_size 8192 --num_embeddings_per_feature "40000000,39060,17295,7424,20265,3,7122,1543,63,40000000,3067956,405282,10,2209,11938,155,4,976,14,40000000,40000000,40000000,590152,12973,108,36"` |
 |MLPerfx2|174.03|16|4096|65536|0.7760998606681824|0.7706344723701477|2028339.2 rec/s| 34m:27s | `--batch_size 4096 --num_embeddings_per_feature "80000000,39060,17295,7424,20265,3,7122,1543,63,80000000,3067956,405282,10,2209,11938,155,4,976,14,80000000,40790948,80000000,590152,12973,108,36"` |
 |Full Size|420.94|80|819|65520|0.7841252684593201|0.778694748878479| 459950.4 rec/s | 02h32m03s | `--batch_size 819 --num_embeddings_per_feature "227605432,39060,17295,7424,20265,3,7122,1543,63,130229467,3067956,405282,10,2209,11938,155,4,976,14,292775614,40790948,187188510,590152,12973,108,36"` |
