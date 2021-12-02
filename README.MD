@@ -14,9 +14,70 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 - RecSys datasets (criteo click logs and movielens)
 - Examples of end-to-end training such the dlrm event prediction model trained on criteo click logs dataset.
 
-## Installation instructions
-[Install FBGEMM] (https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu#build-notes)
-`pip install -e .`
+# Installation
+
+We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 11.1. This setup assumes you have conda installed.
+
+1. Save the following as environment.yml on your machine.
+```
+name: torchrec_py386_cuda111
+channels:
+  - pytorch-nightly
+  - iopath
+  - conda-forge
+dependencies:
+  - python=3.8.6
+  - pytorch
+  - cudatoolkit=11.1
+  - iopath
+  - numpy
+  - pip:
+    - "--editable=git+https://github.com/pytorch/torchx.git@main#egg=torchx"
+    - torchmetrics
+    - pyre-extensions
+```
+
+2. Create a new conda environment for torchrec.
+```
+mkdir torchrec_oss_install
+cd torchrec_oss_install
+conda env create -f environment.yml
+conda activate torchrec_py386_cuda111
+```
+
+3. Download the TorchRec repo.
+```
+cd src
+git clone --recursive https://github.com/facebookresearch/torchrec
+```
+
+4. Next, install FBGEMM_GPU from source (included in third_party folder of torchrec) by following the directions [here](https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu). For CUDA 11.1 and SM80 (Ampere) architecture, the following instructions can be used:
+```
+conda install -c conda-forge scikit-build jinja2 ninja cmake
+export TORCH_CUDA_ARCH_LIST=8.0
+export CUB_DIR=/usr/local/cuda-11.1/include/cub
+export CUDA_BIN_PATH=/usr/local/cuda-11.1/
+export CUDACXX=/usr/local/cuda-11.1/bin/nvcc
+python setup.py install -Dcuda_architectures="80" -DCUDNN_LIBRARY_PATH=/usr/local/cuda-11.1/lib64/libcudnn.so -DCUDNN_INCLUDE_PATH=/usr/local/cuda-11.1/include
+```
+
+5. Next, we'll need to go into the TorchRec source to update some imports related to fbgemm_gpu. Append the line `import fbgemm_gpu` to the imports in the files [torchrec/sparse/jagged_tensor.py](torchrec/sparse/jagged_tensor.py), [torchrec/distributed/comm_ops.py](torchrec/distributed/comm_ops.py), [torchrec/distributed/dist_data.py](torchrec/distributed/dist_data.py), and [torchrec/quant/embedding_modules.py](torchrec/quant/embedding_modules.py). We expect to remove the need for this step soon.
+
+
+6. Then, install TorchRec from source.
+```
+# cd to the directory where torchrec's setup.py is located.
+pip install -e .
+```
+
+7. Test the installation.
+```
+torchx run --scheduler local_cwd test_installation.py:test_installation
+```
+
+8. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/examples/dlrm/dlrm_main.py).
+
+That's it! In the near-to-mid future, we will simplify this process considerably. Stay tuned...
 
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
