@@ -34,6 +34,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
+    ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
 )
@@ -360,34 +361,37 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             # pyre-fixme [16]
             shards = config[1].sharding_spec.shards
 
-            for rank in range(world_size):
-                table = ShardedEmbeddingTable(
-                    num_embeddings=config[0].num_embeddings,
-                    embedding_dim=config[0].embedding_dim,
-                    name=config[0].name,
-                    embedding_names=[],
-                    data_type=config[0].data_type,
-                    feature_names=[],
-                    pooling=config[0].pooling,
-                    is_weighted=config[0].is_weighted,
-                    block_size=config[1].block_size,
-                    has_feature_processor=config[0].has_feature_processor,
-                    compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
-                )
-                if (
-                    rank >= table_node * local_size
-                    and rank < (table_node + 1) * local_size
-                ):
-                    shard_idx = rank - (table_node * local_size)
-                    table.embedding_names = config[0].embedding_names
-                    table.feature_names = config[0].feature_names
-                    table.local_rows = shards[shard_idx].shard_sizes[0]
-                    table.local_cols = config[0].embedding_dim
-                    table.local_metadata = shards[shard_idx]
-                    table.weight_init_max = config[0].weight_init_max
-                    table.weight_init_min = config[0].weight_init_min
+            # construct the global sharded_tensor_metadata
+            global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+            )
 
-                tables_per_rank[rank].append(table)
+            for rank in range(
+                table_node * local_size,
+                (table_node + 1) * local_size,
+            ):
+                rank_idx = rank - (table_node * local_size)
+                tables_per_rank[rank].append(
+                    ShardedEmbeddingTable(
+                        num_embeddings=config[0].num_embeddings,
+                        embedding_dim=config[0].embedding_dim,
+                        name=config[0].name,
+                        embedding_names=config[0].embedding_names,
+                        data_type=config[0].data_type,
+                        feature_names=config[0].feature_names,
+                        pooling=config[0].pooling,
+                        is_weighted=config[0].is_weighted,
+                        has_feature_processor=config[0].has_feature_processor,
+                        local_rows=shards[rank_idx].shard_sizes[0],
+                        local_cols=config[0].embedding_dim,
+                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                        local_metadata=shards[rank_idx],
+                        global_metadata=global_metadata,
+                        weight_init_max=config[0].weight_init_max,
+                        weight_init_min=config[0].weight_init_min,
+                    )
+                )
 
         return tables_per_rank
 

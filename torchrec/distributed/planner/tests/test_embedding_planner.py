@@ -248,7 +248,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.TABLE_ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=[1],
-                    block_size=50,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -602,7 +601,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=None,
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -644,7 +642,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.ROW_WISE.value,
                     compute_kernel="dense",
                     ranks=None,
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -741,7 +738,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                         0,
                         1,
                     ],
-                    block_size=block_size,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -813,9 +809,7 @@ class TestEmbeddingPlanner(unittest.TestCase):
             for i in range(4)
         ]
 
-        num_shards, residual = divmod(62, MIN_DIM)
-        if residual > 0:
-            num_shards += 1
+        block_size, residual = divmod(62, MIN_DIM)
 
         storage = {"hbm": 0.6}
 
@@ -825,7 +819,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.COLUMN_WISE.value,
                     compute_kernel="dense",
                     ranks=[0, 1],
-                    block_size=MIN_DIM,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(
@@ -851,7 +844,6 @@ class TestEmbeddingPlanner(unittest.TestCase):
                     sharding_type=ShardingType.COLUMN_WISE.value,
                     compute_kernel="dense",
                     ranks=[2, 3],
-                    block_size=MIN_DIM,
                     sharding_spec=EnumerableShardingSpec(
                         shards=[
                             ShardMetadata(

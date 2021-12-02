@@ -31,6 +31,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
+    ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
 )
@@ -149,32 +150,33 @@ class TwEmbeddingSharding(EmbeddingSharding):
         for config in embedding_configs:
             # pyre-fixme [16]
             shards = config[1].sharding_spec.shards
+            # construct the global sharded_tensor_metadata
+            global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+            )
 
-            for rank in range(world_size):
-                table = ShardedEmbeddingTable(
+            # pyre-fixme [16]
+            tables_per_rank[config[1].ranks[0]].append(
+                ShardedEmbeddingTable(
                     num_embeddings=config[0].num_embeddings,
                     embedding_dim=config[0].embedding_dim,
                     name=config[0].name,
-                    embedding_names=[],
+                    embedding_names=config[0].embedding_names,
                     data_type=config[0].data_type,
-                    feature_names=[],
+                    feature_names=config[0].feature_names,
                     pooling=config[0].pooling,
                     is_weighted=config[0].is_weighted,
                     has_feature_processor=config[0].has_feature_processor,
+                    local_rows=config[0].num_embeddings,
+                    local_cols=config[0].embedding_dim,
                     compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                    local_metadata=shards[0],
+                    global_metadata=global_metadata,
+                    weight_init_max=config[0].weight_init_max,
+                    weight_init_min=config[0].weight_init_min,
                 )
-
-                # pyre-fixme [16]
-                if rank == config[1].ranks[0]:
-                    table.embedding_names = config[0].embedding_names
-                    table.feature_names = config[0].feature_names
-                    table.local_rows = config[0].num_embeddings
-                    table.local_cols = config[0].embedding_dim
-                    table.local_metadata = shards[0]
-                    table.weight_init_min = config[0].weight_init_min
-                    table.weight_init_max = config[0].weight_init_max
-
-                tables_per_rank[rank].append(table)
+            )
         return tables_per_rank
 
     def create_input_dist(self) -> BaseSparseFeaturesDist:

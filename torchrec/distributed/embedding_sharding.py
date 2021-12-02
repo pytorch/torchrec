@@ -327,12 +327,8 @@ def group_tables(
                             EmbeddingComputeKernel.BATCHED_FUSED,
                             EmbeddingComputeKernel.BATCHED_QUANT,
                         ]:
-                            global_grouped_tables: List[ShardedEmbeddingTable] = []
-                            global_grouped_score_tables: List[
-                                ShardedEmbeddingTable
-                            ] = []
-                            local_grouped_tables: List[ShardedEmbeddingTable] = []
-                            local_grouped_score_tables: List[ShardedEmbeddingTable] = []
+                            grouped_tables: List[ShardedEmbeddingTable] = []
+                            grouped_score_tables: List[ShardedEmbeddingTable] = []
                             for table in embedding_tables:
                                 if table.compute_kernel in [
                                     EmbeddingComputeKernel.BATCHED_FUSED_UVM,
@@ -351,20 +347,11 @@ def group_tables(
                                     == has_feature_processor
                                     and compute_kernel_type == compute_kernel
                                 ):
-
-                                    # if not empty on the rank, add to local configs
-                                    table_not_empty = (
-                                        table.local_rows != 0 and table.local_cols != 0
-                                    )
                                     if table.is_weighted:
-                                        global_grouped_score_tables.append(table)
-                                        if table_not_empty:
-                                            local_grouped_score_tables.append(table)
+                                        grouped_score_tables.append(table)
                                     else:
-                                        global_grouped_tables.append(table)
-                                        if table_not_empty:
-                                            local_grouped_tables.append(table)
-                            if local_grouped_tables:
+                                        grouped_tables.append(table)
+                            if grouped_tables:
                                 grouped_embedding_configs.append(
                                     GroupedEmbeddingConfig(
                                         data_type=data_type,
@@ -372,11 +359,10 @@ def group_tables(
                                         is_weighted=is_weighted,
                                         has_feature_processor=has_feature_processor,
                                         compute_kernel=compute_kernel,
-                                        global_embedding_tables=global_grouped_tables,
-                                        local_embedding_tables=local_grouped_tables,
+                                        embedding_tables=grouped_tables,
                                     )
                                 )
-                            if local_grouped_score_tables:
+                            if grouped_score_tables:
                                 score_grouped_embedding_configs.append(
                                     GroupedEmbeddingConfig(
                                         data_type=data_type,
@@ -384,8 +370,7 @@ def group_tables(
                                         is_weighted=is_weighted,
                                         has_feature_processor=has_feature_processor,
                                         compute_kernel=compute_kernel,
-                                        global_embedding_tables=global_grouped_score_tables,
-                                        local_embedding_tables=local_grouped_score_tables,
+                                        embedding_tables=grouped_score_tables,
                                     )
                                 )
         return grouped_embedding_configs, score_grouped_embedding_configs

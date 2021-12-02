@@ -43,6 +43,7 @@ from torch.distributed._sharded_tensor import (  # noqa
     Shard,
     ShardedTensor,
     ShardedTensorMetadata,
+    TensorProperties,
 )
 from torch.distributed._sharding_spec import ShardMetadata  # noqa
 from torchrec.types import Multistreamable
@@ -282,11 +283,6 @@ class ParameterSharding:
     """
     ranks: Optional[List[int]] = None
 
-    """
-    The block size of sharding dim on each shard.
-    mainly used in cw, not applicable in tw/dp
-    """
-    block_size: int = 0
     sharding_spec: Optional[ShardingSpec] = None
 
 
