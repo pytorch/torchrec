@@ -26,7 +26,7 @@ def kernel_bw_lookup(
     compute_device: str,
     compute_kernel: str,
     caching_ratio: Optional[float] = None,
-) -> float:
+) -> Optional[float]:
     """
     Calculates the device bandwidth based on given compute_device, compute_kernel, and caching_ratio.
 
@@ -41,7 +41,7 @@ def kernel_bw_lookup(
 
     """
     caching_ratio = caching_ratio if caching_ratio else CACHING_RATIO
-    return {
+    lookup = {
         # CPU
         ("cpu", EmbeddingComputeKernel.DENSE.value): 0.35 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.SPARSE.value): 0.35 * DDR_MEM_BW,
@@ -57,4 +57,5 @@ def kernel_bw_lookup(
             caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
         )
         / 100,
-    }[(compute_device, compute_kernel)]
+    }
+    return lookup.get((compute_device, compute_kernel))

@@ -21,6 +21,7 @@ from torchrec.distributed.planner.new.types import (
     ShardingOption,
     Storage,
     InputStats,
+    PlannerError,
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
@@ -123,6 +124,10 @@ def cost_func_emb_wall_time(
     shard_costs = []
     B = 1.0 * world_size * batch_size  # global batch size
     device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
+    if device_bw is None:
+        raise PlannerError(
+            f"No kernel BW exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
+        )
 
     for hash_size, emb_dim in shard_lengths:
 
