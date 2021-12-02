@@ -11,8 +11,8 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.new.constants import (
     BIGINT_DTYPE,
 )
-from torchrec.distributed.planner.new.enumerators import (
-    EmbeddingEnumerator,
+from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.new.shard_estimators import (
     _calculate_tw_shard_io_sizes,
     _calculate_dp_shard_io_sizes,
 )
@@ -327,7 +327,7 @@ class TestEnumerators(unittest.TestCase):
 
     def test_dp_sharding(self) -> None:
         # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [DPSharder()])
+        sharding_options = self.enumerator.enumerate(self.model, [DPSharder()])
 
         for sharding_option in sharding_options:
             self.assertEqual(
@@ -394,7 +394,7 @@ class TestEnumerators(unittest.TestCase):
 
     def test_tw_sharding(self) -> None:
         # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [TWSharder()])
+        sharding_options = self.enumerator.enumerate(self.model, [TWSharder()])
 
         for sharding_option in sharding_options:
             self.assertEqual(
@@ -447,7 +447,7 @@ class TestEnumerators(unittest.TestCase):
 
     def test_rw_sharding(self) -> None:
         # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [RWSharder()])
+        sharding_options = self.enumerator.enumerate(self.model, [RWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
@@ -465,8 +465,12 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_uvm_caching_rw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [UVMCachingRWSharder()])
+
+        sharding_options = self.enumerator.enumerate(
+            self.model,
+            # pyre-ignore[6]
+            [UVMCachingRWSharder()],
+        )
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
             self.assertEqual(
@@ -484,7 +488,7 @@ class TestEnumerators(unittest.TestCase):
 
     def test_twrw_sharding(self) -> None:
         # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [TWRWSharder()])
+        sharding_options = self.enumerator.enumerate(self.model, [TWRWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(
@@ -505,7 +509,7 @@ class TestEnumerators(unittest.TestCase):
 
     def test_cw_sharding(self) -> None:
         # pyre-ignore[6]
-        sharding_options = self.enumerator.run(self.model, [CWSharder()])
+        sharding_options = self.enumerator.enumerate(self.model, [CWSharder()])
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(
@@ -533,7 +537,7 @@ class TestEnumerators(unittest.TestCase):
             compute_kernels=[
                 EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-                EmbeddingComputeKernel.BATCHED_QUANT.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
             ],
         )
         constraints = {
@@ -554,7 +558,7 @@ class TestEnumerators(unittest.TestCase):
         )
         sharder = AllTypesSharder()
         # pyre-ignore[6]
-        sharding_options = enumerator.run(self.model, [sharder])
+        sharding_options = enumerator.enumerate(self.model, [sharder])
 
         expected_sharding_types = {
             ShardingType.TABLE_ROW_WISE.value,
@@ -563,7 +567,7 @@ class TestEnumerators(unittest.TestCase):
         expected_compute_kernels = {
             EmbeddingComputeKernel.SPARSE.value,
             EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-            EmbeddingComputeKernel.BATCHED_QUANT.value,
+            EmbeddingComputeKernel.BATCHED_DENSE.value,
         }
         unexpected_sharding_types = (
             set(sharder.sharding_types(self.compute_device)) - expected_sharding_types

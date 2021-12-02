@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 
 import logging
-from typing import Tuple, Optional, Any, List, Dict
+from typing import Tuple, Optional, Any, List, Dict, cast
 
 from tabulate import tabulate
 from torchrec.distributed.planner.new.types import (
-    PlacerStats,
     ShardingOption,
     Stats,
     Topology,
     InputStats,
+    Storage,
 )
 from torchrec.distributed.planner.utils import bytes_to_gb
 from torchrec.distributed.types import ShardingType, ParameterSharding, ShardingPlan
@@ -27,11 +27,13 @@ class EmbeddingStats(Stats):
     Stats for a sharding planner execution.
     """
 
-    def run(
+    def log(
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
-        placer_stats: PlacerStats,
+        num_proposals: int,
+        num_plans: int,
+        best_plan: List[ShardingOption],
         input_stats: Optional[Dict[str, InputStats]] = None,
     ) -> None:
         """
@@ -44,7 +46,9 @@ class EmbeddingStats(Stats):
         Args:
             sharding_plan (ShardingPlan): sharding plan chosen by the ShardingPlanner.
             topology (Topology): device topology.
-            placer_stats (PlacerStats): stats from the placer.
+            num_proposals (int): number of proposals evaluated
+            num_plans (int): number of proposals successfully partitioned
+            best_plan (List[ShardingOption]): plan with expected performance
             input_stats (Optional[Dict[str, InputStats]]): dict of parameter names to
                 provided InputStats.
 
@@ -58,15 +62,10 @@ class EmbeddingStats(Stats):
             rank: {"type": {}, "pooling_factor": 0.0, "embedding_dims": 0}
             for rank in range(topology.world_size)
         }
-        sharding_solution = (
-            placer_stats.sharding_solution if placer_stats.sharding_solution else []
-        )
-        if not placer_stats.topology_solution:
-            return
-        topology_solution = placer_stats.topology_solution
+
         used_sharding_types = set()
 
-        for sharding_option in sharding_solution:
+        for sharding_option in best_plan:
             fqn = sharding_option.fqn
 
             if shard_by_fqn.get(fqn) is None:
@@ -90,35 +89,46 @@ class EmbeddingStats(Stats):
                 stats[rank]["embedding_dims"] += emb_dims[i]
 
         table = []
-        for rank, (initial_device, solution_device) in enumerate(
-            zip(topology.devices, topology_solution.devices)
-        ):
-            used_hbm = bytes_to_gb(
-                initial_device.storage.hbm - solution_device.storage.hbm
-            )
-            used_hbm_ratio = (
-                1 - solution_device.storage.hbm / initial_device.storage.hbm
-            )
-            used_ddr = bytes_to_gb(
-                initial_device.storage.ddr - solution_device.storage.ddr
-            )
-            used_ddr_ratio = (
-                1 - solution_device.storage.ddr / initial_device.storage.ddr
-            )
+        used_hbm = [0] * topology.world_size
+        used_ddr = [0] * topology.world_size
+        cost = [0.0] * topology.world_size
+        for sharding_option in best_plan:
+            for shard in sharding_option.shards:
+                storage = cast(Storage, shard.storage)
+                rank = cast(int, shard.rank)
+                used_hbm[rank] += storage.hbm
+                used_ddr[rank] += storage.ddr
+                cost[rank] += cast(float, shard.cost)
+
+        for rank, device in enumerate(topology.devices):
+            used_hbm_gb = bytes_to_gb(used_hbm[rank])
+            used_hbm_ratio = used_hbm[rank] / device.storage.hbm
+            used_ddr_gb = bytes_to_gb(used_ddr[rank])
+            used_ddr_ratio = used_ddr[rank] / device.storage.ddr
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
                     stats[rank]["type"][sharding_type] = 0
 
-            hbm = f"{used_hbm:.1f} ({used_hbm_ratio:.0%})"
-            ddr = f"{used_ddr:.1f} ({used_ddr_ratio:.0%})"
-            cost = f"{solution_device.cost / 1000:,.0f}"
-            pooling = f"{int(stats[rank]['pooling_factor']):,}"
-            dims = f"{stats[rank]['embedding_dims']:,}"
-            shards = " ".join(
+            rank_hbm = f"{used_hbm_gb:.1f} ({used_hbm_ratio:.0%})"
+            rank_ddr = f"{used_ddr_gb:.1f} ({used_ddr_ratio:.0%})"
+            rank_cost = f"{cost[rank] / 1000:,.0f}"
+            rank_pooling = f"{int(stats[rank]['pooling_factor']):,}"
+            rank_dims = f"{stats[rank]['embedding_dims']:,}"
+            rank_shards = " ".join(
                 f"{sharding_type}: {num_tables}"
                 for sharding_type, num_tables in sorted(stats[rank]["type"].items())
             )
-            table.append([rank, hbm, ddr, cost, pooling, dims, shards])
+            table.append(
+                [
+                    rank,
+                    rank_hbm,
+                    rank_ddr,
+                    rank_cost,
+                    rank_pooling,
+                    rank_dims,
+                    rank_shards,
+                ]
+            )
 
         headers = ["Rank", "HBM (GB)", "DDR (GB)", "Cost", "Input", "Output", "Shards"]
         table = tabulate(table, headers=headers).split("\n")
@@ -127,11 +137,9 @@ class EmbeddingStats(Stats):
         header_text = "--- Planner Statistics ---"
         logger.info(f"#{header_text: ^98}#")
 
-        num_iterations = placer_stats.num_iterations
-        num_errors = placer_stats.num_errors
         iter_text = (
-            f"--- Ran {num_iterations} iteration(s), "
-            f"found {num_iterations - num_errors} possible plan(s) ---"
+            f"--- Evalulated {num_proposals} proposal(s), "
+            f"found {num_plans} possible plan(s) ---"
         )
         logger.info(f"#{iter_text: ^98}#")
         logger.info(STATS_BAR)

@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 
 import unittest
+from typing import List, cast
 
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.planner.new.calculators import EmbeddingWTCostCalculator
 from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.rankers import DepthRanker
-from torchrec.distributed.planner.new.types import Topology
+from torchrec.distributed.planner.new.proposers import GreedyProposer
+from torchrec.distributed.planner.new.types import Topology, ShardingOption
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
-class TestDepthRanker(unittest.TestCase):
+class TestGreedyProposer(unittest.TestCase):
     def setUp(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")
-        self.calculator = EmbeddingWTCostCalculator(topology=topology)
         self.enumerator = EmbeddingEnumerator(topology=topology)
-        self.ranker = DepthRanker()
+        self.proposer = GreedyProposer()
 
     def test_two_table_cost(self) -> None:
         tables = [
@@ -37,17 +36,21 @@ class TestDepthRanker(unittest.TestCase):
         ]
 
         model = TestSparseNN(tables=tables, weighted_tables=[])
-        sharding_options = self.enumerator.run(
+        search_space = self.enumerator.enumerate(
             module=model, sharders=[EmbeddingBagCollectionSharder()]
         )
-        self.calculator.run(sharding_options)
-        rank_stack = self.ranker.run(sharding_options=sharding_options)
+        self.proposer.load(search_space)
 
         # simulate first five iterations:
         output = []
         for _ in range(5):
-            candidates = rank_stack.bulk_pop()
-            candidates.sort(key=lambda x: (x.cost, x.name))
+            proposal = cast(List[ShardingOption], self.proposer.propose())
+            proposal.sort(
+                key=lambda sharding_option: (
+                    max([shard.cost for shard in sharding_option.shards]),
+                    sharding_option.name,
+                )
+            )
             output.append(
                 [
                     (
@@ -55,13 +58,10 @@ class TestDepthRanker(unittest.TestCase):
                         candidate.sharding_type,
                         candidate.compute_kernel,
                     )
-                    for candidate in candidates
+                    for candidate in proposal
                 ]
             )
-            drop = candidates[0]
-            keep = candidates[1:]
-            rank_stack.remove(drop)
-            rank_stack.bulk_push(keep)
+            self.proposer.feedback(partitionable=True)
 
         expected_output = [
             [
@@ -90,21 +90,9 @@ class TestDepthRanker(unittest.TestCase):
             ],
             [
                 (
-                    "table_0",
-                    "data_parallel",
-                    "dense",
-                ),
-                (
                     "table_1",
                     "data_parallel",
-                    "dense",
-                ),
-            ],
-            [
-                (
-                    "table_1",
-                    "data_parallel",
-                    "dense",
+                    "batched_dense",
                 ),
                 (
                     "table_0",
@@ -114,14 +102,26 @@ class TestDepthRanker(unittest.TestCase):
             ],
             [
                 (
-                    "table_0",
-                    "row_wise",
-                    "batched_fused",
+                    "table_1",
+                    "data_parallel",
+                    "batched_dense",
                 ),
                 (
-                    "table_1",
-                    "row_wise",
+                    "table_0",
+                    "table_wise",
                     "batched_fused",
+                ),
+            ],
+            [
+                (
+                    "table_1",
+                    "data_parallel",
+                    "batched_dense",
+                ),
+                (
+                    "table_0",
+                    "row_wise",
+                    "batched_dense",
                 ),
             ],
         ]

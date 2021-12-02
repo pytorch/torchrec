@@ -7,12 +7,8 @@ import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner.new.calculators import EmbeddingWTCostCalculator
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.partitioners import GreedyCostPartitioner
-from torchrec.distributed.planner.new.placers import EmbeddingPlacer
-from torchrec.distributed.planner.new.rankers import DepthRanker
-from torchrec.distributed.planner.new.types import Topology, PartitionError
+from torchrec.distributed.planner.new.planners import EmbeddingShardingPlanner
+from torchrec.distributed.planner.new.types import Topology, PlannerError
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -33,17 +29,11 @@ class TWvsRWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TestEmbeddingShardingPlacer(unittest.TestCase):
+class TestEmbeddingShardingPlanner(unittest.TestCase):
     def setUp(self) -> None:
         compute_device = "cuda"
         self.topology = Topology(world_size=2, compute_device=compute_device)
-        self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.calculator = EmbeddingWTCostCalculator(topology=self.topology)
-        self.placer = EmbeddingPlacer(
-            topology=self.topology,
-            partitioners=[GreedyCostPartitioner()],
-            rankers=[DepthRanker()],
-        )
+        self.planner = EmbeddingShardingPlanner(topology=self.topology)
 
     def test_tw_solution(self) -> None:
         tables = [
@@ -56,14 +46,13 @@ class TestEmbeddingShardingPlacer(unittest.TestCase):
             for i in range(4)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
-        sharding_options = self.enumerator.run(module=model, sharders=[TWvsRWSharder()])
-        self.calculator.run(sharding_options=sharding_options)
-        sharding_plan = self.placer.run(sharding_options=sharding_options)
+        sharding_plan = self.planner.plan(module=model, sharders=[TWvsRWSharder()])
         expected_ranks = [[0], [0], [1], [1]]
         ranks = [
             cast(List[int], param_shard.ranks)
             for param_shard in sharding_plan.plan["sparse.ebc"].values()
         ]
+
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
 
     def test_hidden_rw_solution(self) -> None:
@@ -77,14 +66,13 @@ class TestEmbeddingShardingPlacer(unittest.TestCase):
             for i in range(3)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
-        sharding_options = self.enumerator.run(module=model, sharders=[TWvsRWSharder()])
-        self.calculator.run(sharding_options=sharding_options)
-        sharding_plan = self.placer.run(sharding_options=sharding_options)
+        sharding_plan = self.planner.plan(module=model, sharders=[TWvsRWSharder()])
         expected_ranks = [[0], [0, 1], [1]]
         ranks = [
             cast(List[int], param_shard.ranks)
             for param_shard in sharding_plan.plan["sparse.ebc"].values()
         ]
+
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
 
     def test_never_fit(self) -> None:
@@ -98,8 +86,7 @@ class TestEmbeddingShardingPlacer(unittest.TestCase):
             for i in range(10)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
-        sharding_options = self.enumerator.run(module=model, sharders=[TWvsRWSharder()])
-        self.calculator.run(sharding_options=sharding_options)
-        with self.assertRaises(PartitionError):
-            self.placer.run(sharding_options=sharding_options)
-        self.assertEqual(self.placer._counter, 11)
+
+        with self.assertRaises(PlannerError):
+            self.planner.plan(module=model, sharders=[TWvsRWSharder()])
+        self.assertEqual(self.planner._num_proposals, 22)

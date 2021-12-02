@@ -73,20 +73,22 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         self.partitioner = GreedyCostPartitioner()
 
     def test_tw_balanced_cost_device(self) -> None:
-        sharding_options = self.enumerator.run(
+        sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWSharder()]
         )
 
         for sharding_option in sharding_options:
-            sharding_option.cost = 100
             sharding_option.shards[0].cost = 100
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
-        self.partitioner.run(
-            sharding_options=sharding_options,
-            topology=candidate_topology,
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
         )
+        # pyre-ignore [16]
+        solution_topology = self.partitioner._topology
+
         expected_ranks = {
             "table_0": [1],
             "table_1": [0],
@@ -96,38 +98,40 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         ranks = {
             sharding_option.name: [shard.rank for shard in sharding_option.shards]
-            for sharding_option in sharding_options
+            for sharding_option in sharding_plan
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(candidate_topology.devices[0].cost, 200)
-        self.assertEqual(candidate_topology.devices[1].cost, 200)
+        self.assertEqual(solution_topology.devices[0].cost, 200)
+        self.assertEqual(solution_topology.devices[1].cost, 200)
 
         self.assertEqual(
-            candidate_topology.devices[0].storage,
+            solution_topology.devices[0].storage,
             self.topology.devices[0].storage - Storage(2000, 2000),
         )
         self.assertEqual(
-            candidate_topology.devices[1].storage,
+            solution_topology.devices[1].storage,
             self.topology.devices[1].storage - Storage(2000, 2000),
         )
 
     def test_tw_unbalanced_cost_device(self) -> None:
-        sharding_options = self.enumerator.run(
+        sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWSharder()]
         )
 
         for i, sharding_option in enumerate(sharding_options):
             cost = 100 if i > 0 else 300
-            sharding_option.cost = cost
             sharding_option.shards[0].cost = cost
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
-        self.partitioner.run(
-            sharding_options=sharding_options,
-            topology=candidate_topology,
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
         )
+        # pyre-ignore[16]
+        solution_topology = self.partitioner._topology
+
         expected_ranks = {
             "table_0": [0],
             "table_1": [1],
@@ -137,19 +141,19 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         ranks = {
             sharding_option.name: [shard.rank for shard in sharding_option.shards]
-            for sharding_option in sharding_options
+            for sharding_option in sharding_plan
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(candidate_topology.devices[0].cost, 300)
-        self.assertEqual(candidate_topology.devices[1].cost, 300)
+        self.assertEqual(solution_topology.devices[0].cost, 300)
+        self.assertEqual(solution_topology.devices[1].cost, 300)
 
         self.assertEqual(
-            candidate_topology.devices[0].storage,
+            solution_topology.devices[0].storage,
             self.topology.devices[0].storage - Storage(1000, 1000),
         )
         self.assertEqual(
-            candidate_topology.devices[1].storage,
+            solution_topology.devices[1].storage,
             self.topology.devices[1].storage - Storage(3000, 3000),
         )
 
@@ -170,7 +174,7 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
         self.partitioner = GreedyCostPartitioner()
-        sharding_options = self.enumerator.run(
+        sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWRWSharder()]
         )
         for sharding_option in sharding_options:
@@ -178,14 +182,15 @@ class TestGreedyCostPartitioner(unittest.TestCase):
             for shard in sharding_option.shards:
                 shard.cost = cost
                 shard.storage = Storage(hbm=1000, ddr=1000)
-            sharding_option.cost = cost * sharding_option.num_shards
             sharding_option.partition_by = PartitionByType.HOST.value
 
         candidate_topology = copy.deepcopy(self.topology)
-        self.partitioner.run(
-            sharding_options=sharding_options,
-            topology=candidate_topology,
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
         )
+        # pyre-ignore[16]
+        solution_topology = self.partitioner._topology
 
         expected_ranks = {
             "table_0": [8, 9, 10, 11, 12, 13, 14, 15],
@@ -196,13 +201,13 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         ranks = {
             sharding_option.name: [shard.rank for shard in sharding_option.shards]
-            for sharding_option in sharding_options
+            for sharding_option in sharding_plan
         }
         self.assertEqual(expected_ranks, ranks)
 
         for i in range(self.topology.world_size):
             self.assertEqual(
-                candidate_topology.devices[i].storage,
+                solution_topology.devices[i].storage,
                 # there are two shards allocated to each device
                 self.topology.devices[i].storage - Storage(2000, 2000),
             )
@@ -222,7 +227,7 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
         self.partitioner = GreedyCostPartitioner()
-        sharding_options = self.enumerator.run(
+        sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[RWSharder()]
         )
         for sharding_option in sharding_options:
@@ -230,14 +235,15 @@ class TestGreedyCostPartitioner(unittest.TestCase):
             for shard in sharding_option.shards:
                 shard.cost = cost
                 shard.storage = Storage(hbm=1000, ddr=1000)
-            sharding_option.cost = cost * sharding_option.num_shards
             sharding_option.partition_by = PartitionByType.UNIFORM.value
 
         candidate_topology = copy.deepcopy(self.topology)
-        self.partitioner.run(
-            sharding_options=sharding_options,
-            topology=candidate_topology,
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
         )
+        # pyre-ignore[16]
+        solution_topology = self.partitioner._topology
 
         expected_ranks = {
             "table_0": [0, 1, 2, 3],
@@ -248,12 +254,12 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         ranks = {
             sharding_option.name: [shard.rank for shard in sharding_option.shards]
-            for sharding_option in sharding_options
+            for sharding_option in sharding_plan
         }
         self.assertEqual(expected_ranks, ranks)
 
         for i in range(self.topology.world_size):
             self.assertEqual(
-                candidate_topology.devices[i].storage,
+                solution_topology.devices[i].storage,
                 self.topology.devices[i].storage - Storage(4000, 4000),
             )

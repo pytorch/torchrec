@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 from typing import List, Tuple, Optional, Dict, cast
 
 from torchrec.distributed.planner.new.constants import MAX_SIZE
@@ -9,7 +10,7 @@ from torchrec.distributed.planner.new.types import (
     ShardingOption,
     Storage,
     PartitionByType,
-    PartitionError,
+    PlannerError,
 )
 
 
@@ -48,7 +49,7 @@ def greedy_partition(
         sharding_option: ShardingOption = sharding_options[order_shard_idx[0]]
         return (
             cast(float, sharding_option.shards[order_shard_idx[1]].cost),
-            sharding_option.shards[order_shard_idx[1]].storage,
+            cast(Storage, sharding_option.shards[order_shard_idx[1]].storage),
         )
 
     sorted_shard_idxes = sorted(
@@ -74,7 +75,9 @@ def greedy_partition(
     """
     while sorted_shard_idxes:
         option_idx, shard_idx = sorted_shard_idxes.pop()
-        storage_size = sharding_options[option_idx].shards[shard_idx].storage
+        storage_size = cast(
+            Storage, sharding_options[option_idx].shards[shard_idx].storage
+        )
         cost = cast(float, sharding_options[option_idx].shards[shard_idx].cost)
 
         min_sum = MAX_SIZE
@@ -90,7 +93,7 @@ def greedy_partition(
                     min_partition_idx = partition_idx
 
         if min_partition_idx == -1:
-            raise PartitionError(
+            raise PlannerError(
                 f"Table of size {storage_size}GB cannot be added to any rank. partition_size_sums: {partition_size_sums}. mem_cap: {mem_cap}."
             )
 
@@ -130,9 +133,11 @@ def uniform_partition(
 
     partitions: List[List[Tuple[int, int]]] = [[] for _ in range(num_partitions)]
     for option_idx, shard_idx in shard_idxes:
-        storage_size = sharding_options[option_idx].shards[shard_idx].storage
+        storage_size = cast(
+            Storage, sharding_options[option_idx].shards[shard_idx].storage
+        )
         if partition_size_sums[shard_idx] + storage_size > mem_cap[shard_idx]:
-            raise PartitionError(
+            raise PlannerError(
                 f"Table of size {storage_size}GB cannot be added to any rank. partition_size_sums: {partition_size_sums}. mem_cap: {mem_cap}."
             )
         partition_size_sums[shard_idx] += storage_size
@@ -157,21 +162,21 @@ class GreedyCostPartitioner(Partitioner):
     Greedy Partitioner
     """
 
-    def run(
+    def partition(
         self,
-        sharding_options: List[ShardingOption],
-        topology: Topology,
-    ) -> None:
+        proposal: List[ShardingOption],
+        storage_constraint: Topology,
+    ) -> List[ShardingOption]:
         """
         Places sharding options on topology based on each sharding option's partition_by attribute.
         Topology storage and costs are updated at the end of the placement.
 
         Args:
-            sharding_options (List[ShardingOption]): list of populated sharding options.
-            topology (Topology): device topology.
+            proposal (List[ShardingOption]): list of populated sharding options.
+            storage_constraint (Topology): device topology.
 
         Returns:
-            None.
+            List[ShardingOption]: list of sharding options for selected plan.
 
         Example:
 
@@ -213,8 +218,10 @@ class GreedyCostPartitioner(Partitioner):
         """
 
         # pyre-ignore[16]
-        self._topology = topology
-        grouped_sharding_options = _group_sharding_options(sharding_options)
+        self._topology = copy.deepcopy(storage_constraint)
+        plan = copy.deepcopy(proposal)
+
+        grouped_sharding_options = _group_sharding_options(plan)
 
         if PartitionByType.UNIFORM.value in grouped_sharding_options:
             self._partition_by_uniform(
@@ -228,6 +235,7 @@ class GreedyCostPartitioner(Partitioner):
             self._partition_by_device(
                 grouped_sharding_options[PartitionByType.DEVICE.value]
             )
+        return plan
 
     def _partition_by_uniform(self, sharding_options: List[ShardingOption]) -> None:
         partitions = uniform_partition(
