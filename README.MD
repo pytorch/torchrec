@@ -17,3 +17,6 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 ## Installation instructions
 [Install FBGEMM] (https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu#build-notes)
 `pip install -e .`
+
+## License
+TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
