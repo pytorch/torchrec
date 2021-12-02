@@ -1,4 +1,4 @@
-# TorchRec (🚨 Warning: Unstable Prototype 🚨)
+# Torchrec
 
 TorchRec is a PyTorch domain library built to provide common sparsity & parallelism primitives needed for large-scale recommender systems (RecSys). It allows authors to train models with large embedding tables sharded across many GPUs.
 
