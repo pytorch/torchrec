@@ -489,12 +489,21 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # Forward
         with record_function("## forward ##"):
+            # if using multiple streams (ie. CUDA), create an event in default stream
+            # before starting forward pass
+            if self._data_dist_stream:
+                event = torch.cuda.current_stream().record_event()
             (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
 
         # Data Distribution
         with record_function("## sparse_data_dist ##"):
             with torch.cuda.stream(self._data_dist_stream):
                 _wait_for_batch(batch_ip1, self._memcpy_stream)
+                # Ensure event in default stream has been called before
+                # starting data dist
+                if self._data_dist_stream:
+                    # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
+                    self._data_dist_stream.wait_event(event)
                 _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
 
         if self._model.training:
