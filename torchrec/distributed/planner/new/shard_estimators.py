@@ -20,12 +20,11 @@ from torchrec.distributed.planner.new.constants import (
     CACHING_RATIO,
 )
 from torchrec.distributed.planner.new.types import (
-    PlannerConstraints,
+    ParameterConstraints,
     ShardEstimator,
     Topology,
     ShardingOption,
     Storage,
-    InputStats,
     PlannerError,
 )
 from torchrec.distributed.planner.utils import sharder_name
@@ -40,8 +39,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
     def __init__(
         self,
         topology: Topology,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
@@ -368,12 +366,10 @@ class EmbeddingStorageEstimator(ShardEstimator):
     def __init__(
         self,
         topology: Topology,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
-        self._input_stats = input_stats
 
     def estimate(
         self,
@@ -388,8 +384,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder = sharder_map[sharder_key]
 
             input_lengths = (
-                self._input_stats[sharding_option.name].pooling_factors
-                if self._input_stats and self._input_stats.get(sharding_option.name)
+                self._constraints[sharding_option.name].pooling_factors
+                if self._constraints and self._constraints.get(sharding_option.name)
                 else [POOLING_FACTOR]
             )
 

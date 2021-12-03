@@ -24,8 +24,7 @@ from torchrec.distributed.planner.new.storage_reservations import (
     FixedPercentageReservation,
 )
 from torchrec.distributed.planner.new.types import (
-    PlannerConstraints,
-    InputStats,
+    ParameterConstraints,
     Partitioner,
     Topology,
     Stats,
@@ -132,19 +131,16 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         partitioner: Optional[Partitioner] = None,
         performance_model: Optional[PerfModel] = None,
         stats: Optional[Stats] = None,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._topology = topology
-        self._input_stats = input_stats
-
+        self._constraints = constraints
         self._enumerator: Enumerator = (
             enumerator
             if enumerator
             else EmbeddingEnumerator(
                 topology=topology,
                 constraints=constraints,
-                input_stats=input_stats,
             )
         )
         self._storage_reservation: StorageReservation = (
@@ -239,7 +235,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,
                 best_plan=best_plan,
-                input_stats=self._input_stats,
+                constraints=self._constraints,
             )
             return sharding_plan
         else:

@@ -22,8 +22,7 @@ from torchrec.distributed.planner.new.shard_estimators import (
     _calculate_dp_shard_io_sizes,
 )
 from torchrec.distributed.planner.new.types import (
-    InputStats,
-    PlannerConstraints,
+    ParameterConstraints,
     Storage,
     Topology,
 )
@@ -297,16 +296,14 @@ class TestEnumerators(unittest.TestCase):
         self.world_size = 8
         self.local_world_size = 4
         self.constraints = {
-            "table_0": PlannerConstraints(min_partition=20),
-            "table_1": PlannerConstraints(min_partition=8),
-            "table_2": PlannerConstraints(min_partition=9, caching_ratio=0.36),
-            "table_3": PlannerConstraints(min_partition=12, caching_ratio=0.85),
-        }
-        self.input_stats = {
-            "table_0": InputStats(),
-            "table_1": InputStats(pooling_factors=[1, 3, 5]),
-            "table_2": InputStats(pooling_factors=[8, 2]),
-            "table_3": InputStats(pooling_factors=[2, 1, 3, 7]),
+            "table_0": ParameterConstraints(min_partition=20),
+            "table_1": ParameterConstraints(min_partition=8, pooling_factors=[1, 3, 5]),
+            "table_2": ParameterConstraints(
+                min_partition=9, caching_ratio=0.36, pooling_factors=[8, 2]
+            ),
+            "table_3": ParameterConstraints(
+                min_partition=12, caching_ratio=0.85, pooling_factors=[2, 1, 3, 7]
+            ),
         }
         self.num_tables = 4
         tables = [
@@ -327,7 +324,6 @@ class TestEnumerators(unittest.TestCase):
                 batch_size=self.batch_size,
             ),
             constraints=self.constraints,
-            input_stats=self.input_stats,
         )
 
     def test_dp_sharding(self) -> None:
@@ -352,7 +348,7 @@ class TestEnumerators(unittest.TestCase):
 
             input_sizes, output_sizes = _calculate_dp_shard_io_sizes(
                 batch_size=self.batch_size,
-                input_lengths=self.input_stats[sharding_option.name].pooling_factors,
+                input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 num_shards=self.world_size,
                 input_data_type_size=input_data_type_size,
@@ -416,7 +412,7 @@ class TestEnumerators(unittest.TestCase):
             input_sizes, output_sizes = _calculate_tw_shard_io_sizes(
                 batch_size=self.batch_size,
                 world_size=self.world_size,
-                input_lengths=self.input_stats[sharding_option.name].pooling_factors,
+                input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
@@ -534,7 +530,7 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_filtering(self) -> None:
-        constraint = PlannerConstraints(
+        constraint = ParameterConstraints(
             sharding_types=[
                 ShardingType.TABLE_ROW_WISE.value,
                 ShardingType.COLUMN_WISE.value,

@@ -19,8 +19,7 @@ from torchrec.distributed.planner.new.shard_estimators import (
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.planner.new.types import (
-    PlannerConstraints,
-    InputStats,
+    ParameterConstraints,
     Enumerator,
     ShardingOption,
     Shard,
@@ -39,25 +38,21 @@ class EmbeddingEnumerator(Enumerator):
 
     Constructor Args:
         topology (Topology): device topology.
-        constraints (Optional[Dict[str, PlannerConstraints]]): dict of parameter names
-            to provided PlannerConstraints.
-        input_stats (Optional[Dict[str, InputStats]]): dict of parameter names to
-            provided InputStats.
+        constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names
+            to provided ParameterConstraints.
 
     """
 
     def __init__(
         self,
         topology: Topology,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
         self._compute_device: str = topology.compute_device
         self._world_size: int = topology.world_size
         self._local_world_size: int = topology.local_world_size
         self._constraints = constraints
-        self._input_stats = input_stats
         self._batch_size: int = topology.batch_size
 
         if estimator:
@@ -67,9 +62,7 @@ class EmbeddingEnumerator(Enumerator):
         else:
             self._estimators: List[ShardEstimator] = [
                 EmbeddingPerfEstimator(topology=topology, constraints=constraints),
-                EmbeddingStorageEstimator(
-                    topology=topology, constraints=constraints, input_stats=input_stats
-                ),
+                EmbeddingStorageEstimator(topology=topology, constraints=constraints),
             ]
 
     def enumerate(
@@ -107,8 +100,8 @@ class EmbeddingEnumerator(Enumerator):
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
                         input_lengths = (
-                            self._input_stats[name].pooling_factors
-                            if self._input_stats and self._input_stats.get(name)
+                            self._constraints[name].pooling_factors
+                            if self._constraints and self._constraints.get(name)
                             else [POOLING_FACTOR]
                         )
                         col_wise_shard_dim = (
@@ -155,7 +148,7 @@ class EmbeddingEnumerator(Enumerator):
     def _filter_sharding_types(self, name: str, sharding_types: List[str]) -> List[str]:
         if not self._constraints or not self._constraints.get(name):
             return sharding_types
-        constraints: PlannerConstraints = self._constraints[name]
+        constraints: ParameterConstraints = self._constraints[name]
         if not constraints.sharding_types:
             return sharding_types
         constrained_sharding_types: List[str] = constraints.sharding_types
@@ -173,7 +166,7 @@ class EmbeddingEnumerator(Enumerator):
     ) -> List[str]:
         if not self._constraints or not self._constraints.get(name):
             return compute_kernels
-        constraints: PlannerConstraints = self._constraints[name]
+        constraints: ParameterConstraints = self._constraints[name]
         if not constraints.compute_kernels:
             return compute_kernels
         constrained_compute_kernels: List[str] = constraints.compute_kernels

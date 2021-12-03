@@ -211,7 +211,7 @@ class PartitionByType(Enum):
 
 
 @dataclass
-class PlannerConstraints:
+class ParameterConstraints:
     """
     Stores user provided constraints around
     sharding types, compute kernels and partitioning
@@ -221,16 +221,9 @@ class PlannerConstraints:
     compute_kernels: Optional[List[str]] = None
     min_partition: Optional[int] = None  # CW sharding
     caching_ratio: Optional[float] = None  # UVM caching
-
-
-@dataclass
-class InputStats:
-    """
-    Stores statistics around input data for
-    a given tensor
-    """
-
-    pooling_factors: List[float] = field(default_factory=lambda: [POOLING_FACTOR])
+    pooling_factors: List[float] = field(
+        default_factory=lambda: [POOLING_FACTOR]
+    )  # Embedding Tables
 
 
 class PlannerError(Exception):
@@ -267,8 +260,7 @@ class Enumerator(abc.ABC):
     def __init__(
         self,
         topology: Topology,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
         ...
@@ -295,8 +287,7 @@ class ShardEstimator(abc.ABC):
     def __init__(
         self,
         topology: Topology,
-        constraints: Optional[Dict[str, PlannerConstraints]] = None,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         ...
 
@@ -368,7 +359,7 @@ class Stats(abc.ABC):
         num_proposals: int,
         num_plans: int,
         best_plan: List[ShardingOption],
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         """
         See class description

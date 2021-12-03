@@ -13,7 +13,7 @@ from torchrec.distributed.planner.new.types import (
     ShardingOption,
     Stats,
     Topology,
-    InputStats,
+    ParameterConstraints,
     Storage,
 )
 from torchrec.distributed.planner.utils import bytes_to_gb
@@ -39,7 +39,7 @@ class EmbeddingStats(Stats):
         num_proposals: int,
         num_plans: int,
         best_plan: List[ShardingOption],
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         """
         Log stats for a given sharding plan to stdout.
@@ -54,8 +54,8 @@ class EmbeddingStats(Stats):
             num_proposals (int): number of proposals evaluated
             num_plans (int): number of proposals successfully partitioned
             best_plan (List[ShardingOption]): plan with expected performance
-            input_stats (Optional[Dict[str, InputStats]]): dict of parameter names to
-                provided InputStats.
+            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names to
+                provided ParameterConstraints.
 
         """
         shard_by_fqn = {
@@ -82,7 +82,7 @@ class EmbeddingStats(Stats):
                 sharding_option=sharding_option,
                 world_size=topology.world_size,
                 local_size=topology.local_world_size,
-                input_stats=input_stats,
+                constraints=constraints,
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
@@ -163,7 +163,7 @@ class EmbeddingStats(Stats):
         sharding_option: ShardingOption,
         world_size: int,
         local_size: int,
-        input_stats: Optional[Dict[str, InputStats]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Tuple[List[int], List[float], List[int]]:
         """
         Gets ranks, pooling factors, and embedding dimensions per shard
@@ -175,8 +175,8 @@ class EmbeddingStats(Stats):
         """
         ranks = list(range(world_size))
         pooling_factor = [
-            sum(input_stats[sharding_option.name].pooling_factors)
-            if input_stats and input_stats.get(sharding_option.name)
+            sum(constraints[sharding_option.name].pooling_factors)
+            if constraints and constraints.get(sharding_option.name)
             else 0.0
         ]
         emb_dims = [sharding_option.tensor.shape[1]]
