@@ -28,7 +28,10 @@ from torchrec.sparse.jagged_tensor import (
     KeyedTensor,
 )
 
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+try:
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+except OSError:
+    pass
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
