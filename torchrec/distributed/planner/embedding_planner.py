@@ -291,7 +291,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                         )
                         is_placed = True
                         break
-                constrained_devices.append(candidate_device)
+                else:
+                    constrained_devices.append(candidate_device)
 
             for constrained_device in constrained_devices:
                 heapq.heappush(candidate_devices, constrained_device)

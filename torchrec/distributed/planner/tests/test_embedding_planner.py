@@ -790,10 +790,10 @@ class TestEmbeddingPlanner(unittest.TestCase):
             mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
-                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 12800, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                    "  Rank 0 -- HBM/DDR: 0.0/0.0, Cost: 6400, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
                 ),
                 call.info(
-                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 12800, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
+                    "  Rank 1 -- HBM/DDR: 0.0/0.0, Cost: 6400, Mean Pooling: 0, Emb Dims: 64, Shards: {'column_wise': 1}"
                 ),
             ],
         )
@@ -908,20 +908,25 @@ class TestEmbeddingPlanner(unittest.TestCase):
         self.assertEqual(output.plan, expected_plan)
 
         # check logger
+        # default cost function: math.log(hash_size, 10) * emb_dim * COMMS_MULTIPLER[sharding_type] * KERNEL_MULTIPLER[compute_kernel]
+        # rank 0:
+        #   table 0 shard 0: log10(4194304) * 31 * 2 * 25
+        #   table 2: log10(250) * 62 * 1 * 25
+        #   table 3: log10(250) * 62 * 1 * 25
         self.assertEqual(
             mock_logger.mock_calls[1 : world_size + 1],
             [
                 call.info(
-                    "  Rank 0 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                    "  Rank 0 -- HBM/DDR: 0.5/0.0, Cost: 17699, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
                 ),
                 call.info(
-                    "  Rank 1 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                    "  Rank 1 -- HBM/DDR: 0.5/0.0, Cost: 17699, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
                 ),
                 call.info(
-                    "  Rank 2 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                    "  Rank 2 -- HBM/DDR: 0.5/0.0, Cost: 17699, Mean Pooling: 0, Emb Dims: 156, Shards: {'column_wise': 1, 'data_parallel': 2}"
                 ),
                 call.info(
-                    "  Rank 3 -- HBM/DDR: 0.5/0.0, Cost: 27964, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
+                    "  Rank 3 -- HBM/DDR: 0.5/0.0, Cost: 17699, Mean Pooling: 0, Emb Dims: 154, Shards: {'column_wise': 1, 'data_parallel': 2}"
                 ),
             ],
         )

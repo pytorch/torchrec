@@ -161,6 +161,8 @@ def allocate_param(
         # for col-wise sharding, we allocate one shard at a time
         device_ranks = [sharding_option.ranks[-1]]
         host_ranks = [topology.host_and_device_by_rank[sharding_option.ranks[-1]][0]]
+        # TODO: more accurate colwise shard storage calculation for
+        # embedding_dim % shard_dim != 0 case
         storage = {
             # pyre-fixme[58]
             k: math.ceil(v / sharding_option._num_col_wise_shards)
@@ -176,13 +178,17 @@ def allocate_param(
             for device_rank in device_ranks:
                 topology.get_device(device_rank).hbm.free -= storage_usage
         elif storage_type == ParameterStorage.DDR.value:
-            for host_rank in host_ranks:
-                topology.get_host(host_rank).ddr.free -= storage_usage
+            for device_rank in device_ranks:
+                topology.get_host(device_rank).ddr.free -= storage_usage
         else:
             raise ValueError(f"Unknown ParameterStorage type {storage_type}")
 
     for device_rank in device_ranks:
         cost = -sharding_option.cost if is_deallocation else sharding_option.cost
+        # TODO: more accurate colwise shard cost calculation for
+        # embedding_dim % shard_dim != 0 case
+        if sharding_option._num_col_wise_shards is not None:
+            cost = math.ceil(cost / sharding_option._num_col_wise_shards)
         topology.get_device(device_rank).total_cost += cost
 
 
