@@ -60,15 +60,16 @@ export CUDA_BIN_PATH=/usr/local/cuda-11.1/
 export CUDACXX=/usr/local/cuda-11.1/bin/nvcc
 python setup.py install -Dcuda_architectures="80" -DCUDNN_LIBRARY_PATH=/usr/local/cuda-11.1/lib64/libcudnn.so -DCUDNN_INCLUDE_PATH=/usr/local/cuda-11.1/include
 ```
+The last line of the above code block (`python setup.py install`...) which manually installs fbgemm_gpu can be skipped if you do not need to build fbgemm_gpu with custom build-related flags. Skip to the next step if that is the case.
 
-5. Next, we'll need to go into the TorchRec source to update some imports related to fbgemm_gpu. Append the line `import fbgemm_gpu` to the imports in the files [torchrec/sparse/jagged_tensor.py](torchrec/sparse/jagged_tensor.py), [torchrec/distributed/comm_ops.py](torchrec/distributed/comm_ops.py), [torchrec/distributed/dist_data.py](torchrec/distributed/dist_data.py), and [torchrec/quant/embedding_modules.py](torchrec/quant/embedding_modules.py). We expect to remove the need for this step soon.
-
-
-6. Then, install TorchRec from source.
+5. Then, install TorchRec from source.
 ```
-# cd to the directory where torchrec's setup.py is located.
-pip install -e .
+# cd to the directory where torchrec's setup.py is located. Then run one of the below:
+python setup.py build develop --skip_fbgemm  # If you manually installed fbgemm_gpu in the previous step.
+python setup.py build develop                # Otherwise. This will run the fbgemm_gpu install step for you behind the scenes.
 ```
+
+6. Next, we'll need to go into the TorchRec source to update some imports related to fbgemm_gpu. Append the line `import fbgemm_gpu` to the imports in the files [torchrec/sparse/jagged_tensor.py](torchrec/sparse/jagged_tensor.py), [torchrec/distributed/comm_ops.py](torchrec/distributed/comm_ops.py), [torchrec/distributed/dist_data.py](torchrec/distributed/dist_data.py), and [torchrec/quant/embedding_modules.py](torchrec/quant/embedding_modules.py). We installed in develop mode so editing the source will reflect changes without rebuilding. We expect to remove the need for this step soon.
 
 7. Test the installation.
 ```
