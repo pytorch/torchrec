@@ -55,8 +55,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 if self._constraints and self._constraints.get(sharding_option.name)
                 else None
             )
-            shard_costs = cost_func_emb_wall_time(
-                shard_lengths=[shard.length for shard in sharding_option.shards],
+            shard_perfs = perf_func_emb_wall_time(
+                shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
                 compute_device=self._topology.compute_device,
                 sharding_type=sharding_option.sharding_type,
@@ -77,12 +77,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 caching_ratio=caching_ratio,
             )
 
-            for shard, cost in zip(sharding_option.shards, shard_costs):
-                shard.cost = cost
+            for shard, perf in zip(sharding_option.shards, shard_perfs):
+                shard.perf = perf
 
 
-def cost_func_emb_wall_time(
-    shard_lengths: List[List[int]],
+def perf_func_emb_wall_time(
+    shard_sizes: List[List[int]],
     compute_kernel: str,
     compute_device: str,
     sharding_type: str,
@@ -99,13 +99,13 @@ def cost_func_emb_wall_time(
     caching_ratio: Optional[float] = None,
 ) -> List[float]:
     """
-    Attempts to model costs as a function of relative wall times.
-    Only models forward costs (ignores backward costs).
-    The computation cost estimation is based on EmbeddingBagCollectionSharder
+    Attempts to model perfs as a function of relative wall times.
+    Only models forward perfs (ignores backward perfs).
+    The computation perf estimation is based on EmbeddingBagCollectionSharder
     (pooledEmbedding).
 
     Args:
-        shard_lengths (List[List[int]]): the list of (local_rows, local_cols) pf each shard.
+        shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each shard.
         compute_kernel (str): comput kernel.
         compute_device (str): compute device.
         sharding_type (str): tw, rw, cw, twrw, dp.
@@ -122,9 +122,9 @@ def cost_func_emb_wall_time(
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth of device.
 
     Returns:
-        List[float]: the list of cost for each shard.
+        List[float]: the list of perf for each shard.
     """
-    shard_costs = []
+    shard_perfs = []
     B = 1.0 * world_size * batch_size  # global batch size
     device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
     if device_bw is None:
@@ -132,77 +132,77 @@ def cost_func_emb_wall_time(
             f"No kernel BW exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
         )
 
-    for hash_size, emb_dim in shard_lengths:
+    for hash_size, emb_dim in shard_sizes:
 
         if sharding_type is ShardingType.TABLE_WISE.value:
-            input_cost, compute_cost, output_cost = _get_tw_sharding_cost(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+            input_perf, compute_perf, output_perf = _get_tw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type is ShardingType.COLUMN_WISE.value:
-            input_cost, compute_cost, output_cost = _get_cw_sharding_cost(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+            input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type is ShardingType.ROW_WISE.value:
-            input_cost, compute_cost, output_cost = _get_rw_sharding_cost(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+            input_perf, compute_perf, output_perf = _get_rw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type is ShardingType.TABLE_ROW_WISE.value:
-            input_cost, compute_cost, output_cost = _get_twrw_sharding_cost(
-                B,
-                world_size,
-                local_world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
-                bw_intra_host,
+            input_perf, compute_perf, output_perf = _get_twrw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                local_world_size=local_world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+                bw_intra_host=bw_intra_host,
             )
         elif sharding_type is ShardingType.DATA_PARALLEL.value:
-            input_cost, compute_cost, output_cost = _get_dp_sharding_cost(
-                batch_size,
-                input_lengths,
-                hash_size * emb_dim,
-                bw_inter_host,
-                emb_dim,
-                output_data_type_size,
-                device_bw,
+            input_perf, compute_perf, output_perf = _get_dp_sharding_perf(
+                batch_size=batch_size,
+                input_lengths=input_lengths,
+                grad_num_elem=hash_size * emb_dim,
+                bw_inter_host=bw_inter_host,
+                emb_dim=emb_dim,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
             )
         else:
-            raise RuntimeError(f"Unexpected sharding type: {sharding_type}")
+            raise ValueError(f"Unexpected sharding type: {sharding_type}")
 
-        shard_cost = 0
-        shard_cost += input_cost if has_input_dist else 0
-        shard_cost += compute_cost
-        shard_cost += output_cost if has_output_dist else 0
-        shard_costs.append(shard_cost)
+        shard_perf = 0
+        shard_perf += input_perf if has_input_dist else 0
+        shard_perf += compute_perf
+        shard_perf += output_perf if has_output_dist else 0
+        shard_perfs.append(shard_perf)
 
-    return shard_costs
+    return shard_perfs
 
 
-def _get_tw_sharding_cost(
+def _get_tw_sharding_perf(
     global_batch_size: float,
     world_size: int,
     input_lengths: List[float],
@@ -212,27 +212,27 @@ def _get_tw_sharding_cost(
     device_bw: float,
     bw_inter_host: int,
 ) -> Tuple[float, float, float]:
-    input_cost = (
+    input_perf = (
         global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
     )
-    compute_cost = (
+    compute_perf = (
         global_batch_size
         * sum(input_lengths)
         * emb_dim
         * output_data_type_size
         / device_bw
     )
-    output_cost = (
+    output_perf = (
         global_batch_size
         * emb_dim
         * len(input_lengths)
         * output_data_type_size
         / bw_inter_host
     )
-    return (input_cost, compute_cost, output_cost)
+    return (input_perf, compute_perf, output_perf)
 
 
-def _get_cw_sharding_cost(
+def _get_cw_sharding_perf(
     global_batch_size: float,
     world_size: int,
     input_lengths: List[float],
@@ -242,27 +242,27 @@ def _get_cw_sharding_cost(
     device_bw: float,
     bw_inter_host: int,
 ) -> Tuple[float, float, float]:
-    input_cost = (
+    input_perf = (
         global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
     )
-    compute_cost = (
+    compute_perf = (
         global_batch_size
         * sum(input_lengths)
         * emb_dim
         * output_data_type_size
         / device_bw
     )
-    output_cost = (
+    output_perf = (
         global_batch_size
         * emb_dim
         * len(input_lengths)
         * output_data_type_size
         / bw_inter_host
     )
-    return (input_cost, compute_cost, output_cost)
+    return (input_perf, compute_perf, output_perf)
 
 
-def _get_rw_sharding_cost(
+def _get_rw_sharding_perf(
     global_batch_size: float,
     world_size: int,
     input_lengths: List[float],
@@ -272,14 +272,14 @@ def _get_rw_sharding_cost(
     device_bw: float,
     bw_inter_host: int,
 ) -> Tuple[float, float, float]:
-    input_cost = (
+    input_perf = (
         global_batch_size
         * sum(input_lengths)
         / world_size
         * input_data_type_size
         / bw_inter_host
     )
-    compute_cost = (
+    compute_perf = (
         global_batch_size
         * sum(input_lengths)
         / world_size
@@ -287,17 +287,17 @@ def _get_rw_sharding_cost(
         * output_data_type_size
         / device_bw
     )
-    output_cost = (
+    output_perf = (
         global_batch_size
         * emb_dim
         * len(input_lengths)
         * output_data_type_size
         / bw_inter_host
     )
-    return (input_cost, compute_cost, output_cost)
+    return (input_perf, compute_perf, output_perf)
 
 
-def _get_twrw_sharding_cost(
+def _get_twrw_sharding_perf(
     global_batch_size: float,
     world_size: int,
     local_world_size: int,
@@ -309,14 +309,14 @@ def _get_twrw_sharding_cost(
     bw_inter_host: int,
     bw_intra_host: int,
 ) -> Tuple[float, float, float]:
-    input_cost = (
+    input_perf = (
         global_batch_size
         * sum(input_lengths)
         / local_world_size
         * input_data_type_size
         / bw_inter_host
     )
-    compute_cost = (
+    compute_perf = (
         global_batch_size
         * sum(input_lengths)
         / local_world_size
@@ -324,7 +324,7 @@ def _get_twrw_sharding_cost(
         * output_data_type_size
         / device_bw
     )
-    output_cost = (
+    output_perf = (
         global_batch_size
         * emb_dim
         * len(input_lengths)
@@ -337,10 +337,10 @@ def _get_twrw_sharding_cost(
         * (local_world_size / world_size)
         / bw_inter_host
     )
-    return (input_cost, compute_cost, output_cost)
+    return (input_perf, compute_perf, output_perf)
 
 
-def _get_dp_sharding_cost(
+def _get_dp_sharding_perf(
     batch_size: float,
     input_lengths: List[float],
     grad_num_elem: int,
@@ -349,13 +349,13 @@ def _get_dp_sharding_cost(
     output_data_type_size: float,
     device_bw: float,
 ) -> Tuple[float, float, float]:
-    input_cost = 0
-    compute_cost = (
+    input_perf = 0
+    compute_perf = (
         batch_size * sum(input_lengths) * emb_dim * output_data_type_size / device_bw
     )
-    # TODO: this is allreduce cost, better separated out as backward cost
-    output_cost = grad_num_elem * output_data_type_size / bw_inter_host
-    return (input_cost, compute_cost, output_cost)
+    # TODO: this is allreduce perf, better separated out as backward perf
+    output_perf = grad_num_elem * output_data_type_size / bw_inter_host
+    return (input_perf, compute_perf, output_perf)
 
 
 class EmbeddingStorageEstimator(ShardEstimator):
@@ -401,7 +401,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 tensor=sharding_option.tensor,
                 compute_device=self._topology.compute_device,
                 compute_kernel=sharding_option.compute_kernel,
-                shard_lengths=[shard.length for shard in sharding_option.shards],
+                shard_sizes=[shard.size for shard in sharding_option.shards],
                 batch_size=self._topology.batch_size,
                 world_size=self._topology.world_size,
                 local_world_size=self._topology.local_world_size,
@@ -419,7 +419,7 @@ def calculate_shard_storages(
     tensor: torch.Tensor,
     compute_device: str,
     compute_kernel: str,
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     batch_size: int,
     world_size: int,
     local_world_size: int,
@@ -436,7 +436,7 @@ def calculate_shard_storages(
         tensor (torch.Tensor): tensor to be sharded.
         compute_device (str): compute device to be used.
         compute_kernel (str): compute kernel to be used.
-        shard_lengths (List[List[int]]): list of dimensions of each sharded tensor.
+        shard_sizes (List[List[int]]): list of dimensions of each sharded tensor.
         batch_size (int): batch size to be used.
         world_size (int): total number of devices in topology.
         local_world_size (int): total number of devices in host group topology.
@@ -458,7 +458,7 @@ def calculate_shard_storages(
         local_world_size=local_world_size,
         input_lengths=input_lengths,
         emb_dim=tensor.shape[1],
-        shard_lengths=shard_lengths,
+        shard_sizes=shard_sizes,
         input_data_type_size=input_data_type_size,
         output_data_type_size=output_data_type_size,
     )
@@ -474,7 +474,7 @@ def calculate_shard_storages(
     hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=hbm_storage,
         shape=tensor.shape,
-        shard_lengths=shard_lengths,
+        shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         compute_kernel=compute_kernel,
         on_device=compute_device == "cuda",
@@ -485,7 +485,7 @@ def calculate_shard_storages(
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
         shape=tensor.shape,
-        shard_lengths=shard_lengths,
+        shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         compute_kernel=compute_kernel,
         on_device=compute_device == "cpu",
@@ -529,7 +529,7 @@ def _calculate_shard_io_sizes(
     local_world_size: int,
     input_lengths: List[float],
     emb_dim: int,
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
@@ -538,7 +538,7 @@ def _calculate_shard_io_sizes(
             batch_size=batch_size,
             input_lengths=input_lengths,
             emb_dim=emb_dim,
-            num_shards=len(shard_lengths),
+            num_shards=len(shard_sizes),
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
         )
@@ -556,7 +556,7 @@ def _calculate_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             input_lengths=input_lengths,
-            shard_lengths=shard_lengths,
+            shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
         )
@@ -565,7 +565,7 @@ def _calculate_shard_io_sizes(
             batch_size=batch_size,
             world_size=world_size,
             input_lengths=input_lengths,
-            shard_lengths=shard_lengths,
+            shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
         )
@@ -575,7 +575,7 @@ def _calculate_shard_io_sizes(
             world_size=world_size,
             local_world_size=local_world_size,
             input_lengths=input_lengths,
-            shard_lengths=shard_lengths,
+            shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
         )
@@ -627,24 +627,24 @@ def _calculate_cw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     input_lengths: List[float],
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
     input_sizes: List[int] = [
         # pyre-ignore[58]
         math.ceil(batch_size * world_size * sum(input_lengths) * input_data_type_size)
-    ] * len(shard_lengths)
+    ] * len(shard_sizes)
 
     output_sizes: List[int] = [
         (
             batch_size
             * world_size
-            * shard_lengths[i][1]
+            * shard_sizes[i][1]
             * len(input_lengths)
             * output_data_type_size
         )
-        for i in range(len(shard_lengths))
+        for i in range(len(shard_sizes))
     ]
 
     return input_sizes, output_sizes
@@ -654,7 +654,7 @@ def _calculate_rw_shard_io_sizes(
     batch_size: int,
     world_size: int,
     input_lengths: List[float],
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
@@ -667,17 +667,17 @@ def _calculate_rw_shard_io_sizes(
             / world_size
             * input_data_type_size
         )
-    ] * len(shard_lengths)
+    ] * len(shard_sizes)
 
     output_sizes: List[int] = [
         (
             batch_size
             * world_size
-            * shard_lengths[i][1]
+            * shard_sizes[i][1]
             * len(input_lengths)
             * output_data_type_size
         )
-        for i in range(len(shard_lengths))
+        for i in range(len(shard_sizes))
     ]
 
     return input_sizes, output_sizes
@@ -688,7 +688,7 @@ def _calculate_twrw_shard_io_sizes(
     world_size: int,
     local_world_size: int,
     input_lengths: List[float],
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
 ) -> Tuple[List[int], List[int]]:
@@ -701,17 +701,17 @@ def _calculate_twrw_shard_io_sizes(
             / local_world_size
             * input_data_type_size
         )
-    ] * len(shard_lengths)
+    ] * len(shard_sizes)
 
     output_sizes: List[int] = [
         (
             batch_size
             * world_size
-            * shard_lengths[i][1]
+            * shard_sizes[i][1]
             * len(input_lengths)
             * output_data_type_size
         )
-        for i in range(len(shard_lengths))
+        for i in range(len(shard_sizes))
     ]
 
     return input_sizes, output_sizes
@@ -720,7 +720,7 @@ def _calculate_twrw_shard_io_sizes(
 def _calculate_storage_specific_sizes(
     storage: int,
     shape: torch.Size,
-    shard_lengths: List[List[int]],
+    shard_sizes: List[List[int]],
     sharding_type: str,
     compute_kernel: str,
     on_device: bool,
@@ -729,10 +729,10 @@ def _calculate_storage_specific_sizes(
     output_data_type_size: int,
 ) -> List[int]:
     tensor_sizes: List[int] = [
-        math.ceil(storage * math.prod(length) / math.prod(shape))
+        math.ceil(storage * math.prod(size) / math.prod(shape))
         if sharding_type != ShardingType.DATA_PARALLEL.value
         else storage
-        for length in shard_lengths
+        for size in shard_sizes
     ]
 
     gradient_sizes: List[int] = tensor_sizes
@@ -740,11 +740,11 @@ def _calculate_storage_specific_sizes(
         gradient_sizes = [
             math.ceil(
                 input_size
-                * shard_length[1]
+                * shard_size[1]
                 * output_data_type_size
                 / input_data_type_size
             )
-            for input_size, shard_length in zip(input_sizes, shard_lengths)
+            for input_size, shard_size in zip(input_sizes, shard_sizes)
         ]
 
     optimizer_sizes: List[int] = [

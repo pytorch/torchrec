@@ -32,7 +32,7 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 
-EXPECTED_RW_SHARD_LENGTHS = [
+EXPECTED_RW_SHARD_SIZES = [
     [[13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [9, 10]],
     [[14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [12, 20]],
     [[15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30]],
@@ -134,7 +134,7 @@ EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
 ]
 
 
-EXPECTED_TWRW_SHARD_LENGTHS = [
+EXPECTED_TWRW_SHARD_SIZES = [
     [[25, 10], [25, 10], [25, 10], [25, 10]],
     [[28, 20], [28, 20], [28, 20], [26, 20]],
     [[30, 30], [30, 30], [30, 30], [30, 30]],
@@ -175,7 +175,7 @@ EXPECTED_TWRW_SHARD_STORAGE = [
     ],
 ]
 
-EXPECTED_CW_SHARD_LENGTHS = [
+EXPECTED_CW_SHARD_SIZES = [
     [[100, 10]],
     [[110, 8], [110, 12]],
     [[120, 9], [120, 9], [120, 12]],
@@ -335,7 +335,7 @@ class TestEnumerators(unittest.TestCase):
                 sharding_option.sharding_type, ShardingType.DATA_PARALLEL.value
             )
             self.assertEqual(
-                [shard.length for shard in sharding_option.shards],
+                [shard.size for shard in sharding_option.shards],
                 [list(sharding_option.tensor.shape)] * self.world_size,
             )
             self.assertEqual(
@@ -402,7 +402,7 @@ class TestEnumerators(unittest.TestCase):
                 sharding_option.sharding_type, ShardingType.TABLE_WISE.value
             )
             self.assertEqual(
-                sharding_option.shards[0].length, list(sharding_option.tensor.shape)
+                sharding_option.shards[0].size, list(sharding_option.tensor.shape)
             )
             self.assertEqual(sharding_option.shards[0].offset, [0, 0])
 
@@ -453,8 +453,8 @@ class TestEnumerators(unittest.TestCase):
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
             self.assertEqual(
-                [shard.length for shard in sharding_option.shards],
-                EXPECTED_RW_SHARD_LENGTHS[i],
+                [shard.size for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_SIZES[i],
             )
             self.assertEqual(
                 [shard.offset for shard in sharding_option.shards],
@@ -475,8 +475,8 @@ class TestEnumerators(unittest.TestCase):
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
             self.assertEqual(
-                [shard.length for shard in sharding_option.shards],
-                EXPECTED_RW_SHARD_LENGTHS[i],
+                [shard.size for shard in sharding_option.shards],
+                EXPECTED_RW_SHARD_SIZES[i],
             )
             self.assertEqual(
                 [shard.offset for shard in sharding_option.shards],
@@ -496,8 +496,8 @@ class TestEnumerators(unittest.TestCase):
                 sharding_option.sharding_type, ShardingType.TABLE_ROW_WISE.value
             )
             self.assertEqual(
-                [shard.length for shard in sharding_option.shards],
-                EXPECTED_TWRW_SHARD_LENGTHS[i],
+                [shard.size for shard in sharding_option.shards],
+                EXPECTED_TWRW_SHARD_SIZES[i],
             )
             self.assertEqual(
                 [shard.offset for shard in sharding_option.shards],
@@ -517,8 +517,8 @@ class TestEnumerators(unittest.TestCase):
                 sharding_option.sharding_type, ShardingType.COLUMN_WISE.value
             )
             self.assertEqual(
-                [shard.length for shard in sharding_option.shards],
-                EXPECTED_CW_SHARD_LENGTHS[i],
+                [shard.size for shard in sharding_option.shards],
+                EXPECTED_CW_SHARD_SIZES[i],
             )
             self.assertEqual(
                 [shard.offset for shard in sharding_option.shards],

@@ -25,7 +25,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             topology=topology, estimator=self.estimator
         )
 
-    def test_1_table_cost(self) -> None:
+    def test_1_table_perf(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
@@ -40,7 +40,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             sharders=[EmbeddingBagCollectionSharder()],
         )
 
-        expected_costs = {
+        expected_perfs = {
             ("dense", "data_parallel"): [398.5666507405638, 398.5666507405638],
             ("batched_dense", "data_parallel"): [378.9966555183946, 378.9966555183946],
             ("dense", "table_wise"): [3543.7999681477945],
@@ -74,11 +74,11 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                 12782.23578564941,
             ],
         }
-        costs = {
+        perfs = {
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): [shard.cost for shard in sharding_option.shards]
+            ): [shard.perf for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
-        self.assertEqual(expected_costs, costs)
+        self.assertEqual(expected_perfs, perfs)

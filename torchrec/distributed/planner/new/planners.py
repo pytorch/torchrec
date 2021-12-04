@@ -16,7 +16,7 @@ from torchrec.distributed.collective_utils import (
 )
 from torchrec.distributed.planner.new.constants import MAX_SIZE
 from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.partitioners import GreedyCostPartitioner
+from torchrec.distributed.planner.new.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.new.perf_models import NoopPerfModel
 from torchrec.distributed.planner.new.proposers import GreedyProposer
 from torchrec.distributed.planner.new.stats import EmbeddingStats
@@ -66,7 +66,7 @@ def _merge_shards_by_dim(shards: List[Shard], dim: int) -> List[Shard]:
             # pyre-ignore [16]
             current_shard.storage += shard.storage
             # pyre-ignore [16]
-            current_shard.cost += shard.cost
+            current_shard.perf += shard.perf
         current_dim_offset += shard.length[dim]
     return merged_shards
 
@@ -104,7 +104,7 @@ def _to_sharding_plan(
             else EnumerableShardingSpec(
                 [
                     ShardMetadata(
-                        shard_sizes=shard.length,
+                        shard_sizes=shard.size,
                         shard_offsets=shard.offset,
                         placement=_placement(
                             compute_device, cast(int, shard.rank), local_size
@@ -149,7 +149,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             else FixedPercentageReservation(percentage=0.4)
         )
         self._partitioner: Partitioner = (
-            partitioner if partitioner else GreedyCostPartitioner()
+            partitioner if partitioner else GreedyPerfPartitioner()
         )
         if proposer:
             self._proposers: List[Proposer] = (

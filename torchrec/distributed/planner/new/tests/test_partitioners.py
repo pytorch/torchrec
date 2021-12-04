@@ -13,7 +13,7 @@ from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.partitioners import GreedyCostPartitioner
+from torchrec.distributed.planner.new.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.new.types import Storage, Topology, PartitionByType
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
@@ -59,7 +59,7 @@ class TWRWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TestGreedyCostPartitioner(unittest.TestCase):
+class TestGreedyPerfPartitioner(unittest.TestCase):
     def setUp(self) -> None:
         compute_device = "cuda"
         self.topology = Topology(world_size=2, compute_device=compute_device)
@@ -75,15 +75,15 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         self.topology = Topology(world_size=2, compute_device=compute_device)
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyCostPartitioner()
+        self.partitioner = GreedyPerfPartitioner()
 
-    def test_tw_balanced_cost_device(self) -> None:
+    def test_tw_balanced_perf_device(self) -> None:
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWSharder()]
         )
 
         for sharding_option in sharding_options:
-            sharding_option.shards[0].cost = 100
+            sharding_option.shards[0].perf = 100
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
@@ -107,8 +107,8 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(solution_topology.devices[0].cost, 200)
-        self.assertEqual(solution_topology.devices[1].cost, 200)
+        self.assertEqual(solution_topology.devices[0].perf, 200)
+        self.assertEqual(solution_topology.devices[1].perf, 200)
 
         self.assertEqual(
             solution_topology.devices[0].storage,
@@ -119,14 +119,14 @@ class TestGreedyCostPartitioner(unittest.TestCase):
             self.topology.devices[1].storage - Storage(2000, 2000),
         )
 
-    def test_tw_unbalanced_cost_device(self) -> None:
+    def test_tw_unbalanced_perf_device(self) -> None:
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWSharder()]
         )
 
         for i, sharding_option in enumerate(sharding_options):
-            cost = 100 if i > 0 else 300
-            sharding_option.shards[0].cost = cost
+            perf = 100 if i > 0 else 300
+            sharding_option.shards[0].perf = perf
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
@@ -150,8 +150,8 @@ class TestGreedyCostPartitioner(unittest.TestCase):
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(solution_topology.devices[0].cost, 300)
-        self.assertEqual(solution_topology.devices[1].cost, 300)
+        self.assertEqual(solution_topology.devices[0].perf, 300)
+        self.assertEqual(solution_topology.devices[1].perf, 300)
 
         self.assertEqual(
             solution_topology.devices[0].storage,
@@ -162,7 +162,7 @@ class TestGreedyCostPartitioner(unittest.TestCase):
             self.topology.devices[1].storage - Storage(3000, 3000),
         )
 
-    def test_tw_balanced_cost_host(self) -> None:
+    def test_tw_balanced_perf_host(self) -> None:
         self.topology = Topology(
             world_size=16, local_world_size=8, compute_device="cuda"
         )
@@ -178,14 +178,14 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyCostPartitioner()
+        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWRWSharder()]
         )
         for sharding_option in sharding_options:
-            cost = 100.0
+            perf = 100.0
             for shard in sharding_option.shards:
-                shard.cost = cost
+                shard.perf = perf
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
@@ -217,7 +217,7 @@ class TestGreedyCostPartitioner(unittest.TestCase):
                 self.topology.devices[i].storage - Storage(2000, 2000),
             )
 
-    def test_rw_unbalanced_cost_uniform(self) -> None:
+    def test_rw_unbalanced_perf_uniform(self) -> None:
         self.topology = Topology(world_size=4, compute_device="cuda")
         tables = [
             EmbeddingBagConfig(
@@ -231,14 +231,14 @@ class TestGreedyCostPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyCostPartitioner()
+        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[RWSharder()]
         )
         for sharding_option in sharding_options:
-            cost = 100.0
+            perf = 100.0
             for shard in sharding_option.shards:
-                shard.cost = cost
+                shard.perf = perf
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.UNIFORM.value
 

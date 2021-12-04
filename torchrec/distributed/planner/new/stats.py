@@ -45,7 +45,7 @@ class EmbeddingStats(Stats):
         Log stats for a given sharding plan to stdout.
 
         Provide a tabular view of stats for the given sharding plan with per device
-        storage usage (HBM and DDR), cost, input (pooling factors), output (embedding
+        storage usage (HBM and DDR), perf, input (pooling factors), output (embedding
         dimension), and number and type of shards.
 
         Args:
@@ -54,8 +54,8 @@ class EmbeddingStats(Stats):
             num_proposals (int): number of proposals evaluated
             num_plans (int): number of proposals successfully partitioned
             best_plan (List[ShardingOption]): plan with expected performance
-            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names to
-                provided ParameterConstraints.
+            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter
+                names to provided ParameterConstraints.
 
         """
         shard_by_fqn = {
@@ -96,14 +96,14 @@ class EmbeddingStats(Stats):
         table = []
         used_hbm = [0] * topology.world_size
         used_ddr = [0] * topology.world_size
-        cost = [0.0] * topology.world_size
+        perf = [0.0] * topology.world_size
         for sharding_option in best_plan:
             for shard in sharding_option.shards:
                 storage = cast(Storage, shard.storage)
                 rank = cast(int, shard.rank)
                 used_hbm[rank] += storage.hbm
                 used_ddr[rank] += storage.ddr
-                cost[rank] += cast(float, shard.cost)
+                perf[rank] += cast(float, shard.perf)
 
         for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
@@ -116,7 +116,7 @@ class EmbeddingStats(Stats):
 
             rank_hbm = f"{used_hbm_gb:.1f} ({used_hbm_ratio:.0%})"
             rank_ddr = f"{used_ddr_gb:.1f} ({used_ddr_ratio:.0%})"
-            rank_cost = f"{cost[rank] / 1000:,.0f}"
+            rank_perf = f"{perf[rank] / 1000:,.0f}"
             rank_pooling = f"{int(stats[rank]['pooling_factor']):,}"
             rank_dims = f"{stats[rank]['embedding_dims']:,}"
             rank_shards = " ".join(
@@ -128,14 +128,14 @@ class EmbeddingStats(Stats):
                     rank,
                     rank_hbm,
                     rank_ddr,
-                    rank_cost,
+                    rank_perf,
                     rank_pooling,
                     rank_dims,
                     rank_shards,
                 ]
             )
 
-        headers = ["Rank", "HBM (GB)", "DDR (GB)", "Cost", "Input", "Output", "Shards"]
+        headers = ["Rank", "HBM (GB)", "DDR (GB)", "Perf", "Input", "Output", "Shards"]
         table = tabulate(table, headers=headers).split("\n")
 
         logger.info(STATS_DIVIDER)
@@ -166,12 +166,12 @@ class EmbeddingStats(Stats):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Tuple[List[int], List[float], List[int]]:
         """
-        Gets ranks, pooling factors, and embedding dimensions per shard
+        Gets ranks, pooling factors, and embedding dimensions per shard.
 
         Returns:
-            ranks: list of ranks
-            pooling_factor: list of pooling factors across ranks
-            emb_dims: list of embedding dimensions across ranks
+            ranks: list of ranks.
+            pooling_factor: list of pooling factors across ranks.
+            emb_dims: list of embedding dimensions across ranks.
         """
         ranks = list(range(world_size))
         pooling_factor = [
@@ -193,7 +193,7 @@ class EmbeddingStats(Stats):
             assert shard.ranks
             ranks = shard.ranks
             emb_dims = [
-                int(shard.shard_lengths[1])
+                int(shard.shard_sizes[1])
                 # pyre-ignore [16]
                 for shard in shard.sharding_spec.shards
             ]

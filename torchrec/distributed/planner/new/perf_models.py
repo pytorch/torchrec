@@ -15,10 +15,10 @@ class NoopPerfModel(PerfModel):
         self._topology = topology
 
     def rate(self, plan: List[ShardingOption]) -> float:
-        prefs = [0] * self._topology.world_size
+        perfs = [0] * self._topology.world_size
         for sharding_option in plan:
             for shard in sharding_option.shards:
                 # pyre-ignore [6]: Expected `typing_extensions.SupportsIndex`
-                prefs[shard.rank] += cast(float, shard.cost)
+                perfs[shard.rank] += cast(float, shard.perf)
 
-        return max(prefs)
+        return max(perfs)

@@ -76,8 +76,7 @@ class EmbeddingEnumerator(Enumerator):
             sharders (List[ModuleSharder[nn.Module]]): provided sharders for module.
 
         Returns:
-            List[ShardingOption]: valid sharding options with values populated except
-                for cost.
+            List[ShardingOption]: valid sharding options with values populated.
 
         """
         sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
@@ -110,9 +109,9 @@ class EmbeddingEnumerator(Enumerator):
                             else None
                         )
                         (
-                            shard_lengths,
+                            shard_sizes,
                             shard_offsets,
-                        ) = calculate_shard_lengths_and_offsets(
+                        ) = calculate_shard_sizes_and_offsets(
                             tensor=param,
                             world_size=self._world_size,
                             local_world_size=self._local_world_size,
@@ -132,10 +131,8 @@ class EmbeddingEnumerator(Enumerator):
                                 sharding_type=sharding_type,
                                 partition_by=get_partition_by_type(sharding_type),
                                 shards=[
-                                    Shard(length=length, offset=offset)
-                                    for length, offset in zip(
-                                        shard_lengths, shard_offsets
-                                    )
+                                    Shard(size=size, offset=offset)
+                                    for size, offset in zip(shard_sizes, shard_offsets)
                                 ],
                             )
                         )
@@ -212,7 +209,7 @@ def get_partition_by_type(sharding_type: str) -> str:
     raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
 
 
-def calculate_shard_lengths_and_offsets(
+def calculate_shard_sizes_and_offsets(
     tensor: torch.Tensor,
     world_size: int,
     local_world_size: int,
@@ -220,8 +217,7 @@ def calculate_shard_lengths_and_offsets(
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     """
-    Calculates lengths and offsets for tensor sharded according to provided sharding
-    type.
+    Calculates sizes and offsets for tensor sharded according to provided sharding type.
 
     Args:
         tensor (torch.Tensor): tensor to be sharded.
@@ -231,7 +227,7 @@ def calculate_shard_lengths_and_offsets(
         col_wise_shard_dim (Optional[int]): dimension for column wise sharding split.
 
     Returns:
-        Tuple[List[List[int]], List[List[int]]]: shard lengths, represented as a list of
+        Tuple[List[List[int]], List[List[int]]]: shard sizes, represented as a list of
             the dimensions of the sharded tensor on each device, and shard offsets,
             represented as a list of coordinates of placement on each device.
 
@@ -247,22 +243,20 @@ def calculate_shard_lengths_and_offsets(
     elif sharding_type == ShardingType.TABLE_WISE.value:
         return [[rows, columns]], [[0, 0]]
     elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return _calculate_cw_shard_lengths_and_offsets(
-            columns, rows, col_wise_shard_dim
-        )
+        return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return _calculate_rw_shard_lengths_and_offsets(rows, world_size, columns)
+        return _calculate_rw_shard_sizes_and_offsets(rows, world_size, columns)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return _calculate_rw_shard_lengths_and_offsets(rows, local_world_size, columns)
+        return _calculate_rw_shard_sizes_and_offsets(rows, local_world_size, columns)
 
     raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
 
 
-def _calculate_rw_shard_lengths_and_offsets(
+def _calculate_rw_shard_sizes_and_offsets(
     hash_size: int, num_devices: int, columns: int
 ) -> Tuple[List[List[int]], List[List[int]]]:
     """
-    Sets prefix of shard_lengths to be ceil(hash_size/num_devices).
+    Sets prefix of shard_sizes to be ceil(hash_size/num_devices).
 
     For example if hash_size = 10, num_devices = 3, we will allocate the rows as 3,3,3,1
     (rather than 3,3,2,2).
@@ -279,7 +273,7 @@ def _calculate_rw_shard_lengths_and_offsets(
     block_size: int = math.ceil(hash_size / num_devices)
     last_rank: int = hash_size // block_size
     last_block_size: int = hash_size - block_size * last_rank
-    shard_lengths: List[List[int]] = []
+    shard_sizes: List[List[int]] = []
 
     for rank in range(num_devices):
         if rank < last_rank:
@@ -288,16 +282,16 @@ def _calculate_rw_shard_lengths_and_offsets(
             local_row: int = last_block_size
         else:
             local_row: int = 0
-        shard_lengths.append([local_row, columns])
+        shard_sizes.append([local_row, columns])
     shard_offsets = [[0, 0]]
 
     for i in range(num_devices - 1):
-        shard_offsets.append([shard_lengths[i][0] + shard_offsets[i][0], 0])
+        shard_offsets.append([shard_sizes[i][0] + shard_offsets[i][0], 0])
 
-    return shard_lengths, shard_offsets
+    return shard_sizes, shard_offsets
 
 
-def _calculate_cw_shard_lengths_and_offsets(
+def _calculate_cw_shard_sizes_and_offsets(
     hash_size: int,
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
@@ -307,10 +301,10 @@ def _calculate_cw_shard_lengths_and_offsets(
     )
     num_col_wise_shards, residual = divmod(hash_size, block_size)
 
-    shard_lengths: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
-    shard_lengths.append([rows, block_size + residual])
+    shard_sizes: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
+    shard_sizes.append([rows, block_size + residual])
 
     shard_offsets: List[List[int]] = [
         [0, block_size * rank] for rank in range(num_col_wise_shards)
     ]
-    return shard_lengths, shard_offsets
+    return shard_sizes, shard_offsets

@@ -30,7 +30,7 @@ from torchrec.distributed.types import ModuleSharder, ShardingPlan
 @dataclass(repr=True, order=True, eq=True)
 class Storage:
     """
-    Representation of the storage capacities of a hardware used in training."
+    Representation of the storage capacities of a hardware used in training.
     """
 
     hbm: int
@@ -52,12 +52,13 @@ class Storage:
 @dataclass
 class DeviceHardware:
     """
-    Reprensentation of a device in a process group. Cost is an estimation of network, CPU, and storage usages.
+    Representation of a device in a process group. 'perf' is an estimation of network,
+    CPU, and storage usages.
     """
 
     rank: int
     storage: Storage
-    cost: int = 0
+    perf: int = 0
 
 
 class Topology:
@@ -150,13 +151,15 @@ class Topology:
 @dataclass
 class Shard:
     """
-    Representation of a subset of an embedding table. Length and offset fully deterine the tensors in the shard. 'storage' is an estimation of how much it takes to store the shard with an estimation 'cost'.
+    Representation of a subset of an embedding table. 'size' and 'offset' fully
+    determine the tensors in the shard. 'storage' is an estimation of how much it takes
+    to store the shard with an estimation 'perf'.
     """
 
-    length: List[int]
+    size: List[int]
     offset: List[int]
     storage: Optional[Storage] = None
-    cost: Optional[float] = None
+    perf: Optional[float] = None
     rank: Optional[int] = None
 
 
@@ -213,8 +216,8 @@ class PartitionByType(Enum):
 @dataclass
 class ParameterConstraints:
     """
-    Stores user provided constraints around
-    sharding types, compute kernels and partitioning
+    Stores user provided constraints around sharding types, compute kernels, and
+    partitioning.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -252,8 +255,8 @@ class PerfModel(abc.ABC):
 
 class Enumerator(abc.ABC):
     """
-    Generates all relevant sharding options for given nn.Module,
-    input stats, and user constraints
+    Generates all relevant sharding options for given nn.Module, input stats, and user
+    constraints.
     """
 
     @abc.abstractmethod
@@ -279,8 +282,7 @@ class Enumerator(abc.ABC):
 
 class ShardEstimator(abc.ABC):
     """
-    Calculates costs, requires fully specified sharding options
-    (ie. ranks/lengths)
+    Estimates shard perf or storage, requires fully specified sharding options.
     """
 
     @abc.abstractmethod
@@ -303,8 +305,8 @@ class ShardEstimator(abc.ABC):
 
 class Proposer(abc.ABC):
     """
-    Prosposes complete lists of sharding options which can be
-    parititioned to generate a plan
+    Prosposes complete lists of sharding options which can be parititioned to generate
+    a plan.
     """
 
     @abc.abstractmethod
@@ -330,10 +332,9 @@ class Proposer(abc.ABC):
 
 class Partitioner(abc.ABC):
     """
-    Parition
+    Partitions shards.
 
-    Today we have multiple strategies ie.
-    (Greedy, BLDM, Linear)
+    Today we have multiple strategies ie. (Greedy, BLDM, Linear).
     """
 
     @abc.abstractmethod
@@ -348,7 +349,7 @@ class Partitioner(abc.ABC):
 
 class Stats(abc.ABC):
     """
-    Log statistics related to the sharding plan
+    Logs statistics related to the sharding plan.
     """
 
     @abc.abstractmethod

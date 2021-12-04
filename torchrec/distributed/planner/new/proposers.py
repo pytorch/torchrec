@@ -39,9 +39,9 @@ class GreedyProposer(Proposer):
 
     def _sharding_option_score(self, sharding_option: ShardingOption) -> float:
         return (
-            max([cast(float, shard.cost) for shard in sharding_option.shards])
+            max([cast(float, shard.perf) for shard in sharding_option.shards])
             if self._use_depth
-            else sum([cast(float, shard.cost) for shard in sharding_option.shards])
+            else sum([cast(float, shard.perf) for shard in sharding_option.shards])
         )
 
     def propose(self) -> Optional[List[ShardingOption]]:

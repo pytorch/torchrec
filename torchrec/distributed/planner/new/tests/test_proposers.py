@@ -24,7 +24,7 @@ class TestGreedyProposer(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(topology=topology)
         self.proposer = GreedyProposer()
 
-    def test_two_table_cost(self) -> None:
+    def test_two_table_perf(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
@@ -52,7 +52,7 @@ class TestGreedyProposer(unittest.TestCase):
             proposal = cast(List[ShardingOption], self.proposer.propose())
             proposal.sort(
                 key=lambda sharding_option: (
-                    max([shard.cost for shard in sharding_option.shards]),
+                    max([shard.perf for shard in sharding_option.shards]),
                     sharding_option.name,
                 )
             )
