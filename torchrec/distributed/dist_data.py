@@ -26,6 +26,12 @@ try:
 except OSError:
     pass
 
+# OSS
+try:
+    import fbgemm_gpu  # @manual # noqa
+except ImportError:
+    pass
+
 
 def _recat(local_split: int, num_splits: int, stagger: int = 1) -> List[int]:
     """

@@ -22,6 +22,13 @@ except OSError:
     pass
 
 
+# OSS
+try:
+    import fbgemm_gpu  # @manual # noqa
+except ImportError:
+    pass
+
+
 W = TypeVar("W")
 
 # TODO: T96382816, NE Parity Backward compatibility

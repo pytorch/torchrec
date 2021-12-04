@@ -38,6 +38,12 @@ try:
 except OSError:
     pass
 
+# OSS
+try:
+    import fbgemm_gpu  # @manual # noqa
+except ImportError:
+    pass
+
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     def __init__(

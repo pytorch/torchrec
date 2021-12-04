@@ -18,6 +18,12 @@ try:
 except OSError:
     pass
 
+# OSS
+try:
+    import fbgemm_gpu  # @manual # noqa
+except ImportError:
+    pass
+
 
 def _cumsum(o: List[int]) -> List[int]:
     ret = [0] * (len(o) + 1)
