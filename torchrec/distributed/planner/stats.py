@@ -8,8 +8,7 @@
 import logging
 from typing import Tuple, Optional, Any, List, Dict, cast
 
-from tabulate import tabulate
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.types import (
     ShardingOption,
     Stats,
     Topology,
@@ -107,7 +106,11 @@ class EmbeddingStats(Stats):
 
         for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
-            used_hbm_ratio = used_hbm[rank] / device.storage.hbm
+            used_hbm_ratio = (
+                used_hbm[rank] / device.storage.hbm
+                if topology.compute_device == "cuda"
+                else 0
+            )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
             used_ddr_ratio = used_ddr[rank] / device.storage.ddr
             for sharding_type in used_sharding_types:
@@ -136,7 +139,6 @@ class EmbeddingStats(Stats):
             )
 
         headers = ["Rank", "HBM (GB)", "DDR (GB)", "Perf", "Input", "Output", "Shards"]
-        table = tabulate(table, headers=headers).split("\n")
 
         logger.info(STATS_DIVIDER)
         header_text = "--- Planner Statistics ---"
@@ -149,8 +151,9 @@ class EmbeddingStats(Stats):
         logger.info(f"#{iter_text: ^98}#")
         logger.info(STATS_BAR)
 
+        logger.info(f"{'  '.join(headers)}#")
         for row in table:
-            logger.info(f"# {row: <97}#")
+            logger.info(f"# {'  '.join([str(elem) for elem in row])}#")
 
         logger.info(f"#{'' : ^98}#")
         legend = "Input: pooling factor, Output: embedding dimension, Shards: number of tables"

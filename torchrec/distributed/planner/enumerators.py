@@ -10,15 +10,15 @@ from typing import Tuple, Optional, Dict, List, Union
 
 import torch
 from torch import nn
-from torchrec.distributed.planner.new.constants import (
+from torchrec.distributed.planner.constants import (
     MIN_CW_DIM,
     POOLING_FACTOR,
 )
-from torchrec.distributed.planner.new.shard_estimators import (
+from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Enumerator,
     ShardingOption,

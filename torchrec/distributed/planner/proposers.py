@@ -8,7 +8,7 @@
 import copy
 from typing import List, Dict, Tuple, Optional, cast
 
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.types import (
     Proposer,
     ShardingOption,
 )

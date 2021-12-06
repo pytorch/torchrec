@@ -17,7 +17,11 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     QuantEmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.planner import EmbeddingShardingPlanner, sharder_name
+from torchrec.distributed.planner import (
+    EmbeddingShardingPlanner,
+    sharder_name,
+    Topology,
+)
 from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
@@ -105,7 +109,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         # 2. Call ShardingPlanner.collective_plan passing all found modules and corresponding sharders.
         if plan is None:
-            planner = EmbeddingShardingPlanner(self._env.world_size, self.device.type)
+            planner = EmbeddingShardingPlanner(
+                topology=Topology(
+                    world_size=self._env.world_size, compute_device=self.device.type
+                )
+            )
             pg = self._env.process_group
             if pg is not None:
                 plan = planner.collective_plan(module, sharders, pg)

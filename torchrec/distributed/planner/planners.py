@@ -14,16 +14,16 @@ from torch.distributed._sharding_spec import EnumerableShardingSpec, ShardMetada
 from torchrec.distributed.collective_utils import (
     invoke_on_rank_and_broadcast_result,
 )
-from torchrec.distributed.planner.new.constants import MAX_SIZE
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.partitioners import GreedyPerfPartitioner
-from torchrec.distributed.planner.new.perf_models import NoopPerfModel
-from torchrec.distributed.planner.new.proposers import GreedyProposer
-from torchrec.distributed.planner.new.stats import EmbeddingStats
-from torchrec.distributed.planner.new.storage_reservations import (
+from torchrec.distributed.planner.constants import MAX_SIZE
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
+from torchrec.distributed.planner.perf_models import NoopPerfModel
+from torchrec.distributed.planner.proposers import GreedyProposer
+from torchrec.distributed.planner.stats import EmbeddingStats
+from torchrec.distributed.planner.storage_reservations import (
     FixedPercentageReservation,
 )
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Partitioner,
     Topology,
@@ -62,12 +62,12 @@ def _merge_shards_by_dim(shards: List[Shard], dim: int) -> List[Shard]:
             current_rank = shard.rank
         else:
             # pyre-ignore [16]
-            current_shard.length[dim] += shard.length[dim]
+            current_shard.size[dim] += shard.size[dim]
             # pyre-ignore [16]
             current_shard.storage += shard.storage
             # pyre-ignore [16]
             current_shard.perf += shard.perf
-        current_dim_offset += shard.length[dim]
+        current_dim_offset += shard.size[dim]
     return merged_shards
 
 
@@ -200,6 +200,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             module=module,
             sharders=sharders,
         )
+        if not search_space:
+            # No shardable parameters
+            return ShardingPlan({})
 
         for proposer in self._proposers:
             proposer.load(search_space=search_space)

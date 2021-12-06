@@ -12,8 +12,8 @@ import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner.new.planners import EmbeddingShardingPlanner
-from torchrec.distributed.planner.new.types import Topology, PlannerError
+from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
+from torchrec.distributed.planner.types import Topology, PlannerError
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig

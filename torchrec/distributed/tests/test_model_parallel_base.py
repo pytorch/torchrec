@@ -16,8 +16,11 @@ import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.planner import EmbeddingShardingPlanner
-from torchrec.distributed.planner.types import ParameterHints
+from torchrec.distributed.planner import (
+    EmbeddingShardingPlanner,
+    ParameterConstraints,
+    Topology,
+)
 from torchrec.distributed.tests.test_model import (
     ModelInput,
     TestSparseNNBase,
@@ -56,7 +59,7 @@ class ModelParallelTestBase(unittest.TestCase):
         backend: str,
         optim: EmbOptimType,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
-        hints: Optional[Dict[str, ParameterHints]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
         # Override local_size after pg construction because unit test device count
@@ -98,7 +101,9 @@ class ModelParallelTestBase(unittest.TestCase):
             num_float_features=16,
         )
 
-        planner = EmbeddingShardingPlanner(world_size, device.type, hints)
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(world_size, device.type), constraints=constraints
+        )
         plan = planner.collective_plan(local_model, sharders, pg)
 
         local_model = DistributedModelParallel(
@@ -150,7 +155,7 @@ class ModelParallelTestBase(unittest.TestCase):
         model_class: TestSparseNNBase,
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
-        hints: Optional[Dict[str, ParameterHints]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
         ctx = multiprocessing.get_context("spawn")
@@ -168,7 +173,7 @@ class ModelParallelTestBase(unittest.TestCase):
                     backend,
                     optim,
                     weighted_tables,
-                    hints,
+                    constraints,
                 ),
                 kwargs={
                     "local_size": local_size,

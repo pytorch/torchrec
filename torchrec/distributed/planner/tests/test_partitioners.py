@@ -12,9 +12,9 @@ from typing import List
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.partitioners import GreedyPerfPartitioner
-from torchrec.distributed.planner.new.types import Storage, Topology, PartitionByType
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
+from torchrec.distributed.planner.types import Storage, Topology, PartitionByType
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig

@@ -25,8 +25,11 @@ from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
     get_default_sharders,
 )
-from torchrec.distributed.planner import EmbeddingShardingPlanner
-from torchrec.distributed.planner.types import ParameterHints
+from torchrec.distributed.planner import (
+    EmbeddingShardingPlanner,
+    ParameterConstraints,
+    Topology,
+)
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestSparseNNBase,
@@ -378,7 +381,7 @@ class ModelParallelTest(ModelParallelTestBase):
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
-        hints: Optional[Dict[str, ParameterHints]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._run_multi_process_test(
             # pyre-ignore [6]
@@ -392,7 +395,7 @@ class ModelParallelTest(ModelParallelTestBase):
             sharders=sharders,
             backend=backend,
             optim=EmbOptimType.EXACT_SGD,
-            hints=hints,
+            constraints=constraints,
         )
 
 
@@ -494,8 +497,9 @@ class ModelParallelStateDictTest(unittest.TestCase):
             device=self.device,
             env=env,
             plan=EmbeddingShardingPlanner(
-                world_size=env.world_size,
-                compute_device_type=self.device.type,
+                topology=Topology(
+                    world_size=env.world_size, compute_device=self.device.type
+                )
             ).plan(m1, get_default_sharders()),
         )
 
@@ -514,8 +518,9 @@ class ModelParallelStateDictTest(unittest.TestCase):
             device=torch.device("meta"),
             env=env,
             plan=EmbeddingShardingPlanner(
-                world_size=env.world_size,
-                compute_device_type=self.device.type,
+                topology=Topology(
+                    world_size=env.world_size, compute_device=self.device.type
+                )
             ).plan(m2, get_default_sharders()),
         )
 

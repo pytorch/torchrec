@@ -13,15 +13,15 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
 )
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner.new.constants import (
+from torchrec.distributed.planner.constants import (
     BIGINT_DTYPE,
 )
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.shard_estimators import (
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.shard_estimators import (
     _calculate_tw_shard_io_sizes,
     _calculate_dp_shard_io_sizes,
 )
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Storage,
     Topology,

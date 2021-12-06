@@ -11,9 +11,9 @@ from typing import List, cast
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.proposers import GreedyProposer
-from torchrec.distributed.planner.new.types import Topology, ShardingOption
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.proposers import GreedyProposer
+from torchrec.distributed.planner.types import Topology, ShardingOption
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 

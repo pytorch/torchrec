@@ -10,9 +10,9 @@ import unittest
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.planner.new.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.new.shard_estimators import EmbeddingPerfEstimator
-from torchrec.distributed.planner.new.types import Topology
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
+from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 

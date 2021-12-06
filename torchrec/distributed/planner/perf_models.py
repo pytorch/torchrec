@@ -7,7 +7,7 @@
 
 from typing import List, cast
 
-from torchrec.distributed.planner.new.types import PerfModel, Topology, ShardingOption
+from torchrec.distributed.planner.types import PerfModel, Topology, ShardingOption
 
 
 class NoopPerfModel(PerfModel):

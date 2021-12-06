@@ -9,7 +9,7 @@ import copy
 from typing import List
 
 from torch import nn
-from torchrec.distributed.planner.new.types import StorageReservation, Topology
+from torchrec.distributed.planner.types import StorageReservation, Topology
 from torchrec.distributed.types import ModuleSharder
 
 

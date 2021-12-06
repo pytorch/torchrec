@@ -8,8 +8,8 @@
 import copy
 from typing import List, Tuple, Optional, Dict, cast
 
-from torchrec.distributed.planner.new.constants import MAX_SIZE
-from torchrec.distributed.planner.new.types import (
+from torchrec.distributed.planner.constants import MAX_SIZE
+from torchrec.distributed.planner.types import (
     Partitioner,
     Topology,
     ShardingOption,

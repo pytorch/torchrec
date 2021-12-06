@@ -5,155 +5,361 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Deque, Tuple
+import abc
+from dataclasses import field, dataclass
+from enum import Enum
+from typing import Optional, List, Dict, Tuple, Union
 
 import torch
-from torchrec.distributed.types import ParameterStorage
+from torch import nn
+from torchrec.distributed.planner.constants import (
+    CROSS_NODE_BANDWIDTH,
+    INTRA_NODE_BANDWIDTH,
+    HBM_CAP,
+    DDR_CAP,
+    POOLING_FACTOR,
+    BATCH_SIZE,
+)
+from torchrec.distributed.types import ModuleSharder, ShardingPlan
+
+# ---- TOPOLOGY ---- #
 
 
-@dataclass
-class ParameterHints:
-    """
-    Stores user provided hints around
-    sharding types and compute kernels
-    """
-
-    sharding_types: Optional[List[str]] = None
-    compute_kernels: Optional[List[str]] = None
-    col_wise_shard_dim: Optional[int] = None
-
-
-@dataclass
-class ParameterInputStats:
-    """
-    Stores statistics around input data for
-    a given parameter
-    """
-
-    mean: Optional[List[float]] = None
-    std: Optional[List[float]] = None
-
-
-@dataclass
+@dataclass(repr=True, order=True, eq=True)
 class Storage:
-    capacity: int = 0
-    free: int = 0
+    """
+    Representation of the storage capacities of a hardware used in training."
+    """
 
+    hbm: int
+    ddr: int
 
-@dataclass
-class DeviceInfo:
-    rank: int
-    compute_device: str = "cpu"
-    total_cost: int = 0
-    # Device level storage
-    hbm: Storage = field(default_factory=Storage)
+    def __add__(self, other: "Storage") -> "Storage":
+        return Storage(
+            hbm=self.hbm + other.hbm,
+            ddr=self.ddr + other.ddr,
+        )
 
-    def __lt__(self, other: "DeviceInfo") -> bool:
-        return (self.total_cost, -self.hbm.free, self.rank) < (
-            other.total_cost,
-            -other.hbm.free,
-            other.rank,
+    def __sub__(self, other: "Storage") -> "Storage":
+        return Storage(
+            hbm=self.hbm - other.hbm,
+            ddr=self.ddr - other.ddr,
         )
 
 
 @dataclass
-class HostInfo:
-    devices: List[DeviceInfo]
-    # Host level storage
-    ddr: Storage = field(default_factory=Storage)
+class DeviceHardware:
+    """
+    Reprensentation of a device in a process group. Cost is an estimation of network, CPU, and storage usages.
+    """
+
+    rank: int
+    storage: Storage
+    perf: int = 0
+
+
+class Topology:
+    def __init__(
+        self,
+        world_size: int,
+        compute_device: str,
+        hbm_cap: Optional[int] = None,
+        ddr_cap: int = DDR_CAP,
+        local_world_size: Optional[int] = None,
+        intra_host_bw: int = INTRA_NODE_BANDWIDTH,
+        inter_host_bw: int = CROSS_NODE_BANDWIDTH,
+        batch_size: int = BATCH_SIZE,
+    ) -> None:
+        """
+        Representation of a network of devices in a cluster.
+        """
+        # validate input
+        assert compute_device in [
+            "cpu",
+            "cuda",
+        ], f"unsupported compute device {compute_device}"
+
+        self._compute_device = compute_device
+        self._world_size = world_size
+
+        hbm_per_device = 0
+        if self._compute_device == "cuda":
+            hbm_per_device = hbm_cap if hbm_cap else HBM_CAP
+
+        self._devices: List[DeviceHardware] = []
+        for rank in range(world_size):
+            self._devices.append(
+                DeviceHardware(
+                    rank=rank,
+                    storage=Storage(hbm=hbm_per_device, ddr=ddr_cap),
+                )
+            )
+
+        self._local_world_size: int = (
+            local_world_size if local_world_size else world_size
+        )
+        self._intra_host_bw = intra_host_bw
+        self._inter_host_bw = inter_host_bw
+        self._batch_size = batch_size
+
+    @property
+    def batch_size(self) -> int:
+        return self._batch_size
+
+    @property
+    def compute_device(self) -> str:
+        return self._compute_device
+
+    @property
+    def devices(self) -> List[DeviceHardware]:
+        return self._devices
+
+    @property
+    def world_size(self) -> int:
+        return self._world_size
+
+    @property
+    def local_world_size(self) -> int:
+        return self._local_world_size
+
+    @property
+    def intra_host_bw(self) -> int:
+        return self._intra_host_bw
+
+    @property
+    def inter_host_bw(self) -> int:
+        return self._inter_host_bw
+
+    def __repr__(self) -> str:
+        topology_repr: str = f"world_size={self._world_size} \n"
+        topology_repr += f"compute_device={self._compute_device}\n"
+        topology_repr += "devices=\n"
+        for idx, device in enumerate(self._devices):
+            topology_repr += f"\tdevice {idx} {device}\n"
+        topology_repr += f"local_world_size={self._local_world_size} \n"
+        topology_repr += f"intra_host_bw={self._intra_host_bw} \n"
+        topology_repr += f"inter_host_bw={self._inter_host_bw} \n"
+        return topology_repr
+
+
+# ---- INPUT / OUTPUT ----- #
 
 
 @dataclass
-class Topology:
-    hosts: List[HostInfo]
-    world_size: int
-    host_and_device_by_rank: Dict[int, Tuple[int, int]] = field(default_factory=dict)
+class Shard:
+    """
+    Representation of a subset of an embedding table. Length and offset fully deterine the tensors in the shard. 'storage' is an estimation of how much it takes to store the shard with an estimation 'perf'.
+    """
 
-    def get_host(self, rank: int) -> HostInfo:
-        host_idx, _ = self.host_and_device_by_rank[rank]
-        return self.hosts[host_idx]
-
-    def get_device(self, rank: int) -> DeviceInfo:
-        host_idx, device_idx = self.host_and_device_by_rank[rank]
-        return self.hosts[host_idx].devices[device_idx]
+    size: List[int]
+    offset: List[int]
+    storage: Optional[Storage] = None
+    perf: Optional[float] = None
+    rank: Optional[int] = None
 
 
 @dataclass
 class ShardingOption:
-    sharding_type: str
-    compute_kernel: str
-    storage_usage: Dict[str, int]
-    cost: int = 0
-    ranks: Optional[List[int]] = None
-    _num_col_wise_shards: Optional[int] = None
-    col_wise_shard_dim: Optional[int] = None
+    """
+    One way of sharding an embedding table.
+    """
 
-    def __lt__(self, other: "ShardingOption") -> bool:
-        """
-        Sharding option with lowest cost is preferable
-        If cost same, pick option with lowest (HBM, DDR, SDD) usage
-        """
-        return (
-            self.cost,
-            self.storage_usage.get(ParameterStorage.HBM.value, 0),
-            self.storage_usage.get(ParameterStorage.DDR.value, 0),
-        ) < (
-            other.cost,
-            other.storage_usage.get(ParameterStorage.HBM.value, 0),
-            other.storage_usage.get(ParameterStorage.DDR.value, 0),
-        )
-
-
-@dataclass
-class CostInput:
-    param: torch.Tensor
-    compute_device_type: str
-    compute_kernel: str
-    sharding_type: str
-    input_stats: Optional[ParameterInputStats]
-
-
-@dataclass
-class ParameterInfo:
-    param: torch.Tensor
     name: str
-    prefix: str
-    sharding_options: Deque[ShardingOption]
+    tensor: torch.Tensor
+    module: Tuple[str, nn.Module]
+    upstream_modules: List[Tuple[str, nn.Module]]
+    downstream_modules: List[Tuple[str, nn.Module]]
+    input_lengths: List[float]
+    batch_size: int  # per single device
+    sharding_type: str
+    partition_by: str  # {DEVICE, HOST, UNIFORM}
+    compute_kernel: str
+    # relevant to planner output, must be populated if sharding option
+    # part of final solution
+    shards: List[Shard] = field(default_factory=list)
 
     @property
     def fqn(self) -> str:
-        return self.prefix + "." + self.name
+        return self.module[0] + "." + self.name
+
+    @property
+    def path(self) -> str:
+        return self.module[0]
+
+    @property
+    def num_shards(self) -> int:
+        return len(self.shards)
+
+    @property
+    def num_inputs(self) -> int:
+        return len(self.input_lengths)
+
+
+class PartitionByType(Enum):
+    """
+    Well-known partition types
+    """
+
+    # Partitioning based on device
+    DEVICE = "device"
+    # Partitioning based on host
+    HOST = "host"
+    # Uniform, (ie. fixed layout)
+    UNIFORM = "uniform"
 
 
 @dataclass
-class ParamSortKey:
-    compute_cost: int
-    storage_cost: int
-    sharding_cost: int
-    fqn: str
-    sort_by: str = "compute"
+class ParameterConstraints:
+    """
+    Stores user provided constraints around
+    sharding types, compute kernels and partitioning
+    """
 
-    def __lt__(self, other: "ParamSortKey") -> bool:
-        if self.sort_by == "compute":
-            return self._lt_compute_cost(other)
-        elif self.sort_by == "storage":
-            return self._lt_storage_cost(other)
-        else:
-            raise ValueError(f"Invalid sort_by value {self.sort_by}")
+    sharding_types: Optional[List[str]] = None
+    compute_kernels: Optional[List[str]] = None
+    min_partition: Optional[int] = None  # CW sharding
+    caching_ratio: Optional[float] = None  # UVM caching
+    pooling_factors: List[float] = field(
+        default_factory=lambda: [POOLING_FACTOR]
+    )  # Embedding Tables
 
-    def _lt_compute_cost(self, other: "ParamSortKey") -> bool:
-        return (
-            -self.compute_cost,
-            -self.storage_cost,
-            self.sharding_cost,
-            self.fqn,
-        ) < (-other.compute_cost, -other.storage_cost, other.sharding_cost, other.fqn)
 
-    def _lt_storage_cost(self, other: "ParamSortKey") -> bool:
-        return (
-            -self.storage_cost,
-            self.sharding_cost,
-            -self.compute_cost,
-            self.fqn,
-        ) < (-other.storage_cost, other.sharding_cost, -other.compute_cost, other.fqn)
+class PlannerError(Exception):
+    ...
+
+
+# ---- PLANNER COMPONENTS ---- #
+
+
+class StorageReservation(abc.ABC):
+    @abc.abstractmethod
+    def reserve(
+        self,
+        topology: Topology,
+        module: nn.Module,
+        sharders: List[ModuleSharder[nn.Module]],
+    ) -> Topology:
+        ...
+
+
+class PerfModel(abc.ABC):
+    @abc.abstractmethod
+    def rate(self, plan: List[ShardingOption]) -> float:
+        ...
+
+
+class ShardEstimator(abc.ABC):
+    """
+    Calculates costs, requires fully specified sharding options
+    (ie. ranks/lengths)
+    """
+
+    @abc.abstractmethod
+    def __init__(
+        self,
+        topology: Topology,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def estimate(
+        self,
+        sharding_options: List[ShardingOption],
+        sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
+    ) -> None:
+        # update sharding_options with per shard estimate in-place
+        ...
+
+
+class Enumerator(abc.ABC):
+    """
+    Generates all relevant sharding options for given nn.Module,
+    input stats, and user constraints
+    """
+
+    @abc.abstractmethod
+    def __init__(
+        self,
+        topology: Topology,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def enumerate(
+        self,
+        module: nn.Module,
+        sharders: List[ModuleSharder[nn.Module]],
+    ) -> List[ShardingOption]:
+        """
+        See class description.
+        """
+        ...
+
+
+class Proposer(abc.ABC):
+    """
+    Prosposes complete lists of sharding options which can be
+    parititioned to generate a plan
+    """
+
+    @abc.abstractmethod
+    def load(
+        self,
+        search_space: List[ShardingOption],
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def feedback(
+        self,
+        partitionable: bool,
+        plan: Optional[List[ShardingOption]] = None,
+        perf_rating: Optional[float] = None,
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def propose(self) -> Optional[List[ShardingOption]]:
+        ...
+
+
+class Partitioner(abc.ABC):
+    """
+    Parition
+
+    Today we have multiple strategies ie.
+    (Greedy, BLDM, Linear)
+    """
+
+    @abc.abstractmethod
+    def partition(
+        self,
+        proposal: List[ShardingOption],
+        storage_constraint: Topology,
+    ) -> List[ShardingOption]:
+        # modifies sharding_options and topology in-place
+        ...
+
+
+class Stats(abc.ABC):
+    """
+    Log statistics related to the sharding plan
+    """
+
+    @abc.abstractmethod
+    def log(
+        self,
+        sharding_plan: ShardingPlan,
+        topology: Topology,
+        num_proposals: int,
+        num_plans: int,
+        best_plan: List[ShardingOption],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    ) -> None:
+        """
+        See class description
+        """
+        ...

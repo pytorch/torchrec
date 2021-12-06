@@ -20,7 +20,7 @@ from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
 )
-from torchrec.distributed.planner.types import ParameterHints
+from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestSparseNNBase,
@@ -176,7 +176,7 @@ class ModelParallelTest(ModelParallelTestBase):
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
-        hints: Optional[Dict[str, ParameterHints]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._run_multi_process_test(
             # pyre-ignore [6]
@@ -190,7 +190,7 @@ class ModelParallelTest(ModelParallelTestBase):
             sharders=sharders,
             backend=backend,
             optim=optim,
-            hints=hints,
+            constraints=constraints,
         )
 
     @classmethod
@@ -205,7 +205,7 @@ class ModelParallelTest(ModelParallelTestBase):
         backend: str,
         optim: EmbOptimType,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
-        hints: Optional[Dict[str, ParameterHints]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
         # Override local_size after pg construction because unit test device count
