@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import os
 import unittest
 from collections import OrderedDict
@@ -148,6 +149,57 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="nccl",
         )
 
+    @unittest.skip("CW + EBC is not well supported currently")
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    def test_sharding_nccl_cw(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
+        world_size = 4
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                ),
+            ],
+            backend="nccl",
+            world_size=world_size,
+            constraints={
+                table.name: ParameterConstraints(
+                    min_partition=math.ceil(table.embedding_dim / world_size)
+                )
+                for table in self.tables
+            },
+        )
+
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -267,6 +319,57 @@ class ModelParallelTest(ModelParallelTestBase):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="gloo",
+        )
+
+    @unittest.skip("CW + EBC is not well supported currently")
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                # TODO: enable it with correct semantics, see T104397332
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    def test_sharding_gloo_cw(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+    ) -> None:
+        world_size = 4
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                ),
+            ],
+            backend="gloo",
+            world_size=world_size,
+            constraints={
+                table.name: ParameterConstraints(
+                    min_partition=math.ceil(table.embedding_dim / world_size)
+                )
+                for table in self.tables
+            },
         )
 
     # pyre-fixme[56]
