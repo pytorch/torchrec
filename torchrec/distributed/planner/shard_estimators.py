@@ -105,21 +105,26 @@ def perf_func_emb_wall_time(
     (pooledEmbedding).
 
     Args:
-        shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each shard.
-        compute_kernel (str): comput kernel.
+        shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each
+            shard.
+        compute_kernel (str): compute kernel.
         compute_device (str): compute device.
         sharding_type (str): tw, rw, cw, twrw, dp.
         batch_size (int): the size of each batch.
         world_size (int): the number of devices for all hosts.
         local_world_size (int): the number of the device for each host.
-        input_lengths (List[float]): the list of the average number of lookups of each input query feature.
-        input_data_type_size (float): the data type size of the distributed data_parallel input.
-        output_data_type_size (float): the data type size of the distributed data_parallel output.
+        input_lengths (List[float]): the list of the average number of lookups of each
+            input query feature.
+        input_data_type_size (float): the data type size of the distributed
+            data_parallel input.
+        output_data_type_size (float): the data type size of the distributed
+            data_parallel output.
         bw_intra_host (int): the bandwidth within the single host like multiple threads.
         bw_inter_host (int): the bandwidth between two hosts like multiple machines.
         has_input_dist (bool = True): if we need input distributed.
         has_output_dist (bool = True): if we need output distributed.
-        caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth of device.
+        caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
+            of device.
 
     Returns:
         List[float]: the list of perf for each shard.
@@ -136,59 +141,59 @@ def perf_func_emb_wall_time(
 
         if sharding_type == ShardingType.TABLE_WISE.value:
             input_perf, compute_perf, output_perf = _get_tw_sharding_perf(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type == ShardingType.ROW_WISE.value:
             input_perf, compute_perf, output_perf = _get_rw_sharding_perf(
-                B,
-                world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
+                global_batch_size=B,
+                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
             )
         elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
             input_perf, compute_perf, output_perf = _get_twrw_sharding_perf(
-                B,
-                world_size,
-                local_world_size,
-                input_lengths,
-                emb_dim,
-                input_data_type_size,
-                output_data_type_size,
-                device_bw,
-                bw_inter_host,
-                bw_intra_host,
+                global_batch_size=B,
+                world_size=world_size,
+                local_world_size=local_world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+                bw_intra_host=bw_intra_host,
             )
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
             input_perf, compute_perf, output_perf = _get_dp_sharding_perf(
-                batch_size,
-                input_lengths,
-                hash_size * emb_dim,
-                bw_inter_host,
-                emb_dim,
-                output_data_type_size,
-                device_bw,
+                batch_size=batch_size,
+                input_lengths=input_lengths,
+                grad_num_elem=hash_size * emb_dim,
+                bw_inter_host=bw_inter_host,
+                emb_dim=emb_dim,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
             )
         else:
             raise ValueError(f"Unexpected sharding type: {sharding_type}")

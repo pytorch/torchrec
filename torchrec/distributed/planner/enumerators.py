@@ -33,8 +33,8 @@ from torchrec.distributed.types import ModuleSharder, ShardingType
 
 class EmbeddingEnumerator(Enumerator):
     """
-    Generates embedding sharding options for given nn.Module, considering provided user
-    constraints and input stats.
+    Generates embedding sharding options for given nn.Module, considering user provided
+    constraints.
 
     Constructor Args:
         topology (Topology): device topology.
@@ -266,6 +266,7 @@ def _calculate_rw_shard_sizes_and_offsets(
 
     Also consider the example of hash_size = 5, num_devices = 4. The expected rows per
     rank is [2,2,1,0].
+
     """
 
     num_devices: int = min(num_devices, hash_size)

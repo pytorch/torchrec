@@ -28,7 +28,7 @@ from torchrec.distributed.types import ModuleSharder, ShardingPlan
 @dataclass(repr=True, order=True, eq=True)
 class Storage:
     """
-    Representation of the storage capacities of a hardware used in training."
+    Representation of the storage capacities of a hardware used in training.
     """
 
     hbm: int
@@ -50,7 +50,8 @@ class Storage:
 @dataclass
 class DeviceHardware:
     """
-    Reprensentation of a device in a process group. Cost is an estimation of network, CPU, and storage usages.
+    Reprensentation of a device in a process group. 'perf' is an estimation of network,
+    CPU, and storage usages.
     """
 
     rank: int
@@ -148,7 +149,9 @@ class Topology:
 @dataclass
 class Shard:
     """
-    Representation of a subset of an embedding table. Length and offset fully deterine the tensors in the shard. 'storage' is an estimation of how much it takes to store the shard with an estimation 'perf'.
+    Representation of a subset of an embedding table. 'size' and 'offset' fully
+    determine the tensors in the shard. 'storage' is an estimation of how much it takes
+    to store the shard with an estimation 'perf'.
     """
 
     size: List[int]
@@ -197,7 +200,7 @@ class ShardingOption:
 
 class PartitionByType(Enum):
     """
-    Well-known partition types
+    Well-known partition types.
     """
 
     # Partitioning based on device
@@ -211,8 +214,8 @@ class PartitionByType(Enum):
 @dataclass
 class ParameterConstraints:
     """
-    Stores user provided constraints around
-    sharding types, compute kernels and partitioning
+    Stores user provided constraints around sharding types, compute kernels, and
+    partitioning.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -250,8 +253,7 @@ class PerfModel(abc.ABC):
 
 class ShardEstimator(abc.ABC):
     """
-    Calculates costs, requires fully specified sharding options
-    (ie. ranks/lengths)
+    Estimates shard perf or storage, requires fully specified sharding options.
     """
 
     @abc.abstractmethod
@@ -274,8 +276,8 @@ class ShardEstimator(abc.ABC):
 
 class Enumerator(abc.ABC):
     """
-    Generates all relevant sharding options for given nn.Module,
-    input stats, and user constraints
+    Generates all relevant sharding options for given topology, constraints, nn.Module,
+    and sharders.
     """
 
     @abc.abstractmethod
@@ -301,8 +303,8 @@ class Enumerator(abc.ABC):
 
 class Proposer(abc.ABC):
     """
-    Prosposes complete lists of sharding options which can be
-    parititioned to generate a plan
+    Prosposes complete lists of sharding options which can be parititioned to generate a
+    plan.
     """
 
     @abc.abstractmethod
@@ -328,10 +330,9 @@ class Proposer(abc.ABC):
 
 class Partitioner(abc.ABC):
     """
-    Parition
+    Partitions shards.
 
-    Today we have multiple strategies ie.
-    (Greedy, BLDM, Linear)
+    Today we have multiple strategies ie. (Greedy, BLDM, Linear).
     """
 
     @abc.abstractmethod
@@ -346,7 +347,7 @@ class Partitioner(abc.ABC):
 
 class Stats(abc.ABC):
     """
-    Log statistics related to the sharding plan
+    Logs statistics related to the sharding plan.
     """
 
     @abc.abstractmethod

@@ -175,6 +175,7 @@ class EmbeddingStats(Stats):
             ranks: list of ranks.
             pooling_factor: list of pooling factors across ranks.
             emb_dims: list of embedding dimensions across ranks.
+
         """
         ranks = list(range(world_size))
         pooling_factor = [
