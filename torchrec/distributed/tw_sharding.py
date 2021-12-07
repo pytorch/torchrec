@@ -98,7 +98,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
         self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
     ) -> Awaitable[torch.Tensor]:
         return self._dist(
-            local_embs=local_embs,
+            local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,
             input_splits=sharding_ctx.input_splits,
             output_splits=sharding_ctx.output_splits,
