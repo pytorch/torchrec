@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+from functools import reduce
 from typing import Dict, Optional, List, cast, Union
 
 import torch.distributed as dist
@@ -29,6 +30,7 @@ from torchrec.distributed.planner.types import (
     Topology,
     Stats,
     Shard,
+    Storage,
     ShardingOption,
     StorageReservation,
     Enumerator,
@@ -188,6 +190,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
     ) -> ShardingPlan:
 
         best_plan = None
+        lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE
 
         storage_constraint = self._storage_reservation.reserve(
@@ -225,6 +228,19 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                         partitionable=True, plan=plan, perf_rating=perf_rating
                     )
                 except PlannerError:
+                    current_storage = cast(
+                        Storage,
+                        reduce(
+                            lambda x, y: x + y,
+                            [
+                                shard.storage
+                                for option in proposal
+                                for shard in option.shards
+                            ],
+                        ),
+                    )
+                    if current_storage < lowest_storage:
+                        lowest_storage = current_storage
                     proposer.feedback(partitionable=False)
 
                 proposal = proposer.propose()
@@ -242,11 +258,22 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
             return sharding_plan
         else:
+            global_storage_capacity = reduce(
+                lambda x, y: x + y,
+                [device.storage for device in self._topology.devices],
+            )
+            global_storge_constraints = reduce(
+                lambda x, y: x + y,
+                [device.storage for device in storage_constraint.devices],
+            )
             raise PlannerError(
-                f"Unable to find a plan for this model are evaluating {self._num_proposals} proposals.\n"
-                "Possible solutions:\n"
-                "  1) Increase the number of devices\n"
-                "  2) Reduce the model size\n"
-                "  3) Reduce batch size\n"
-                "  4) Remove planner constraints that might be reducing search space\n"
+                f"Unable to find a plan for this model are evaluating {self._num_proposals} proposals."
+                "\nPossible solutions:"
+                f"\n  1) Increase the number of devices ({self._topology.world_size})"
+                f"\n  2) Reduce the model size ("
+                f"\n\t  Global storage: {global_storage_capacity.hbm}, "
+                f"\n\t  Available for model parallel: {global_storge_constraints},"
+                f"\n\t  Requirement for model parallel: {lowest_storage})"
+                f"\n  3) Reduce local batch size ({self._topology.batch_size})"
+                "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
