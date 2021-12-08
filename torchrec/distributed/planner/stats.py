@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Tuple, Optional, Any, List, Dict, cast
+from typing import Union, Tuple, Optional, Any, List, Dict, cast
 
 from torchrec.distributed.planner.types import (
     ShardingOption,
@@ -92,7 +92,6 @@ class EmbeddingStats(Stats):
                 stats[rank]["pooling_factor"] += pooling_factor[i]
                 stats[rank]["embedding_dims"] += emb_dims[i]
 
-        table = []
         used_hbm = [0] * topology.world_size
         used_ddr = [0] * topology.world_size
         perf = [0.0] * topology.world_size
@@ -103,6 +102,19 @@ class EmbeddingStats(Stats):
                 used_hbm[rank] += storage.hbm
                 used_ddr[rank] += storage.ddr
                 perf[rank] += cast(float, shard.perf)
+
+        table: List[List[Union[str, int]]] = [
+            ["Rank", "HBM (GB)", "DDR (GB)", "Perf", "Input", "Output", "Shards"],
+            [
+                "------",
+                "----------",
+                "----------",
+                "------",
+                "-------",
+                "--------",
+                "--------",
+            ],
+        ]
 
         for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
@@ -138,8 +150,6 @@ class EmbeddingStats(Stats):
                 ]
             )
 
-        headers = ["Rank", "HBM (GB)", "DDR (GB)", "Perf", "Input", "Output", "Shards"]
-
         logger.info(STATS_DIVIDER)
         header_text = "--- Planner Statistics ---"
         logger.info(f"#{header_text: ^98}#")
@@ -151,9 +161,9 @@ class EmbeddingStats(Stats):
         logger.info(f"#{iter_text: ^98}#")
         logger.info(STATS_BAR)
 
-        logger.info(f"{'  '.join(headers)}#")
-        for row in table:
-            logger.info(f"# {'  '.join([str(elem) for elem in row])}#")
+        formatted_table = _format_table(table)
+        for row in formatted_table:
+            logger.info(f"# {row: <97}#")
 
         logger.info(f"#{'' : ^98}#")
         legend = "Input: pooling factor, Output: embedding dimension, Shards: number of tables"
@@ -230,3 +240,13 @@ def _get_sharding_type_abbr(sharding_type: str) -> str:
         return "TWRW"
     else:
         raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
+
+
+def _format_table(table: List[List[Union[str, int]]]) -> List[str]:
+    longest_cols = [
+        (max([len(str(row[i])) for row in table]) + 3) for i in range(len(table[0]))
+    ]
+    row_format = "".join(
+        ["{:>" + str(longest_col) + "}" for longest_col in longest_cols]
+    )
+    return [row_format.format(*row) for row in table]
