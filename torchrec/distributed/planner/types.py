@@ -46,6 +46,9 @@ class Storage:
             ddr=self.ddr - other.ddr,
         )
 
+    def __hash__(self) -> int:
+        return hash((self.hbm, self.ddr))
+
 
 @dataclass
 class DeviceHardware:
@@ -160,6 +163,17 @@ class Shard:
     perf: Optional[float] = None
     rank: Optional[int] = None
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                tuple(self.size),
+                tuple(self.offset),
+                self.storage,
+                self.perf,
+                self.rank,
+            )
+        )
+
 
 @dataclass
 class ShardingOption:
@@ -196,6 +210,16 @@ class ShardingOption:
     @property
     def num_inputs(self) -> int:
         return len(self.input_lengths)
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.fqn,
+                self.sharding_type,
+                self.compute_kernel,
+                tuple(self.shards),
+            )
+        )
 
 
 class PartitionByType(Enum):

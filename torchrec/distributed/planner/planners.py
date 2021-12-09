@@ -7,7 +7,7 @@
 
 import copy
 from functools import reduce
-from typing import Dict, Optional, List, cast, Union
+from typing import Tuple, Dict, Optional, List, cast, Union
 
 import torch.distributed as dist
 from torch import nn
@@ -207,12 +207,29 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             # No shardable parameters
             return ShardingPlan({})
 
+        proposal_cache: Dict[
+            Tuple[int, ...],
+            Tuple[bool, Optional[List[ShardingOption]], Optional[float]],
+        ] = {}
+
         for proposer in self._proposers:
             proposer.load(search_space=search_space)
 
         for proposer in self._proposers:
             proposal = proposer.propose()
+
             while proposal:
+                proposal_key = tuple(sorted(map(hash, proposal)))
+                if proposal_key in proposal_cache:
+                    partitionable, plan, perf_rating = proposal_cache[proposal_key]
+                    proposer.feedback(
+                        partitionable=partitionable,
+                        plan=plan,
+                        perf_rating=perf_rating,
+                    )
+                    proposal = proposer.propose()
+                    continue
+
                 self._num_proposals += 1
                 try:
                     plan = self._partitioner.partition(
@@ -224,6 +241,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     if perf_rating < best_perf_rating:
                         best_perf_rating = perf_rating
                         best_plan = plan
+                    proposal_cache[proposal_key] = (True, plan, perf_rating)
                     proposer.feedback(
                         partitionable=True, plan=plan, perf_rating=perf_rating
                     )
@@ -241,6 +259,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     )
                     if current_storage < lowest_storage:
                         lowest_storage = current_storage
+                    proposal_cache[proposal_key] = (False, None, None)
                     proposer.feedback(partitionable=False)
 
                 proposal = proposer.propose()
