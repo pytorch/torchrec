@@ -1,3 +1,4 @@
 [submodule "third_party/fbgemm"]
 	path = third_party/fbgemm
 	url = https://github.com/pytorch/FBGEMM.git
+	branch = main
