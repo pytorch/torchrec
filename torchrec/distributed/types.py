@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import (
     Any,
+    Callable,
     Dict,
     Generic,
     Optional,
@@ -99,16 +100,30 @@ DistOut = TypeVar("DistOut")
 
 
 class Awaitable(abc.ABC, Generic[W]):
+    def __init__(self) -> None:
+        self._callbacks: List[Callable[[W], W]] = []
+
     @abc.abstractmethod
-    def wait(self) -> W:
+    def _wait_impl(self) -> W:
         pass
+
+    def wait(self) -> W:
+        ret: W = self._wait_impl()
+        for callback in self.callbacks:
+            ret = callback(ret)
+        return ret
+
+    @property
+    def callbacks(self) -> List[Callable[[W], W]]:
+        return self._callbacks
 
 
 class NoWait(Awaitable[W]):
     def __init__(self, obj: W) -> None:
+        super().__init__()
         self._obj = obj
 
-    def wait(self) -> W:
+    def _wait_impl(self) -> W:
         return self._obj
 
 
@@ -214,7 +229,7 @@ class LazyNoWait(LazyAwaitable[W]):
         super().__init__()
         self._obj = obj
 
-    def wait(self) -> W:
+    def _wait_impl(self) -> W:
         return self._obj
 
 

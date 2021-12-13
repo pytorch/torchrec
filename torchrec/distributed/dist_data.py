@@ -109,9 +109,6 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
         super().__init__()
         self._workers: int = pg.size()
         self._input = input
-        self._callback: Optional[
-            Callable[[KeyedJaggedTensor], KeyedJaggedTensor]
-        ] = None
         self._in_lengths_per_worker: List[int] = []
         self._out_lengths_per_worker: List[int] = []
         if self._workers == 1:
@@ -186,7 +183,7 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
             )
             self._weights: torch.Tensor = out_weights
 
-    def wait(self) -> KeyedJaggedTensor:
+    def _wait_impl(self) -> KeyedJaggedTensor:
         """
         Syncs KJT after AlltoAll.
 
@@ -195,13 +192,8 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
 
         """
         if self._workers == 1:
-            # TODO: add callback logic to awaitable type directly
             self._input.sync()
-            return (
-                self._callback(self._input)
-                if self._callback is not None
-                else self._input
-            )
+            return self._input
 
         with record_function("## all2all_data:values ##"):
             self._values_awaitable.wait()
@@ -234,8 +226,7 @@ class KJTAllToAllAwaitable(Awaitable[KeyedJaggedTensor]):
             stride=self._workers * self._input.stride(),
         )
 
-        # TODO: add callback logic to awaitable type directly
-        return self._callback(ret) if self._callback is not None else ret
+        return ret
 
 
 class KJTAllToAll(nn.Module):
@@ -369,9 +360,8 @@ class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):
     ) -> None:
         super().__init__()
         self._tensor_awaitable = tensor_awaitable
-        self._callback: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
 
-    def wait(self) -> torch.Tensor:
+    def _wait_impl(self) -> torch.Tensor:
         """
         Syncs pooled embeddings after collective operation.
 
@@ -380,10 +370,6 @@ class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):
 
         """
         ret = self._tensor_awaitable.wait()
-        # TODO: add callback logic to awaitable type directly
-        if self._callback is not None:
-            ret = self._callback(ret)
-
         return ret
 
 
@@ -463,9 +449,8 @@ class PooledEmbeddingsAllToAll(nn.Module):
             cumsum_dim_sum_per_rank_tensor=self._cumsum_dim_sum_per_rank_tensor,
             group=self._pg,
         )
-        return PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable,
-        )
+
+        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
 
 class PooledEmbeddingsReduceScatter(nn.Module):
@@ -547,10 +532,18 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
         super().__init__()
         self._tensor_awaitable = tensor_awaitable
         self._unbucketize_permute_tensor = unbucketize_permute_tensor
-        self._callback: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
         self._embedding_dim = embedding_dim
 
-    def wait(self) -> torch.Tensor:
+        if self._unbucketize_permute_tensor is not None:
+            self.callbacks.append(
+                lambda ret: torch.index_select(
+                    ret.view(-1, self._embedding_dim),
+                    0,
+                    self._unbucketize_permute_tensor,
+                )
+            )
+
+    def _wait_impl(self) -> torch.Tensor:
         """
         Syncs sequence embeddings after collective operation.
 
@@ -559,15 +552,6 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
 
         """
         ret = self._tensor_awaitable.wait()
-        # TODO: add callback logic to awaitable type directly
-        if self._callback is not None:
-            ret = self._callback(ret)
-        if self._unbucketize_permute_tensor is not None:
-            ret = torch.index_select(
-                ret.view(-1, self._embedding_dim),
-                0,
-                self._unbucketize_permute_tensor,
-            )
         return ret
 
 

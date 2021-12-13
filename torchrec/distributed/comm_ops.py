@@ -65,7 +65,7 @@ class Request(Awaitable[W]):
         self.rsi = None  # type: ignore
         self.wait_function = None  # type: ignore
 
-    def wait(self) -> W:
+    def _wait_impl(self) -> W:
         """
         Calls the wait function for this request.
 

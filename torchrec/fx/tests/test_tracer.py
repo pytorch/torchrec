@@ -262,7 +262,7 @@ class TestTracer(unittest.TestCase):
                 super().__init__()
                 self._obj = obj
 
-            def wait(self) -> torch.Tensor:
+            def _wait_impl(self) -> torch.Tensor:
                 return self._obj + 3
 
         class MyAsyncModule(torch.nn.Module):

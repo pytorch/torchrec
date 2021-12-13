@@ -18,7 +18,7 @@ class NeedWait(LazyAwaitable[torch.Tensor]):
         super().__init__()
         self.actual_value = actual_value
 
-    def wait(self) -> torch.Tensor:
+    def _wait_impl(self) -> torch.Tensor:
         self.actual_value += 8
         return self.actual_value
 
@@ -29,7 +29,7 @@ class NeedWaitNoInit(LazyAwaitable[torch.Tensor]):
         # should error out when using it
         self.actual_value = actual_value
 
-    def wait(self) -> torch.Tensor:
+    def _wait_impl(self) -> torch.Tensor:
         self.actual_value += 8
         return self.actual_value
 
@@ -40,7 +40,7 @@ class NeedWaitDict(LazyAwaitable[Dict[str, torch.Tensor]]):
         self.actual_value = actual_value
         self.key = key
 
-    def wait(self) -> Dict[str, torch.Tensor]:
+    def _wait_impl(self) -> Dict[str, torch.Tensor]:
         self.actual_value[self.key] *= 3
         return self.actual_value
 

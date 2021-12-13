@@ -83,7 +83,7 @@ class SparseFeaturesAllToAllAwaitable(Awaitable[SparseFeatures]):
         self._id_list_features_awaitable = id_list_features_awaitable
         self._id_score_list_features_awaitable = id_score_list_features_awaitable
 
-    def wait(self) -> SparseFeatures:
+    def _wait_impl(self) -> SparseFeatures:
         """
         Syncs sparse features after AlltoAll.
 
@@ -411,7 +411,7 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
         super().__init__()
         self.awaitables = awaitables
 
-    def wait(self) -> SparseFeaturesList:
+    def _wait_impl(self) -> SparseFeaturesList:
         """
         Syncs sparse features in SparseFeaturesList.
 

@@ -217,7 +217,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
         self._embedding_dims = embedding_dims
         self._embedding_names = embedding_names
 
-    def wait(self) -> KeyedTensor:
+    def _wait_impl(self) -> KeyedTensor:
         embeddings = [w.wait() for w in self._awaitables]
         if len(embeddings) == 1:
             embeddings = embeddings[0]
@@ -574,7 +574,7 @@ class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
         super().__init__()
         self._awaitable = awaitable
 
-    def wait(self) -> torch.Tensor:
+    def _wait_impl(self) -> torch.Tensor:
         embedding = self._awaitable.wait()
         return embedding
 
