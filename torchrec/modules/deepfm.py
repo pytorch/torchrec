@@ -5,6 +5,18 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""
+.. fb:display_title::
+    Deep Factorization-Machine Modules
+=====
+
+The following modules are based off the Deep Factorization-Machine (DeepFM) paper which is located at this link: https://arxiv.org/pdf/1703.04247.pdf
+    * Class DeepFM implents the DeepFM Framework
+    * Class FactorizationMachine implements FM as noted in the above paper.
+
+
+"""
+
 from typing import List
 
 import torch

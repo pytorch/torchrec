@@ -17,8 +17,12 @@ from torchrec.sparse.jagged_tensor import (
     KeyedTensor,
 )
 
+# Sphinx Documentation Text (for user-facing classes only)
 
 """
+.. fb:display_title::
+    DLRM API
+=====
 Notations uses throughout:
 
 F: number of sparseFeatures

@@ -14,3 +14,8 @@ from torchrec.optim.keyed import (
     OptimizerWrapper,
 )  # noqa
 from torchrec.optim.warmup import WarmupPolicy, WarmupStage, WarmupOptimizer  # noqa
+
+from . import clipping  # noqa
+from . import fused  # noqa
+from . import keyed  # noqa
+from . import warmup  # noqa

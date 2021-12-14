@@ -36,9 +36,9 @@ class CrossNet(torch.nn.Module):
     such that crossing effect can cover all bits on each layer. On each layer l, the tensor
     is transformed into:
 
-    .. math ::    x_{l+1} = x_0 * (W_l x x_l + b_l) + x_l
+    .. math ::    x_{l+1} = x_0 * (W_l \dot x_l + b_l) + x_l
 
-    where `W_l` is a square matrix (NxN), "*" means element-wise multiplication, "x" means
+    where :math:`W_l` is a square matrix :math:`(NxN)`, :math:`*` means element-wise multiplication, :math:`\dot` means
     matrix multiplication.
 
     Constructor Args:
@@ -97,37 +97,37 @@ class CrossNet(torch.nn.Module):
 
 class LowRankCrossNet(torch.nn.Module):
     r"""
-    Low Rank Cross net is a high-efficient cross net. Instead of using full rank cross matrix (NxN)
-    at each layer, it will use two kernels :math:`W (N' * r')` and :math:`V (r' * N')`, where `r << N`, to simplify the matrix
-    multiplication.
+     Low Rank Cross net is a high-efficient cross net. Instead of using full rank cross matrix (NxN)
+     at each layer, it will use two kernels :math:`W (N * r)` and :math:`V (r * N)`, where `r << N`, to simplify the matrix
+     multiplication.
 
-    On each layer l, the tensor is transformed into:
+     On each layer l, the tensor is transformed into:
 
-    .. math::    x_{l+1} = x_0 * (W_l x (V_l x x_l) + b_l) + x_l
+     .. math::    x_{l+1} = x_0 * (W_l \dot (V_l \dot x_l) + b_l) + x_l
 
-    where `W_l` is either a vector, "*" means element-wise multiplication, and "x" means matrix multiplication.
+    where :math:`W_l` is either a vector, :math:`*` means element-wise multiplication, and :math:`\dot` means matrix multiplication.
 
-    Note that, rank `r` should be chosen smartly. Usually, we should expect `r < N/2` to have computation saving; we should
-    expect `r ~= N/4` to perserve the accuracy of full rank cross net.
+     Note that, rank `r` should be chosen smartly. Usually, we should expect `r < N/2` to have computation saving; we should
+     expect :math:`r ~= N/4` to perserve the accuracy of full rank cross net.
 
-    Constructor Args:
-        * in_features (int): the dimension of the input.
-        * num_layers (int): the number of layers in the module.
-        * low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
+     Constructor Args:
+         * in_features (int): the dimension of the input.
+         * num_layers (int): the number of layers in the module.
+         * low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always >= 0
 
-    Call Args:
-        * input (torch.Tensor): tensor with shape [batch_size, in_features]
+     Call Args:
+         * input (torch.Tensor): tensor with shape [batch_size, in_features]
 
-    Returns:
-        * output (torch.Tensor): tensor with shape [batch_size, in_features]
+     Returns:
+         * output (torch.Tensor): tensor with shape [batch_size, in_features]
 
-    Example:
-        >>> batch_size = 3
-        >>> num_layers = 2
-        >>> in_features = 10
-        >>> input = torch.randn(batch_size, in_features)
-        >>> dcn = LowRankCrossNet(num_layers=num_layers, low_rank=3)
-        >>> output = dcn(input)
+     Example:
+         >>> batch_size = 3
+         >>> num_layers = 2
+         >>> in_features = 10
+         >>> input = torch.randn(batch_size, in_features)
+         >>> dcn = LowRankCrossNet(num_layers=num_layers, low_rank=3)
+         >>> output = dcn(input)
     """
 
     def __init__(
@@ -200,7 +200,7 @@ class VectorCrossNet(torch.nn.Module):
 
     .. math::    x_{l+1} = x_0 * (W_l . x_l + b_l) + x_l
 
-    where `W_l` is either a vector, "*" means element-wise multiplication; "." means dot operations.
+    where :math:`W_l` is either a vector, :math:`*` means element-wise multiplication; :math:`.` means dot operations.
 
     Constructor Args:
         * in_features (int): the dimension of the input.
@@ -265,11 +265,11 @@ class LowRankMixtureCrossNet(torch.nn.Module):
     r"""
     LowRankMixtureCrossNet is a DCN V2 implementation from the paper: https://arxiv.org/pdf/2008.13535.pdf
 
-    LowRankMixtureCrossNet defines the learnable crossing parameter per layer as low-rank matrix (Nxr) together
+    LowRankMixtureCrossNet defines the learnable crossing parameter per layer as low-rank matrix :math:`(N*r)` together
     with mixture of expert. Compared to LowRankCrossNet, instead of relying on one single expert to learn
-    feature crosses, this module leverages such `K` experts; each learning feature interactions in a
+    feature crosses, this module leverages such :math:`K` experts; each learning feature interactions in a
     different subspaces, and adaptively combine the learned crosses using a gating mechanism that depends
-    on input `x`.
+    on input :math:`x`..
 
     On each layer l, the tensor is transformed into:
 
@@ -277,10 +277,10 @@ class LowRankMixtureCrossNet(torch.nn.Module):
 
     and each :math:`expert_i` is defined as:
 
-    .. math::    expert_i = x_0 * (U_l_i x g(C_l_i x g(V_l_i x x_l)) + b_l)
+    .. math::    expert_i = x_0 * (U_l_i \dot g(C_l_i \dot g(V_l_i \dot x_l)) + b_l)
 
-    where `U_l_i (N, r)`, `C_l_i (r, r)` and `V_l_i (r, N)` are low-rank matrix, "*" means element-wise multiplication,
-    "x" means matrix multiplication, and g(.) is the non-linear activation function.
+    where :math:`U_l_i (N, r)`, :math:`C_l_i (r, r)` and :math:`V_l_i (r, N)` are low-rank matrix, :math:`*` means element-wise multiplication,
+    :math:`x` means matrix multiplication, and :math:`g()` is the non-linear activation function.
 
     One optimization is when num_expert is 1, the gate evaluation and MOE will be skipped for computation saving.
 
