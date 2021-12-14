@@ -172,11 +172,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         pooled_embeddings: List[torch.Tensor] = []
 
+        feature_dict = features.to_dict()
         for embedding_config, embedding_bag in zip(
             self._embedding_bag_configs, self.embedding_bags.values()
         ):
             for feature_name in embedding_config.feature_names:
-                f = features[feature_name]
+                f = feature_dict[feature_name]
                 res = embedding_bag(
                     input=f.values(),
                     offsets=f.offsets(),
