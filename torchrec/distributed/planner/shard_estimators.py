@@ -672,7 +672,10 @@ def _calculate_rw_shard_io_sizes(
             / world_size
             * input_data_type_size
         )
-    ] * len(shard_sizes)
+        if math.prod(shard) != 0
+        else 0
+        for shard in shard_sizes
+    ]
 
     output_sizes: List[int] = [
         (
@@ -682,7 +685,9 @@ def _calculate_rw_shard_io_sizes(
             * len(input_lengths)
             * output_data_type_size
         )
-        for i in range(len(shard_sizes))
+        if math.prod(shard) != 0
+        else 0
+        for i, shard in enumerate(shard_sizes)
     ]
 
     return input_sizes, output_sizes
@@ -706,7 +711,10 @@ def _calculate_twrw_shard_io_sizes(
             / local_world_size
             * input_data_type_size
         )
-    ] * len(shard_sizes)
+        if math.prod(shard) != 0
+        else 0
+        for shard in shard_sizes
+    ]
 
     output_sizes: List[int] = [
         (
@@ -716,7 +724,9 @@ def _calculate_twrw_shard_io_sizes(
             * len(input_lengths)
             * output_data_type_size
         )
-        for i in range(len(shard_sizes))
+        if math.prod(shard) != 0
+        else 0
+        for i, shard in enumerate(shard_sizes)
     ]
 
     return input_sizes, output_sizes
@@ -749,6 +759,8 @@ def _calculate_storage_specific_sizes(
                 * output_data_type_size
                 / input_data_type_size
             )
+            if math.prod(shard_size) != 0
+            else 0
             for input_size, shard_size in zip(input_sizes, shard_sizes)
         ]
 

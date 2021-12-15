@@ -269,8 +269,6 @@ def _calculate_rw_shard_sizes_and_offsets(
 
     """
 
-    num_devices: int = min(num_devices, hash_size)
-
     block_size: int = math.ceil(hash_size / num_devices)
     last_rank: int = hash_size // block_size
     last_block_size: int = hash_size - block_size * last_rank
