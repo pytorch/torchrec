@@ -48,88 +48,88 @@ EXPECTED_RW_SHARD_OFFSETS = [
 
 EXPECTED_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=85008, ddr=0),
-        Storage(hbm=84688, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84488, ddr=0),
+        Storage(hbm=84328, ddr=0),
     ],
     [
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=512192, ddr=0),
-        Storage(hbm=511872, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=511072, ddr=0),
+        Storage(hbm=510912, ddr=0),
     ],
     [
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
-        Storage(hbm=515600, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
+        Storage(hbm=513800, ddr=0),
     ],
     [
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1342784, ddr=0),
-        Storage(hbm=1340864, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1340064, ddr=0),
+        Storage(hbm=1339104, ddr=0),
     ],
 ]
 
 
 EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84176, ddr=832),
-        Storage(hbm=84112, ddr=576),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84072, ddr=416),
+        Storage(hbm=84040, ddr=288),
     ],
     [
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510400, ddr=1792),
-        Storage(hbm=510336, ddr=1536),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510176, ddr=896),
+        Storage(hbm=510144, ddr=768),
     ],
     [
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
-        Storage(hbm=513296, ddr=2304),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
+        Storage(hbm=512648, ddr=1152),
     ],
     [
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1341968, ddr=816),
-        Storage(hbm=1340336, ddr=528),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1339656, ddr=408),
+        Storage(hbm=1338840, ddr=264),
     ],
 ]
 
@@ -150,28 +150,28 @@ EXPECTED_TWRW_SHARD_OFFSETS = [
 
 EXPECTED_TWRW_SHARD_STORAGE = [
     [
-        Storage(hbm=88016, ddr=0),
-        Storage(hbm=88016, ddr=0),
-        Storage(hbm=88016, ddr=0),
-        Storage(hbm=88016, ddr=0),
+        Storage(hbm=87016, ddr=0),
+        Storage(hbm=87016, ddr=0),
+        Storage(hbm=87016, ddr=0),
+        Storage(hbm=87016, ddr=0),
     ],
     [
-        Storage(hbm=532864, ddr=0),
-        Storage(hbm=532864, ddr=0),
-        Storage(hbm=532864, ddr=0),
-        Storage(hbm=532544, ddr=0),
+        Storage(hbm=530624, ddr=0),
+        Storage(hbm=530624, ddr=0),
+        Storage(hbm=530624, ddr=0),
+        Storage(hbm=530464, ddr=0),
     ],
     [
-        Storage(hbm=539680, ddr=0),
-        Storage(hbm=539680, ddr=0),
-        Storage(hbm=539680, ddr=0),
-        Storage(hbm=539680, ddr=0),
+        Storage(hbm=536080, ddr=0),
+        Storage(hbm=536080, ddr=0),
+        Storage(hbm=536080, ddr=0),
+        Storage(hbm=536080, ddr=0),
     ],
     [
-        Storage(hbm=1374528, ddr=0),
-        Storage(hbm=1374528, ddr=0),
-        Storage(hbm=1374528, ddr=0),
-        Storage(hbm=1373888, ddr=0),
+        Storage(hbm=1369248, ddr=0),
+        Storage(hbm=1369248, ddr=0),
+        Storage(hbm=1369248, ddr=0),
+        Storage(hbm=1368928, ddr=0),
     ],
 ]
 
@@ -190,17 +190,17 @@ EXPECTED_CW_SHARD_OFFSETS = [
 ]
 
 EXPECTED_CW_SHARD_STORAGE = [
-    [Storage(hbm=106304, ddr=0)],
-    [Storage(hbm=351104, ddr=0), Storage(hbm=452928, ddr=0)],
+    [Storage(hbm=102304, ddr=0)],
+    [Storage(hbm=347584, ddr=0), Storage(hbm=447648, ddr=0)],
     [
-        Storage(hbm=319936, ddr=0),
-        Storage(hbm=319936, ddr=0),
-        Storage(hbm=371968, ddr=0),
+        Storage(hbm=315616, ddr=0),
+        Storage(hbm=315616, ddr=0),
+        Storage(hbm=366208, ddr=0),
     ],
     [
-        Storage(hbm=618688, ddr=0),
-        Storage(hbm=618688, ddr=0),
-        Storage(hbm=753920, ddr=0),
+        Storage(hbm=612448, ddr=0),
+        Storage(hbm=612448, ddr=0),
+        Storage(hbm=745600, ddr=0),
     ],
 ]
 
@@ -360,27 +360,14 @@ class TestEnumerators(unittest.TestCase):
                 * sharding_option.tensor.element_size()
             ] * self.world_size
 
-            gradient_sizes = (
-                [
-                    input_sizes[0]
-                    * sharding_option.tensor.shape[1]
-                    * output_data_type_size
-                    / input_data_type_size
-                ]
-                * self.world_size
-                if sharding_option.compute_kernel == EmbeddingComputeKernel.SPARSE.value
-                else tensor_sizes
-            )
-
             optimizer_sizes = [tensor_size * 2 for tensor_size in tensor_sizes]
 
             storage_sizes = [
-                input_size + tensor_size + output_size + gradient_size + optimizer_size
-                for input_size, tensor_size, output_size, gradient_size, optimizer_size in zip(
+                input_size + tensor_size + output_size + optimizer_size
+                for input_size, tensor_size, output_size, optimizer_size in zip(
                     input_sizes,
                     tensor_sizes,
                     output_sizes,
-                    gradient_sizes,
                     optimizer_sizes,
                 )
             ]
@@ -422,24 +409,10 @@ class TestEnumerators(unittest.TestCase):
                 math.prod(sharding_option.tensor.shape)
                 * sharding_option.tensor.element_size()
             )
-            gradient_size = (
-                (
-                    input_sizes[0]
-                    * sharding_option.tensor.shape[1]
-                    * output_data_type_size
-                    / input_data_type_size
-                )
-                if sharding_option.compute_kernel == EmbeddingComputeKernel.SPARSE.value
-                else tensor_size
-            )
             optimizer_size = 0
 
             storage_size = (
-                input_sizes[0]
-                + output_sizes[0]
-                + tensor_size
-                + gradient_size
-                + optimizer_size
+                input_sizes[0] + output_sizes[0] + tensor_size + optimizer_size
             )
 
             self.assertEqual(
@@ -466,12 +439,12 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_uvm_caching_rw_sharding(self) -> None:
-
         sharding_options = self.enumerator.enumerate(
             self.model,
             # pyre-ignore[6]
             [UVMCachingRWSharder()],
         )
+
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
             self.assertEqual(

@@ -53,7 +53,7 @@ class Storage:
 @dataclass
 class DeviceHardware:
     """
-    Reprensentation of a device in a process group. 'perf' is an estimation of network,
+    Representation of a device in a process group. 'perf' is an estimation of network,
     CPU, and storage usages.
     """
 
@@ -238,8 +238,7 @@ class PartitionByType(Enum):
 @dataclass
 class ParameterConstraints:
     """
-    Stores user provided constraints around sharding types, compute kernels, and
-    partitioning.
+    Stores user provided constraints around the sharding plan.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -259,12 +258,17 @@ class PlannerError(Exception):
 
 
 class StorageReservation(abc.ABC):
+    """
+    Reserves storage space for non-sharded parts of the model.
+    """
+
     @abc.abstractmethod
     def reserve(
         self,
         topology: Topology,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Topology:
         ...
 

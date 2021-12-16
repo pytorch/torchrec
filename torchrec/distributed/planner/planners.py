@@ -22,7 +22,7 @@ from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.proposers import GreedyProposer
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
-    FixedPercentageReservation,
+    HeuristicalStorageReservation,
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
@@ -148,7 +148,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._storage_reservation: StorageReservation = (
             storage_reservation
             if storage_reservation
-            else FixedPercentageReservation(percentage=0.4)
+            else HeuristicalStorageReservation(percentage=0.15)
         )
         self._partitioner: Partitioner = (
             partitioner if partitioner else GreedyPerfPartitioner()
@@ -197,6 +197,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             topology=self._topology,
             module=module,
             sharders=sharders,
+            constraints=self._constraints,
         )
 
         search_space = self._enumerator.enumerate(

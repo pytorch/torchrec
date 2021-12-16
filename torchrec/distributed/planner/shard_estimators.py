@@ -750,28 +750,12 @@ def _calculate_storage_specific_sizes(
         for size in shard_sizes
     ]
 
-    gradient_sizes: List[int] = tensor_sizes
-    if compute_kernel == EmbeddingComputeKernel.SPARSE.value and on_device:
-        gradient_sizes = [
-            math.ceil(
-                input_size
-                * shard_size[1]
-                * output_data_type_size
-                / input_data_type_size
-            )
-            if math.prod(shard_size) != 0
-            else 0
-            for input_size, shard_size in zip(input_sizes, shard_sizes)
-        ]
-
     optimizer_sizes: List[int] = [
         tensor_size * 2 if sharding_type == ShardingType.DATA_PARALLEL.value else 0
         for tensor_size in tensor_sizes
     ]
 
     return [
-        tensor_size + gradient_size + optimizer_size
-        for tensor_size, gradient_size, optimizer_size in zip(
-            tensor_sizes, gradient_sizes, optimizer_sizes
-        )
+        tensor_size + optimizer_size
+        for tensor_size, optimizer_size in zip(tensor_sizes, optimizer_sizes)
     ]
