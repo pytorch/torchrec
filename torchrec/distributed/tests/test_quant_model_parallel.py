@@ -51,7 +51,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
 
 
 def _quantize_sharded(module: nn.Module, inplace: bool) -> nn.Module:
-    qconfig = quant.QConfigDynamic(
+    qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver,
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
     )
@@ -72,7 +72,7 @@ def _quantize_sharded(module: nn.Module, inplace: bool) -> nn.Module:
 
 
 def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
-    qconfig = quant.QConfigDynamic(
+    qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver,
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
     )
