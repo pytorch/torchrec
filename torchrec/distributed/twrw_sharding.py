@@ -95,6 +95,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
 
     def __init__(
         self,
+        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         intra_pg: dist.ProcessGroup,
         num_id_list_features: int,
@@ -303,6 +304,7 @@ class TwRwEmbeddingSharding(EmbeddingSharding):
             raise RuntimeError(
                 "TABLE_ROW_WISE sharding does not support sequence embeddings."
             )
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._world_size: int = self._pg.size()
         self._my_rank: int = self._pg.rank()

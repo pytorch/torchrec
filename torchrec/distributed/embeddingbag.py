@@ -266,9 +266,13 @@ class ShardedEmbeddingBagCollection(
         self._is_weighted: bool = module.is_weighted
         self._device = device
         self._create_lookups(fused_params)
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
@@ -286,7 +290,11 @@ class ShardedEmbeddingBagCollection(
                     # modify param keys to match EmbeddingBagCollection
                     params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
                     for param_key, weight in module.fused_optimizer.params.items():
+                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
                         params["embedding_bags." + param_key] = weight
+                    # pyre-fixme[8]: Attribute has type `Mapping[str, Tensor]`; used
+                    #  as `Mapping[str, Union[Tensor,
+                    #  torch.distributed._sharded_tensor.api.ShardedTensor]]`.
                     module.fused_optimizer.params = params
                     optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
@@ -328,6 +336,8 @@ class ShardedEmbeddingBagCollection(
         self,
         fused_params: Optional[Dict[str, Any]],
     ) -> None:
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._lookups: nn.ModuleList[BaseEmbeddingLookup] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
             self._lookups.append(sharding.create_lookup(fused_params))
@@ -656,7 +666,11 @@ class ShardedEmbeddingBag(
                 # modify param keys to match EmbeddingBag
                 params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
                 for param_key, weight in module.fused_optimizer.params.items():
+                    # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
                     params[param_key.split(".")[-1]] = weight
+                # pyre-fixme[8]: Attribute has type `Mapping[str, Tensor]`; used as
+                #  `Mapping[str, Union[Tensor,
+                #  torch.distributed._sharded_tensor.api.ShardedTensor]]`.
                 module.fused_optimizer.params = params
                 optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)

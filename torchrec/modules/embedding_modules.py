@@ -127,7 +127,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self._is_weighted = is_weighted
-        # pyre-ignore[11]
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
         self._embedding_names: List[str] = []

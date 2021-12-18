@@ -76,6 +76,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self.embedding_bags: nn.ModuleList[nn.Module] = nn.ModuleList()
         for emb_config in self._embedding_bag_configs:
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(

@@ -35,7 +35,6 @@ class PositionWeightedModule(BaseFeatureProcessor):
         self.max_feature_lengths = max_feature_lengths
         self.position_weights: nn.ParameterDict = nn.ParameterDict()
         for key, length in max_feature_lengths.items():
-            # pyre-fixme[29]
             self.position_weights[key] = nn.Parameter(torch.empty([length]).fill_(1.0))
 
     def forward(
@@ -43,7 +42,6 @@ class PositionWeightedModule(BaseFeatureProcessor):
         features: Dict[str, JaggedTensor],
     ) -> Dict[str, JaggedTensor]:
         ret: Dict[str, JaggedTensor] = {}
-        # pyre-fixme[29]
         for key, pos_weight in self.position_weights.items():
             seq = torch.ops.fbgemm.offsets_range(
                 features[key].lengths().long(), features[key].values().long()

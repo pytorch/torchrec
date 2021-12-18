@@ -214,7 +214,6 @@ class CombinedOptimizer(KeyedOptimizer):
 
     def zero_grad(self, set_to_none: bool = False) -> None:
         for _, opt in self._optims:
-            # pyre-ignore [28]
             opt.zero_grad(set_to_none=set_to_none)
 
     # pyre-ignore [2]
@@ -291,7 +290,6 @@ class OptimizerWrapper(KeyedOptimizer):
         return self._optimizer.__repr__()
 
     def zero_grad(self, set_to_none: bool = False) -> None:
-        # pyre-ignore [28]
         self._optimizer.zero_grad(set_to_none=set_to_none)
 
     # pyre-ignore [2]

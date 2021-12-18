@@ -26,7 +26,6 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
                 raise
         self.position_weights: nn.ParameterDict = nn.ParameterDict()
         for key, length in max_feature_lengths.items():
-            # pyre-ignore [29]
             self.position_weights[key] = nn.Parameter(
                 torch.empty([length], device=device).fill_(1.0)
             )
@@ -72,7 +71,6 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        # pyre-ignore [29]
         for name, param in self.position_weights.items():
             yield append_prefix(prefix, f"position_weights.{name}"), param
 
@@ -91,7 +89,6 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
             destination = OrderedDict()
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
-        # pyre-ignore [29]
         for name, param in self.position_weights.items():
             destination[prefix + f"position_weights.{name}"] = param
         return destination

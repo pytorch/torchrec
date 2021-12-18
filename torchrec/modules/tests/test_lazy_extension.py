@@ -151,7 +151,8 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
             return input[0] + 1
 
         m = TestModule()
-        # pyre-fixme[29]
+        # pyre-fixme[6]: Expected `(...) -> None` for 1st param but got `(module:
+        #  Module, input: Tuple[Tensor, ...]) -> Tensor`.
         m.register_forward_pre_hook(input_only_hook)
         output = m(torch.zeros(2, 2))
         self.assertTrue(torch.allclose(output, torch.ones(2, 2)))

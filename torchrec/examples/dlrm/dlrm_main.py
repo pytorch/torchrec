@@ -182,7 +182,11 @@ def _evaluate(
         else itertools.islice(iterator, limit_batches),
         itertools.islice(next_iterator, TRAIN_PIPELINE_STAGES - 1),
     )
+    # pyre-fixme[6]: Expected `Union[None, int, torch.device]` for 1st param but got
+    #  `Union[torch.Tensor, torch.nn.modules.module.Module]`.
     auroc = metrics.AUROC(compute_on_step=False).to(device)
+    # pyre-fixme[6]: Expected `Union[None, int, torch.device]` for 1st param but got
+    #  `Union[torch.Tensor, torch.nn.modules.module.Module]`.
     accuracy = metrics.Accuracy(compute_on_step=False).to(device)
 
     # Infinite iterator instead of while-loop to leverage tqdm progress bar.

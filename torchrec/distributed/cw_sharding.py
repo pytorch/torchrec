@@ -34,6 +34,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
+        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
     ) -> None:

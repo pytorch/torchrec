@@ -144,6 +144,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         # Update
         if self._model.training:
             with record_function("## optimizer ##"):
+                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         return output
@@ -518,6 +519,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
             # Update
             with record_function("## optimizer ##"):
+                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         self._batch_i = batch_ip1

@@ -59,6 +59,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _load_state_dict(
+    # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot take
+    #  parameters.
     emb_modules: "nn.ModuleList[nn.Module]",
     state_dict: "OrderedDict[str, torch.Tensor]",
 ) -> Tuple[List[str], List[str]]:
@@ -90,9 +92,11 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self,
         config: GroupedEmbeddingConfig,
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
+        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         def to_rowwise_sharded_metadata(
@@ -265,7 +269,10 @@ class GroupedEmbedding(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._emb_modules: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._sparse = sparse
         for embedding_config in self._config.embedding_tables:
@@ -371,6 +378,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         self._local_rows: List[int] = []
@@ -643,6 +651,8 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
                 )
 
         super().__init__()
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._emb_modules: nn.ModuleList[BaseEmbedding] = nn.ModuleList()
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config))
@@ -705,7 +715,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
         state_dict: "OrderedDict[str, torch.Tensor]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        # pyre-ignore [6]
         m, u = _load_state_dict(self._emb_modules, state_dict)
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
@@ -770,7 +779,10 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._emb_modules: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._sparse = sparse
         self._emb_names: List[str] = []
@@ -906,6 +918,7 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         def to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
@@ -1376,10 +1389,14 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
                 )
 
         super().__init__()
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config))
 
+        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
+        #  take parameters.
         self._score_emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
         for config in grouped_score_configs:
             self._score_emb_modules.append(_create_lookup(config))
@@ -1482,9 +1499,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         state_dict: "OrderedDict[str, torch.Tensor]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        # pyre-ignore [6]
         m1, u1 = _load_state_dict(self._emb_modules, state_dict)
-        # pyre-ignore [6]
         m2, u2 = _load_state_dict(self._score_emb_modules, state_dict)
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 

@@ -15,6 +15,7 @@ from typing import Optional, Callable, TypeVar, cast, Any
 import torch.distributed as dist
 
 
+# pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
 def is_leader(pg: Optional[dist.ProcessGroup], leader_rank: int = 0) -> bool:
     """
     Check if the current processs is the leader.

@@ -70,7 +70,6 @@ class PositionWeightsAttacher(nn.Module):
         self.features_max_length = features_max_length
         self.position_weights = nn.ParameterDict()
         for feature_name, max_length in features_max_length.items():
-            # pyre-fixme[29]: `Union[nn.Module, torch.Tensor]` is not a function.
             self.position_weights[feature_name] = nn.Parameter(torch.ones(max_length))
 
     def forward(

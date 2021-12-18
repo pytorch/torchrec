@@ -46,6 +46,7 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 class TwSparseFeaturesDist(BaseSparseFeaturesDist):
     def __init__(
         self,
+        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
@@ -121,6 +122,7 @@ class TwEmbeddingSharding(EmbeddingSharding):
         is_sequence: bool = False,
     ) -> None:
         super().__init__()
+        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._device = device
         self._is_sequence = is_sequence

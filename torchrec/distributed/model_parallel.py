@@ -137,7 +137,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         Property to directly access sharded module, which
         may or may not yet be wrapped in DDP
         """
-        # pyre-ignore [7]
         return (
             self.module.module
             if isinstance(self.module, DistributedDataParallel)
@@ -233,10 +232,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         def init_parameters(module: nn.Module) -> None:
             # Allocate parameters and buffers if over 'meta' device.
             has_meta_param = False
-            # pyre-ignore [16]
             for name, param in module._parameters.items():
                 if isinstance(param, torch.Tensor) and param.device.type == "meta":
-                    # pyre-ignore [29]
                     module._parameters[name] = nn.Parameter(
                         torch.empty_like(param, device=self.device),
                         requires_grad=param.requires_grad,
@@ -244,7 +241,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                     has_meta_param = True
             for name, buffer in module._buffers.items():
                 if isinstance(buffer, torch.Tensor) and buffer.device.type == "meta":
-                    # pyre-ignore [29]
                     module._buffers[name] = torch.empty_like(buffer, device=self.device)
 
             # Init parameters if at least one parameter is over 'meta' device.
@@ -301,7 +297,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         if isinstance(module, ShardedModule):
             module.state_dict(destination, prefix, keep_vars)
         else:
-            # pyre-ignore [29]
             module._save_to_state_dict(destination, prefix, keep_vars)
             for name, child in module.named_children():
                 self._state_dict(child, destination, prefix + name + ".", keep_vars)
@@ -327,7 +322,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         if isinstance(module, ShardedModule):
             return module.load_state_dict(state_dict, strict=strict)
         else:
-            # pyre-ignore [29]
             module._load_from_state_dict(
                 state_dict, prefix, {}, strict, missing_keys, unexpected_keys, []
             )
@@ -401,5 +395,4 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _reset_parameters(module: nn.Module) -> None:
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
-                # pyre-ignore [29]
                 m.reset_parameters()

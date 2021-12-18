@@ -68,7 +68,6 @@ def check_module_output_dimension(
 def init_mlp_weights_xavier_uniform(m: torch.nn.Module) -> None:
     if isinstance(m, torch.nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight)
-        # pyre-fixme[16]: Optional type has no attribute `data`.
         m.bias.data.fill_(0.0)
 
 
