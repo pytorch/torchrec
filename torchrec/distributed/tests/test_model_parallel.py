@@ -263,7 +263,7 @@ class ModelParallelTest(ModelParallelTestBase):
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
-        local_size=st.sampled_from([2]),
+        local_size=st.sampled_from([2, 4]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
     def test_sharding_nccl_twrw(
@@ -307,7 +307,6 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
-    # TODO T108428344 TWRW needs to be fixed
     def test_sharding_gloo_tw(
         self,
         sharder_type: str,

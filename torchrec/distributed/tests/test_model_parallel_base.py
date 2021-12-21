@@ -26,6 +26,7 @@ from torchrec.distributed.tests.test_model import (
     TestSparseNNBase,
 )
 from torchrec.distributed.types import (
+    ShardingPlan,
     ShardedTensor,
     ModuleSharder,
     ShardingEnv,
@@ -65,7 +66,10 @@ class ModelParallelTestBase(unittest.TestCase):
         # Override local_size after pg construction because unit test device count
         # is larger than local_size setup. This can be problematic for twrw because
         # we have ShardedTensor placement check.
-        os.environ["LOCAL_WORLD_SIZE"] = str(world_size)
+        # TODO (T108556130) Mock out functions in comm.py instead of overriding environment variables
+        os.environ["LOCAL_WORLD_SIZE"] = str(local_size or world_size)
+        if local_size is not None:
+            os.environ["LOCAL_RANK"] = str(rank % local_size)
         if backend == "nccl":
             device = torch.device(f"cuda:{rank}")
             torch.cuda.set_device(device)
@@ -102,9 +106,27 @@ class ModelParallelTestBase(unittest.TestCase):
         )
 
         planner = EmbeddingShardingPlanner(
-            topology=Topology(world_size, device.type), constraints=constraints
+            topology=Topology(world_size, device.type, local_world_size=local_size),
+            constraints=constraints,
         )
-        plan = planner.collective_plan(local_model, sharders, pg)
+        plan: ShardingPlan = planner.collective_plan(local_model, sharders, pg)
+
+        # We're simulating multiple nodes on a single node. However, metadata information and tensor placement must still be consistent. Here we overwrite this to do so.
+        # Note that the inter/intra process groups should still behave as expected.
+        # TODO, may need to add some checks that only does this if we're running on a single GPU (which should be most cases).
+        for group in plan.plan:
+            for _, parameter_sharding in plan.plan[group].items():
+                if parameter_sharding.sharding_type == "table_row_wise":
+                    sharding_spec = parameter_sharding.sharding_spec
+                    if sharding_spec is not None:
+                        # pyre-ignore
+                        for shard in sharding_spec.shards:
+                            placement = shard.placement
+                            rank: Optional[int] = placement.rank()
+                            assert rank is not None
+                            shard.placement = torch.distributed._remote_device(
+                                f"rank:{rank}/cuda:{rank}"
+                            )
 
         local_model = DistributedModelParallel(
             local_model,

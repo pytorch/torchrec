@@ -9,6 +9,7 @@ import copy
 from functools import reduce
 from typing import Tuple, Dict, Optional, List, cast, Union
 
+import torch
 import torch.distributed as dist
 from torch import nn
 from torch.distributed._sharding_spec import EnumerableShardingSpec, ShardMetadata
@@ -84,7 +85,7 @@ def _to_sharding_plan(
     ) -> str:
         param_device = compute_device
         if compute_device == "cuda":
-            param_device = f"cuda:{rank % local_size}"
+            param_device = torch.device("cuda", rank % local_size)
         return f"rank:{rank}/{param_device}"
 
     compute_device = topology.compute_device
@@ -194,7 +195,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE
 
-        storage_constraint = self._storage_reservation.reserve(
+        storage_constraint: Topology = self._storage_reservation.reserve(
             topology=self._topology,
             module=module,
             sharders=sharders,
