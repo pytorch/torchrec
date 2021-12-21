@@ -239,7 +239,7 @@ class ModelParallelTest(ModelParallelTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() <= 3,
         "Not enough GPUs, this test requires at least four GPUs",
     )
     # pyre-fixme[56]
@@ -279,7 +279,7 @@ class ModelParallelTest(ModelParallelTestBase):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
-            world_size=2,
+            world_size=4,
             local_size=local_size,
         )
 
@@ -307,6 +307,7 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    # TODO T108428344 TWRW needs to be fixed
     def test_sharding_gloo_tw(
         self,
         sharder_type: str,
