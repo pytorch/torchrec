@@ -149,7 +149,6 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="nccl",
         )
 
-    @unittest.skip("CW + EBC is not well supported currently")
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -180,9 +179,10 @@ class ModelParallelTest(ModelParallelTestBase):
     def test_sharding_nccl_cw(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
+        # "CW + EBC is not well supported currently"
+        return
         world_size = 4
         self._test_sharding(
-            # pyre-ignore[6]
             sharders=[
                 create_test_sharder(
                     sharder_type,
@@ -321,7 +321,6 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="gloo",
         )
 
-    @unittest.skip("CW + EBC is not well supported currently")
     # pyre-fixme[56]
     @given(
         sharder_type=st.sampled_from(
@@ -352,9 +351,10 @@ class ModelParallelTest(ModelParallelTestBase):
         sharding_type: str,
         kernel_type: str,
     ) -> None:
+        # "CW + EBC is not well supported currently"
+        return
         world_size = 4
         self._test_sharding(
-            # pyre-ignore[6]
             sharders=[
                 create_test_sharder(
                     sharder_type,
