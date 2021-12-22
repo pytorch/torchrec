@@ -20,7 +20,7 @@ from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
-from torchrec.distributed.planner.proposers import GreedyProposer
+from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
@@ -159,7 +159,11 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 [proposer] if not isinstance(proposer, list) else proposer
             )
         else:
-            self._proposers = [GreedyProposer(), GreedyProposer(use_depth=False)]
+            self._proposers = [
+                GreedyProposer(),
+                GreedyProposer(use_depth=False),
+                UniformProposer(),
+            ]
         self._perf_model: PerfModel = (
             performance_model if performance_model else NoopPerfModel(topology=topology)
         )

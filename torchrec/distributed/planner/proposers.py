@@ -17,38 +17,30 @@ from torchrec.distributed.planner.types import (
 class GreedyProposer(Proposer):
     def __init__(self, use_depth: bool = True) -> None:
         self._use_depth: bool = use_depth
-        self._sharding_options_by_fqn: Dict[
-            str, List[Tuple[float, ShardingOption]]
-        ] = {}
+        self._sharding_options_by_fqn: Dict[str, List[ShardingOption]] = {}
         self._current_proposal: Dict[str, int] = {}
 
     def load(self, search_space: List[ShardingOption]) -> None:
         for sharding_option in search_space:
             fqn = sharding_option.fqn
-            score = self._sharding_option_score(sharding_option)
             if fqn not in self._sharding_options_by_fqn:
                 self._sharding_options_by_fqn[fqn] = []
-            self._sharding_options_by_fqn[fqn].append((score, sharding_option))
+            self._sharding_options_by_fqn[fqn].append(sharding_option)
 
-        for score_shard_tuple in self._sharding_options_by_fqn.values():
-            score_shard_tuple.sort(key=lambda x: x[0])
+        for sharding_options in self._sharding_options_by_fqn.values():
+            sharding_options.sort(
+                key=lambda x: _sharding_option_score(x, self._use_depth)
+            )
 
         self._current_proposal = {
             fqn: 0 for fqn in self._sharding_options_by_fqn.keys()
         }
 
-    def _sharding_option_score(self, sharding_option: ShardingOption) -> float:
-        return (
-            max([cast(float, shard.perf) for shard in sharding_option.shards])
-            if self._use_depth
-            else sum([cast(float, shard.perf) for shard in sharding_option.shards])
-        )
-
     def propose(self) -> Optional[List[ShardingOption]]:
         if self._current_proposal:
             return copy.deepcopy(
                 [
-                    self._sharding_options_by_fqn[fqn][index][1]
+                    self._sharding_options_by_fqn[fqn][index]
                     for fqn, index in self._current_proposal.items()
                 ]
             )
@@ -64,10 +56,10 @@ class GreedyProposer(Proposer):
         # static strategy, ignore feedback and just provide next proposal
         largest_fqn: Optional[str] = None
         largest_storage: Tuple[float, float, float, float] = (0, 0, 0, 0)
-        for fqn, score_shard_tuples in self._sharding_options_by_fqn.items():
+        for fqn, sharding_options in self._sharding_options_by_fqn.items():
             index = self._current_proposal[fqn]
-            if index + 1 < len(score_shard_tuples):
-                sharding_option = score_shard_tuples[index][1]
+            if index + 1 < len(sharding_options):
+                sharding_option = sharding_options[index]
                 current_storage = (
                     # pyre-fixme [16]: `Optional` has no attribute `hbm`
                     max([shard.storage.hbm for shard in sharding_option.shards]),
@@ -84,3 +76,68 @@ class GreedyProposer(Proposer):
             self._current_proposal[largest_fqn] += 1
         else:
             self._current_proposal = {}
+
+
+class UniformProposer(Proposer):
+    def __init__(self, use_depth: bool = True) -> None:
+        self._use_depth: bool = use_depth
+        self._grouped_sharding_options: List[List[ShardingOption]] = []
+        self._proposal_index: int = 0
+
+    def load(self, search_space: List[ShardingOption]) -> None:
+        all_fqns = set()
+        sharding_options_by_type_and_fqn: Dict[
+            str, Dict[str, List[ShardingOption]]
+        ] = {}
+
+        for sharding_option in search_space:
+            sharding_type = sharding_option.sharding_type
+            fqn = sharding_option.fqn
+            all_fqns.add(fqn)
+
+            if sharding_type not in sharding_options_by_type_and_fqn:
+                sharding_options_by_type_and_fqn[sharding_type] = {}
+            if fqn not in sharding_options_by_type_and_fqn[sharding_type]:
+                sharding_options_by_type_and_fqn[sharding_type][fqn] = []
+
+            sharding_options_by_type_and_fqn[sharding_type][fqn].append(sharding_option)
+
+        for sharding_options_by_fqn in sharding_options_by_type_and_fqn.values():
+            for sharding_options in sharding_options_by_fqn.values():
+                sharding_options.sort(
+                    key=lambda x: _sharding_option_score(x, self._use_depth)
+                )
+
+        for sharding_options_by_fqn in sharding_options_by_type_and_fqn.values():
+            if sharding_options_by_fqn.keys() == all_fqns:
+                self._grouped_sharding_options.append(
+                    [
+                        sorted_sharding_options[0]
+                        for sorted_sharding_options in sharding_options_by_fqn.values()
+                    ]
+                )
+
+    def propose(self) -> Optional[List[ShardingOption]]:
+        if self._proposal_index < len(self._grouped_sharding_options):
+            return copy.deepcopy(self._grouped_sharding_options[self._proposal_index])
+        else:
+            return None
+
+    def feedback(
+        self,
+        partitionable: bool,
+        plan: Optional[List[ShardingOption]] = None,
+        perf_rating: Optional[float] = None,
+    ) -> None:
+        # static strategy, ignore feedback and just provide next proposal
+        self._proposal_index += 1
+
+
+def _sharding_option_score(
+    sharding_option: ShardingOption, use_depth: bool = True
+) -> float:
+    return (
+        max([cast(float, shard.perf) for shard in sharding_option.shards])
+        if use_depth
+        else sum([cast(float, shard.perf) for shard in sharding_option.shards])
+    )

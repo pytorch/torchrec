@@ -8,23 +8,25 @@
 import unittest
 from typing import List, cast
 
+import torch
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.proposers import GreedyProposer
+from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
 from torchrec.distributed.planner.types import Topology, ShardingOption
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
-class TestGreedyProposer(unittest.TestCase):
+class TestProposers(unittest.TestCase):
     def setUp(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")
         self.enumerator = EmbeddingEnumerator(topology=topology)
-        self.proposer = GreedyProposer()
+        self.greedy_proposer = GreedyProposer()
+        self.uniform_proposer = UniformProposer()
 
-    def test_two_table_perf(self) -> None:
+    def test_greedy_two_table_perf(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
@@ -40,16 +42,16 @@ class TestGreedyProposer(unittest.TestCase):
             ),
         ]
 
-        model = TestSparseNN(tables=tables, weighted_tables=[])
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         search_space = self.enumerator.enumerate(
             module=model, sharders=[EmbeddingBagCollectionSharder()]
         )
-        self.proposer.load(search_space)
+        self.greedy_proposer.load(search_space)
 
         # simulate first five iterations:
         output = []
         for _ in range(5):
-            proposal = cast(List[ShardingOption], self.proposer.propose())
+            proposal = cast(List[ShardingOption], self.greedy_proposer.propose())
             proposal.sort(
                 key=lambda sharding_option: (
                     max([shard.perf for shard in sharding_option.shards]),
@@ -66,7 +68,7 @@ class TestGreedyProposer(unittest.TestCase):
                     for candidate in proposal
                 ]
             )
-            self.proposer.feedback(partitionable=True)
+            self.greedy_proposer.feedback(partitionable=True)
 
         expected_output = [
             [
@@ -127,6 +129,117 @@ class TestGreedyProposer(unittest.TestCase):
                     "table_0",
                     "row_wise",
                     "batched_dense",
+                ),
+            ],
+        ]
+
+        self.assertEqual(expected_output, output)
+
+    def test_uniform_three_table_perf(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100 * i,
+                embedding_dim=10 * i,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1, 4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        search_space = self.enumerator.enumerate(
+            module=model, sharders=[EmbeddingBagCollectionSharder()]
+        )
+        self.uniform_proposer.load(search_space)
+
+        output = []
+        proposal = self.uniform_proposer.propose()
+        while proposal:
+            proposal.sort(
+                key=lambda sharding_option: (
+                    max([shard.perf for shard in sharding_option.shards]),
+                    sharding_option.name,
+                )
+            )
+            output.append(
+                [
+                    (
+                        candidate.name,
+                        candidate.sharding_type,
+                        candidate.compute_kernel,
+                    )
+                    for candidate in proposal
+                ]
+            )
+            self.uniform_proposer.feedback(partitionable=True)
+            proposal = self.uniform_proposer.propose()
+
+        expected_output = [
+            [
+                (
+                    "table_1",
+                    "data_parallel",
+                    "batched_dense",
+                ),
+                (
+                    "table_2",
+                    "data_parallel",
+                    "batched_dense",
+                ),
+                (
+                    "table_3",
+                    "data_parallel",
+                    "batched_dense",
+                ),
+            ],
+            [
+                (
+                    "table_1",
+                    "table_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_2",
+                    "table_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_3",
+                    "table_wise",
+                    "batched_fused",
+                ),
+            ],
+            [
+                (
+                    "table_1",
+                    "row_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_2",
+                    "row_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_3",
+                    "row_wise",
+                    "batched_fused",
+                ),
+            ],
+            [
+                (
+                    "table_1",
+                    "table_row_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_2",
+                    "table_row_wise",
+                    "batched_fused",
+                ),
+                (
+                    "table_3",
+                    "table_row_wise",
+                    "batched_fused",
                 ),
             ],
         ]

@@ -94,4 +94,5 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
 
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
+
         self.assertEqual(self.planner._num_proposals, 20)
