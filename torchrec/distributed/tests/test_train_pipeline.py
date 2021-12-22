@@ -45,6 +45,7 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.tests.utils import get_free_port, init_distributed_single_host
+from torchrec.types import Pipelineable
 
 
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
@@ -80,7 +81,7 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]
 
 
 @dataclass
-class ModelInputSimple:
+class ModelInputSimple(Pipelineable):
     float_features: torch.Tensor
     label: torch.Tensor
 
