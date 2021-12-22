@@ -15,6 +15,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 import torch.distributed as dist
+from hypothesis import Verbosity, strategies as st, settings, given
 from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
@@ -26,6 +27,57 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.sparse.tests.tests_utils import keyed_jagged_tensor_equals
 from torchrec.tests.utils import get_free_port
+
+
+class UtilsTest(unittest.TestCase):
+    def test_get_unsharded_module_names(self) -> None:
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["LOCAL_WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+        device = torch.device("cpu")
+        backend = "gloo"
+        if not dist.is_initialized():
+            dist.init_process_group(backend=backend)
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=10,
+                embedding_dim=4,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(2)
+        ]
+        weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=10,
+                embedding_dim=4,
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(2)
+        ]
+        m = TestSparseNN(
+            tables=tables,
+            weighted_tables=weighted_tables,
+            dense_device=device,
+            sparse_device=device,
+        )
+        dmp = DistributedModelParallel(
+            module=m,
+            init_data_parallel=False,
+            device=device,
+            sharders=[
+                EmbeddingBagCollectionSharder(),
+            ],
+        )
+
+        np.testing.assert_array_equal(
+            sorted(get_unsharded_module_names(dmp)),
+            sorted(["module.over", "module.dense"]),
+        )
 
 
 def _compute_translated_lengths(
@@ -165,9 +217,7 @@ def block_bucketize_ref(
     ]
 
     expected_keys = [
-        f"{key}@bucket_{index}"
-        for index in range(trainers_size)
-        for key in keyed_jagged_tensor.keys()
+        key for index in range(trainers_size) for key in keyed_jagged_tensor.keys()
     ]
 
     return KeyedJaggedTensor(
@@ -186,73 +236,33 @@ def block_bucketize_ref(
     )
 
 
-class UtilsTest(unittest.TestCase):
-    def test_get_unsharded_module_names(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        device = torch.device("cpu")
-        backend = "gloo"
-        if not dist.is_initialized():
-            dist.init_process_group(backend=backend)
-        tables = [
-            EmbeddingBagConfig(
-                num_embeddings=10,
-                embedding_dim=4,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(2)
-        ]
-        weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=10,
-                embedding_dim=4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(2)
-        ]
-        m = TestSparseNN(
-            tables=tables,
-            weighted_tables=weighted_tables,
-            dense_device=device,
-            sparse_device=device,
-        )
-        dmp = DistributedModelParallel(
-            module=m,
-            init_data_parallel=False,
-            device=device,
-            sharders=[
-                EmbeddingBagCollectionSharder(),
-            ],
-        )
-
-        np.testing.assert_array_equal(
-            sorted(get_unsharded_module_names(dmp)),
-            sorted(["module.over", "module.dense"]),
-        )
-
-    # pyre-ignore[56]
+class KJTBucketizeTest(unittest.TestCase):
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
         "CUDA is not available",
     )
-    def test_kjt_bucketize_before_all2all(self) -> None:
-        index_type = random.choice([torch.int, torch.long])
-        offset_type = random.choice([torch.int, torch.long])
-        world_size = random.randint(1, 129)
-        MAX_NUM_FEATURES = 15
+    # pyre-ignore[56]
+    @given(
+        index_type=st.sampled_from([torch.int, torch.long]),
+        offset_type=st.sampled_from([torch.int, torch.long]),
+        world_size=st.integers(1, 129),
+        num_features=st.integers(1, 15),
+        batch_size=st.integers(1, 15),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=5, deadline=None)
+    def test_kjt_bucketize_before_all2all(
+        self,
+        index_type: torch.dtype,
+        offset_type: torch.dtype,
+        world_size: int,
+        num_features: int,
+        batch_size: int,
+    ) -> None:
         MAX_BATCH_SIZE = 15
         MAX_LENGTH = 10
         # max number of rows needed for a given feature to have unique row index
         MAX_ROW_COUNT = MAX_LENGTH * MAX_BATCH_SIZE
 
-        num_features = random.randint(2, MAX_NUM_FEATURES)
-        batch_size = random.randint(2, MAX_BATCH_SIZE)
         lengths_list = [
             random.randrange(MAX_LENGTH + 1) for _ in range(num_features * batch_size)
         ]
@@ -278,6 +288,8 @@ class UtilsTest(unittest.TestCase):
         # distribute all rows to the available trainers
         block_sizes_list = [
             math.ceil((max(feature_indices_list) + 1) / world_size)
+            if feature_indices_list
+            else 1
             for feature_indices_list in indices_lists
         ]
 
@@ -305,15 +317,6 @@ class UtilsTest(unittest.TestCase):
             block_sizes,
         )
 
-        print(f"block_sizes: {block_sizes}")
-        print(f"num_features: {num_features}")
-        print(f"batch_size: {batch_size}")
-        print(f"world_size: {world_size}")
-        print(f"KeyedJaggedTensor: {kjt}")
-        print(f"block_bucketized KeyedJaggedTensor: {block_bucketized_kjt}")
-        print(
-            f"expected_block_bucketized KeyedJaggedTensor: {expected_block_bucketized_kjt}"
-        )
         self.assertTrue(
             keyed_jagged_tensor_equals(
                 block_bucketized_kjt, expected_block_bucketized_kjt
