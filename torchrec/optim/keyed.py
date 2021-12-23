@@ -29,6 +29,10 @@ OptimizerFactory = Callable[[List[torch.Tensor]], optim.Optimizer]
 class KeyedOptimizer(optim.Optimizer):
     """
     Takes a dict of parameters and exposes state_dict by parameter key.
+
+    This implementation is much stricter than the one in torch.Optimizer:
+    it requires implementations to fully initialize their state during first optimization iteration,
+    and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
     """
 
     def __init__(
@@ -184,7 +188,9 @@ class KeyedOptimizer(optim.Optimizer):
 
 class CombinedOptimizer(KeyedOptimizer):
     """
-    Combines multiple optimizers into one.
+    Combines multiple KeyedOptimizers into one.
+
+    Meant to combine different optimizers for different submodules
     """
 
     def __init__(
@@ -260,6 +266,8 @@ class CombinedOptimizer(KeyedOptimizer):
 class KeyedOptimizerWrapper(KeyedOptimizer):
     """
     Takes a dict of parameters and exposes state_dict by parameter key.
+
+    Convenience wrapper to take in optim_factory callable to create KeyedOptimizer
     """
 
     def __init__(
@@ -279,6 +287,12 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
 
 
 class OptimizerWrapper(KeyedOptimizer):
+    """
+    Wrapper which takes in a KeyedOptimizer and is a KeyedOptimizer
+
+    Subclass for Optimizers like GradientClippingOptimizer and WarmupOptimizer
+    """
+
     def __init__(self, optimizer: KeyedOptimizer) -> None:
         self._optimizer = optimizer
         self.params: Mapping[str, torch.Tensor] = optimizer.params
