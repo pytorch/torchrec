@@ -16,6 +16,8 @@ class Tracer(torch.fx.Tracer):
     """
     NOTE [ Custom FX tracer for torchrec ]
 
+    See https://pytorch.org/docs/stable/fx.html for documentation
+
     We create a custom FX tracer to trace torchrec based models. The custom tracer
     right now have several purposes (the list might expand if we have more use cases):
     1. Handling python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
@@ -27,6 +29,21 @@ class Tracer(torch.fx.Tracer):
 
     # pyre-ignore[2]
     def create_arg(self, a: Any) -> Argument:
+        """
+        A method to specify the behavior of tracing when preparing values to
+        be used as arguments to nodes in the ``Graph``.
+
+        Adds support for the NoWait type in addition to the default tracer
+
+        Args:
+
+            a (Any): The value to be emitted as an ``Argument`` in the ``Graph``.
+
+
+        Returns:
+
+            The value ``a`` converted into the appropriate ``Argument``
+        """
         if isinstance(a, NoWait):
             return self.create_node(
                 "call_function",
@@ -43,6 +60,22 @@ def symbolic_trace(
     root: Union[torch.nn.Module, Callable],
     concrete_args: Optional[Dict[str, Any]] = None,
 ) -> torch.fx.GraphModule:
+    """
+    Symbolic tracing API
+
+    Given an ``nn.Module`` or function instance ``root``, this function will return a ``GraphModule``
+    constructed by recording operations seen while tracing through ``root``.
+
+    ``concrete_args`` allows you to partially specialize your function, whether it's to remove control flow or data structures.
+
+    Args:
+        root (Union[torch.nn.Module, Callable]): Module or function to be traced and converted
+            into a Graph representation.
+        concrete_args (Optional[Dict[str, any]]): Inputs to be partially specialized
+
+    Returns:
+        GraphModule: a Module created from the recorded operations from ``root``.
+    """
 
     tracer = Tracer()
     graph = tracer.trace(root, concrete_args)
