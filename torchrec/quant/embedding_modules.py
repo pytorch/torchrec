@@ -46,6 +46,65 @@ except ImportError:
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
+    """
+    EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
+    This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops
+
+    It processes sparse data in the form of KeyedJaggedTensor
+    with values of the form [F X B X L]
+    F: features (keys)
+    B: batch size
+    L: Length of sparse features (jagged)
+
+    and outputs a KeyedTensor with values of the form [B * (F * D)]
+    where
+    F: features (keys)
+    D: each feature's (key's) embedding dimension
+    B: batch size
+
+    Constructor Args:
+        table_name_to_quantized_weights (Dict[str, Tuple[Tensor, Tensor]]): map of tables to quantized weights
+        embedding_configs (List[EmbeddingBagConfig]): list of embedding tables
+        is_weighted: (bool): whether input KeyedJaggedTensor is weighted
+        device: (Optional[torch.device]): default compute device
+
+    Call Args:
+        features: KeyedJaggedTensor,
+
+    Returns:
+        KeyedTensor
+
+    Example:
+        table_0 = EmbeddingBagConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        table_1 = EmbeddingBagConfig(
+            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+
+        #        0       1        2  <-- batch
+        # "f1"   [0,1] None    [2]
+        # "f2"   [3]    [4]    [5,6,7]
+        #  ^
+        # feature
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        ebc.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=torch.qint8
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
+        )
+
+        qebc = QuantEmbeddingBagCollection.from_float(ebc)
+        quantized_embeddings = qebc(features)
+    """
+
     def __init__(
         self,
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
