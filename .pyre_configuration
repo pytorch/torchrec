@@ -1,0 +1,11 @@
+
+{
+  "source_directories": [
+    "."
+  ],
+  "strict": true,
+  "exclude": [
+    ".*/setup.py"
+  ],
+  "version": "0.0.101634642150"
+}
