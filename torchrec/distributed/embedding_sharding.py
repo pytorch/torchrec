@@ -470,6 +470,9 @@ class EmbeddingSharding(abc.ABC):
 
     """
 
+    def __init__(self, permute_embeddings: bool = False) -> None:
+        self._permute_embeddings: bool = permute_embeddings
+
     @abc.abstractmethod
     def create_input_dist(self) -> BaseSparseFeaturesDist:
         pass

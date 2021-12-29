@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Any, Dict, Tuple
+from typing import Callable, List, Optional, Any, Dict, Tuple
 
 import torch
 import torch.distributed as dist
@@ -73,13 +73,10 @@ class TwPooledEmbeddingDist(BasePooledEmbeddingDist):
         pg: dist.ProcessGroup,
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
+        callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(
-            pg,
-            dim_sum_per_rank,
-            device,
-        )
+        self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
         return self._dist(local_embs)
@@ -120,8 +117,9 @@ class TwEmbeddingSharding(EmbeddingSharding):
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
+        permute_embeddings: bool = False,
     ) -> None:
-        super().__init__()
+        super().__init__(permute_embeddings)
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._device = device

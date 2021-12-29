@@ -5,15 +5,16 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Tuple, cast
+from typing import List, Optional, Tuple, Dict, Set, Callable
 
 import torch
 import torch.distributed as dist
+from caffe2.torch.fb.sparsenn.pooled_embeddings_modules import PermutePooledEmbeddings
 from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
 )
-from torchrec.distributed.tw_sharding import TwEmbeddingSharding
+from torchrec.distributed.tw_sharding import TwEmbeddingSharding, TwPooledEmbeddingDist
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
     ShardMetadata,
@@ -37,8 +38,68 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
         # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         device: Optional[torch.device] = None,
+        permute_embeddings: bool = False,
     ) -> None:
-        super().__init__(embedding_configs, pg, device)
+        super().__init__(
+            embedding_configs, pg, device, permute_embeddings=permute_embeddings
+        )
+        if self._permute_embeddings:
+            self._init_combined_embeddings()
+
+    def _init_combined_embeddings(self) -> None:
+        "We grab the embedding names and dims from TwEmbeddingSharder. Note that this"
+        "could have duplications if there are multiple shards from the same table are on a rank. "
+        "Later on we process these to combine shards together"
+        embedding_names: List[str] = super().embedding_names()
+        embedding_dims: List[int] = super().embedding_dims()
+
+        embedding_shard_metadata: List[
+            Optional[ShardMetadata]
+        ] = super().embedding_shard_metadata()
+
+        embedding_name_to_index_offset_tuples: Dict[str, List[Tuple[int, int]]] = {}
+        for i, (name, metadata) in enumerate(
+            zip(embedding_names, embedding_shard_metadata)
+        ):
+            if name not in embedding_name_to_index_offset_tuples:
+                embedding_name_to_index_offset_tuples[name] = []
+            embedding_name_to_index_offset_tuples[name].append(
+                (i, metadata.shard_offsets[1] if metadata is not None else 0)
+            )
+
+        embedding_name_to_index: Dict[str, List[int]] = {}
+        for name, index_offset_tuples in embedding_name_to_index_offset_tuples.items():
+            embedding_name_to_index[name] = [
+                idx_off_tuple[0]
+                for idx_off_tuple in sorted(
+                    index_offset_tuples,
+                    key=lambda idx_off_tuple: idx_off_tuple[1],
+                )
+            ]
+
+        combined_embedding_names: List[str] = []
+        seen_embedding_names: Set[str] = set()
+
+        for name in embedding_names:
+            if name not in seen_embedding_names:
+                combined_embedding_names.append(name)
+                seen_embedding_names.add(name)
+
+        combined_embedding_dims: List[int] = []
+
+        embedding_order: List[int] = []
+        for name in combined_embedding_names:
+            combined_embedding_dims.append(
+                sum([embedding_dims[idx] for idx in embedding_name_to_index[name]])
+            )
+            embedding_order.extend(embedding_name_to_index[name])
+
+        self._embedding_names: List[str] = embedding_names
+        self._embedding_dims: List[int] = embedding_dims
+        self._embedding_order: List[int] = embedding_order
+
+        self._combined_embedding_names: List[str] = combined_embedding_names
+        self._combined_embedding_dims: List[int] = combined_embedding_dims
 
     def _shard(
         self,
@@ -82,3 +143,33 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
                 )
 
         return tables_per_rank
+
+    def embedding_dims(self) -> List[int]:
+        return (
+            self._combined_embedding_dims
+            if self._permute_embeddings
+            else super().embedding_dims()
+        )
+
+    def embedding_names(self) -> List[str]:
+        return (
+            self._combined_embedding_names
+            if self._permute_embeddings
+            else super().embedding_names()
+        )
+
+    def create_pooled_output_dist(self) -> TwPooledEmbeddingDist:
+        embedding_permute_op: Optional[PermutePooledEmbeddings] = None
+        callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None
+        if self._permute_embeddings and self._embedding_order != list(
+            range(len(self._embedding_order))
+        ):
+            assert len(self._embedding_order) == len(self._embedding_dims)
+            embedding_permute_op = PermutePooledEmbeddings(
+                self._embedding_dims,
+                self._embedding_order,
+            ).to(device=self._device)
+            callbacks = [embedding_permute_op]
+        return TwPooledEmbeddingDist(
+            self._pg, self._dim_sum_per_rank(), self._device, callbacks
+        )

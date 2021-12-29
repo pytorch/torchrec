@@ -77,6 +77,7 @@ def create_embedding_sharding(
     ],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
+    permute_embeddings: bool = False,
 ) -> EmbeddingSharding:
     pg = env.process_group
     if device is not None and device.type == "meta":
@@ -91,7 +92,9 @@ def create_embedding_sharding(
         elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
             return TwRwEmbeddingSharding(embedding_configs, pg, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
-            return CwEmbeddingSharding(embedding_configs, pg, device)
+            return CwEmbeddingSharding(
+                embedding_configs, pg, device, permute_embeddings=permute_embeddings
+            )
         else:
             raise ValueError(f"Sharding not supported {sharding_type}")
     else:
@@ -258,7 +261,7 @@ class ShardedEmbeddingBagCollection(
         )
         self._sharding_type_to_sharding: Dict[str, EmbeddingSharding] = {
             sharding_type: create_embedding_sharding(
-                sharding_type, embedding_confings, env, device
+                sharding_type, embedding_confings, env, device, permute_embeddings=True
             )
             for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
         }
@@ -648,10 +651,11 @@ class ShardedEmbeddingBag(
                     embedding_table_config,
                     self.parameter_sharding,
                     next(iter(module.parameters())),
-                )
+                ),
             ],
             env=env,
             device=device,
+            permute_embeddings=True,
         )
         self._input_dist: nn.Module = self._embedding_sharding.create_input_dist()
         self._lookup: nn.Module = self._embedding_sharding.create_lookup(fused_params)

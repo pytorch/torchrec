@@ -7,6 +7,7 @@
 
 import unittest
 from typing import List, cast
+from unittest.mock import MagicMock
 
 import torch
 from torchrec.distributed.embeddingbag import (
@@ -16,6 +17,7 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
 from torchrec.distributed.planner.types import Topology, ShardingOption
 from torchrec.distributed.tests.test_model import TestSparseNN
+from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -146,8 +148,22 @@ class TestProposers(unittest.TestCase):
             for i in range(1, 4)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+
+        mock_ebc_sharder = EmbeddingBagCollectionSharder()
+        # TODO update this test for CW sharding
+        mock_ebc_sharder.sharding_types = MagicMock(
+            return_value=[
+                ShardingType.DATA_PARALLEL.value,
+                ShardingType.TABLE_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+            ]
+        )
+
+        self.maxDiff = None
+
         search_space = self.enumerator.enumerate(
-            module=model, sharders=[EmbeddingBagCollectionSharder()]
+            module=model, sharders=[mock_ebc_sharder]
         )
         self.uniform_proposer.load(search_space)
 

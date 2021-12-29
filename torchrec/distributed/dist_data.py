@@ -373,6 +373,10 @@ class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):
         ret = self._tensor_awaitable.wait()
         return ret
 
+    @property
+    def callbacks(self) -> List[Callable[[torch.Tensor], torch.Tensor]]:
+        return self._callbacks
+
 
 class PooledEmbeddingsAllToAll(nn.Module):
     # TODO: potentially refactor to take KT instead of torch.Tensor: D29174501
@@ -414,10 +418,14 @@ class PooledEmbeddingsAllToAll(nn.Module):
         pg: dist.ProcessGroup,
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
+        callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
     ) -> None:
         super().__init__()
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
+        self._callbacks: List[Callable[[torch.Tensor], torch.Tensor]] = []
+        if callbacks is not None:
+            self._callbacks = callbacks
 
         self._dim_sum_per_rank = dim_sum_per_rank
         self.register_buffer(
@@ -452,7 +460,16 @@ class PooledEmbeddingsAllToAll(nn.Module):
             group=self._pg,
         )
 
-        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+        pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
+            tensor_awaitable=tensor_awaitable
+        )
+        pooled_embedding_awaitable.callbacks.extend(self._callbacks)
+
+        return pooled_embedding_awaitable
+
+    @property
+    def callbacks(self) -> List[Callable[[torch.Tensor], torch.Tensor]]:
+        return self._callbacks
 
 
 class PooledEmbeddingsReduceScatter(nn.Module):

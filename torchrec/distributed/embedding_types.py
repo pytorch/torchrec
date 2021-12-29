@@ -196,6 +196,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
             ShardingType.ROW_WISE.value,
+            ShardingType.COLUMN_WISE.value,
         ]
         if compute_device_type in {"cuda"}:
             # TWRW supported for CUDA only

@@ -150,7 +150,7 @@ class ModelParallelTest(ModelParallelTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 4,
         "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-fixme[56]
@@ -179,10 +179,9 @@ class ModelParallelTest(ModelParallelTestBase):
     def test_sharding_nccl_cw(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
-        # "CW + EBC is not well supported currently"
-        return
         world_size = 4
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
                 create_test_sharder(
                     sharder_type,
@@ -194,7 +193,7 @@ class ModelParallelTest(ModelParallelTestBase):
             world_size=world_size,
             constraints={
                 table.name: ParameterConstraints(
-                    min_partition=math.ceil(table.embedding_dim / world_size)
+                    min_partition=4,
                 )
                 for table in self.tables
             },
@@ -351,10 +350,9 @@ class ModelParallelTest(ModelParallelTestBase):
         sharding_type: str,
         kernel_type: str,
     ) -> None:
-        # "CW + EBC is not well supported currently"
-        return
         world_size = 4
         self._test_sharding(
+            # pyre-ignore[6]
             sharders=[
                 create_test_sharder(
                     sharder_type,
@@ -365,9 +363,7 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="gloo",
             world_size=world_size,
             constraints={
-                table.name: ParameterConstraints(
-                    min_partition=math.ceil(table.embedding_dim / world_size)
-                )
+                table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
         )

@@ -44,14 +44,20 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("dense", "data_parallel"): [398.5666507405638, 398.5666507405638],
             ("batched_dense", "data_parallel"): [378.9966555183946, 378.9966555183946],
             ("dense", "table_wise"): [3543.7999681477945],
+            ("batched_dense", "column_wise"): [3504.659977703456],
             ("batched_dense", "table_wise"): [3504.659977703456],
             ("batched_fused", "table_wise"): [3458.9966555183946],
+            ("batched_fused", "column_wise"): [3458.9966555183946],
+            ("batched_fused_uvm", "column_wise"): [83727.05882352941],
             ("sparse", "table_wise"): [3543.7999681477945],
             ("batched_fused_uvm", "table_wise"): [83727.05882352941],
             ("batched_fused_uvm_caching", "table_wise"): [22014.604904632153],
+            ("batched_fused_uvm_caching", "column_wise"): [22014.604904632153],
+            ("dense", "column_wise"): [3543.7999681477945],
             ("dense", "row_wise"): [3478.566650740564, 3478.566650740564],
             ("batched_dense", "row_wise"): [3458.9966555183946, 3458.9966555183946],
             ("batched_fused", "row_wise"): [3436.1649944258643, 3436.1649944258643],
+            ("sparse", "column_wise"): [3543.7999681477945],
             ("sparse", "row_wise"): [3478.566650740564, 3478.566650740564],
             ("batched_fused_uvm", "row_wise"): [43570.19607843138, 43570.19607843138],
             ("batched_fused_uvm_caching", "row_wise"): [
@@ -81,4 +87,5 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ): [shard.perf for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
+
         self.assertEqual(expected_perfs, perfs)
