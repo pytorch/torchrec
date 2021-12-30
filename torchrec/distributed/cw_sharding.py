@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple, Dict, Set, Callable
 
 import torch
 import torch.distributed as dist
-from caffe2.torch.fb.sparsenn.pooled_embeddings_modules import PermutePooledEmbeddings
+from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
