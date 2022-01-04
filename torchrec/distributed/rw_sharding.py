@@ -98,7 +98,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Awaitable[Awaitable[SparseFeatures]]:
         if self._num_id_list_features > 0:
             assert sparse_features.id_list_features is not None
             (

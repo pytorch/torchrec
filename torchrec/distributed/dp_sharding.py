@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, cast
 
 import torch
 from torch.distributed._sharding_spec import ShardMetadata
@@ -45,7 +45,7 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Awaitable[Awaitable[SparseFeatures]]:
         """
         No-op as sparse features are already distributed in data-parallel fashion.
 
@@ -53,10 +53,10 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist):
             sparse_features (SparseFeatures): input sparse features.
 
         Returns:
-            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+            Awaitable[Awaitable[SparseFeatures]]: wait twice to get sparse features.
 
         """
-        return NoWait(sparse_features)
+        return NoWait(cast(Awaitable[SparseFeatures], NoWait(sparse_features)))
 
 
 class DpPooledEmbeddingDist(BasePooledEmbeddingDist):

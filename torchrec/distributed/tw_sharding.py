@@ -63,7 +63,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Awaitable[Awaitable[SparseFeatures]]:
         return self._dist(sparse_features)
 
 

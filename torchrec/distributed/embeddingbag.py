@@ -368,8 +368,9 @@ class ShardedEmbeddingBagCollection(
             features_by_shards = features.split(
                 self._feature_splits,
             )
-            awaitables = [
-                module(
+            awaitables = []
+            for module, features_by_shard in zip(self._input_dists, features_by_shards):
+                all2all_lengths = module(
                     SparseFeatures(
                         id_list_features=None
                         if self._is_weighted
@@ -379,10 +380,7 @@ class ShardedEmbeddingBagCollection(
                         else None,
                     )
                 )
-                for module, features_by_shard in zip(
-                    self._input_dists, features_by_shards
-                )
-            ]
+                awaitables.append(all2all_lengths.wait())
             return SparseFeaturesListAwaitable(awaitables)
 
     def compute(
@@ -700,7 +698,7 @@ class ShardedEmbeddingBag(
                 id_list_features=None,
                 id_score_list_features=features,
             )
-        )
+        ).wait()
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: SparseFeatures

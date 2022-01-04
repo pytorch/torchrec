@@ -24,7 +24,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAll,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
-    KJTAllToAllAwaitable,
+    KJTAllToAllLengths,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.tests.utils import get_free_port, seed_and_log
@@ -204,18 +204,18 @@ class KJTAllToAllTest(DistDataTestCase):
     @classmethod
     def _validate(
         cls,
-        actual_output_awaitable: Union[KJTAllToAllAwaitable, KeyedJaggedTensor],
-        expected_output_awaitable: Union[KJTAllToAllAwaitable, KeyedJaggedTensor],
+        actual_output_awaitable: Union[KJTAllToAllLengths, KeyedJaggedTensor],
+        expected_output_awaitable: Union[KJTAllToAllLengths, KeyedJaggedTensor],
     ) -> None:
         actual_output = (
             actual_output_awaitable
             if isinstance(actual_output_awaitable, KeyedJaggedTensor)
-            else actual_output_awaitable.wait()
+            else actual_output_awaitable.wait().wait()
         )
         expected_output = (
             expected_output_awaitable
             if isinstance(expected_output_awaitable, KeyedJaggedTensor)
-            else expected_output_awaitable.wait()
+            else expected_output_awaitable.wait().wait()
         )
         assert_array_equal(
             actual_output.values().cpu(),
@@ -255,8 +255,8 @@ class KJTAllToAllTest(DistDataTestCase):
         _input = _input.to(device=device)
         output = output.to(device=device)
         pg = dist.group.WORLD
-        a2a = KJTAllToAll(pg=pg, splits=splits, device=device)
-        cls._validate(a2a(_input), output)
+        lengths_a2a = KJTAllToAll(pg=pg, splits=splits, device=device)
+        cls._validate(lengths_a2a(_input), output)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,

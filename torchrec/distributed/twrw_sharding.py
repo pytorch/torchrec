@@ -174,7 +174,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Awaitable[Awaitable[SparseFeatures]]:
         """
         Bucketizes sparse feature values into local world size number of buckets,
         performs staggered shuffle on the sparse features, and then performs AlltoAll
