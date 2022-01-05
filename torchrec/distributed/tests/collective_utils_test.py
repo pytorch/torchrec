@@ -5,11 +5,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import logging
 import os
 from unittest import mock
 
-import caffe2.torch.fb.distributed.utils.log_utils as log_utils
 import torch.distributed as dist
 from torch._utils_internal import TEST_MASTER_ADDR as MASTER_ADDR  # @manual
 from torch.testing._internal.common_distributed import MultiProcessTestCase  # @manual
@@ -19,17 +17,6 @@ from torchrec.distributed.collective_utils import (
     run_on_leader,
 )
 from torchrec.tests.utils import get_free_port
-
-
-logger: logging.Logger = log_utils.getLogger()
-
-
-"""
-buck test @mode/dev-nosan //torchrec/distributed/tests:collective_utils_test
-
-Mirrors the test cases implemented for ExtendProcessGroup collective_utils located in:
-fbcode/caffe2/torch/fb/hpc/tests/collective_utils_test.py
-"""
 
 
 class CollectiveUtilsTest(MultiProcessTestCase):
