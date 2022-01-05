@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+from collections import defaultdict
 from typing import Union, Tuple, Optional, Any, List, Dict, cast
 
 from torchrec.distributed.planner.types import (
@@ -68,6 +69,7 @@ class EmbeddingStats(Stats):
         }
 
         used_sharding_types = set()
+        compute_kernels_to_count = defaultdict(int)
 
         for sharding_option in best_plan:
             fqn = sharding_option.fqn
@@ -85,6 +87,7 @@ class EmbeddingStats(Stats):
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
+            compute_kernels_to_count[sharding_option.compute_kernel] += 1
 
             for i, rank in enumerate(ranks):
                 count = stats[rank]["type"].get(sharding_type_abbr, 0)
@@ -168,6 +171,16 @@ class EmbeddingStats(Stats):
         logger.info(f"#{'' : ^98}#")
         legend = "Input: pooling factor, Output: embedding dimension, Shards: number of tables"
         logger.info(f"# {legend: <97}#")
+        logger.info(f"#{'' : ^98}#")
+
+        compute_kernels_count = [
+            f"{compute_kernel}: {count}"
+            for compute_kernel, count in sorted(compute_kernels_to_count.items())
+        ]
+        logger.info(f"# {'Compute Kernels:' : <97}#")
+        for compute_kernel_count in compute_kernels_count:
+            logger.info(f"#   {compute_kernel_count : <95}#")
+
         logger.info(STATS_DIVIDER)
 
     def _get_shard_stats(
