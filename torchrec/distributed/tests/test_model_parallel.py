@@ -111,7 +111,7 @@ class ModelParallelTest(ModelParallelTestBase):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
-       )
+        )
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
