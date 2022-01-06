@@ -15,7 +15,7 @@ from torch import nn
 from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
-    KJTAllToAllIndices,
+    KJTAllToAllIndicesAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
@@ -109,18 +109,20 @@ class SparseFeaturesLengths(Awaitable[SparseFeaturesIndices]):
     Awaitable of sparse features indices distribution.
 
     Constructor Args:
-        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndices]]): awaitable
+        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]): awaitable
             of sharded id list features indices all2all. Wait on this value will trigger
             indices all2all (wait again will get the final all2all results).
-        id_score_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndices]]):
+        id_score_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
             awaitable of sharded id score list features indices all2all. Wait on this
             value will trigger indices all2all (wait again will get the final all2all results).
     """
 
     def __init__(
         self,
-        id_list_features_awaitable: Optional[Awaitable[KJTAllToAllIndices]],
-        id_score_list_features_awaitable: Optional[Awaitable[KJTAllToAllIndices]],
+        id_list_features_awaitable: Optional[Awaitable[KJTAllToAllIndicesAwaitable]],
+        id_score_list_features_awaitable: Optional[
+            Awaitable[KJTAllToAllIndicesAwaitable]
+        ],
     ) -> None:
         super().__init__()
         self._id_list_features_awaitable = id_list_features_awaitable

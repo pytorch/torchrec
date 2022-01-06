@@ -83,7 +83,7 @@ def _split_lengths(
     return length_per_split
 
 
-class KJTAllToAllIndices(Awaitable[KeyedJaggedTensor]):
+class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
     """
     Awaitable for KJT indices and weights All2All.
 
@@ -210,11 +210,11 @@ class KJTAllToAllIndices(Awaitable[KeyedJaggedTensor]):
         return ret
 
 
-class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
+class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
     """
     Awaitable for KJT's lengths all2all.
 
-    wait() waits on lengths all2all, then instantiates KJTAllToAllIndices awaitable where
+    wait() waits on lengths all2all, then instantiates KJTAllToAllIndicesAwaitable awaitable where
     indices and weights all2all will be issued.
 
     Constructor Args:
@@ -230,7 +230,7 @@ class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
        None
 
     Returns:
-        KJTAllToAllIndices.
+        KJTAllToAllIndicesAwaitable.
     """
 
     def __init__(
@@ -275,7 +275,7 @@ class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
             )
             self._lengths: torch.Tensor = out_lengths
 
-    def _wait_impl(self) -> KJTAllToAllIndices:
+    def _wait_impl(self) -> KJTAllToAllIndicesAwaitable:
         """
         Overwrite wait function as we don't handle callbacks here
         """
@@ -291,7 +291,7 @@ class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
                 stride=self._input.stride(),
             )
 
-        ret = KJTAllToAllIndices(
+        ret = KJTAllToAllIndicesAwaitable(
             self._pg,
             kjt,
             self._splits,
@@ -386,7 +386,9 @@ class KJTAllToAll(nn.Module):
             ),
         )
 
-    def forward(self, input: KeyedJaggedTensor) -> Awaitable[KJTAllToAllIndices]:
+    def forward(
+        self, input: KeyedJaggedTensor
+    ) -> Awaitable[KJTAllToAllIndicesAwaitable]:
         """
         Sends input to relevant ProcessGroup ranks.
         First wait will have lengths results and issue indices/weights all2all.
@@ -406,7 +408,7 @@ class KJTAllToAll(nn.Module):
                 self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
             ]
 
-            return KJTAllToAllLengths(
+            return KJTAllToAllLengthsAwaitable(
                 pg=self._pg,
                 input=input,
                 splits=self._splits,

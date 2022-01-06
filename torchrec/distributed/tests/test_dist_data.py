@@ -24,7 +24,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAll,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
-    KJTAllToAllLengths,
+    KJTAllToAllLengthsAwaitable,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.tests.utils import get_free_port, seed_and_log
@@ -204,8 +204,10 @@ class KJTAllToAllTest(DistDataTestCase):
     @classmethod
     def _validate(
         cls,
-        actual_output_awaitable: Union[KJTAllToAllLengths, KeyedJaggedTensor],
-        expected_output_awaitable: Union[KJTAllToAllLengths, KeyedJaggedTensor],
+        actual_output_awaitable: Union[KJTAllToAllLengthsAwaitable, KeyedJaggedTensor],
+        expected_output_awaitable: Union[
+            KJTAllToAllLengthsAwaitable, KeyedJaggedTensor
+        ],
     ) -> None:
         actual_output = (
             actual_output_awaitable
