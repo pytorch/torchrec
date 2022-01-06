@@ -115,6 +115,8 @@ class TestModule(nn.Module):
 class TrainPipelineBaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.device = torch.device("cuda:0")
+        torch.backends.cudnn.allow_tf32 = False
+        torch.backends.cuda.matmul.allow_tf32 = False
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
@@ -145,7 +147,7 @@ class TrainPipelineBaseTest(unittest.TestCase):
 
             pred_gpu = pipeline.progress(dataloader)
 
-            self.assertEquals(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.device, self.device)
             self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
 
 
