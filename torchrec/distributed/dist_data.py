@@ -121,14 +121,16 @@ class KJTAllToAllIndices(Awaitable[KeyedJaggedTensor]):
         self._splits = splits
         self._pg: dist.ProcessGroup = pg
         self._keys = keys
+        self._in_lengths_per_worker: List[int] = []
+        self._out_lengths_per_worker: List[int] = []
         self._input = input
         if self._workers == 1:
             return
 
         self._lengths: torch.Tensor = input.lengths()
 
-        self._in_lengths_per_worker: List[int] = in_lengths_per_worker
-        self._out_lengths_per_worker: List[int] = (
+        self._in_lengths_per_worker = in_lengths_per_worker
+        self._out_lengths_per_worker = (
             self._lengths.view(self._workers, -1).sum(dim=1).cpu().tolist()
         )
 
