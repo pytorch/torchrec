@@ -400,7 +400,6 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(deadline=60000)
     def test_pooled_embedding_reduce_scatter(self) -> None:
         embeddding_dim = 10
         batch_size = 2
