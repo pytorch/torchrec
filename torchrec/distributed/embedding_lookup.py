@@ -10,6 +10,7 @@ import copy
 import itertools
 import logging
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
 import torch
@@ -99,6 +100,12 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
+        @dataclass
+        class ShardParams:
+            optimizer_states: List[Optional[Tuple[torch.Tensor]]]
+            local_metadata: List[ShardMetadata]
+            embedding_weights: List[torch.Tensor]
+
         def to_rowwise_sharded_metadata(
             local_metadata: ShardMetadata,
             global_metadata: ShardedTensorMetadata,
@@ -154,74 +161,127 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             "params": [],
             "lr": emb_module.optimizer_args.learning_rate,
         }
-        params: Dict[str, torch.Tensor] = {}
+
+        params: Dict[str, Union[torch.Tensor, ShardedTensor]] = {}
 
         # Fused optimizers use buffers (they don't use autograd) and we want to make sure
-        # that state_dict look identical to non-fused version.
+        # that state_dict look identical to no-fused version.
+        table_to_shard_params = {}
+
         split_embedding_weights = emb_module.split_embedding_weights()
-        for table_config, weight in zip(
+        split_optimizer_states = emb_module.split_optimizer_states()
+
+        for table_config, optimizer_states, weight in itertools.zip_longest(
             config.embedding_tables,
+            split_optimizer_states,
             split_embedding_weights,
         ):
+            if table_config.name not in table_to_shard_params:
+                table_to_shard_params[table_config.name] = ShardParams(
+                    optimizer_states=[], local_metadata=[], embedding_weights=[]
+                )
+
+            if optimizer_states:
+                for optimizer_state in optimizer_states:
+                    assert table_config.local_rows == optimizer_state.size(0)
+
+            local_metadata = table_config.local_metadata
+
+            table_to_shard_params[table_config.name].optimizer_states.append(
+                optimizer_states
+            )
+            table_to_shard_params[table_config.name].local_metadata.append(
+                local_metadata
+            )
+            table_to_shard_params[table_config.name].embedding_weights.append(weight)
+
+        seen_tables = set()
+        for table_config in config.embedding_tables:
+            if table_config.name in seen_tables:
+                continue
+            seen_tables.add(table_config.name)
+            table_config_global_metadata: Optional[
+                ShardedTensorMetadata
+            ] = table_config.global_metadata
+
+            shard_params: ShardParams = table_to_shard_params[table_config.name]
+
+            assert table_config_global_metadata is not None
+            local_weight_shards = []
+            for local_weight, local_metadata in zip(
+                shard_params.embedding_weights, shard_params.local_metadata
+            ):
+                local_weight_shards.append(Shard(local_weight, local_metadata))
+                table_config_global_metadata.tensor_properties.dtype = (
+                    local_weight.dtype
+                )
+                table_config_global_metadata.tensor_properties.requires_grad = (
+                    local_weight.requires_grad
+                )
+
+            weight = ShardedTensor._init_from_local_shards_and_global_metadata(
+                local_shards=local_weight_shards,
+                sharded_tensor_metadata=table_config_global_metadata,
+                process_group=self._pg,
+            )
+
+            state[weight] = {}
             param_group["params"].append(weight)
             param_key = table_config.name + ".weight"
             params[param_key] = weight
 
-        for table_config, optimizer_states, weight in zip(
-            config.embedding_tables,
-            emb_module.split_optimizer_states(),
-            split_embedding_weights,
-        ):
-            state[weight] = {}
-            # momentum1
-            assert table_config.local_rows == optimizer_states[0].size(0)
-            sharding_dim = (
+            # Setting optimizer states
+            sharding_dim: int = (
                 1 if table_config.local_cols != table_config.embedding_dim else 0
             )
-            momentum1_key = f"{table_config.name}.momentum1"
-            if optimizer_states[0].dim() == 1:
-                (local_metadata, sharded_tensor_metadata) = to_rowwise_sharded_metadata(
-                    table_config.local_metadata,
-                    table_config.global_metadata,
-                    sharding_dim,
-                )
-            else:
-                (local_metadata, sharded_tensor_metadata) = (
-                    table_config.local_metadata,
-                    table_config.global_metadata,
-                )
 
-            momentum1 = ShardedTensor._init_from_local_shards_and_global_metadata(
-                local_shards=[Shard(optimizer_states[0], local_metadata)],
-                sharded_tensor_metadata=sharded_tensor_metadata,
-                process_group=self._pg,
-            )
-            state[weight][momentum1_key] = momentum1
-            # momentum2
-            if len(optimizer_states) == 2:
-                assert table_config.local_rows == optimizer_states[1].size(0)
-                momentum2_key = f"{table_config.name}.momentum2"
+            if all(
+                [opt_state is not None for opt_state in shard_params.optimizer_states]
+            ):
+                # pyre-ignore
+                def get_momentum(momentum_idx: int) -> ShardedTensor:
+                    assert momentum_idx > 0
+                    momentum_local_shards: List[Shard] = []
 
-                if optimizer_states[1].dim() == 1:
-                    (
-                        local_metadata,
-                        sharded_tensor_metadata,
-                    ) = to_rowwise_sharded_metadata(
-                        table_config.local_metadata,
-                        table_config.global_metadata,
-                        sharding_dim,
+                    sharded_tensor_metadata = table_config.global_metadata
+                    for (optimizer_state, shard_param_local_metadata) in zip(
+                        shard_params.optimizer_states, shard_params.local_metadata
+                    ):
+
+                        local_metadata = table_config.local_metadata
+
+                        if optimizer_state[momentum_idx - 1].dim() == 1:
+                            (
+                                local_metadata,
+                                sharded_tensor_metadata,
+                            ) = to_rowwise_sharded_metadata(
+                                shard_param_local_metadata,
+                                table_config.global_metadata,
+                                sharding_dim,
+                            )
+
+                        assert local_metadata is not None
+                        assert sharded_tensor_metadata is not None
+                        momentum_local_shards.append(
+                            Shard(optimizer_state[momentum_idx - 1], local_metadata)
+                        )
+
+                    return ShardedTensor._init_from_local_shards_and_global_metadata(
+                        local_shards=momentum_local_shards,
+                        sharded_tensor_metadata=sharded_tensor_metadata,
+                        process_group=self._pg,
                     )
-                else:
-                    (local_metadata, sharded_tensor_metadata) = (
-                        table_config.local_metadata,
-                        table_config.global_metadata,
-                    )
-                momentum2 = ShardedTensor._init_from_local_shards_and_global_metadata(
-                    local_shards=[Shard(optimizer_states[1], local_metadata)],
-                    sharded_tensor_metadata=sharded_tensor_metadata,
-                    process_group=self._pg,
-                )
-                state[weight][momentum2_key] = momentum2
+
+                if all(
+                    # pyre-ignore
+                    [len(opt_state) >= 1 for opt_state in shard_params.optimizer_states]
+                ):
+                    state[weight][f"{table_config.name}.momentum1"] = get_momentum(1)
+                if all(
+                    # pyre-ignore
+                    [len(opt_state) >= 2 for opt_state in shard_params.optimizer_states]
+                ):
+                    state[weight][f"{table_config.name}.momentum2"] = get_momentum(2)
 
         super().__init__(params, state, [param_group])
 

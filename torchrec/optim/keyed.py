@@ -23,7 +23,7 @@ from torch import optim
 from torch.distributed._sharded_tensor import ShardedTensor
 
 
-OptimizerFactory = Callable[[List[torch.Tensor]], optim.Optimizer]
+OptimizerFactory = Callable[[List[Union[torch.Tensor, ShardedTensor]]], optim.Optimizer]
 
 
 class KeyedOptimizer(optim.Optimizer):
@@ -37,7 +37,7 @@ class KeyedOptimizer(optim.Optimizer):
 
     def __init__(
         self,
-        params: Mapping[str, torch.Tensor],
+        params: Mapping[str, Union[torch.Tensor, ShardedTensor]],
         # pyre-ignore [2]
         state: Mapping[Any, Any],
         param_groups: Collection[Mapping[str, Any]],
@@ -132,8 +132,10 @@ class KeyedOptimizer(optim.Optimizer):
 
                 new_state_val = new_state[param_key][state_key]
                 if isinstance(state_val, torch.Tensor):
+                    assert isinstance(new_state_val, torch.Tensor)
                     state_val.detach().copy_(new_state_val)
                 elif isinstance(state_val, ShardedTensor):
+                    assert isinstance(new_state_val, ShardedTensor)
                     num_shards = len(state_val.local_shards())
                     num_new_shards = len(new_state_val.local_shards())
                     if num_shards != num_new_shards:
@@ -242,7 +244,7 @@ class CombinedOptimizer(KeyedOptimizer):
         ]
 
     @property
-    def params(self) -> Mapping[str, torch.Tensor]:
+    def params(self) -> Mapping[str, Union[torch.Tensor, ShardedTensor]]:
         ret = {}
         for opt_key, opt in self._optims:
             for param_key, param in opt.params.items():
@@ -272,7 +274,7 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
 
     def __init__(
         self,
-        params: Mapping[str, torch.Tensor],
+        params: Mapping[str, Union[torch.Tensor, ShardedTensor]],
         optim_factory: OptimizerFactory,
     ) -> None:
         self._optimizer: optim.Optimizer = optim_factory(list(params.values()))
@@ -295,7 +297,7 @@ class OptimizerWrapper(KeyedOptimizer):
 
     def __init__(self, optimizer: KeyedOptimizer) -> None:
         self._optimizer = optimizer
-        self.params: Mapping[str, torch.Tensor] = optimizer.params
+        self.params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = optimizer.params
         # pyre-ignore [4]
         self.state: Mapping[Any, Any] = optimizer.state
         self.param_groups: Collection[Mapping[str, Any]] = optimizer.param_groups

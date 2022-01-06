@@ -164,7 +164,7 @@ class QuantModelParallelTest(unittest.TestCase):
             sharders=[
                 TestEBCSharder(
                     sharding_type=ShardingType.DATA_PARALLEL.value,
-                    kernel_type=EmbeddingComputeKernel.BATCHED_FUSED.value,
+                    kernel_type=EmbeddingComputeKernel.DENSE.value,
                 )
             ],
             device=device,

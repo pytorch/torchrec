@@ -295,9 +295,6 @@ class ShardedEmbeddingBagCollection(
                     for param_key, weight in module.fused_optimizer.params.items():
                         # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
                         params["embedding_bags." + param_key] = weight
-                    # pyre-fixme[8]: Attribute has type `Mapping[str, Tensor]`; used
-                    #  as `Mapping[str, Union[Tensor,
-                    #  torch.distributed._sharded_tensor.api.ShardedTensor]]`.
                     module.fused_optimizer.params = params
                     optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
@@ -670,9 +667,6 @@ class ShardedEmbeddingBag(
                 for param_key, weight in module.fused_optimizer.params.items():
                     # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
                     params[param_key.split(".")[-1]] = weight
-                # pyre-fixme[8]: Attribute has type `Mapping[str, Tensor]`; used as
-                #  `Mapping[str, Union[Tensor,
-                #  torch.distributed._sharded_tensor.api.ShardedTensor]]`.
                 module.fused_optimizer.params = params
                 optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
