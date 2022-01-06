@@ -294,11 +294,7 @@ class ModelParallelTest(ModelParallelTestBase):
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
-        sharding_type=st.sampled_from(
-            [
-                ShardingType.TABLE_ROW_WISE.value,
-            ]
-        ),
+        sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
@@ -492,6 +488,7 @@ class ModelParallelTest(ModelParallelTestBase):
         if torch.cuda.is_available():
             torch.backends.cudnn.allow_tf32 = False
             torch.backends.cuda.matmul.allow_tf32 = False
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
         num_features = 4
         num_weighted_features = 2
@@ -518,6 +515,12 @@ class ModelParallelTest(ModelParallelTestBase):
         self.embedding_groups = {
             "group_0": ["feature_" + str(i) for i in range(num_features)]
         }
+
+    def tearDown(self) -> None:
+        torch.use_deterministic_algorithms(False)
+        if torch.cuda.is_available():
+            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
+        super().tearDown()
 
     def _test_sharding(
         self,
