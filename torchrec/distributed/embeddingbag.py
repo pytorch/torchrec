@@ -43,6 +43,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.rw_sharding import RwEmbeddingSharding
 from torchrec.distributed.tw_sharding import TwEmbeddingSharding
+from torchrec.distributed.twcw_sharding import TwCwEmbeddingSharding
 from torchrec.distributed.twrw_sharding import TwRwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
@@ -95,13 +96,17 @@ def create_embedding_sharding(
             return CwEmbeddingSharding(
                 embedding_configs, pg, device, permute_embeddings=permute_embeddings
             )
+        elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+            return TwCwEmbeddingSharding(
+                embedding_configs, pg, device, permute_embeddings=permute_embeddings
+            )
         else:
-            raise ValueError(f"Sharding not supported {sharding_type}")
+            raise ValueError(f"Sharding type not supported {sharding_type}")
     else:
         if sharding_type == ShardingType.DATA_PARALLEL.value:
             return DpEmbeddingSharding(embedding_configs, env, device)
         else:
-            raise ValueError(f"Sharding not supported {sharding_type}")
+            raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
 def replace_placement_with_meta_device(

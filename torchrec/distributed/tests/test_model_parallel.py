@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
 import os
 import unittest
 from collections import OrderedDict
@@ -150,8 +149,8 @@ class ModelParallelTest(ModelParallelTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() < 4,
-        "Not enough GPUs, this test requires at least two GPUs",
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
     )
     # pyre-fixme[56]
     @given(
@@ -192,9 +191,55 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="nccl",
             world_size=world_size,
             constraints={
-                table.name: ParameterConstraints(
-                    min_partition=4,
-                )
+                table.name: ParameterConstraints(min_partition=4)
+                for table in self.tables
+            },
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+        local_size=st.sampled_from([2, 4]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    def test_sharding_nccl_twcw(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        local_size: int,
+    ) -> None:
+        world_size = 4
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[create_test_sharder(sharder_type, sharding_type, kernel_type)],
+            backend="nccl",
+            world_size=world_size,
+            local_size=local_size,
+            constraints={
+                table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
         )

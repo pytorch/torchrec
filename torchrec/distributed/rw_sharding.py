@@ -169,7 +169,8 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
 
 class RwEmbeddingSharding(EmbeddingSharding):
     """
-    Shards embedding bags row-wise, i.e.. a given embedding table is evenly distribued by rows and table slices are placed on all ranks.
+    Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
+    by rows and table slices are placed on all ranks.
     """
 
     def __init__(

@@ -70,9 +70,11 @@ class ShardingType(Enum):
     # Range-split on the first dimension across all ranks
     ROW_WISE = "row_wise"
     # Row-wise on the same node and table-wise across nodes
-    # Useful when having multiple ranks perf node
+    # Useful when having multiple ranks per node
     # and comms within a single node are more efficient than across nodes.
     TABLE_ROW_WISE = "table_row_wise"
+    # Column-wise on the same node and table-wise across nodes
+    TABLE_COLUMN_WISE = "table_column_wise"
 
 
 class ParameterStorage(Enum):

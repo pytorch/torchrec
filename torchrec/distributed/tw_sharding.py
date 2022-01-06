@@ -106,7 +106,8 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
 
 class TwEmbeddingSharding(EmbeddingSharding):
     """
-    Shards embedding bags table-wise, i.e.. a given embedding table is entirely placed on a selected rank.
+    Shards embedding bags table-wise, i.e.. a given embedding table is entirely placed
+    on a selected rank.
     """
 
     def __init__(

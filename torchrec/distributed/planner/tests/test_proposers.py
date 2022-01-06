@@ -150,7 +150,7 @@ class TestProposers(unittest.TestCase):
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
 
         mock_ebc_sharder = EmbeddingBagCollectionSharder()
-        # TODO update this test for CW sharding
+        # TODO update this test for CW and TWCW sharding
         mock_ebc_sharder.sharding_types = MagicMock(
             return_value=[
                 ShardingType.DATA_PARALLEL.value,

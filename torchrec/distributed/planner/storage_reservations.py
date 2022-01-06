@@ -49,7 +49,6 @@ class HeuristicalStorageReservation(StorageReservation):
     Constructor Args:
         percentage (float): extra storage percentage to reserve that acts as a margin of
             error beyond heuristic calculation of storage.
-
     """
 
     def __init__(self, percentage: float) -> None:

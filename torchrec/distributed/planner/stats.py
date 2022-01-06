@@ -56,8 +56,8 @@ class EmbeddingStats(Stats):
             best_plan (List[ShardingOption]): plan with expected performance
             constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter
                 names to provided ParameterConstraints.
-
         """
+
         shard_by_fqn = {
             module_name + "." + param_name: value
             for module_name, param_dict in sharding_plan.plan.items()
@@ -198,8 +198,8 @@ class EmbeddingStats(Stats):
             ranks: list of ranks.
             pooling_factor: list of pooling factors across ranks.
             emb_dims: list of embedding dimensions across ranks.
-
         """
+
         ranks = list(range(world_size))
         pooling_factor = [
             sum(constraints[sharding_option.name].pooling_factors)
@@ -237,6 +237,19 @@ class EmbeddingStats(Stats):
             pooling_factor = [pooling_factor[0] / local_size] * len(ranks)
             emb_dims = emb_dims * len(ranks)
 
+        elif shard.sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+            assert shard.ranks
+            ranks = shard.ranks
+            pooling_factor = pooling_factor * len(ranks)
+            emb_dims = [
+                int(shard.shard_sizes[1]) for shard in shard.sharding_spec.shards
+            ]
+
+        else:
+            raise ValueError(
+                f"Unrecognized or unsupported sharding type provided: {shard.sharding_type}"
+            )
+
         return ranks, pooling_factor, emb_dims
 
 
@@ -251,8 +264,12 @@ def _get_sharding_type_abbr(sharding_type: str) -> str:
         return "RW"
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
         return "TWRW"
+    elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+        return "TWCW"
     else:
-        raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
+        raise ValueError(
+            f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+        )
 
 
 def _format_table(table: List[List[Union[str, int]]]) -> List[str]:

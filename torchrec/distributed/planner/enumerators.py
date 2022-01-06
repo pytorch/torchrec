@@ -40,7 +40,6 @@ class EmbeddingEnumerator(Enumerator):
         topology (Topology): device topology.
         constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names
             to provided ParameterConstraints.
-
     """
 
     def __init__(
@@ -77,8 +76,8 @@ class EmbeddingEnumerator(Enumerator):
 
         Returns:
             List[ShardingOption]: valid sharding options with values populated.
-
         """
+
         sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
@@ -186,14 +185,16 @@ def get_partition_by_type(sharding_type: str) -> str:
 
     Returns:
         str: the corresponding PartitionByType value.
-
     """
 
     device_sharding_types = {
         ShardingType.TABLE_WISE.value,
         ShardingType.COLUMN_WISE.value,
     }
-    host_sharding_types = {ShardingType.TABLE_ROW_WISE.value}
+    host_sharding_types = {
+        ShardingType.TABLE_ROW_WISE.value,
+        ShardingType.TABLE_COLUMN_WISE.value,
+    }
     uniform_sharding_types = {
         ShardingType.ROW_WISE.value,
         ShardingType.DATA_PARALLEL.value,
@@ -206,7 +207,9 @@ def get_partition_by_type(sharding_type: str) -> str:
     elif sharding_type in uniform_sharding_types:
         return PartitionByType.UNIFORM.value
 
-    raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
+    raise ValueError(
+        f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+    )
 
 
 def calculate_shard_sizes_and_offsets(
@@ -233,7 +236,6 @@ def calculate_shard_sizes_and_offsets(
 
     Raises:
         ValueError: If `sharding_type` is not a valid ShardingType.
-
     """
 
     (rows, columns) = tensor.shape
@@ -242,14 +244,19 @@ def calculate_shard_sizes_and_offsets(
         return [[rows, columns]] * world_size, [[0, 0]] * world_size
     elif sharding_type == ShardingType.TABLE_WISE.value:
         return [[rows, columns]], [[0, 0]]
-    elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
     elif sharding_type == ShardingType.ROW_WISE.value:
         return _calculate_rw_shard_sizes_and_offsets(rows, world_size, columns)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
         return _calculate_rw_shard_sizes_and_offsets(rows, local_world_size, columns)
+    elif (
+        sharding_type == ShardingType.COLUMN_WISE.value
+        or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+    ):
+        return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
 
-    raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
+    raise ValueError(
+        f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+    )
 
 
 def _calculate_rw_shard_sizes_and_offsets(
@@ -266,7 +273,6 @@ def _calculate_rw_shard_sizes_and_offsets(
 
     Also consider the example of hash_size = 5, num_devices = 4. The expected rows per
     rank is [2,2,1,0].
-
     """
 
     block_size: int = math.ceil(hash_size / num_devices)

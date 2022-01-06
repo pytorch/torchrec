@@ -26,6 +26,7 @@ from torchrec.distributed.tests.test_model import (
     TestSparseNNBase,
 )
 from torchrec.distributed.types import (
+    ShardingType,
     ShardingPlan,
     ShardedTensor,
     ModuleSharder,
@@ -110,13 +111,26 @@ class ModelParallelTestBase(unittest.TestCase):
             constraints=constraints,
         )
         plan: ShardingPlan = planner.collective_plan(local_model, sharders, pg)
+        """
+        Simulating multiple nodes on a single node. However, metadata information and
+        tensor placement must still be consistent. Here we overwrite this to do so.
 
-        # We're simulating multiple nodes on a single node. However, metadata information and tensor placement must still be consistent. Here we overwrite this to do so.
-        # Note that the inter/intra process groups should still behave as expected.
-        # TODO, may need to add some checks that only does this if we're running on a single GPU (which should be most cases).
+        Note:
+            inter/intra process groups should still behave as expected.
+
+        TODO: may need to add some checks that only does this if we're running on a
+        single GPU (which should be most cases).
+        """
         for group in plan.plan:
             for _, parameter_sharding in plan.plan[group].items():
-                if parameter_sharding.sharding_type == "table_row_wise":
+                if (
+                    parameter_sharding.sharding_type
+                    in {
+                        ShardingType.TABLE_ROW_WISE.value,
+                        ShardingType.TABLE_COLUMN_WISE.value,
+                    }
+                    and device.type != "cpu"
+                ):
                     sharding_spec = parameter_sharding.sharding_spec
                     if sharding_spec is not None:
                         # pyre-ignore

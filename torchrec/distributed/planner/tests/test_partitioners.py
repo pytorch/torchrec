@@ -14,7 +14,12 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
-from torchrec.distributed.planner.types import Storage, Topology, PartitionByType
+from torchrec.distributed.planner.types import (
+    ParameterConstraints,
+    Storage,
+    Topology,
+    PartitionByType,
+)
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -52,6 +57,30 @@ class TWRWSharder(
 ):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_ROW_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
+class TWCWSharder(
+    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
+):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.TABLE_COLUMN_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
+class HostLevelSharder(
+    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
+):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.TABLE_ROW_WISE.value, ShardingType.TABLE_COLUMN_WISE.value]
 
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
@@ -268,3 +297,120 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 solution_topology.devices[i].storage,
                 self.topology.devices[i].storage - Storage(4000, 4000),
             )
+
+    def test_twcw_unbalanced_perf_host(self) -> None:
+        self.topology = Topology(
+            world_size=16, local_world_size=8, compute_device="cuda"
+        )
+        constraints = {
+            "table_0": ParameterConstraints(min_partition=2),
+            "table_1": ParameterConstraints(min_partition=10),
+            "table_2": ParameterConstraints(min_partition=5),
+            "table_3": ParameterConstraints(min_partition=8),
+        }
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=64,
+                embedding_dim=20 * (i + 1),
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+
+        self.model = TestSparseNN(tables=tables)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, constraints=constraints
+        )
+        self.partitioner = GreedyPerfPartitioner()
+        sharding_options = self.enumerator.enumerate(
+            module=self.model,
+            sharders=[TWCWSharder()],
+        )
+        for sharding_option in sharding_options:
+            perf = 100.0
+            for shard in sharding_option.shards:
+                shard.perf = perf
+                shard.storage = Storage(hbm=1000, ddr=1000)
+            sharding_option.partition_by = PartitionByType.HOST.value
+
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=self.topology,
+        )
+
+        expected_ranks = {
+            "table_0": [9, 8, 15, 14, 13, 12, 11, 10, 9, 8],
+            "table_1": [3, 2, 1, 0],
+            "table_2": [13, 12, 11, 10, 9, 8, 15, 14, 13, 12, 11, 10],
+            "table_3": [5, 4, 3, 2, 1, 0, 7, 6, 5, 4],
+        }
+
+        ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in sharding_plan
+        }
+        self.assertEqual(expected_ranks, ranks)
+
+    def test_twrw_and_twcw_perf_host(self) -> None:
+        self.topology = Topology(
+            world_size=16, local_world_size=8, compute_device="cuda"
+        )
+        constraints = {
+            "table_0": ParameterConstraints(
+                sharding_types=[ShardingType.TABLE_ROW_WISE.value]
+            ),
+            "table_1": ParameterConstraints(
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=4
+            ),
+            "table_2": ParameterConstraints(
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=7
+            ),
+            "table_3": ParameterConstraints(
+                sharding_types=[ShardingType.TABLE_ROW_WISE.value]
+            ),
+        }
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=128,
+                embedding_dim=20 * (i + 1),
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+
+        self.model = TestSparseNN(tables=tables)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, constraints=constraints
+        )
+        self.partitioner = GreedyPerfPartitioner()
+        sharding_options = self.enumerator.enumerate(
+            module=self.model,
+            sharders=[HostLevelSharder()],
+        )
+
+        for sharding_option in sharding_options:
+            perf = 100.0
+            for shard in sharding_option.shards:
+                shard.perf = perf
+                shard.storage = Storage(hbm=1000, ddr=1000)
+            sharding_option.partition_by = PartitionByType.HOST.value
+
+        sharding_plan = self.partitioner.partition(
+            proposal=sharding_options,
+            storage_constraint=self.topology,
+        )
+        expected_ranks = {
+            "table_0": [8, 9, 10, 11, 12, 13, 14, 15],
+            "table_1": [1, 0, 7, 6, 5, 4, 3, 2, 1, 0],
+            "table_2": [15, 14, 13, 12, 11, 10, 9, 8],
+            "table_3": [0, 1, 2, 3, 4, 5, 6, 7],
+        }
+
+        ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in sharding_plan
+        }
+
+        self.assertEqual(expected_ranks, ranks)

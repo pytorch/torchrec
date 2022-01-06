@@ -129,12 +129,13 @@ def perf_func_emb_wall_time(
     Returns:
         List[float]: the list of perf for each shard.
     """
+
     shard_perfs = []
     B = 1.0 * world_size * batch_size  # global batch size
     device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
     if device_bw is None:
         raise PlannerError(
-            f"No kernel BW exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
+            f"No kernel bandwidth exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
         )
 
     for hash_size, emb_dim in shard_sizes:
@@ -142,7 +143,6 @@ def perf_func_emb_wall_time(
         if sharding_type == ShardingType.TABLE_WISE.value:
             input_perf, compute_perf, output_perf = _get_tw_sharding_perf(
                 global_batch_size=B,
-                world_size=world_size,
                 input_lengths=input_lengths,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
@@ -153,7 +153,16 @@ def perf_func_emb_wall_time(
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
                 global_batch_size=B,
-                world_size=world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+            )
+        elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+            input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
+                global_batch_size=B,
                 input_lengths=input_lengths,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
@@ -196,7 +205,9 @@ def perf_func_emb_wall_time(
                 device_bw=device_bw,
             )
         else:
-            raise ValueError(f"Unexpected sharding type: {sharding_type}")
+            raise ValueError(
+                f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+            )
 
         shard_perf = 0
         shard_perf += input_perf if has_input_dist else 0
@@ -209,7 +220,6 @@ def perf_func_emb_wall_time(
 
 def _get_tw_sharding_perf(
     global_batch_size: float,
-    world_size: int,
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
@@ -239,7 +249,6 @@ def _get_tw_sharding_perf(
 
 def _get_cw_sharding_perf(
     global_batch_size: float,
-    world_size: int,
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
@@ -450,9 +459,9 @@ def calculate_shard_storages(
         caching_ratio (float): ratio of HBM to DDR memory for UVM caching.
 
     Returns:
-        List[Storage]: storage object for each device in topology
-
+        List[Storage]: storage object for each device in topology.
     """
+
     input_data_type_size = BIGINT_DTYPE
     output_data_type_size = tensor.element_size()
 
@@ -584,8 +593,19 @@ def _calculate_shard_io_sizes(
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
         )
+    elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+        return _calculate_cw_shard_io_sizes(
+            batch_size=batch_size,
+            world_size=local_world_size,
+            input_lengths=input_lengths,
+            shard_sizes=shard_sizes,
+            input_data_type_size=input_data_type_size,
+            output_data_type_size=output_data_type_size,
+        )
     else:
-        raise ValueError(f"Unrecognized sharding type provided: {sharding_type}")
+        raise ValueError(
+            f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+        )
 
 
 def _calculate_dp_shard_io_sizes(

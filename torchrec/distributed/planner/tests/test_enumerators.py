@@ -204,6 +204,25 @@ EXPECTED_CW_SHARD_STORAGE = [
     ],
 ]
 
+EXPECTED_TWCW_SHARD_SIZES: List[List[List[int]]] = EXPECTED_CW_SHARD_SIZES
+
+EXPECTED_TWCW_SHARD_OFFSETS: List[List[List[int]]] = EXPECTED_CW_SHARD_OFFSETS
+
+EXPECTED_TWCW_SHARD_STORAGE = [
+    [Storage(hbm=53152, ddr=0)],
+    [Storage(hbm=175552, ddr=0), Storage(hbm=226464, ddr=0)],
+    [
+        Storage(hbm=159968, ddr=0),
+        Storage(hbm=159968, ddr=0),
+        Storage(hbm=185984, ddr=0),
+    ],
+    [
+        Storage(hbm=309344, ddr=0),
+        Storage(hbm=309344, ddr=0),
+        Storage(hbm=376960, ddr=0),
+    ],
+]
+
 
 class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -255,6 +274,16 @@ class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
+class TWCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.TABLE_COLUMN_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
 class DPSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value]
@@ -273,6 +302,7 @@ class AllTypesSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
             ShardingType.ROW_WISE.value,
             ShardingType.TABLE_ROW_WISE.value,
             ShardingType.COLUMN_WISE.value,
+            ShardingType.TABLE_COLUMN_WISE.value,
         ]
 
     def compute_kernels(
@@ -500,6 +530,27 @@ class TestEnumerators(unittest.TestCase):
             self.assertEqual(
                 [shard.storage for shard in sharding_option.shards],
                 EXPECTED_CW_SHARD_STORAGE[i],
+            )
+
+    def test_twcw_sharding(self) -> None:
+        # pyre-ignore[6]
+        sharding_options = self.enumerator.enumerate(self.model, [TWCWSharder()])
+
+        for i, sharding_option in enumerate(sharding_options):
+            self.assertEqual(
+                sharding_option.sharding_type, ShardingType.TABLE_COLUMN_WISE.value
+            )
+            self.assertEqual(
+                [shard.size for shard in sharding_option.shards],
+                EXPECTED_TWCW_SHARD_SIZES[i],
+            )
+            self.assertEqual(
+                [shard.offset for shard in sharding_option.shards],
+                EXPECTED_TWCW_SHARD_OFFSETS[i],
+            )
+            self.assertEqual(
+                [shard.storage for shard in sharding_option.shards],
+                EXPECTED_TWCW_SHARD_STORAGE[i],
             )
 
     def test_filtering(self) -> None:
