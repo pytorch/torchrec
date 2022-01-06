@@ -17,7 +17,7 @@ from torchrec.distributed.comm_ops import (
     alltoall_sequence,
     reduce_scatter_pooled,
 )
-from torchrec.distributed.types import Awaitable, NoWait
+from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
@@ -250,7 +250,6 @@ class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
         self._pg: dist.ProcessGroup = pg
         self._device: torch.device = input.values().device
         self._keys = keys
-        self._callbacks: List[Callable[[KeyedJaggedTensor], KeyedJaggedTensor]] = []
         if self._workers == 1:
             return
         dim_0 = splits[pg.rank()]
@@ -301,15 +300,6 @@ class KJTAllToAllLengths(Awaitable[KJTAllToAllIndices]):
             self._in_lengths_per_worker,
         )
         return ret
-
-    def wait(self) -> KJTAllToAllIndices:
-        ret = self._wait_impl()
-        ret.callbacks.extend(self._callbacks)
-        return ret
-
-    @property
-    def callbacks(self) -> List[Callable[[KeyedJaggedTensor], KeyedJaggedTensor]]:
-        return self._callbacks
 
 
 class KJTAllToAll(nn.Module):
