@@ -95,10 +95,6 @@ def _to_sharding_plan(
     for sharding_option in sharding_options:
         shards = sharding_option.shards
         sharding_type = sharding_option.sharding_type
-        if sharding_type == ShardingType.COLUMN_WISE.value:
-            shards = _merge_shards_by_dim(shards, 1)
-            if len(shards) == 1:
-                sharding_type = ShardingType.TABLE_WISE.value
 
         module_plan = plan.get(sharding_option.path, {})
         module_plan[sharding_option.name] = ParameterSharding(
