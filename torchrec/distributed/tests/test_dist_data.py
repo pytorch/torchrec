@@ -259,6 +259,7 @@ class KJTAllToAllTest(DistDataTestCase):
         pg = dist.group.WORLD
         lengths_a2a = KJTAllToAll(pg=pg, splits=splits, device=device)
         cls._validate(lengths_a2a(_input), output)
+        dist.destroy_process_group()
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,

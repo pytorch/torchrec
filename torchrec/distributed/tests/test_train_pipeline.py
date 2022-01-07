@@ -155,10 +155,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
     def setUp(self) -> None:
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
-        if not dist.is_initialized():
-            self.pg = init_distributed_single_host(backend="gloo", rank=0, world_size=1)
-        else:
-            self.pg = dist.group.WORLD
+        self.pg = init_distributed_single_host(backend="gloo", rank=0, world_size=1)
 
         num_features = 4
         num_weighted_features = 2
@@ -183,6 +180,10 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         ]
 
         self.device = torch.device("cuda:0")
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        dist.destroy_process_group(self.pg)
 
     def _test_move_cpu_gpu_helper(
         self, distributed_model: DistributedModelParallel
@@ -219,9 +220,9 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
 
             pred_gpu = pipeline.progress(dataloader)
 
-            self.assertEquals(pred_gpu.device, self.device)
-            self.assertEquals(pred_gpu.cpu().size(), pred.size())
-            self.assertEquals(len(pipeline._pipelined_modules), 2)
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.cpu().size(), pred.size())
+            self.assertEqual(len(pipeline._pipelined_modules), 2)
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(

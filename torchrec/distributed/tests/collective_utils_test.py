@@ -57,6 +57,7 @@ class CollectiveUtilsTest(MultiProcessTestCase):
         else:
             assert is_leader(pg, 1) is True
             assert is_leader(pg, 0) is False
+        dist.destroy_process_group()
 
     def test_invoke_on_rank_and_broadcast_result(self) -> None:
         dist.init_process_group(
@@ -86,6 +87,7 @@ class CollectiveUtilsTest(MultiProcessTestCase):
             func.assert_not_called()
         else:
             func.assert_called_once()
+        dist.destroy_process_group()
 
     def test_run_on_leader_decorator(self) -> None:
         dist.init_process_group(
@@ -109,3 +111,4 @@ class CollectiveUtilsTest(MultiProcessTestCase):
 
         res = _test_run_on_1(pg.rank())
         assert res == 1
+        dist.destroy_process_group()

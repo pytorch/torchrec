@@ -137,6 +137,7 @@ class TestKeyedOptimizer(unittest.TestCase):
         self._assert_state_dict_equals(
             expected_state_dict, keyed_optimizer.state_dict()
         )
+        dist.destroy_process_group()
 
     def test_non_param_state_key(self) -> None:
         with self.assertRaisesRegex(ValueError, "All state keys must be params."):

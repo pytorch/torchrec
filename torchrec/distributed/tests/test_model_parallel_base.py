@@ -177,6 +177,7 @@ class ModelParallelTestBase(unittest.TestCase):
 
         # Compare predictions of sharded vs unsharded models.
         torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        dist.destroy_process_group(pg)
 
     def _run_multi_process_test(
         self,

@@ -75,6 +75,7 @@ class TestAllToAll(MultiProcessTestCase):
         v_embs_out = a2a_req.wait()
         res = torch.cat(v_embs_out, dim=1).cpu()
         self.assertEqual(tuple(res.size()), (5, 34))
+        dist.destroy_process_group()
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
@@ -154,3 +155,4 @@ class TestAllToAll(MultiProcessTestCase):
         seq_embs_out.backward(seq_embs_out)
         grad = input_embeddings.grad
         self.assertEqual(input_embeddings.cpu().detach(), grad.cpu().detach())
+        dist.destroy_process_group()

@@ -71,6 +71,47 @@ def create_test_sharder(
 
 @skip_if_asan_class
 class ModelParallelTest(ModelParallelTestBase):
+    @seed_and_log
+    def setUp(self) -> None:
+        super().setUp()
+        torch.use_deterministic_algorithms(True)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+        num_features = 4
+        num_weighted_features = 2
+
+        self.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 2) * 4,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(num_features)
+        ]
+        self.weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 2) * 4,
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(num_weighted_features)
+        ]
+
+        self.embedding_groups = {
+            "group_0": ["feature_" + str(i) for i in range(num_features)]
+        }
+
+    def tearDown(self) -> None:
+        torch.use_deterministic_algorithms(False)
+        if torch.cuda.is_available():
+            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
+        super().tearDown()
+
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -480,47 +521,7 @@ class ModelParallelTest(ModelParallelTestBase):
         np.testing.assert_array_equal(
             np.array([7.5, 7.5, 7.5], dtype=np.float32), sharded_param.detach().numpy()
         )
-
-    @seed_and_log
-    def setUp(self) -> None:
-        super().setUp()
-        torch.use_deterministic_algorithms(True)
-        if torch.cuda.is_available():
-            torch.backends.cudnn.allow_tf32 = False
-            torch.backends.cuda.matmul.allow_tf32 = False
-            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-
-        num_features = 4
-        num_weighted_features = 2
-
-        self.tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(num_features)
-        ]
-        self.weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(num_weighted_features)
-        ]
-
-        self.embedding_groups = {
-            "group_0": ["feature_" + str(i) for i in range(num_features)]
-        }
-
-    def tearDown(self) -> None:
-        torch.use_deterministic_algorithms(False)
-        if torch.cuda.is_available():
-            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
-        super().tearDown()
+        dist.destroy_process_group(pg)
 
     def _test_sharding(
         self,
@@ -562,8 +563,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
         else:
             self.device = torch.device("cpu")
             backend = "gloo"
-        if not dist.is_initialized():
-            dist.init_process_group(backend=backend)
+        dist.init_process_group(backend=backend)
 
         num_features = 4
         num_weighted_features = 2
@@ -588,6 +588,10 @@ class ModelParallelStateDictTest(unittest.TestCase):
             )
             for i in range(num_weighted_features)
         ]
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        dist.destroy_process_group()
 
     def _generate_dmps_and_batch(
         self, sharders: Optional[List[ModuleSharder[nn.Module]]] = None

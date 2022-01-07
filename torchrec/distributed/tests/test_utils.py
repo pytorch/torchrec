@@ -39,8 +39,7 @@ class UtilsTest(unittest.TestCase):
         os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         device = torch.device("cpu")
         backend = "gloo"
-        if not dist.is_initialized():
-            dist.init_process_group(backend=backend)
+        dist.init_process_group(backend=backend)
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=10,
@@ -78,6 +77,7 @@ class UtilsTest(unittest.TestCase):
             sorted(get_unsharded_module_names(dmp)),
             sorted(["module.over", "module.dense"]),
         )
+        dist.destroy_process_group()
 
 
 def _compute_translated_lengths(
