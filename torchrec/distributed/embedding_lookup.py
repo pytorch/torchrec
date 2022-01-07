@@ -656,7 +656,9 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
                 list(zip(self._local_rows, self._local_cols)),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=PoolingMode.NONE,
-                use_cpu=device is None or device.type == "cpu",
+                use_cpu=device is None
+                or device.type == "cpu"
+                or not torch.cuda.is_available(),
             )
         )
 
@@ -1186,7 +1188,9 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 list(zip(self._local_rows, self._local_cols)),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
-                use_cpu=device is None or device.type == "cpu",
+                use_cpu=device is None
+                or device.type == "cpu"
+                or not torch.cuda.is_available(),
             )
         )
 
