@@ -5,52 +5,67 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import multiprocessing
 import os
+import unittest
+from typing import Callable
 from unittest import mock
 
 import torch.distributed as dist
 from torch._utils_internal import TEST_MASTER_ADDR as MASTER_ADDR  # @manual
-from torch.testing._internal.common_distributed import MultiProcessTestCase  # @manual
 from torchrec.distributed.collective_utils import (
     is_leader,
     invoke_on_rank_and_broadcast_result,
     run_on_leader,
 )
-from torchrec.tests.utils import get_free_port
+from torchrec.tests.utils import seed_and_log, get_free_port
 
 
-class CollectiveUtilsTest(MultiProcessTestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        os.environ["MASTER_ADDR"] = str(MASTER_ADDR)
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        super().setUpClass()
-
+class CollectiveUtilsTest(unittest.TestCase):
+    @seed_and_log
     def setUp(self) -> None:
-        super(CollectiveUtilsTest, self).setUp()
-        self._spawn_processes()
+        os.environ["MASTER_ADDR"] = str(MASTER_ADDR)
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        self.WORLD_SIZE = 2
 
-    def tearDown(self) -> None:
-        super(CollectiveUtilsTest, self).tearDown()
-        try:
-            os.remove(self.file_name)
-        except OSError:
-            pass
+    def _run_multi_process_test(
+        self,
+        world_size: int,
+        backend: str,
+        callable: Callable[[], None],
+    ) -> None:
+        processes = []
+        ctx = multiprocessing.get_context("spawn")
+        for rank in range(world_size):
+            p = ctx.Process(
+                target=callable,
+                args=(
+                    rank,
+                    world_size,
+                    backend,
+                ),
+            )
+            p.start()
+            processes.append(p)
 
-    @property
-    def world_size(self) -> int:
-        return 2
+        for p in processes:
+            p.join()
+            self.assertEqual(0, p.exitcode)
 
-    def test_is_leader(self) -> None:
-        dist.init_process_group(
-            rank=self.rank, world_size=self.world_size, backend="gloo"
-        )
+    @classmethod
+    def _test_is_leader(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.new_group(
             ranks=[0, 1],
-            backend="gloo",
+            backend=backend,
         )
-
         if pg.rank() == 0:
             assert is_leader(pg, 0) is True
             assert is_leader(pg, 1) is False
@@ -59,13 +74,25 @@ class CollectiveUtilsTest(MultiProcessTestCase):
             assert is_leader(pg, 0) is False
         dist.destroy_process_group()
 
-    def test_invoke_on_rank_and_broadcast_result(self) -> None:
-        dist.init_process_group(
-            rank=self.rank, world_size=self.world_size, backend="gloo"
+    def test_is_leader(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            # pyre-ignore [6]
+            callable=self._test_is_leader,
         )
+
+    @classmethod
+    def _test_invoke_on_rank_and_broadcast_result(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.new_group(
             ranks=[0, 1],
-            backend="gloo",
+            backend=backend,
         )
 
         func = mock.MagicMock()
@@ -87,15 +114,28 @@ class CollectiveUtilsTest(MultiProcessTestCase):
             func.assert_not_called()
         else:
             func.assert_called_once()
+
         dist.destroy_process_group()
 
-    def test_run_on_leader_decorator(self) -> None:
-        dist.init_process_group(
-            rank=self.rank, world_size=self.world_size, backend="gloo"
+    def test_invoke_on_rank_and_broadcast_result(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            # pyre-ignore [6]
+            callable=self._test_invoke_on_rank_and_broadcast_result,
         )
+
+    @classmethod
+    def _test_run_on_leader_decorator(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.new_group(
             ranks=[0, 1],
-            backend="gloo",
+            backend=backend,
         )
 
         @run_on_leader(pg, 0)
@@ -112,3 +152,11 @@ class CollectiveUtilsTest(MultiProcessTestCase):
         res = _test_run_on_1(pg.rank())
         assert res == 1
         dist.destroy_process_group()
+
+    def test_run_on_leader_decorator(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            # pyre-ignore [6]
+            callable=self._test_run_on_leader_decorator,
+        )
