@@ -6,50 +6,60 @@
 # LICENSE file in the root directory of this source tree.
 
 import itertools
+import multiprocessing
 import os
 import unittest
+from typing import Callable
 
 import numpy
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
-from torch._utils_internal import TEST_MASTER_ADDR as MASTER_ADDR  # @manual
-from torch.testing._internal.common_distributed import MultiProcessTestCase  # @manual
-from torchrec.tests.utils import get_free_port
+from torchrec.tests.utils import seed_and_log, get_free_port
 
 
-class TestAllToAll(MultiProcessTestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        os.environ["MASTER_ADDR"] = str(MASTER_ADDR)
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        super().setUpClass()
-
+class TestAllToAll(unittest.TestCase):
+    @seed_and_log
     def setUp(self) -> None:
-        super(TestAllToAll, self).setUp()
-        self._spawn_processes()
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        self.WORLD_SIZE = 2
 
-    def tearDown(self) -> None:
-        super(TestAllToAll, self).tearDown()
-        try:
-            os.remove(self.file_name)
-        except OSError:
-            pass
+    def _run_multi_process_test(
+        self,
+        world_size: int,
+        backend: str,
+        callable: Callable[[], None],
+    ) -> None:
+        processes = []
+        ctx = multiprocessing.get_context("spawn")
+        for rank in range(world_size):
+            p = ctx.Process(
+                target=callable,
+                args=(
+                    rank,
+                    world_size,
+                    backend,
+                ),
+            )
+            p.start()
+            processes.append(p)
 
-    @property
-    def world_size(self) -> int:
-        return 2
+        for p in processes:
+            p.join()
+            self.assertEqual(0, p.exitcode)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
-    @unittest.skipIf(
-        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
-    )
-    def test_alltoallv(self) -> None:
-        dist.init_process_group(
-            rank=self.rank, world_size=self.world_size, backend="nccl"
-        )
-        device = torch.device(f"cuda:{self.rank}")
+    @classmethod
+    def _test_alltoallv(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        device = torch.device(f"cuda:{rank}")
 
         torch.cuda.set_device(device)
 
@@ -74,7 +84,7 @@ class TestAllToAll(MultiProcessTestCase):
         a2a_req = comm_ops.alltoallv(input_embeddings, out_split)
         v_embs_out = a2a_req.wait()
         res = torch.cat(v_embs_out, dim=1).cpu()
-        self.assertEqual(tuple(res.size()), (5, 34))
+        assert tuple(res.size()) == (5, 34)
         dist.destroy_process_group()
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
@@ -82,11 +92,23 @@ class TestAllToAll(MultiProcessTestCase):
     @unittest.skipIf(
         torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
     )
-    def test_alltoall_sequence(self) -> None:
-        dist.init_process_group(
-            rank=self.rank, world_size=self.world_size, backend="nccl"
+    def test_alltoallv(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_alltoallv,
         )
-        device = torch.device(f"cuda:{self.rank}")
+
+    @classmethod
+    def _test_alltoall_sequence(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
 
         ranks = 2
@@ -125,34 +147,45 @@ class TestAllToAll(MultiProcessTestCase):
         num_features_per_rank = [len(features) for features in tables_mp]
         seq_all2all_forward_recat = []
         for j in range(ranks):
-            for i in range(num_features_per_rank[self.rank]):
+            for i in range(num_features_per_rank[rank]):
                 seq_all2all_forward_recat.append(j + i * ranks)
         seq_all2all_forward_recat_tensor = torch.IntTensor(seq_all2all_forward_recat)
         seq_all2all_backward_recat = []
-        for i in range(num_features_per_rank[self.rank]):
+        for i in range(num_features_per_rank[rank]):
             for j in range(ranks):
-                seq_all2all_backward_recat.append(
-                    i + j * num_features_per_rank[self.rank]
-                )
+                seq_all2all_backward_recat.append(i + j * num_features_per_rank[rank])
 
         seq_all2all_backward_recat_tensor = torch.IntTensor(seq_all2all_backward_recat)
         input_embeddings = torch.rand(
-            lengths_mp[self.rank].sum(),
+            lengths_mp[rank].sum(),
             table_dim,
             device=device,
             requires_grad=True,
         )
-        lengths_after_sparse_data_all2all = torch.IntTensor(lengths_mp[self.rank])
+        lengths_after_sparse_data_all2all = torch.IntTensor(lengths_mp[rank])
         a2a_req = comm_ops.alltoall_sequence(
             a2a_sequence_embs_tensor=input_embeddings.cuda(),
             forward_recat_tensor=seq_all2all_forward_recat_tensor.cuda(),
             backward_recat_tensor=seq_all2all_backward_recat_tensor.cuda(),
             lengths_after_sparse_data_all2all=lengths_after_sparse_data_all2all.cuda(),
-            input_splits=input_splits[self.rank],
-            output_splits=output_splits[self.rank],
+            input_splits=input_splits[rank],
+            output_splits=output_splits[rank],
         )
         seq_embs_out = a2a_req.wait()
         seq_embs_out.backward(seq_embs_out)
         grad = input_embeddings.grad
-        self.assertEqual(input_embeddings.cpu().detach(), grad.cpu().detach())
+        assert torch.equal(input_embeddings.cpu().detach(), grad.cpu().detach())
         dist.destroy_process_group()
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    def test_alltoall_sequence(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_alltoall_sequence,
+        )
