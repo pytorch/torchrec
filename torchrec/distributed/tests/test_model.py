@@ -18,7 +18,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
-from torchrec.types import Pipelineable
+from torchrec.streamable import Pipelineable
 
 
 @dataclass

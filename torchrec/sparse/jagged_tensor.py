@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Tuple
 
 import torch
 import torch.fx
-from torchrec.types import Pipelineable
+from torchrec.streamable import Pipelineable
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")

@@ -27,7 +27,7 @@ from torch.fx.node import Node
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
-from torchrec.types import Pipelineable, Multistreamable
+from torchrec.streamable import Pipelineable, Multistreamable
 
 logger: logging.Logger = logging.getLogger(__name__)
 

@@ -52,7 +52,7 @@ from torch.distributed._sharded_tensor import (  # noqa
     TensorProperties,
 )
 from torch.distributed._sharding_spec import ShardMetadata  # noqa
-from torchrec.types import Multistreamable
+from torchrec.streamable import Multistreamable
 
 
 class ShardingType(Enum):

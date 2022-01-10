@@ -25,4 +25,4 @@ from torchrec.sparse.jagged_tensor import (  # noqa
     KeyedJaggedTensor,
     KeyedTensor,
 )
-from torchrec.types import Pipelineable, Multistreamable  # noqa
+from torchrec.streamable import Pipelineable, Multistreamable  # noqa

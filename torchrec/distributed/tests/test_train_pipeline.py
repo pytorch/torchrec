@@ -44,8 +44,8 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.streamable import Pipelineable
 from torchrec.tests.utils import get_free_port, init_distributed_single_host
-from torchrec.types import Pipelineable
 
 
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):

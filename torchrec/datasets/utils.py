@@ -26,7 +26,7 @@ import torch
 from iopath.common.file_io import PathManager, PathManagerFactory
 from torch.utils.data import IterDataPipe, functional_datapipe, get_worker_info
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.types import Pipelineable
+from torchrec.streamable import Pipelineable
 
 PATH_MANAGER_KEY = "torchrec"
 

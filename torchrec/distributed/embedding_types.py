@@ -24,7 +24,7 @@ from torchrec.modules.embedding_configs import (
     EmbeddingTableConfig,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.types import Multistreamable
+from torchrec.streamable import Multistreamable
 
 
 @unique
