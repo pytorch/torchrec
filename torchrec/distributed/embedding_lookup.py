@@ -203,7 +203,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             seen_tables.add(table_config.name)
             table_config_global_metadata: Optional[
                 ShardedTensorMetadata
-            ] = table_config.global_metadata
+            ] = copy.deepcopy(table_config.global_metadata)
 
             shard_params: ShardParams = table_to_shard_params[table_config.name]
 
