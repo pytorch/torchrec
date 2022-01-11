@@ -16,6 +16,7 @@ from typing import (
     Collection,
     Tuple,
     Union,
+    Optional,
 )
 
 import torch
@@ -186,6 +187,28 @@ class KeyedOptimizer(optim.Optimizer):
     # pyre-ignore [2]
     def add_param_group(self, param_group: Any) -> None:
         raise NotImplementedError()
+
+    def init_state(
+        self,
+        sparse_grad_parameter_names: Optional[Set[str]] = None,
+    ) -> None:
+        """
+        Runs a dummy optimizer step, which allows to initialize
+        optimizer state, which is typically lazy.
+        This allows us to do in-place loading of optimizer state from a checkpoint.
+        """
+        for key, param in self.params.items():
+            if param.requires_grad:
+                t = torch.zeros_like(param)
+                if (
+                    sparse_grad_parameter_names is not None
+                    and key in sparse_grad_parameter_names
+                ):
+                    # pyre-ignore [16]
+                    t = t.to_sparse()
+                # pyre-ignore [41]
+                param.grad = torch.autograd.Variable(t)
+        self.step(closure=None)
 
 
 class CombinedOptimizer(KeyedOptimizer):
