@@ -46,9 +46,14 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
             self._init_combined_embeddings()
 
     def _init_combined_embeddings(self) -> None:
-        "We grab the embedding names and dims from TwEmbeddingSharder. Note that this"
-        "could have duplications if there are multiple shards from the same table are on a rank. "
-        "Later on we process these to combine shards together"
+        """
+        Grabs the embedding names and dims from TwEmbeddingSharder.
+
+        Note:
+            This could have duplications if there are multiple shards from the same
+            table on a rank. Later on we process these to combine shards together.
+        """
+
         embedding_names: List[str] = super().embedding_names()
         embedding_dims: List[int] = super().embedding_dims()
 

@@ -36,7 +36,6 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 class DpSparseFeaturesDist(BaseSparseFeaturesDist):
     """
     Distributes sparse features (input) to be data-parallel.
-
     """
 
     def __init__(self) -> None:
@@ -54,15 +53,14 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist):
 
         Returns:
             Awaitable[Awaitable[SparseFeatures]]: wait twice to get sparse features.
-
         """
+
         return NoWait(cast(Awaitable[SparseFeatures], NoWait(sparse_features)))
 
 
 class DpPooledEmbeddingDist(BasePooledEmbeddingDist):
     """
     Distributes pooled embeddings to be data-parallel.
-
     """
 
     def __init__(self) -> None:
@@ -77,7 +75,6 @@ class DpPooledEmbeddingDist(BasePooledEmbeddingDist):
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
-
         """
 
         return NoWait(local_embs)
@@ -86,7 +83,6 @@ class DpPooledEmbeddingDist(BasePooledEmbeddingDist):
 class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
     """
     Distributes sequence embeddings to be data-parallel.
-
     """
 
     def __init__(self) -> None:
@@ -103,7 +99,6 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
-
         """
 
         return NoWait(local_embs)
@@ -113,7 +108,6 @@ class DpEmbeddingSharding(EmbeddingSharding):
     """
     Shards embedding bags using data-parallel, with no table sharding i.e.. a given
     embedding table is replicated across all ranks.
-
     """
 
     def __init__(

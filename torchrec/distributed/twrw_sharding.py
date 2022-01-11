@@ -186,8 +186,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
 
         Returns:
             Awaitable[SparseFeatures]: awaitable of SparseFeatures.
-
         """
+
         bucketized_sparse_features = SparseFeatures(
             id_list_features=bucketize_kjt_before_all2all(
                 sparse_features.id_list_features,
@@ -220,8 +220,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist):
         """
         Reorders sparse data such that data is in contiguous blocks and correctly ordered
         for global TWRW layout.
-
         """
+
         nodes = self._world_size // self._local_size
         features_per_node = [
             features_per_rank[node * self._local_size] for node in range(nodes)
@@ -251,7 +251,6 @@ class TwRwEmbeddingDist(BasePooledEmbeddingDist):
         dim_sum_per_node (List[int]): number of features (sum of dimensions) of the
             embedding for each host.
         device (Optional[torch.device]): device on which buffers will be allocated.
-
     """
 
     def __init__(
@@ -279,15 +278,14 @@ class TwRwEmbeddingDist(BasePooledEmbeddingDist):
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
-
         """
+
         return self._cross_dist(self._intra_dist(local_embs).wait())
 
 
 class TwRwEmbeddingSharding(EmbeddingSharding):
     """
     Shards embedding bags table-wise then row-wise.
-
     """
 
     def __init__(

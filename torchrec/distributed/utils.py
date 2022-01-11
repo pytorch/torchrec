@@ -13,6 +13,10 @@ from torchrec.distributed.types import ShardedModule
 
 
 def append_prefix(prefix: str, name: str) -> str:
+    """
+    Appends provided prefix to provided name.
+    """
+
     if prefix != "" and name != "":
         return prefix + "." + name
     else:
@@ -22,12 +26,24 @@ def append_prefix(prefix: str, name: str) -> str:
 def filter_state_dict(
     state_dict: "OrderedDict[str, torch.Tensor]", name: str
 ) -> "OrderedDict[str, torch.Tensor]":
-    rtn_dict = OrderedDict()
+    """
+    Filters state dict for keys that start with provided name.
+    Strips provided name from beginning of key in the resulting state dict.
+
+    Args:
+        state_dict (OrderedDict[str, torch.Tensor]): input state dict to filter.
+        name (str): name to filter from state dict keys.
+
+    Returns:
+        OrderedDict[str, torch.Tensor]: filtered state dict.
+    """
+
+    filtered_state_dict = OrderedDict()
     for key, value in state_dict.items():
         if key.startswith(name):
             # + 1 to length is to remove the '.' after the key
-            rtn_dict[key[len(name) + 1 :]] = value
-    return rtn_dict
+            filtered_state_dict[key[len(name) + 1 :]] = value
+    return filtered_state_dict
 
 
 def _get_unsharded_module_names_helper(
@@ -59,8 +75,15 @@ def _get_unsharded_module_names_helper(
 
 def get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
     """
-    Returns a list of top level modules do not contain any sharded sub modules.
+    Retrieves names of top level modules that do not contain any sharded sub-modules.
+
+    Args:
+        model (torch.nn.Module): model to retrieve unsharded module names from.
+
+    Returns:
+        List[str]: list of names of modules that don't have sharded sub-modules.
     """
+
     unsharded_module_names: Set[str] = set()
     _get_unsharded_module_names_helper(
         model,
@@ -72,12 +95,14 @@ def get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
 
 class sharded_model_copy:
     """
-    Allows to copy DistributedModelParallel module to a target device.
-    Example coping model to CPU:
-        >>> m = DistributedModelParallel(m)
-        with sharded_model_copy("cpu"):
-            m_cpu = copy.deepcopy(m)
+    Allows copying of DistributedModelParallel module to a target device.
 
+    Example:
+        Copying model to CPU.
+
+        >>> m = DistributedModelParallel(m)
+        >>> with sharded_model_copy("cpu"):
+                m_cpu = copy.deepcopy(m)
     """
 
     def __init__(self, device: Union[str, int, torch.device]) -> None:

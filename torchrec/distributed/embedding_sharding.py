@@ -47,7 +47,6 @@ class SequenceShardingContext(Multistreamable):
     unbucketize_permute_tensor: stores the permute order of
         KJT bucketize (for row-wise sharding only).
     lengths_after_input_dist: stores the KJT length after input dist.
-
     """
 
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
@@ -74,7 +73,6 @@ class SparseFeaturesIndices(Awaitable[SparseFeatures]):
             of sharded id list features.
         id_score_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]):
             awaitable of sharded id score list features.
-
     """
 
     def __init__(
@@ -92,8 +90,8 @@ class SparseFeaturesIndices(Awaitable[SparseFeatures]):
 
         Returns:
             SparseFeatures: synced sparse features.
-
         """
+
         return SparseFeatures(
             id_list_features=self._id_list_features_awaitable.wait()
             if self._id_list_features_awaitable is not None
@@ -109,12 +107,15 @@ class SparseFeaturesLengths(Awaitable[SparseFeaturesIndices]):
     Awaitable of sparse features indices distribution.
 
     Constructor Args:
-        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]): awaitable
-            of sharded id list features indices all2all. Wait on this value will trigger
-            indices all2all (wait again will get the final all2all results).
-        id_score_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
-            awaitable of sharded id score list features indices all2all. Wait on this
-            value will trigger indices all2all (wait again will get the final all2all results).
+        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
+            awaitable of sharded id list features indices AlltoAll. Waiting on this
+            value will trigger indices AlltoAll (waiting again will yield final AlltoAll
+            results).
+        id_score_list_features_awaitable
+            (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
+            awaitable of sharded id score list features indices AlltoAll. Waiting on
+            this value will trigger indices AlltoAll (waiting again will yield the final
+            AlltoAll results).
     """
 
     def __init__(
@@ -130,11 +131,11 @@ class SparseFeaturesLengths(Awaitable[SparseFeaturesIndices]):
 
     def _wait_impl(self) -> SparseFeaturesIndices:
         """
-        Get lengths all2all results, instantiate SparseFeaturesIndices for indices all2all.
+        Gets lengths of AlltoAll results, instantiates SparseFeaturesIndices for indices
+        AlltoAll.
 
         Returns:
-            SparseFeaturesIndices
-
+            SparseFeaturesIndices.
         """
         return SparseFeaturesIndices(
             id_list_features_awaitable=self._id_list_features_awaitable.wait()
@@ -172,8 +173,8 @@ def bucketize_kjt_before_all2all(
         Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized
             `KeyedJaggedTensor` and the optional permute mapping from the unbucketized
             values to bucketized value.
-
     """
+
     num_features = len(kjt.keys())
     assert (
         block_sizes.numel() == num_features
@@ -298,7 +299,6 @@ class SparseFeaturesAllToAll(nn.Module):
             'B'     None        [B.V0]      [B.V1]      None        [B.V2]      [B.V3, B.V4]
             'C'     [C.V0]       [C.V1]      None       [C.V2]      [C.V3]      None
             'D      None         [D.V0]      None       [D.V1]      [D.V2]      [D.V3, D.V4]
-
     """
 
     def __init__(
@@ -332,8 +332,8 @@ class SparseFeaturesAllToAll(nn.Module):
 
         Returns:
             Awaitable[SparseFeatures]: awaitable of SparseFeatures.
-
         """
+
         return SparseFeaturesLengths(
             id_list_features_awaitable=self._id_list_features_all2all.forward(
                 sparse_features.id_list_features
@@ -361,7 +361,6 @@ def group_tables(
     Returns:
         Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
             per rank list of GroupedEmbeddingConfig for unscored and scored features.
-
     """
 
     def _group_tables_per_rank(
@@ -449,7 +448,6 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
 
     Constructor Args:
         awaitables: (List[Awaitable[SparseFeatures]])
-
     """
 
     def __init__(
@@ -465,20 +463,19 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
 
         Returns:
             SparseFeaturesList: synced SparseFeaturesList.
-
         """
+
         return SparseFeaturesList([w.wait() for w in self.awaitables])
 
 
 class SparseFeaturesListIndicesAwaitable(Awaitable[List[Awaitable[SparseFeatures]]]):
     """
-    This module handles the first wait for a list of two-layer awaitables of SparseFeatures.
-    Wait on this module will get lengths all2all results for each SparseFeatures and
+    Handles the first wait for a list of two-layer awaitables of SparseFeatures.
+    Wait on this module will get lengths all2all results for each SparseFeatures, and
     instantiate its indices all2all.
 
     Constructor Args:
         awaitables: (List[Awaitable[Awaitable[SparseFeatures]]])
-
     """
 
     def __init__(
@@ -493,16 +490,15 @@ class SparseFeaturesListIndicesAwaitable(Awaitable[List[Awaitable[SparseFeatures
         Syncs sparse features in SparseFeaturesList.
 
         Returns:
-            SparseFeaturesList: synced SparseFeaturesList.
-
+            List[Awaitable[SparseFeatures]]
         """
+
         return [m.wait() for m in self.awaitables]
 
 
 class BaseSparseFeaturesDist(abc.ABC, nn.Module):
     """
     Converts input from data-parallel to model-parallel.
-
     """
 
     @abc.abstractmethod
@@ -516,7 +512,6 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module):
 class BasePooledEmbeddingDist(abc.ABC, nn.Module):
     """
     Converts output of pooled EmbeddingLookup from model-parallel to data-parallel.
-
     """
 
     @abc.abstractmethod
@@ -527,7 +522,6 @@ class BasePooledEmbeddingDist(abc.ABC, nn.Module):
 class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
     """
     Converts output of sequence EmbeddingLookup from model-parallel to data-parallel.
-
     """
 
     pass
@@ -543,7 +537,6 @@ class EmbeddingSharding(abc.ABC):
     """
     Used to implement different sharding types for EmbeddingBagCollection, e.g.
     table_wise.
-
     """
 
     def __init__(self, permute_embeddings: bool = False) -> None:

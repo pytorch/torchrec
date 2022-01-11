@@ -52,7 +52,6 @@ class Request(Awaitable[W]):
 
     Constructor Args:
         pg (dist.ProcessGroup): The process group the request is for.
-
     """
 
     # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
@@ -69,8 +68,8 @@ class Request(Awaitable[W]):
     def _wait_impl(self) -> W:
         """
         Calls the wait function for this request.
-
         """
+
         ret = self.wait_function.apply(self.pg, self, self.tensor)
         self.req = None
         self.tensor = None
@@ -96,7 +95,6 @@ class All2AllPooledInfo(object):
             dimensioned or not.
         D (int): embedding dimension of the embedding table.
         B_local (int): local batch size before scattering.
-
     """
 
     dim_sum_per_rank: List[int]
@@ -123,7 +121,6 @@ class All2AllSequenceInfo(object):
         output_splits (List[int]): output splits.
         lengths_sparse_before_features_all2all (Optional[Tensor]): lengths of sparse
             features before AlltoAll.
-
     """
 
     embedding_dim: int
@@ -153,7 +150,6 @@ class All2AllVInfo(object):
             remembers how to split the input when doing the all_to_all_single operation.
         output_split_sizes (List[int]): The output split sizes for each rank, this
             remembers how to fill the output when doing the all_to_all_single operation.
-
     """
 
     dims_sum_per_rank: List[int]
@@ -175,7 +171,6 @@ class ReduceScatterInfo(object):
         input_sizes (List[int]): the sizes of the input tensors. This remembers the
             sizes of the input tensors when running the backward pass and producing the
             gradient.
-
     """
 
     input_sizes: List[int]
@@ -233,8 +228,8 @@ def alltoall_pooled(
 
     .. warning::
         `alltoall_pooled` is experimental and subject to change.
-
     """
+
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
@@ -292,8 +287,8 @@ def alltoall_sequence(
 
     .. warning::
         `alltoall_sequence` is experimental and subject to change.
-
     """
+
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
@@ -343,7 +338,6 @@ def alltoallv(
 
     .. warning::
         `alltoallv` is experimental and subject to change.
-
     """
 
     if group is None:
@@ -400,8 +394,8 @@ def reduce_scatter_pooled(
 
     .. warning::
         `reduce_scatter_pooled` is experimental and subject to change.
-
     """
+
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
@@ -420,12 +414,6 @@ def reduce_scatter_pooled(
 def _recat_pooled_embedding_grad_out(
     grad_output: Tensor, num_features_per_rank: List[int]
 ) -> Tensor:
-
-    """
-    TODO: improve performance of _recat_pooled_embedding_grad_out in an
-    efficient fashion (the .contiguous() calls are extremely expensive).
-    see T87591139
-    """
     grad_outputs_by_rank = grad_output.split(num_features_per_rank, dim=1)
     return torch.cat(
         [

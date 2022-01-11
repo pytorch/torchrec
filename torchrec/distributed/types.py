@@ -57,8 +57,7 @@ from torchrec.streamable import Multistreamable
 
 class ShardingType(Enum):
     """
-    Well-known sharding types,
-    used by inter-module optimizations.
+    Well-known sharding types, used by inter-module optimizations.
     """
 
     # Replicated on all ranks
@@ -79,8 +78,7 @@ class ShardingType(Enum):
 
 class ParameterStorage(Enum):
     """
-    Well-known physical resources,
-    which can be used as constraints by ShardingPlanner.
+    Well-known physical resources, which can be used as constraints by ShardingPlanner.
     """
 
     # GPU-attached memory
@@ -213,8 +211,8 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     # pyre-ignore [2, 3]
     def __getattr__(self, name):
         """
-        overriding __getattr__ to allow LazyAwaitable to first wait and
-        then call getattr on the wait results.
+        Overrides __getattr__ to allow LazyAwaitable to first wait and then call getattr
+        on the wait results.
         """
         if name == "_result":
             raise RuntimeError(
@@ -282,29 +280,25 @@ for orig_method_name in torch.fx.graph.reflectable_magic_methods:
 @dataclass
 class ParameterSharding:
     """
-    sharding_type and location are the only two dimensions
-    produced by ShardingPlanner.
-    We can add more in future, but this seems sufficient for immediate needs.
+    Describes the sharding of the parameter.
+
+    sharding_type (str): how this parameter is sharded. See ShardingType for well-known
+        types.
+    compute_kernel (str): compute kernel to be used by this parameter.
+    ranks (Optional[List[int]]): rank of each shard.
+    sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
+
+    Note:
+        ShardingType.TABLE_WISE - rank where this embedding is placed
+        ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as
+            individual tables
+        ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
+        ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
     """
 
-    """
-    How this parameter is sharded. See ShardingType for well-known types.
-    """
     sharding_type: str
-
-    """
-    Compute kernel to be used by this parameter.
-    """
     compute_kernel: str
-
-    """
-    ShardingType.TABLE_WISE - rank where this embedding is placed
-    ShardingType.COLUMN_WISE - rank where this embedding shards are placed, we see them as individual tables
-    ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
-    ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
-    """
     ranks: Optional[List[int]] = None
-
     sharding_spec: Optional[ShardingSpec] = None
 
 
@@ -324,8 +318,8 @@ class EmptyContext(ShardedModuleContext):
 
 class ShardingEnv:
     """
-    Provides abstraction over torch.distributed.ProcessGroup,
-    which practically enables DistributedModelParallel to be used during inference.
+    Provides an abstraction over torch.distributed.ProcessGroup, which practically
+    enables DistributedModelParallel to be used during inference.
     """
 
     def __init__(
@@ -343,7 +337,9 @@ class ShardingEnv:
     def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
         """
         Creates ProcessGroup-based sharding environment.
-        Typically used during training.
+
+        Note:
+            Typically used during training.
         """
         return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
 
@@ -351,7 +347,9 @@ class ShardingEnv:
     def from_local(cls, world_size: int, rank: int) -> "ShardingEnv":
         """
         Creates a local host-based sharding environment.
-        Typically used during single host inference.
+
+        Note:
+            Typically used during single host inference.
         """
         return cls(world_size, rank, None)
 
@@ -360,8 +358,10 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     """
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
-    'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
-    from data-parallel to model parallel and vise-versa.
+
+    Note:
+        'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
+        from data-parallel to model parallel and vise-versa.
     """
 
     @abc.abstractmethod
@@ -442,19 +442,20 @@ class ModuleSharder(abc.ABC, Generic[M]):
         device: torch.device,
     ) -> ShardedModule[Any, Any, Any]:
         """
-        Does actual sharding. It will allocate parameters on the requested locations
+        Does the actual sharding. It will allocate parameters on the requested locations
         as specified by corresponding ParameterSharding.
-        Default implementation is just data-parallel replication.
+
+        Default implementation is data-parallel replication.
 
         Args:
-            module: module to shard
-            params: dict of fully qualified parameter name
+            module: module to shard.
+            params: dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
-            pg: process group to use
-            device: compute device
+            env (ShardingEnv): sharding environment that has the process group.
+            device (torch.device): compute device.
 
         Returns:
-            sharded module implementation
+            ShardedModule[Any, Any, Any]: sharded module implementation.
         """
         ...
 
@@ -465,7 +466,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
     def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
         """
-        List of parameters, which can be sharded.
+        List of parameters that can be sharded.
         """
         return dict(module.named_parameters())
 
@@ -489,7 +490,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
     ) -> Dict[str, int]:
         """
         List of system resources and corresponding usage given a compute device and
-        compute kernel
+        compute kernel.
         """
 
         assert compute_device_type in {"cuda", "cpu"}
@@ -504,7 +505,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
 class ShardingPlan:
     """
     Representation of sharding plan.
-    Dict keyed by module path of dict of parameter sharding specs keyed by parameter name.
+
+    plan (Dict[str, Dict[str, ParameterSharding]]): Dict keyed by module path of dict of parameter sharding specs keyed by parameter name.
     """
 
     plan: Dict[str, Dict[str, ParameterSharding]]
@@ -514,11 +516,12 @@ class ShardingPlan:
     ) -> Optional[Dict[str, ParameterSharding]]:
         """
         Args:
-            module_path
+            module_path (str)
 
         Returns:
-            dict of parameter sharding specs keyed by parameter name.
-            Returns none if sharding specs does not exist for given module_path.
+            Optional[Dict[str, ParameterSharding]]: dict of parameter sharding specs
+                keyed by parameter name. None if sharding specs do not exist for given
+                module_path.
         """
         return self.plan.get(module_path, None)
 
@@ -539,12 +542,14 @@ class ShardingPlanner(abc.ABC):
         sharders: List[ModuleSharder[nn.Module]],
     ) -> ShardingPlan:
         """
+        Plans sharding for provided module and given sharders.
+
         Args:
-            modules
-            sharders
+            module (nn.Module): module that sharding is planned for.
+            sharders (List[ModuleSharder[nn.Module]]): provided sharders for module.
 
         Returns:
-            Sharding plan.
+            ShardingPlan: the computed sharding plan.
         """
         ...
 
@@ -555,13 +560,13 @@ class ShardingPlanner(abc.ABC):
         sharders: List[ModuleSharder[nn.Module]],
     ) -> ShardingPlan:
         """
-        Call self.plan(...) on rank 0 and broadcast
+        Calls self.plan(...) on rank 0 and broadcasts.
 
         Args:
-            modules
-            sharders
+            module (nn.Module): module that sharding is planned for.
+            sharders (List[ModuleSharder[nn.Module]]): provided sharders for module.
 
         Returns:
-            Sharding plan.
+            ShardingPlan: the computed sharding plan.
         """
         ...

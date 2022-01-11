@@ -73,7 +73,7 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
 class TrainPipelineBase(TrainPipeline[In, Out]):
     """
     This class runs training iterations using a pipeline of two stages, each as a CUDA stream,
-    namely, the current (default) stream and self._memcpy_stream.  For each iteration,
+    namely, the current (default) stream and self._memcpy_stream. For each iteration,
     self._memcpy_stream moves the input from host (CPU) memory to GPU memory, and the default
     stream runs forward, backward, and optimization.
     """
@@ -270,10 +270,11 @@ def _start_data_dist(
 
 # pyre-ignore
 def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int]:
-    """A helper funtion that goes through the args/kwargs of a
-    Node and arranges them into a list of ArgInfos. It also counts the number
-    of (args + kwargs) found.
     """
+    Goes through the args/kwargs of a node and arranges them into a list of ArgInfos.
+    It also counts the number of (args + kwargs) found.
+    """
+
     arg_info_list = [ArgInfo([], None) for _ in range(len(arguments))]
     for arg, arg_info in zip(arguments, arg_info_list):
         if arg is None:
@@ -346,6 +347,7 @@ def _get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
     """
     Returns a list of top level modules do not contain any sharded sub modules.
     """
+
     unsharded_module_names: Set[str] = set()
     _get_unsharded_module_names_helper(
         model,
