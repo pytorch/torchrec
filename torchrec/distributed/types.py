@@ -439,7 +439,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         module: M,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
-        device: torch.device,
+        device: Optional[torch.device] = None,
     ) -> ShardedModule[Any, Any, Any]:
         """
         Does the actual sharding. It will allocate parameters on the requested locations

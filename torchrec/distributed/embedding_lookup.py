@@ -29,6 +29,7 @@ from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
+    SparseFeaturesList,
     GroupedEmbeddingConfig,
     BaseEmbeddingLookup,
     SparseFeatures,
@@ -681,7 +682,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         )
 
 
-class GroupedEmbeddingsLookup(BaseEmbeddingLookup):
+class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
@@ -1238,6 +1239,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                         self._local_rows, config.embedding_tables
                     )
                 ],
+                device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
             )
@@ -1371,7 +1373,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         return ret
 
 
-class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
+class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
@@ -1383,6 +1385,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
+            device: Optional[torch.device] = None,
         ) -> BaseEmbeddingBag:
             if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
                 return BatchedDenseEmbeddingBag(
@@ -1425,13 +1428,13 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
         #  take parameters.
         self._emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config))
+            self._emb_modules.append(_create_lookup(config, device))
 
         # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
         #  take parameters.
         self._score_emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
         for config in grouped_score_configs:
-            self._score_emb_modules.append(_create_lookup(config))
+            self._score_emb_modules.append(_create_lookup(config, device))
 
         self._id_list_feature_splits: List[int] = []
         for config in grouped_configs:
@@ -1559,4 +1562,94 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup):
             emb_module.sparse_grad_parameter_names(destination, prefix)
         for emb_module in self._score_emb_modules:
             emb_module.sparse_grad_parameter_names(destination, prefix)
+        return destination
+
+
+class InferGroupedPooledEmbeddingsLookup(
+    BaseEmbeddingLookup[SparseFeaturesList, List[torch.Tensor]]
+):
+    def __init__(
+        self,
+        grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
+        grouped_score_configs_per_rank: List[List[GroupedEmbeddingConfig]],
+        world_size: int,
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__()
+        self._embedding_lookups_per_rank: List[GroupedPooledEmbeddingsLookup] = []
+        for rank in range(world_size):
+            self._embedding_lookups_per_rank.append(
+                GroupedPooledEmbeddingsLookup(
+                    grouped_configs=grouped_configs_per_rank[rank],
+                    grouped_score_configs=grouped_score_configs_per_rank[rank],
+                    fused_params=fused_params,
+                    device=torch.device("cuda", rank),
+                )
+            )
+
+    def forward(
+        self,
+        sparse_features: SparseFeaturesList,
+    ) -> List[torch.Tensor]:
+        embeddings: List[torch.Tensor] = []
+        for sparse_features_rank, embedding_lookup in zip(
+            sparse_features, self._embedding_lookups_per_rank
+        ):
+            assert (
+                sparse_features_rank.id_list_features is not None
+                or sparse_features_rank.id_score_list_features is not None
+            )
+            embeddings.append(embedding_lookup(sparse_features_rank))
+        return embeddings
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+
+        for rank_modules in self._embedding_lookups_per_rank:
+            rank_modules.state_dict(destination, prefix, keep_vars)
+
+        return destination
+
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexpected_keys = []
+        for rank_modules in self._embedding_lookups_per_rank:
+            incompatible_keys = rank_modules.load_state_dict(state_dict)
+            missing_keys.extend(incompatible_keys.missing_keys)
+            unexpected_keys.extend(incompatible_keys.unexpected_keys)
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
+        )
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for rank_modules in self._embedding_lookups_per_rank:
+            yield from rank_modules.named_parameters(prefix, recurse)
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for rank_modules in self._embedding_lookups_per_rank:
+            yield from rank_modules.named_buffers(prefix, recurse)
+
+    def sparse_grad_parameter_names(
+        self, destination: Optional[List[str]] = None, prefix: str = ""
+    ) -> List[str]:
+        destination = [] if destination is None else destination
+        for rank_modules in self._embedding_lookups_per_rank:
+            rank_modules.sparse_grad_parameter_names(destination, prefix)
         return destination

@@ -40,6 +40,7 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     BaseEmbeddingLookup,
     SparseFeaturesList,
+    ListOfSparseFeaturesList,
 )
 from torchrec.distributed.rw_sharding import RwEmbeddingSharding
 from torchrec.distributed.tw_sharding import TwEmbeddingSharding
@@ -49,12 +50,10 @@ from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
     ParameterSharding,
-    ParameterStorage,
     ShardedModule,
     ShardingType,
     ShardedModuleContext,
     ShardedTensor,
-    ModuleSharder,
     ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
@@ -65,12 +64,9 @@ from torchrec.modules.embedding_modules import (
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
-from torchrec.quant.embedding_modules import (
-    EmbeddingBagCollection as QuantEmbeddingBagCollection,
-)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
-
+# pyre-fixme [3]
 def create_embedding_sharding(
     sharding_type: str,
     embedding_configs: List[
@@ -79,13 +75,13 @@ def create_embedding_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
-) -> EmbeddingSharding:
+) -> EmbeddingSharding[Any, Any, Any, Any]:
     pg = env.process_group
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(embedding_configs)
     if pg is not None:
         if sharding_type == ShardingType.TABLE_WISE.value:
-            return TwEmbeddingSharding(embedding_configs, pg, device)
+            return TwEmbeddingSharding(embedding_configs, env, device)
         elif sharding_type == ShardingType.ROW_WISE.value:
             return RwEmbeddingSharding(embedding_configs, pg, device)
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
@@ -94,17 +90,19 @@ def create_embedding_sharding(
             return TwRwEmbeddingSharding(embedding_configs, pg, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             return CwEmbeddingSharding(
-                embedding_configs, pg, device, permute_embeddings=permute_embeddings
+                embedding_configs, env, device, permute_embeddings=permute_embeddings
             )
         elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
             return TwCwEmbeddingSharding(
-                embedding_configs, pg, device, permute_embeddings=permute_embeddings
+                embedding_configs, env, device, permute_embeddings=permute_embeddings
             )
         else:
             raise ValueError(f"Sharding type not supported {sharding_type}")
     else:
         if sharding_type == ShardingType.DATA_PARALLEL.value:
             return DpEmbeddingSharding(embedding_configs, env, device)
+        elif sharding_type == ShardingType.TABLE_WISE.value:
+            return TwEmbeddingSharding(embedding_configs, env, device)
         else:
             raise ValueError(f"Sharding type not supported {sharding_type}")
 
@@ -239,13 +237,16 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
         )
 
 
-class ShardedEmbeddingBagCollection(
+F = TypeVar("F", SparseFeaturesList, ListOfSparseFeaturesList)
+T = TypeVar("T", List[torch.Tensor], List[List[torch.Tensor]])
+
+
+class ShardedEmbeddingBagCollectionBase(
     ShardedModule[
-        SparseFeaturesList,
-        List[torch.Tensor],
+        F,
+        T,
         KeyedTensor,
     ],
-    FusedOptimizerModule,
 ):
     """
     Sharded implementation of EmbeddingBagCollection.
@@ -264,7 +265,10 @@ class ShardedEmbeddingBagCollection(
         sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
-        self._sharding_type_to_sharding: Dict[str, EmbeddingSharding] = {
+        # pyre-fixme[4]
+        self._sharding_type_to_sharding: Dict[
+            str, EmbeddingSharding[Any, Any, Any, Any]
+        ] = {
             sharding_type: create_embedding_sharding(
                 sharding_type, embedding_confings, env, device, permute_embeddings=True
             )
@@ -274,11 +278,13 @@ class ShardedEmbeddingBagCollection(
         self._is_weighted: bool = module.is_weighted
         self._device = device
         self._create_lookups(fused_params)
+
         # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
         #  take parameters.
         self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
+
         # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
         #  take parameters.
         self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
@@ -290,28 +296,14 @@ class ShardedEmbeddingBagCollection(
         self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
 
-        # Get all fused optimizers and combine them.
-        optims = []
-        for lookup in self._lookups:
-            for _, module in lookup.named_modules():
-                if isinstance(module, FusedOptimizerModule):
-                    # modify param keys to match EmbeddingBagCollection
-                    params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
-                    for param_key, weight in module.fused_optimizer.params.items():
-                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
-                        params["embedding_bags." + param_key] = weight
-                    module.fused_optimizer.params = params
-                    optims.append(("", module.fused_optimizer))
-        self._optim: CombinedOptimizer = CombinedOptimizer(optims)
-
     def _create_input_dist(
         self,
         input_feature_names: List[str],
+        device: torch.device,
     ) -> None:
-
         feature_names: List[str] = []
         for sharding in self._sharding_type_to_sharding.values():
-            self._input_dists.append(sharding.create_input_dist())
+            self._input_dists.append(sharding.create_train_input_dist())
             feature_names.extend(
                 sharding.id_score_list_feature_names()
                 if self._is_weighted
@@ -332,33 +324,31 @@ class ShardedEmbeddingBagCollection(
                 self._features_order.append(input_feature_names.index(f))
             self.register_buffer(
                 "_features_order_tensor",
-                torch.tensor(
-                    self._features_order, device=self._device, dtype=torch.int32
-                ),
+                torch.tensor(self._features_order, device=device, dtype=torch.int32),
             )
 
     def _create_lookups(
         self,
         fused_params: Optional[Dict[str, Any]],
     ) -> None:
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._lookups: nn.ModuleList[BaseEmbeddingLookup] = nn.ModuleList()
+        # pyre-fixme[24]
+        self._lookups: nn.ModuleList[BaseEmbeddingLookup[Any, Any]] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup(fused_params))
+            self._lookups.append(sharding.create_train_lookup(fused_params))
 
-    def _create_output_dist(self) -> None:
+    def _create_output_dist(self, device: Optional[torch.device] = None) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._output_dists.append(sharding.create_pooled_output_dist())
+            self._output_dists.append(sharding.create_train_pooled_output_dist(device))
             self._embedding_names.extend(sharding.embedding_names())
             self._embedding_dims.extend(sharding.embedding_dims())
 
+    # pyre-ignore [3]
     # pyre-ignore [14]
     def input_dist(
         self, ctx: ShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Any]:
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(features.keys())
+            self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
         with torch.no_grad():
             if self._has_features_permute:
@@ -386,15 +376,20 @@ class ShardedEmbeddingBagCollection(
             return SparseFeaturesListAwaitable(awaitables)
 
     def compute(
-        self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
-    ) -> List[torch.Tensor]:
+        self,
+        ctx: ShardedModuleContext,
+        dist_input: F,
+    ) -> T:
+        # pyre-fixme [7]
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
     def output_dist(
-        self, ctx: ShardedModuleContext, output: List[torch.Tensor]
+        self,
+        ctx: ShardedModuleContext,
+        output: T,
     ) -> LazyAwaitable[KeyedTensor]:
         if self._has_uninitialized_output_dist:
-            self._create_output_dist()
+            self._create_output_dist(self._device)
             self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
@@ -405,16 +400,18 @@ class ShardedEmbeddingBagCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: ShardedModuleContext, input: SparseFeaturesList
+        self, ctx: ShardedModuleContext, input: F
     ) -> LazyAwaitable[KeyedTensor]:
         if self._has_uninitialized_output_dist:
-            self._create_output_dist()
+            self._create_output_dist(self._device)
             self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
                 for lookup, dist, features in zip(
-                    self._lookups, self._output_dists, input
+                    self._lookups,
+                    self._output_dists,
+                    input,
                 )
             ],
             embedding_dims=self._embedding_dims,
@@ -500,6 +497,41 @@ class ShardedEmbeddingBagCollection(
             )
         return destination
 
+
+class ShardedEmbeddingBagCollection(
+    ShardedEmbeddingBagCollectionBase[F, T],
+    FusedOptimizerModule,
+):
+    """
+    Sharded implementation of EmbeddingBagCollection.
+    This is part of public API to allow for manual data dist pipelining.
+    """
+
+    def __init__(
+        self,
+        module: EmbeddingBagCollectionInterface,
+        table_name_to_parameter_sharding: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(
+            module, table_name_to_parameter_sharding, env, fused_params, device
+        )
+        # Get all fused optimizers and combine them.
+        optims = []
+        for lookup in self._lookups:
+            for _, module in lookup.named_modules():
+                if isinstance(module, FusedOptimizerModule):
+                    # modify param keys to match EmbeddingBagCollection
+                    params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
+                    for param_key, weight in module.fused_optimizer.params.items():
+                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
+                        params["embedding_bags." + param_key] = weight
+                    module.fused_optimizer.params = params
+                    optims.append(("", module.fused_optimizer))
+        self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
@@ -519,7 +551,7 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> ShardedEmbeddingBagCollection:
+    ) -> ShardedEmbeddingBagCollection[SparseFeaturesList, List[torch.Tensor]]:
         return ShardedEmbeddingBagCollection(
             module, params, env, self.fused_params, device
         )
@@ -535,48 +567,6 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
     @property
     def module_type(self) -> Type[EmbeddingBagCollection]:
         return EmbeddingBagCollection
-
-
-class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollection]):
-    def shard(
-        self,
-        module: QuantEmbeddingBagCollection,
-        params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
-        device: Optional[torch.device] = None,
-    ) -> ShardedEmbeddingBagCollection:
-        return ShardedEmbeddingBagCollection(module, params, env, None, device)
-
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [ShardingType.DATA_PARALLEL.value]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [
-            EmbeddingComputeKernel.BATCHED_QUANT.value,
-        ]
-
-    def storage_usage(
-        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
-    ) -> Dict[str, int]:
-        tensor_bytes = tensor.numel() * tensor.element_size() + tensor.shape[0] * 4
-        assert compute_device_type in {"cuda", "cpu"}
-        storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
-        return {storage_map[compute_device_type].value: tensor_bytes}
-
-    def shardable_parameters(
-        self, module: QuantEmbeddingBagCollection
-    ) -> Dict[str, nn.Parameter]:
-        return {
-            name.split(".")[-2]: param
-            for name, param in module.state_dict().items()
-            if name.endswith(".weight")
-        }
-
-    @property
-    def module_type(self) -> Type[QuantEmbeddingBagCollection]:
-        return QuantEmbeddingBagCollection
 
 
 class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
@@ -644,7 +634,9 @@ class ShardedEmbeddingBag(
                 "table-wise sharding on a single EmbeddingBag is not supported yet"
             )
 
-        self._embedding_sharding: EmbeddingSharding = create_embedding_sharding(
+        self._embedding_sharding: EmbeddingSharding[
+            SparseFeatures, torch.Tensor, SparseFeaturesList, List[torch.Tensor]
+        ] = create_embedding_sharding(
             sharding_type=self.parameter_sharding.sharding_type,
             embedding_configs=[
                 (
@@ -657,10 +649,12 @@ class ShardedEmbeddingBag(
             device=device,
             permute_embeddings=True,
         )
-        self._input_dist: nn.Module = self._embedding_sharding.create_input_dist()
-        self._lookup: nn.Module = self._embedding_sharding.create_lookup(fused_params)
+        self._input_dist: nn.Module = self._embedding_sharding.create_train_input_dist()
+        self._lookup: nn.Module = self._embedding_sharding.create_train_lookup(
+            fused_params
+        )
         self._output_dist: nn.Module = (
-            self._embedding_sharding.create_pooled_output_dist()
+            self._embedding_sharding.create_train_pooled_output_dist()
         )
 
         # Get all fused optimizers and combine them.

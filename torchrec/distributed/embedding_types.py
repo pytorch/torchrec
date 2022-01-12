@@ -8,7 +8,7 @@
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import List, Optional, Dict, Any, TypeVar, Iterator
+from typing import Generic, List, Optional, Dict, Any, TypeVar, Iterator
 
 import torch
 from torch import nn
@@ -80,6 +80,27 @@ class SparseFeaturesList(Multistreamable):
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features:
+            feature.record_stream(stream)
+
+
+class ListOfSparseFeaturesList(Multistreamable):
+    def __init__(self, features: List[SparseFeaturesList]) -> None:
+        self.features_list = features
+
+    def __len__(self) -> int:
+        return len(self.features_list)
+
+    def __setitem__(self, key: int, item: SparseFeaturesList) -> None:
+        self.features_list[key] = item
+
+    def __getitem__(self, key: int) -> SparseFeaturesList:
+        return self.features_list[key]
+
+    def __iter__(self) -> Iterator[SparseFeaturesList]:
+        return iter(self.features_list)
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        for feature in self.features_list:
             feature.record_stream(stream)
 
 
@@ -162,7 +183,11 @@ class GroupedEmbeddingConfig:
         return embedding_shard_metadata
 
 
-class BaseEmbeddingLookup(abc.ABC, nn.Module):
+F = TypeVar("F", bound=Multistreamable)
+T = TypeVar("T")
+
+
+class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
     """
     Interface implemented by different embedding implementations:
     e.g. one, which relies on nn.EmbeddingBag or table-batched one, etc.
@@ -171,8 +196,8 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module):
     @abc.abstractmethod
     def forward(
         self,
-        sparse_features: SparseFeatures,
-    ) -> torch.Tensor:
+        sparse_features: F,
+    ) -> T:
         pass
 
     def sparse_grad_parameter_names(

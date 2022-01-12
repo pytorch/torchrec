@@ -15,13 +15,13 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
-    QuantEmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
+from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     ShardingPlan,
     ModuleSharder,
@@ -73,6 +73,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     Returns:
         None
     """
+
+    SHARE_SHARDED: bool = False
+    # pyre-fixme [4]
+    SHARED_SHARDED_MODULE: Dict[str, ShardedModule[Any, Any, Any]] = {}
 
     def __init__(
         self,
@@ -175,15 +179,33 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for name, child in module.named_children():
             curr_path = path + name
             sharded_params = self._plan.get_plan_for_module(curr_path)
+            sharder_key = sharder_name(type(child))
             if sharded_params:
-                # Shard module
-                sharder_key = sharder_name(type(child))
-                sharded_child = self._sharder_map[sharder_key].shard(
-                    child,
-                    sharded_params,
-                    self._env,
-                    self.device,
-                )
+                if DistributedModelParallel.SHARE_SHARDED:
+                    if name in DistributedModelParallel.SHARED_SHARDED_MODULE:
+                        sharded_child = DistributedModelParallel.SHARED_SHARDED_MODULE[
+                            name
+                        ]
+                    else:
+                        # Shard module device-agnostic
+                        # This is the multi-threading programming model case
+                        sharded_child = self._sharder_map[sharder_key].shard(
+                            child,
+                            sharded_params,
+                            self._env,
+                            self.device,
+                        )
+                        DistributedModelParallel.SHARED_SHARDED_MODULE[
+                            name
+                        ] = sharded_child
+                else:
+                    # Shard module
+                    sharded_child = self._sharder_map[sharder_key].shard(
+                        child,
+                        sharded_params,
+                        self._env,
+                        self.device,
+                    )
                 setattr(module, name, sharded_child)
                 if isinstance(sharded_child, FusedOptimizerModule):
                     fused_optims.append((curr_path, sharded_child.fused_optimizer))

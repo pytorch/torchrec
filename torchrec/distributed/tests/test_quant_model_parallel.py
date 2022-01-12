@@ -19,10 +19,10 @@ from torchrec.distributed.embedding_lookup import (
     QuantBatchedEmbeddingBag,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.embeddingbag import (
+from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.tests.test_model import (
     TestSparseNN,
     TestEBCSharder,
