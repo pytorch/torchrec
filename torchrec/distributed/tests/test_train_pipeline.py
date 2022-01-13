@@ -48,7 +48,9 @@ from torchrec.streamable import Pipelineable
 from torchrec.tests.utils import get_free_port, init_distributed_single_host
 
 
-class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
+class TestShardedEmbeddingBagCollection(
+    ShardedEmbeddingBagCollection[SparseFeaturesList, List[torch.Tensor]]
+):
     def input_dist(
         self,
         ctx: ShardedModuleContext,

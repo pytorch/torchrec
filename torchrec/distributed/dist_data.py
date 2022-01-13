@@ -17,12 +17,16 @@ from torchrec.distributed.comm_ops import (
     alltoall_sequence,
     reduce_scatter_pooled,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, NoWait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:merge_pooled_embeddings")
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:merge_pooled_embeddings_cpu"
+    )
 except OSError:
     pass
 
@@ -416,6 +420,55 @@ class KJTAllToAll(nn.Module):
             )
 
 
+class KJTOneToAll(nn.Module):
+    """
+    Redistributes KeyedJaggedTensor to all devices.
+
+    Implementation utilizes OnetoAll function, which essentially P2P copies the feature to the devices.
+
+    Constructor Args:
+        splits (List[int]): The lengths of features to split the KeyJaggedTensor features before copying
+        them.
+        world_size (int): the number of all devices.
+        recat (torch.Tensor): recat tensor for reordering tensor order after all2all.
+
+    Call Args:
+        kjt (KeyedJaggedTensor): The input features.
+
+    Returns:
+        Awaitable[List[KeyedJaggedTensor]].
+    """
+
+    def __init__(
+        self,
+        splits: List[int],
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._splits = splits
+        self._world_size = world_size
+        assert self._world_size == len(splits)
+
+    def forward(self, kjt: KeyedJaggedTensor) -> Awaitable[List[KeyedJaggedTensor]]:
+        """
+        Split featuers first and then send the slices to the corresponding devices.
+
+
+        Call Args:
+            input (KeyedJaggedTensor): KeyedJaggedTensor of values to distribute.
+
+        Returns:
+            Awaitable[List[KeyedJaggedTensor]]: awaitable of the KeyedJaggedTensor splits.
+
+        """
+        kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
+        dist_kjts = [
+            split_kjt.to(torch.device("cuda", rank), non_blocking=True)
+            for rank, split_kjt in enumerate(kjts)
+        ]
+        return NoWait(dist_kjts)
+
+
 class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):
     """
     Awaitable for pooled embeddings after collective operation.
@@ -539,6 +592,27 @@ class PooledEmbeddingsAllToAll(nn.Module):
     @property
     def callbacks(self) -> List[Callable[[torch.Tensor], torch.Tensor]]:
         return self._callbacks
+
+
+class PooledEmbeddingsAllToOne(nn.Module):
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._device = device
+        self._world_size = world_size
+
+    def forward(self, tensors: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
+        assert len(tensors) == self._world_size
+        return NoWait(
+            torch.ops.fbgemm.merge_pooled_embeddings(
+                tensors,
+                tensors[0].size(0),
+                self._device,
+            )
+        )
 
 
 class PooledEmbeddingsReduceScatter(nn.Module):

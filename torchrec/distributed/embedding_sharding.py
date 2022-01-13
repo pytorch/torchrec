@@ -7,7 +7,7 @@
 
 import abc
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Dict, Any
+from typing import TypeVar, Generic, List, Tuple, Optional, Dict, Any
 
 import torch
 import torch.distributed as dist
@@ -15,6 +15,7 @@ from torch import nn
 from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
+    KJTOneToAll,
     KJTAllToAllIndicesAwaitable,
 )
 from torchrec.distributed.embedding_types import (
@@ -25,8 +26,9 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     BaseGroupedFeatureProcessor,
     SparseFeaturesList,
+    ListOfSparseFeaturesList,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import NoWait, Awaitable
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,
@@ -311,10 +313,10 @@ class SparseFeaturesAllToAll(nn.Module):
         stagger: int = 1,
     ) -> None:
         super().__init__()
-        self._id_list_features_all2all = KJTAllToAll(
+        self._id_list_features_all2all: KJTAllToAll = KJTAllToAll(
             pg, id_list_features_per_rank, device, stagger
         )
-        self._id_score_list_features_all2all = KJTAllToAll(
+        self._id_score_list_features_all2all: KJTAllToAll = KJTAllToAll(
             pg, id_score_list_features_per_rank, device, stagger
         )
 
@@ -348,6 +350,52 @@ class SparseFeaturesAllToAll(nn.Module):
         )
 
 
+class SparseFeaturesOneToAll(nn.Module):
+    def __init__(
+        self,
+        id_list_features_per_rank: List[int],
+        id_score_list_features_per_rank: List[int],
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._world_size = world_size
+        self._id_list_features_one2all: KJTOneToAll = KJTOneToAll(
+            id_list_features_per_rank,
+            world_size,
+        )
+        self._id_score_list_features_one2all: KJTOneToAll = KJTOneToAll(
+            id_score_list_features_per_rank, world_size
+        )
+
+    def forward(
+        self,
+        sparse_features: SparseFeatures,
+    ) -> Awaitable[SparseFeaturesList]:
+        return NoWait(
+            SparseFeaturesList(
+                [
+                    SparseFeatures(
+                        id_list_features=id_list_features,
+                        id_score_list_features=id_score_list_features,
+                    )
+                    for id_list_features, id_score_list_features in zip(
+                        self._id_list_features_one2all.forward(
+                            sparse_features.id_list_features
+                        ).wait()
+                        if sparse_features.id_list_features is not None
+                        else [None] * self._world_size,
+                        self._id_score_list_features_one2all.forward(
+                            sparse_features.id_score_list_features
+                        ).wait()
+                        if sparse_features.id_score_list_features is not None
+                        else [None] * self._world_size,
+                    )
+                ]
+            )
+        )
+
+
+# group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
 ) -> Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
@@ -442,6 +490,14 @@ def group_tables(
     )
 
 
+F = TypeVar("F", bound=Multistreamable)
+T = TypeVar("T")
+TRAIN_F = TypeVar("TRAIN_F", bound=Multistreamable)
+INFER_F = TypeVar("INFER_F", bound=Multistreamable)
+TRAIN_T = TypeVar("TRAIN_T")
+INFER_T = TypeVar("INFER_T")
+
+
 class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
     """
     Awaitable of SparseFeaturesList.
@@ -496,7 +552,35 @@ class SparseFeaturesListIndicesAwaitable(Awaitable[List[Awaitable[SparseFeatures
         return [m.wait() for m in self.awaitables]
 
 
-class BaseSparseFeaturesDist(abc.ABC, nn.Module):
+class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
+    """
+    This module handles the tables-wise sharding input features distribution for inference.
+    For inference, we currently do not separate lengths from indices.
+
+    Constructor Args:
+        awaitables: List[Awaitable[SparseFeaturesList]]
+
+    """
+
+    def __init__(
+        self,
+        awaitables: List[Awaitable[SparseFeaturesList]],
+    ) -> None:
+        super().__init__()
+        self.awaitables = awaitables
+
+    def _wait_impl(self) -> ListOfSparseFeaturesList:
+        """
+        Syncs sparse features in List of SparseFeaturesList.
+
+        Returns:
+            ListOfSparseFeaturesList: synced ListOfSparseFeaturesList.
+
+        """
+        return ListOfSparseFeaturesList([w.wait() for w in self.awaitables])
+
+
+class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
     """
     Converts input from data-parallel to model-parallel.
     """
@@ -505,17 +589,17 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[Awaitable[SparseFeatures]]:
+    ) -> Awaitable[Awaitable[F]]:
         pass
 
 
-class BasePooledEmbeddingDist(abc.ABC, nn.Module):
+class BasePooledEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
     """
     Converts output of pooled EmbeddingLookup from model-parallel to data-parallel.
     """
 
     @abc.abstractmethod
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(self, local_embs: T) -> Awaitable[torch.Tensor]:
         pass
 
 
@@ -533,7 +617,7 @@ class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
         pass
 
 
-class EmbeddingSharding(abc.ABC):
+class EmbeddingSharding(abc.ABC, Generic[TRAIN_F, TRAIN_T, INFER_F, INFER_T]):
     """
     Used to implement different sharding types for EmbeddingBagCollection, e.g.
     table_wise.
@@ -543,24 +627,43 @@ class EmbeddingSharding(abc.ABC):
         self._permute_embeddings: bool = permute_embeddings
 
     @abc.abstractmethod
-    def create_input_dist(self) -> BaseSparseFeaturesDist:
+    def create_train_input_dist(self) -> BaseSparseFeaturesDist[TRAIN_F]:
         pass
 
     @abc.abstractmethod
-    def create_pooled_output_dist(self) -> BasePooledEmbeddingDist:
+    def create_train_pooled_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BasePooledEmbeddingDist[TRAIN_T]:
         pass
 
     @abc.abstractmethod
-    def create_sequence_output_dist(self) -> BaseSequenceEmbeddingDist:
+    def create_train_sequence_output_dist(self) -> BaseSequenceEmbeddingDist:
         pass
 
     @abc.abstractmethod
-    def create_lookup(
+    def create_train_lookup(
         self,
         fused_params: Optional[Dict[str, Any]],
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup:
+    ) -> BaseEmbeddingLookup[TRAIN_F, TRAIN_T]:
         pass
+
+    def create_infer_input_dist(self) -> BaseSparseFeaturesDist[INFER_F]:
+        raise NotImplementedError
+
+    def create_infer_pooled_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BasePooledEmbeddingDist[INFER_T]:
+        raise NotImplementedError
+
+    def create_infer_lookup(
+        self,
+        fused_params: Optional[Dict[str, Any]],
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
+    ) -> BaseEmbeddingLookup[INFER_F, INFER_T]:
+        raise NotImplementedError
 
     @abc.abstractmethod
     def embedding_dims(self) -> List[int]:

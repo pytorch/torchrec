@@ -8,7 +8,7 @@
 from typing import Set, Callable, Dict, List, Optional, Tuple
 
 import torch
-import torch.distributed as dist
+import torch.distributed as dist  # noqa
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
@@ -16,6 +16,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.tw_sharding import TwEmbeddingSharding, TwPooledEmbeddingDist
 from torchrec.distributed.types import (
+    ShardingEnv,
     ShardedTensorMetadata,
     ShardMetadata,
     ParameterSharding,
@@ -34,13 +35,12 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
     ) -> None:
         super().__init__(
-            embedding_configs, pg, device, permute_embeddings=permute_embeddings
+            embedding_configs, env, device, permute_embeddings=permute_embeddings
         )
         if self._permute_embeddings:
             self._init_combined_embeddings()
@@ -162,7 +162,10 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
             else super().embedding_names()
         )
 
-    def create_pooled_output_dist(self) -> TwPooledEmbeddingDist:
+    def create_train_pooled_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> TwPooledEmbeddingDist:
         embedding_permute_op: Optional[PermutePooledEmbeddings] = None
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None
         if self._permute_embeddings and self._embedding_order != list(

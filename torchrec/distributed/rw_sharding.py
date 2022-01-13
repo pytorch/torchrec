@@ -30,6 +30,7 @@ from torchrec.distributed.embedding_sharding import (
     bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
+    SparseFeaturesList,
     ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
     SparseFeatures,
@@ -44,7 +45,7 @@ from torchrec.distributed.types import (
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
-class RwSparseFeaturesDist(BaseSparseFeaturesDist):
+class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     def __init__(
         self,
         # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
@@ -133,7 +134,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist):
         return self._dist(bucketized_sparse_features)
 
 
-class RwPooledEmbeddingDist(BasePooledEmbeddingDist):
+class RwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -167,7 +168,11 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
         )
 
 
-class RwEmbeddingSharding(EmbeddingSharding):
+class RwEmbeddingSharding(
+    EmbeddingSharding[
+        SparseFeatures, torch.Tensor, SparseFeaturesList, List[torch.Tensor]
+    ]
+):
     """
     Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
     by rows and table slices are placed on all ranks.
@@ -255,7 +260,7 @@ class RwEmbeddingSharding(EmbeddingSharding):
                 )
         return tables_per_rank
 
-    def create_input_dist(self) -> BaseSparseFeaturesDist:
+    def create_train_input_dist(self) -> BaseSparseFeaturesDist[SparseFeatures]:
         num_id_list_features = self._get_id_list_features_num()
         num_id_score_list_features = self._get_id_score_list_features_num()
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
@@ -271,7 +276,7 @@ class RwEmbeddingSharding(EmbeddingSharding):
             has_feature_processor=self._has_feature_processor,
         )
 
-    def create_lookup(
+    def create_train_lookup(
         self,
         fused_params: Optional[Dict[str, Any]],
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
@@ -293,10 +298,13 @@ class RwEmbeddingSharding(EmbeddingSharding):
                 feature_processor=feature_processor,
             )
 
-    def create_pooled_output_dist(self) -> RwPooledEmbeddingDist:
+    def create_train_pooled_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> RwPooledEmbeddingDist:
         return RwPooledEmbeddingDist(self._pg)
 
-    def create_sequence_output_dist(self) -> RwSequenceEmbeddingDist:
+    def create_train_sequence_output_dist(self) -> RwSequenceEmbeddingDist:
         return RwSequenceEmbeddingDist(
             self._pg,
             self._get_id_list_features_num(),
