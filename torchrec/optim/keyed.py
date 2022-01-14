@@ -34,6 +34,13 @@ class KeyedOptimizer(optim.Optimizer):
     This implementation is much stricter than the one in torch.Optimizer:
     it requires implementations to fully initialize their state during first optimization iteration,
     and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
+
+    It also doesn't expose param_groups in state_dict() by default
+    Old behavior can be switch on by setting save_param_groups flag.
+    The reason is that during distributed training not all parameters are present on all ranks
+    and we identify param_group by its parameters.
+    In addition to that, param_groups are typically re-set during training initialization,
+    so it makes little sense to save them as a part of the state to begin with.
     """
 
     def __init__(
@@ -49,6 +56,7 @@ class KeyedOptimizer(optim.Optimizer):
         self.param_groups: Collection[Mapping[str, Any]] = param_groups
         self.params = params
         self.defaults: Dict[str, Any] = {}
+        self._save_param_groups = False
 
         params_set = set(params.values())
         non_param_state_keys = [key for key in self.state if key not in params_set]
@@ -86,7 +94,10 @@ class KeyedOptimizer(optim.Optimizer):
                     ret_group[k] = deepcopy(v)
             ret_groups.append(ret_group)
 
-        return {"state": ret_state, "param_groups": ret_groups}
+        ret: Dict[str, object] = {"state": ret_state}
+        if self._save_param_groups:
+            ret["param_groups"] = ret_groups
+        return ret
 
     def post_load_state_dict(self) -> None:
         pass
@@ -106,9 +117,7 @@ class KeyedOptimizer(optim.Optimizer):
         """
 
         new_state = state_dict["state"]
-        new_param_groups = state_dict["param_groups"]
         state = self.state
-        param_groups = self.param_groups
         params = self.params
 
         # Load state
@@ -151,36 +160,42 @@ class KeyedOptimizer(optim.Optimizer):
                     state[param][state_key] = deepcopy(new_state_val)
 
         # Load param_groups.
-        if len(param_groups) != len(new_param_groups):
-            raise ValueError(
-                f"Different param_groups count: {len(param_groups)} vs {len(new_param_groups)}"
-            )
-        param_to_key = {param: key for key, param in params.items()}
-        group_map = {}
-        for group in param_groups:
-            param_keys = []
-            for param in group["params"]:
-                param_keys.append(param_to_key[param])
-            group_map["/".join(sorted(param_keys))] = group
-        new_group_map = {}
-        for new_group in new_param_groups:
-            param_keys = []
-            for param_key in new_group["params"]:
-                param_keys.append(param_key)
-            new_group_map["/".join(sorted(param_keys))] = new_group
-        for group_key, group in group_map.items():
-            if group_key not in new_group_map:
-                raise ValueError(f"Group {group_key} not found")
-            new_group = new_group_map[group_key]
-            if len(group) != len(new_group):
+        if self._save_param_groups:
+            new_param_groups = state_dict["param_groups"]
+            param_groups = self.param_groups
+
+            if len(param_groups) != len(new_param_groups):
                 raise ValueError(
-                    f"Different param_group size: {len(group)} vs {len(new_group)}"
+                    f"Different param_groups count: {len(param_groups)} vs {len(new_param_groups)}"
                 )
-            for k, v in group.items():
-                if k not in new_group:
-                    raise ValueError(f"Group key {k} not found for group {group_key}")
-                if k != "params":
-                    group[k] = deepcopy(new_group[k])
+            param_to_key = {param: key for key, param in params.items()}
+            group_map = {}
+            for group in param_groups:
+                param_keys = []
+                for param in group["params"]:
+                    param_keys.append(param_to_key[param])
+                group_map["/".join(sorted(param_keys))] = group
+            new_group_map = {}
+            for new_group in new_param_groups:
+                param_keys = []
+                for param_key in new_group["params"]:
+                    param_keys.append(param_key)
+                new_group_map["/".join(sorted(param_keys))] = new_group
+            for group_key, group in group_map.items():
+                if group_key not in new_group_map:
+                    raise ValueError(f"Group {group_key} not found")
+                new_group = new_group_map[group_key]
+                if len(group) != len(new_group):
+                    raise ValueError(
+                        f"Different param_group size: {len(group)} vs {len(new_group)}"
+                    )
+                for k, v in group.items():
+                    if k not in new_group:
+                        raise ValueError(
+                            f"Group key {k} not found for group {group_key}"
+                        )
+                    if k != "params":
+                        group[k] = deepcopy(new_group[k])
 
         self.post_load_state_dict()
 
@@ -211,6 +226,9 @@ class KeyedOptimizer(optim.Optimizer):
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 
+    def save_param_groups(self, save: bool) -> None:
+        self._save_param_groups = True
+
 
 class CombinedOptimizer(KeyedOptimizer):
     """
@@ -223,6 +241,7 @@ class CombinedOptimizer(KeyedOptimizer):
         self, optims: List[Union[KeyedOptimizer, Tuple[str, KeyedOptimizer]]]
     ) -> None:
         self.defaults: Dict[str, Any] = {}
+        self._save_param_groups = False
         # Append empty optimizer key if not passed.
         self._optims: List[Tuple[str, KeyedOptimizer]] = []
         for key_value in optims:
@@ -325,6 +344,7 @@ class OptimizerWrapper(KeyedOptimizer):
         # pyre-ignore [4]
         self.state: Mapping[Any, Any] = optimizer.state
         self.param_groups: Collection[Mapping[str, Any]] = optimizer.param_groups
+        self._save_param_groups = False
 
     def __repr__(self) -> str:
         return self._optimizer.__repr__()
@@ -354,3 +374,6 @@ class OptimizerWrapper(KeyedOptimizer):
         self.param_groups = self._optimizer.param_groups
 
         self.post_load_state_dict()
+
+    def save_param_groups(self, save: bool) -> None:
+        self._optimizer.save_param_groups(save)

@@ -78,6 +78,7 @@ class TestKeyedOptimizer(unittest.TestCase):
                 },
             ],
         )
+        keyed_optimizer.save_param_groups(True)
 
         # Assert state_dict is as expected.
         state: Dict[str, Any] = {
@@ -191,6 +192,7 @@ class TestCombinedOptimizer(unittest.TestCase):
         combined_optimizer = CombinedOptimizer(
             [("ko1", keyed_optimizer_1), ("", keyed_optimizer_2)]
         )
+        combined_optimizer.save_param_groups(True)
 
         combined_optimizer_state_dict = combined_optimizer.state_dict()
         combined_optimizer_state_dict["state"]["ko1.param_1"] = {"one": 999}
@@ -219,6 +221,7 @@ class TestOptimizerWrapper(unittest.TestCase):
             [{"params": [param_1], "param_group_val_0": 2.0}],
         )
         optimizer_wrapper = OptimizerWrapper(keyed_optimizer)
+        optimizer_wrapper.save_param_groups(True)
 
         optimizer_wrapper_state_dict = optimizer_wrapper.state_dict()
         optimizer_wrapper_state_dict["state"]["param_1"] = {"one": 999}

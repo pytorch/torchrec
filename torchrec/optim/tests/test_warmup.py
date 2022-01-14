@@ -40,6 +40,7 @@ class TestWarmupOptimizer(unittest.TestCase):
                     ),
                 ],
             )
+            warmup_optimizer.save_param_groups(True)
             return warmup_optimizer
 
         warmup_optimizer_1 = get_optimizer()
@@ -58,6 +59,7 @@ class TestWarmupOptimizer(unittest.TestCase):
         warmup_optimizer_2.step()
         warmup_optimizer_2.zero_grad()
 
+        warmup_optimizer_2.save_param_groups(True)
         warmup_optimizer_2.load_state_dict(warmup_optimizer_1.state_dict())
 
         self.assertEqual(
