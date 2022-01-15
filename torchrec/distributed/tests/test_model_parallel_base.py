@@ -49,6 +49,18 @@ class ModelParallelTestBase(unittest.TestCase):
         os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
 
+        torch.use_deterministic_algorithms(True)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+    def tearDown(self) -> None:
+        torch.use_deterministic_algorithms(False)
+        if torch.cuda.is_available():
+            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
+        super().tearDown()
+
     @classmethod
     def _test_sharding_single_rank(
         cls,
@@ -64,6 +76,11 @@ class ModelParallelTestBase(unittest.TestCase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
+        torch.use_deterministic_algorithms(True)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+
         # Override local_size after pg construction because unit test device count
         # is larger than local_size setup. This can be problematic for twrw because
         # we have ShardedTensor placement check.
@@ -178,6 +195,11 @@ class ModelParallelTestBase(unittest.TestCase):
         # Compare predictions of sharded vs unsharded models.
         torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
         dist.destroy_process_group(pg)
+
+        torch.use_deterministic_algorithms(False)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cuda.matmul.allow_tf32 = True
 
     def _run_multi_process_test(
         self,
