@@ -90,7 +90,9 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
         for name, param in self.position_weights.items():
-            destination[prefix + f"position_weights.{name}"] = param
+            destination[prefix + f"position_weights.{name}"] = (
+                param if keep_vars else param.detach()
+            )
         return destination
 
     def sparse_grad_parameter_names(
