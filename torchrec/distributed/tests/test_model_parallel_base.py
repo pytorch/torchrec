@@ -81,10 +81,13 @@ class ModelParallelTestBase(unittest.TestCase):
             torch.backends.cudnn.allow_tf32 = False
             torch.backends.cuda.matmul.allow_tf32 = False
 
-        # Override local_size after pg construction because unit test device count
-        # is larger than local_size setup. This can be problematic for twrw because
-        # we have ShardedTensor placement check.
-        # TODO (T108556130) Mock out functions in comm.py instead of overriding environment variables
+        """
+        Override local_size after pg construction because unit test device count is
+        larger than local_size setup. This can be problematic for twrw because we have
+        ShardedTensor placement check.
+
+        TODO (T108556130) Mock out functions in comm.py instead of overriding env vars
+        """
         os.environ["LOCAL_WORLD_SIZE"] = str(local_size or world_size)
         if local_size is not None:
             os.environ["LOCAL_RANK"] = str(rank % local_size)
@@ -132,7 +135,7 @@ class ModelParallelTestBase(unittest.TestCase):
         Simulating multiple nodes on a single node. However, metadata information and
         tensor placement must still be consistent. Here we overwrite this to do so.
 
-        Note:
+        NOTE:
             inter/intra process groups should still behave as expected.
 
         TODO: may need to add some checks that only does this if we're running on a
