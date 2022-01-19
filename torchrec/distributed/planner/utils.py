@@ -14,3 +14,7 @@ def sharder_name(t: Type[Any]) -> str:
 
 def bytes_to_gb(num_bytes: int) -> float:
     return float(num_bytes / (1024 * 1024 * 1024))
+
+
+def gb_to_bytes(gb: float) -> int:
+    return int(gb * 1024 * 1024 * 1024)

@@ -20,7 +20,8 @@ POOLING_FACTOR: float = 1.0
 BIGINT_DTYPE: int = 8
 
 HBM_CAP: int = 32 * 1024 * 1024 * 1024  # 32 GB
-DDR_CAP: int = 128 * 1024 * 1024 * 1024  # 128 GB
+DDR_CAP: int = 128 * 1024 * 1024 * 1024  # 128 GB per rank
+HOST_DDR_CAP: int = DDR_CAP * 8  # 1 TB for the whole host
 DDR_MEM_BW: int = 51
 HBM_MEM_BW: int = 897
 CACHING_RATIO: float = 0.2
