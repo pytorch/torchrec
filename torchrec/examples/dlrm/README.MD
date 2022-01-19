@@ -24,10 +24,12 @@ You can also use [torchrun](https://pytorch.org/docs/stable/elastic/run.html).
 ## Preliminary Training Results
 
 **Setup:**
+* Dataset: Criteo 1TB Click Logs dataset
 * CUDA 11.0, NCCL 2.10.3.
 * AWS p4d24xlarge instances, each with 8 40GB NVIDIA A100s.
    *  Elastic Fabric Adapter enabled.
-* Shared flags for all runs include: `--pin_memory --batch_size 4096 --epochs 1 --embedding_dim 128 --dense_arch_layer_sizes "512,256,128" --over_arch_layer_sizes "1024,1024,512,256,1" --in_memory_binary_criteo_path "..." --learning_rate 15.0`
+* Shared flags for all runs include: `--pin_memory --batch_size 4096 --epochs 1 --embedding_dim 128 --dense_arch_layer_sizes "512,256,128" --over_arch_layer_sizes "1024,1024,512,256,1" --in_memory_binary_criteo_path "..."`
+
 
 **Results**
 
@@ -37,5 +39,50 @@ You can also use [torchrun](https://pytorch.org/docs/stable/elastic/run.html).
 |MLPerfx2|174.03|16|4096|65536|0.7760998606681824|0.7706344723701477|2028339.2 rec/s| 34m:27s | `--batch_size 4096 --num_embeddings_per_feature "80000000,39060,17295,7424,20265,3,7122,1543,63,80000000,3067956,405282,10,2209,11938,155,4,976,14,80000000,40790948,80000000,590152,12973,108,36"` |
 |Full Size|420.94|80|819|65520|0.7841252684593201|0.778694748878479| 459950.4 rec/s | 02h32m03s | `--batch_size 819 --num_embeddings_per_feature "227605432,39060,17295,7424,20265,3,7122,1543,63,130229467,3067956,405282,10,2209,11938,155,4,976,14,292775614,40790948,187188510,590152,12973,108,36"` |
 
+**Reproduce**
+
+Run the following command to reproduce the results for a single node (8 GPUs) on AWS. This command makes use of the `aws_component.py` script found in the `torchrec/examples/dlrm` folder.
+
+Ensure to:
+- set $PATH_TO_1TB_NUMPY_FILES to the path with the pre-processed .npy files of the Criteo 1TB dataset.
+- set $TRAIN_QUEUE to the partition that handles training jobs
+
+```
+torchx run --scheduler slurm --scheduler_args partition=$TRAIN_QUEUE,time=5:00:00 aws_component.py:run_dlrm_main --num_trainers=8 -- --pin_memory --batch_size 8192 --epochs 1 --num_embeddings_per_feature "45833188,36746,17245,7413,20243,3,7114,1441,62,29275261,1572176,345138,10,2209,11267,128,4,974,14,48937457,11316796,40094537,452104,12606,104,35" --embedding_dim 128 --dense_arch_layer_sizes "512,256,128" --over_arch_layer_sizes "1024,1024,512,256,1" --in_memory_binary_criteo_path $PATH_TO_1TB_NUMPY_FILES --learning_rate 5.0
+```
+Upon scheduling the job, there should be an output that looks like this:
+
+```
+warnings.warn(
+slurm://torchx/14731
+torchx 2022-01-07 21:06:59 INFO     Launched app: slurm://torchx/14731
+torchx 2022-01-07 21:06:59 INFO     AppStatus:
+  msg: ''
+  num_restarts: -1
+  roles: []
+  state: UNKNOWN (7)
+  structured_error_msg: <NONE>
+  ui_url: null
+
+torchx 2022-01-07 21:06:59 INFO     Job URL: None
+```
+
+In this example, the job was launched to: `slurm://torchx/14731`.
+
+Run the following commands to check the status of your job and read the logs:
+
+```
+# Status should be "RUNNING" if properly scheduled
+torchx status slurm://torchx/14731
+
+# Log file was automatically created in the directory where you launched the job from
+cat slurm-14731.out
+
+```
+
+The results from the training can be found in the log file (e.g. `slurm-14731.out`).
+
+
 **TODO/Work In Progress**
 * Confirm DLRM example converges to MLPerf training benchmark threshold of val AUROC 0.8025 in reasonable number of iterations.
+* Write section on how to pre-process the dataset.
