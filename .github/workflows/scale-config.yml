@@ -1,0 +1,11 @@
+runner_types:
+  linux.2xlarge:
+    instance_type: c5.2xlarge
+    os: linux
+    max_available: 200
+    disk_size: 150
+  linux.8xlarge.nvidia.gpu:
+    instance_type: p3.8xlarge
+    os: linux
+    max_available: 10
+    disk_size: 150
