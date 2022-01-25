@@ -220,7 +220,7 @@ class ModelParallelTestBase(unittest.TestCase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         local_size: Optional[int] = None,
     ) -> None:
-        ctx = multiprocessing.get_context("spawn")
+        ctx = multiprocessing.get_context("forkserver")
         processes = []
         for rank in range(world_size):
             p = ctx.Process(
