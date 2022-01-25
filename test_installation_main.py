@@ -80,10 +80,14 @@ def main(argv: List[str]) -> None:
         backend = "nccl"
         torch.cuda.set_device(device)
     else:
-        raise Exception("Cuda not available")
+        device = torch.device("cpu")
+        backend = "gloo"
+        print(
+            "\033[92m"
+            + "Warning: CUDA not available! Is this meant to be a CPU installation?"
+        )
 
-    if not torch.distributed.is_initialized():
-        dist.init_process_group(backend=backend)
+    dist.init_process_group(backend=backend)
 
     model = DLRM(
         embedding_bag_collection=EmbeddingBagCollection(
