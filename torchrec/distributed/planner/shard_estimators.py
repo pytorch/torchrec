@@ -27,6 +27,7 @@ from torchrec.distributed.planner.types import (
     Storage,
     PlannerError,
 )
+from torchrec.distributed.planner.utils import prod
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
 
@@ -692,7 +693,7 @@ def _calculate_rw_shard_io_sizes(
             / world_size
             * input_data_type_size
         )
-        if math.prod(shard) != 0
+        if prod(shard) != 0
         else 0
         for shard in shard_sizes
     ]
@@ -705,7 +706,7 @@ def _calculate_rw_shard_io_sizes(
             * len(input_lengths)
             * output_data_type_size
         )
-        if math.prod(shard) != 0
+        if prod(shard) != 0
         else 0
         for i, shard in enumerate(shard_sizes)
     ]
@@ -731,7 +732,7 @@ def _calculate_twrw_shard_io_sizes(
             / local_world_size
             * input_data_type_size
         )
-        if math.prod(shard) != 0
+        if prod(shard) != 0
         else 0
         for shard in shard_sizes
     ]
@@ -744,7 +745,7 @@ def _calculate_twrw_shard_io_sizes(
             * len(input_lengths)
             * output_data_type_size
         )
-        if math.prod(shard) != 0
+        if prod(shard) != 0
         else 0
         for i, shard in enumerate(shard_sizes)
     ]
@@ -764,7 +765,7 @@ def _calculate_storage_specific_sizes(
     output_data_type_size: int,
 ) -> List[int]:
     tensor_sizes: List[int] = [
-        math.ceil(storage * math.prod(size) / math.prod(shape))
+        math.ceil(storage * prod(size) / prod(shape))
         if sharding_type != ShardingType.DATA_PARALLEL.value
         else storage
         for size in shard_sizes

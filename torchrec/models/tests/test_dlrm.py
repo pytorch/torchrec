@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
 import unittest
 from itertools import combinations
 from typing import List
@@ -220,7 +219,7 @@ class InteractionArchTest(unittest.TestCase):
         )
         concat_dense = inter_arch(dense_features, embeddings)
         #  B X (D + F + F choose 2)
-        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+        self.assertEqual(concat_dense.size(), (B, D + F + choose(F, 2)))
 
     def test_larger(self) -> None:
         D = 8
@@ -239,7 +238,7 @@ class InteractionArchTest(unittest.TestCase):
 
         concat_dense = inter_arch(dense_features, embeddings)
         #  B X (D + F + F choose 2)
-        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+        self.assertEqual(concat_dense.size(), (B, D + F + choose(F, 2)))
 
     def test_fx_and_shape(self) -> None:
         D = 3
@@ -259,7 +258,7 @@ class InteractionArchTest(unittest.TestCase):
 
         concat_dense = gm(dense_features, embeddings)
         #  B X (D + F + F choose 2)
-        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+        self.assertEqual(concat_dense.size(), (B, D + F + choose(F, 2)))
 
     # TODO(T89043538): Auto-generate this test.
     def test_fx_script(self) -> None:
@@ -281,7 +280,7 @@ class InteractionArchTest(unittest.TestCase):
 
         concat_dense = scripted_gm(dense_features, embeddings)
         #  B X (D + F + F choose 2)
-        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+        self.assertEqual(concat_dense.size(), (B, D + F + choose(F, 2)))
 
     def test_correctness(self) -> None:
         D = 11
@@ -300,7 +299,7 @@ class InteractionArchTest(unittest.TestCase):
 
         concat_dense = inter_arch(dense_features, embeddings)
         #  B X (D + F + F choose 2)
-        self.assertEqual(concat_dense.size(), (B, D + F + math.comb(F, 2)))
+        self.assertEqual(concat_dense.size(), (B, D + F + choose(F, 2)))
 
         expected = self._test_correctness_helper(
             dense_features=dense_features,
@@ -541,3 +540,16 @@ class DLRMTest(unittest.TestCase):
 
         logits = scripted_gm(features, sparse_features)
         self.assertEqual(logits.size(), (B, 1))
+
+
+def choose(n: int, k: int) -> int:
+    if 0 <= k <= n:
+        ntok = 1
+        ktok = 1
+        for t in range(1, min(k, n - k) + 1):
+            ntok *= n
+            ktok *= t
+            n -= 1
+        return ntok // ktok
+    else:
+        return 0

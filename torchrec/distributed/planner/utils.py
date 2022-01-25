@@ -5,7 +5,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Type
+import operator
+from functools import reduce
+from typing import Iterable, Any, Type
 
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
@@ -18,3 +20,7 @@ def bytes_to_gb(num_bytes: int) -> float:
 
 def gb_to_bytes(gb: float) -> int:
     return int(gb * 1024 * 1024 * 1024)
+
+
+def prod(iterable: Iterable[int]) -> int:
+    return reduce(operator.mul, iterable, 1)

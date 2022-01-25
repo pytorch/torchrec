@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
 import unittest
 from typing import List
 
@@ -26,6 +25,7 @@ from torchrec.distributed.planner.types import (
     Storage,
     Topology,
 )
+from torchrec.distributed.planner.utils import prod
 from torchrec.distributed.tests.test_model import TestSparseNN
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -386,7 +386,7 @@ class TestEnumerators(unittest.TestCase):
             )
 
             tensor_sizes = [
-                math.prod(sharding_option.tensor.shape)
+                prod(sharding_option.tensor.shape)
                 * sharding_option.tensor.element_size()
             ] * self.world_size
 
@@ -436,7 +436,7 @@ class TestEnumerators(unittest.TestCase):
             )
 
             tensor_size = (
-                math.prod(sharding_option.tensor.shape)
+                prod(sharding_option.tensor.shape)
                 * sharding_option.tensor.element_size()
             )
             optimizer_size = 0
