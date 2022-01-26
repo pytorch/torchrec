@@ -288,7 +288,7 @@ class ParameterSharding:
     ranks (Optional[List[int]]): rank of each shard.
     sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
 
-    Note:
+    NOTE:
         ShardingType.TABLE_WISE - rank where this embedding is placed
         ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as
             individual tables
@@ -338,7 +338,7 @@ class ShardingEnv:
         """
         Creates ProcessGroup-based sharding environment.
 
-        Note:
+        NOTE:
             Typically used during training.
         """
         return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
@@ -348,7 +348,7 @@ class ShardingEnv:
         """
         Creates a local host-based sharding environment.
 
-        Note:
+        NOTE:
             Typically used during single host inference.
         """
         return cls(world_size, rank, None)
@@ -359,7 +359,7 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
 
-    Note:
+    NOTE:
         'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
         from data-parallel to model parallel and vise-versa.
     """
@@ -397,9 +397,8 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         self, ctx: ShardedModuleContext, input: CompIn
     ) -> LazyAwaitable[Out]:
         """
-        In case of multiple output distributions
-        it makes sense to override this method and initiate
-        output distibution as soon as corresponding compute completes.
+        In case of multiple output distributions it makes sense to override this method
+        and initiate output distibution as soon as the corresponding compute completes.
         """
         output = self.compute(ctx, input)
         return self.output_dist(ctx, output)
@@ -506,7 +505,8 @@ class ShardingPlan:
     """
     Representation of sharding plan.
 
-    plan (Dict[str, Dict[str, ParameterSharding]]): Dict keyed by module path of dict of parameter sharding specs keyed by parameter name.
+    plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of dict
+        of parameter sharding specs keyed by parameter name.
     """
 
     plan: Dict[str, Dict[str, ParameterSharding]]

@@ -324,10 +324,10 @@ class KJTAllToAll(nn.Module):
             more detail.
 
     Call Args:
-        input (KeyedJaggedTensor): Input KJT tensor.
+        input (KeyedJaggedTensor): input KeyedJaggedTensor of values to distribute.
 
     Returns:
-        None
+        Awaitable[KeyedJaggedTensor]: awaitable of a KeyedJaggedTensor.
 
     Example:
         >>> keys=['A','B','C']
@@ -394,14 +394,8 @@ class KJTAllToAll(nn.Module):
     ) -> Awaitable[KJTAllToAllIndicesAwaitable]:
         """
         Sends input to relevant ProcessGroup ranks.
-        First wait will have lengths results and issue indices/weights all2all.
+        First wait will have lengths results and issue indices/weights AlltoAll.
         Second wait will have indices/weights results.
-
-        Call Args:
-            input (KeyedJaggedTensor): KeyedJaggedTensor of values to distribute.
-
-        Returns:
-            Awaitable[KeyedJaggedTensor]: awaitable of a KeyedJaggedTensor.
         """
 
         with torch.no_grad():
@@ -424,19 +418,20 @@ class KJTOneToAll(nn.Module):
     """
     Redistributes KeyedJaggedTensor to all devices.
 
-    Implementation utilizes OnetoAll function, which essentially P2P copies the feature to the devices.
+    Implementation utilizes OnetoAll function, which essentially P2P copies the feature
+    to the devices.
 
     Constructor Args:
-        splits (List[int]): The lengths of features to split the KeyJaggedTensor features before copying
-        them.
-        world_size (int): the number of all devices.
-        recat (torch.Tensor): recat tensor for reordering tensor order after all2all.
+        splits (List[int]): lengths of features to split the KeyJaggedTensor features
+            into before copying them.
+        world_size (int): number of devices in the topology.
+        recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
 
     Call Args:
-        kjt (KeyedJaggedTensor): The input features.
+        kjt (KeyedJaggedTensor): the input features.
 
     Returns:
-        Awaitable[List[KeyedJaggedTensor]].
+        Awaitable[List[KeyedJaggedTensor]]: awaitable of the KeyedJaggedTensor splits.
     """
 
     def __init__(
@@ -451,16 +446,9 @@ class KJTOneToAll(nn.Module):
 
     def forward(self, kjt: KeyedJaggedTensor) -> Awaitable[List[KeyedJaggedTensor]]:
         """
-        Split featuers first and then send the slices to the corresponding devices.
-
-
-        Call Args:
-            input (KeyedJaggedTensor): KeyedJaggedTensor of values to distribute.
-
-        Returns:
-            Awaitable[List[KeyedJaggedTensor]]: awaitable of the KeyedJaggedTensor splits.
-
+        Splits features first and then sends the slices to the corresponding devices.
         """
+
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
             split_kjt.to(torch.device("cuda", rank), non_blocking=True)
@@ -514,12 +502,13 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
+        callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]])
 
     Call Args:
-        local_embs: (torch.Tensor)
+        local_embs (torch.Tensor): tensor of values to distribute.
 
     Returns:
-        PooledEmbeddingsAwaitable
+        PooledEmbeddingsAwaitable: awaitable of pooled embeddings.
 
     Example:
         >>> dim_sum_per_rank = [2, 1]
@@ -563,12 +552,6 @@ class PooledEmbeddingsAllToAll(nn.Module):
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
         """
         Performs AlltoAll pooled operation on pooled embeddings tensor.
-
-        Call Args:
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            PooledEmbeddingsAwaitable: awaitable of pooled embeddings.
         """
 
         if local_embs.numel() == 0:
@@ -595,6 +578,20 @@ class PooledEmbeddingsAllToAll(nn.Module):
 
 
 class PooledEmbeddingsAllToOne(nn.Module):
+    """
+    Merges the pooled embedding tensor on each device into single tensor.
+
+    Constructor Args:
+        device (torch.device): device on which buffer will be allocated
+        world_size (int): number of devices in the topology.
+
+    Call Args:
+        tensors (List[torch.Tensor]): list of pooled embedding tensors.
+
+    Returns:
+        Awaitable[torch.Tensor]: awaitable of the merged pooled embeddings.
+    """
+
     def __init__(
         self,
         device: torch.device,
@@ -605,6 +602,10 @@ class PooledEmbeddingsAllToOne(nn.Module):
         self._world_size = world_size
 
     def forward(self, tensors: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
+        """
+        Performs AlltoOne operation on pooled embeddings tensors.
+        """
+
         assert len(tensors) == self._world_size
         return NoWait(
             torch.ops.fbgemm.merge_pooled_embeddings(
@@ -637,7 +638,8 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
 
     Returns:
-        PooledEmbeddingsAwaitable of tensor of shape [batch_size, dimension].
+        PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape
+            [batch_size, dimension].
 
     Example:
         >>> init_distributed(rank=rank, size=2, backend="nccl")
@@ -659,12 +661,6 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
         """
         Performs reduce scatter operation on pooled embeddings tensor.
-
-        Call Args:
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            PooledEmbeddingsAwaitable: awaitable of pooled embeddings.
         """
 
         tensor_awaitable = reduce_scatter_pooled(
@@ -791,17 +787,6 @@ class SequenceEmbeddingAllToAll(nn.Module):
     ) -> SequenceEmbeddingsAwaitable:
         """
         Performs AlltoAll operation on sequence embeddings tensor.
-
-        Call Args:
-            local_embs (torch.Tensor): input embeddings tensor.
-            lengths (torch.Tensor): lengths of sparse features after AlltoAll.
-            input_splits (List[int]): input splits of AlltoAll.
-            output_splits (List[int]): output splits of AlltoAll.
-            unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order of
-                KJT bucketize (for row-wise sharding only).
-
-        Returns:
-            SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
         """
 
         tensor_awaitable = alltoall_sequence(

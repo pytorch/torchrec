@@ -49,33 +49,32 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
-    Bucketizes sparse features in TWRW fashion and then redistributes with to AlltoAll
+    Bucketizes sparse features in TWRW fashion and then redistributes with an AlltoAll
     collective operation.
 
     Constructor Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
             communication.
-        num_id_list_features (int):
-        num_id_score_list_features (int):
         id_list_features_per_rank (List[int]): number of id list features to send to
             each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features to
             send to each rank
-        id_list_feature_hash_sizes (List[int]): hash size of id list features.
-        id_score_list_feature_hash_sizes (List[int]): has size of id score list features.
+        id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
+        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
         device (Optional[torch.device]): device on which buffers will be allocated.
-        has_feature_processor (bool):
+        has_feature_processor (bool): existence of feature processor (ie. position
+            weighted features).
 
     Example:
         3 features
         2 hosts with 2 devices each
 
-        Bucketize each feature into 2 buckets
-        Staggered shuffle with feature splits [2, 1]
-        AlltoAll operation
+        >>> Bucketize each feature into 2 buckets
+        >>> Staggered shuffle with feature splits [2, 1]
+        >>> AlltoAll operation
 
-        Note: result of staggered shuffle and AlltoAll operation look the same after
+        NOTE: result of staggered shuffle and AlltoAll operation look the same after
         reordering in AlltoAll
 
         Result:
@@ -99,8 +98,6 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         intra_pg: dist.ProcessGroup,
-        num_id_list_features: int,
-        num_id_score_list_features: int,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         id_list_feature_hash_sizes: List[int],
@@ -406,8 +403,6 @@ class TwRwEmbeddingSharding(
         return tables_per_rank
 
     def create_train_input_dist(self) -> BaseSparseFeaturesDist[SparseFeatures]:
-        num_id_list_features = self._get_id_list_features_num()
-        num_id_score_list_features = self._get_id_score_list_features_num()
         id_list_features_per_rank = self._features_per_rank(
             self._grouped_embedding_configs_per_rank
         )
@@ -419,8 +414,6 @@ class TwRwEmbeddingSharding(
         return TwRwSparseFeaturesDist(
             pg=self._pg,
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
-            num_id_list_features=num_id_list_features,
-            num_id_score_list_features=num_id_score_list_features,
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
@@ -506,20 +499,6 @@ class TwRwEmbeddingSharding(
             for config in grouped_config:
                 id_score_list_feature_names.extend(config.feature_names())
         return id_score_list_feature_names
-
-    def _get_id_list_features_num(self) -> int:
-        id_list_features_num: int = 0
-        for grouped_config in self._grouped_embedding_configs_per_node:
-            for config in grouped_config:
-                id_list_features_num += config.num_features()
-        return id_list_features_num
-
-    def _get_id_score_list_features_num(self) -> int:
-        id_score_list_features_num: int = 0
-        for grouped_config in self._score_grouped_embedding_configs_per_node:
-            for config in grouped_config:
-                id_score_list_features_num += config.num_features()
-        return id_score_list_features_num
 
     def _get_id_list_features_hash_sizes(self) -> List[int]:
         id_list_feature_hash_sizes: List[int] = []

@@ -255,14 +255,14 @@ class SparseFeaturesAllToAll(nn.Module):
             'B'    None         [B.V0]      [B.V1]
             'C'    [C.V0]       [C.V1]      None
 
-            rank1_input.id_score_list_features is KeyedJaggedTensor holding
+            rank1_input.id_list_features is KeyedJaggedTensor holding
 
                     0           1           2
             'A'     [A.V3]      [A.V4]      None
             'B'     None        [B.V2]      [B.V3, B.V4]
             'C'     [C.V2]      [C.V3]      None
 
-            rank0_input.id_list_features is KeyedJaggedTensor holding
+            rank0_input.id_score_list_features is KeyedJaggedTensor holding
 
                     0           1           2
             'A'    [A.V0]       None        [A.V1, A.V2]
@@ -286,11 +286,11 @@ class SparseFeaturesAllToAll(nn.Module):
             'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
             'B'     None        [B.V0]    [B.V1]        None        [B.V2]     [B.V3, B.V4]
 
-            rank1_output.id_score_list_features is KeyedJaggedTensor holding
+            rank1_output.id_list_features is KeyedJaggedTensor holding
                     0           1           2           3           4           5
             'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
 
-            rank1_output.id_list_features is KeyedJaggedTensor holding
+            rank0_output.id_score_list_features is KeyedJaggedTensor holding
 
                     0           1           2           3           4           5
             'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
@@ -325,15 +325,9 @@ class SparseFeaturesAllToAll(nn.Module):
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeaturesIndices]:
         """
-        Sends sparse features to relevant ProcessGroup ranks. Instantiate lengths all2all.
-        First wait will get lengths all2all results, then issue indices all2all.
-        Second wait will get indices all2all results.
-
-        Call Args:
-            sparse_features (SparseFeatures): sparse features to distribute.
-
-        Returns:
-            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+        Sends sparse features to relevant ProcessGroup ranks. Instantiate lengths AlltoAll.
+        First wait will get lengths AlltoAll results, then issue indices AlltoAll.
+        Second wait will get indices AlltoAll results.
         """
 
         return SparseFeaturesLengths(
@@ -351,6 +345,23 @@ class SparseFeaturesAllToAll(nn.Module):
 
 
 class SparseFeaturesOneToAll(nn.Module):
+    """
+    Redistributes sparse features to all devices.
+
+    Constructor Args:
+        id_list_features_per_rank (List[int]): number of id list features to send to
+            each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features to
+            send to each rank
+        world_size (int): number of devices in the topology.
+
+    Call Args:
+        sparse_features (SparseFeatures): sparse features to redistribute.
+
+    Returns:
+        Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+    """
+
     def __init__(
         self,
         id_list_features_per_rank: List[int],
@@ -371,6 +382,10 @@ class SparseFeaturesOneToAll(nn.Module):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[SparseFeaturesList]:
+        """
+        Performs OnetoAll operation on sparse features.
+        """
+
         return NoWait(
             SparseFeaturesList(
                 [
@@ -527,8 +542,8 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
 class SparseFeaturesListIndicesAwaitable(Awaitable[List[Awaitable[SparseFeatures]]]):
     """
     Handles the first wait for a list of two-layer awaitables of SparseFeatures.
-    Wait on this module will get lengths all2all results for each SparseFeatures, and
-    instantiate its indices all2all.
+    Wait on this module will get lengths AlltoAll results for each SparseFeatures, and
+    instantiate its indices AlltoAll.
 
     Constructor Args:
         awaitables: (List[Awaitable[Awaitable[SparseFeatures]]])

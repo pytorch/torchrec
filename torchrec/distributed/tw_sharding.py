@@ -50,6 +50,17 @@ from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
 class TwInferenceSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
+    """
+    Redistributes sparse features to all devices for inference.
+
+    Constructor Args:
+        id_list_features_per_rank (List[int]): number of id list features to send to
+            each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features to
+            send to each rank
+        world_size (int): number of devices in the topology.
+    """
+
     def __init__(
         self,
         id_list_features_per_rank: List[int],
@@ -67,10 +78,29 @@ class TwInferenceSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+        """
+        Performs OnetoAll operation on sparse features.
+
+        Call Args:
+            sparse_features (SparseFeatures): sparse features to redistribute.
+
+        Returns:
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
+                SparseFeatures.
+        """
+
         return NoWait(self._dist.forward(sparse_features))
 
 
 class TwInferencePooledEmbeddingDist(BasePooledEmbeddingDist[List[torch.Tensor]]):
+    """
+    Merges pooled embedding tensor from each device for inference.
+
+    Constructor Args:
+        device (Optional[torch.device]): device on which buffer will be allocated.
+        world_size (int): number of devices in the topology.
+    """
+
     def __init__(
         self,
         device: torch.device,
@@ -83,10 +113,34 @@ class TwInferencePooledEmbeddingDist(BasePooledEmbeddingDist[List[torch.Tensor]]
         )
 
     def forward(self, local_embs: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
+        """
+        Performs AlltoOne operation on pooled embedding tensors.
+
+        Call Args:
+            local_embs (List[torch.Tensor]): pooled embedding tensors with
+                len(local_embs) == world_size.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of merged pooled embedding tensor.
+        """
+
         return self._dist.forward(local_embs)
 
 
 class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
+    """
+    Redistributes sparse features in hierarchical fashion with an AlltoAll collective
+    operation.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        id_list_features_per_rank (List[int]): number of id list features to send to
+            each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features to
+            send to each rank
+        device (Optional[torch.device]): device on which buffers will be allocated.
+    """
+
     def __init__(
         self,
         # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
@@ -107,10 +161,32 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         self,
         sparse_features: SparseFeatures,
     ) -> Awaitable[Awaitable[SparseFeatures]]:
+        """
+        Performs AlltoAll operation on sparse features.
+
+        Call Args:
+            sparse_features (SparseFeatures): sparse features to redistribute.
+
+        Returns:
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
+                SparseFeatures.
+        """
+
         return self._dist(sparse_features)
 
 
 class TwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
+    """
+    Redistributes pooled embedding tensor in hierarchical fashion with an AlltoAll
+    collective operation.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
+            embedding in each rank.
+        device (Optional[torch.device]): device on which buffers will be allocated.
+    """
+
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -122,10 +198,31 @@ class TwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+        """
+        Performs AlltoAll operation on pooled embeddings tensor.
+
+        Call Args:
+            local_embs (torch.Tensor): tensor of values to distribute.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of pooled embeddings.
+        """
+
         return self._dist(local_embs)
 
 
 class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
+    """
+    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoAll
+    operation.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        features_per_rank (List[int]): number of features (sum of dimensions) of the
+            embedding for each host.
+        device (Optional[torch.device]): device on which buffers will be allocated.
+    """
+
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -138,6 +235,18 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
     def forward(
         self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
     ) -> Awaitable[torch.Tensor]:
+        """
+        Performs AlltoAll operation on sequence embeddings tensor.
+
+        Call Args:
+            sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
+                operation.
+            local_embs (torch.Tensor): tensor of values to distribute.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
+        """
+
         return self._dist(
             local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,

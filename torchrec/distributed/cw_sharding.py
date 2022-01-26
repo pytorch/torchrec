@@ -49,7 +49,7 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
         """
         Grabs the embedding names and dims from TwEmbeddingSharder.
 
-        Note:
+        NOTE:
             This could have duplications if there are multiple shards from the same
             table on a rank. Later on we process these to combine shards together.
         """
