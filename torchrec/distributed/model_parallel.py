@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import abc
 from collections import OrderedDict
 from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 
@@ -41,6 +42,64 @@ def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
     ]
 
 
+class DataParallelWrapper(abc.ABC):
+    """
+    Interface implemented by custom data parallel wrappers.
+    """
+
+    @abc.abstractmethod
+    def wrap(
+        self,
+        dmp: "DistributedModelParallel",
+        env: ShardingEnv,
+        device: torch.device,
+    ) -> None:
+        pass
+
+
+class DefaultDataParallelWrapper(DataParallelWrapper):
+    """
+    Default data parallel wrapper, which applies data parallel for all
+    unsharded modules.
+    """
+
+    def wrap(
+        self,
+        dmp: "DistributedModelParallel",
+        env: ShardingEnv,
+        device: torch.device,
+    ) -> None:
+        pg = env.process_group
+        if pg is None:
+            raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
+        sharded_parameter_names = set(
+            DistributedModelParallel._sharded_parameter_names(dmp.module)
+        )
+        DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
+            module=dmp.module,
+            params_and_buffers_to_ignore=[
+                key
+                for key, _ in dmp.named_parameters()
+                if key in sharded_parameter_names
+            ],
+        )
+        # initailize DDP
+        dmp.module = cast(
+            nn.Module,
+            DistributedDataParallel(
+                module=dmp.module.to(device),
+                device_ids=None if device.type == "cpu" else [device],
+                process_group=pg,
+                gradient_as_bucket_view=True,
+                broadcast_buffers=False,
+            ),
+        )
+
+        # Enable static graph for better DPP performance
+        # pyre-ignore
+        dmp.module._set_static_graph()
+
+
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     """
     Entry point to model parallelism.
@@ -67,6 +126,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         the first forward pass. Pass True if that's a case to delay initialization of data parallel modules.
         Do first forward pass and then call DistributedModelParallel.init_data_parallel().
         init_parameters: initialize parameters for modules still on meta device.
+        data_parallel_wrapper: custom wrapper for data parallel modules.
 
     Call Args:
 
@@ -87,6 +147,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         init_data_parallel: bool = True,
         init_parameters: bool = True,
+        data_parallel_wrapper: Optional[DataParallelWrapper] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
@@ -102,7 +163,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         if device is None:
             device = torch.device("cpu")
-
         self.device: torch.device = device
 
         if sharders is None:
@@ -110,6 +170,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
+
+        if data_parallel_wrapper is None:
+            data_parallel_wrapper = DefaultDataParallelWrapper()
+        self._data_parallel_wrapper: DataParallelWrapper = data_parallel_wrapper
 
         # 2. Call ShardingPlanner.collective_plan passing all found modules and corresponding sharders.
         if plan is None:
@@ -132,7 +196,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             fused_optims=fused_optims,
         )
         if init_data_parallel:
-            self._init_ddp()
+            self.init_data_parallel()
         self._optim = CombinedOptimizer(fused_optims)
 
     @property
@@ -157,7 +221,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         It's safe to call this method multiple times.
         """
         if not isinstance(self.module, DistributedDataParallel):
-            self._init_ddp()
+            # Allocate any 'meta' tensors
+            if self.init_parameters:
+                self._init_parameters(self.module)
+            self._data_parallel_wrapper.wrap(self, self._env, self.device)
 
     def _init_dmp(
         self,
@@ -216,38 +283,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                     curr_path + ".",
                     fused_optims,
                 )
-
-    def _init_ddp(self) -> None:
-        pg = self._env.process_group
-        if pg is None:
-            raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
-        sharded_parameter_names = set(self._sharded_parameter_names(self.module))
-        DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
-            module=self.module,
-            params_and_buffers_to_ignore=[
-                key
-                for key, _ in self.named_parameters()
-                if key in sharded_parameter_names
-            ],
-        )
-        # Allocate any 'meta' tensors
-        if self.init_parameters:
-            self._init_parameters(self.module)
-        # initailize DDP
-        self.module = cast(
-            nn.Module,
-            DistributedDataParallel(
-                module=self.module.to(self.device),
-                device_ids=None if self.device.type == "cpu" else [self.device],
-                process_group=pg,
-                gradient_as_bucket_view=True,
-                broadcast_buffers=False,
-            ),
-        )
-
-        # Enable static graph for better DPP performance
-        # pyre-ignore
-        self.module._set_static_graph()
 
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
@@ -377,14 +412,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         yield from self._named_parameters(self.dmp_module, prefix, recurse)
 
-    def _sharded_parameter_names(
-        self, module: nn.Module, prefix: str = ""
-    ) -> Iterator[str]:
+    @staticmethod
+    def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
         if isinstance(module, ShardedModule):
             yield from module.sharded_parameter_names(prefix)
         else:
             for name, child in module.named_children():
-                yield from self._sharded_parameter_names(
+                yield from DistributedModelParallel._sharded_parameter_names(
                     child, append_prefix(prefix, name)
                 )
 
