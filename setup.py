@@ -43,7 +43,7 @@ if __name__ == "__main__":
         torchrec_dir = os.getcwd()
         os.chdir("third_party/fbgemm/fbgemm_gpu/")
         os.system(
-            'CUDACXX=/usr/local/cuda-11.3/bin/nvcc TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
+            'TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
         )
         os.chdir(torchrec_dir)
         # check_call([sys.executable, "setup.py", "build"], cwd="third_party/fbgemm/fbgemm_gpu", env={'TORCH_CUDA_ARCH_LIST: "7.0;8.0'})
