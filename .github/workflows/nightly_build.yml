@@ -1,0 +1,154 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Python package
+
+on:
+  # Run on PRs and pushes to the default branch.
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  # run every day at 23:15am
+  schedule:
+    - cron:  '15 23 * * *'
+
+jobs:
+
+  build_gpu:
+    runs-on: linux.8xlarge.nvidia.gpu
+    steps:
+    - name: check cpu info
+      shell: bash
+      run: |
+        cat /proc/cpuinfo
+    - name: check distribution info
+      shell: bash
+      run: |
+        cat /proc/version
+    - name: Display EC2 information
+      shell: bash
+      run: |
+        set -euo pipefail
+        function get_ec2_metadata() {
+          # Pulled from instance metadata endpoint for EC2
+          # see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+          category=$1
+          curl -fsSL "http://169.254.169.254/latest/meta-data/${category}"
+        }
+        echo "ami-id: $(get_ec2_metadata ami-id)"
+        echo "instance-id: $(get_ec2_metadata instance-id)"
+        echo "instance-type: $(get_ec2_metadata instance-type)"
+    - name: check gpu info
+      shell: bash
+      run: |
+        sudo yum install lshw -y
+        sudo lshw -C display
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+    # Update references
+    - name: Git Sumbodule Update
+      run: |
+        git submodule init
+        git submodule update --remote --recursive
+        cd third_party/fbgemm/
+        git submodule sync
+        git submodule update --init --recursive
+        git log
+    - name: check amazon-linux-extras
+      run: |
+        sudo yum install -y amazon-linux-extras
+        amazon-linux-extras | grep -i python
+    - name: update python
+      run: |
+        sudo amazon-linux-extras install python3.8
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: create virtual env
+      run: |
+        sudo pip3 install --upgrade virtualenv
+        virtualenv build_binary_3.8 -p python3.8
+    - name: check python version
+      run: |
+        source build_binary_3.8/bin/activate
+        python --version
+    - name: Install CUDA 11.3
+      shell: bash
+      run: |
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        sudo yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
+        sudo yum clean expire-cache
+        sudo yum install -y nvidia-driver-latest-dkms
+        sudo yum install -y cuda-11-3
+        sudo yum install -y cuda-drivers
+        sudo yum install -y libcudnn8-devel
+    - name: setup Path
+      run: |
+        echo /usr/local/cuda-11.3/bin >> $GITHUB_PATH
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: nvcc check
+      run: |
+        nvcc --version
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        source build_binary_3.8/bin/activate
+        pip3 install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        source build_binary_3.8/bin/activate
+        pip3 install -r requirements.txt
+    - name: Test Installation of dependencies
+      run: |
+        source build_binary_3.8/bin/activate
+        python3 -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        python3 -c "import skbuild"
+        echo "skbuild succeeded"
+        python3 -c "import numpy"
+        echo "numpy succeeded"
+    - name: sudo check cmake version
+      run: |
+        source build_binary_3.8/bin/activate
+        sudo env "PATH=$PATH" cmake --version
+    - name: Build and Install TorchRec Nightly
+      run: |
+        source build_binary_3.8/bin/activate
+        rm -r dist || true
+        sudo env "PATH=$PATH" python setup.py bdist_wheel --override-name torchrec-release
+        pip3 install dist/*.whl
+    - name: Test fbgemm_gpu and torchrec installation
+      shell: bash
+      run: |
+        source build_binary_3.8/bin/activate
+        python3 -c "import fbgemm_gpu"
+        python3 -c "import torchrec"
+    - name: Test with pytest
+      continue-on-error: true
+      run: |
+        source build_binary_3.8/bin/activate
+        pip3 install pytest
+        cd torchrec
+        python3 -m pytest -s -v -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+    - name: Upload wheel as GHA artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: torchrec_nightly.whl
+        path: dist/*.whl
+    - name: Push TorchRec Binary to Test PYPI
+      env:
+          TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
+      run: |
+        source build_binary_3.8/bin/activate
+        pip3 install twine
+        twine upload --repository-url https://test.pypi.org/legacy/ \
+            --username __token__ \
+            --password "$TEST_PYPI_TOKEN" \
+            dist/*
