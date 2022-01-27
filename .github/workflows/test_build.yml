@@ -10,7 +10,7 @@ jobs:
 
 
   build_gpu:
-    runs-on: linux.8xlarge.nvidia.gpu
+    runs-on: linux.4xlarge.nvidia.gpu
     steps:
     - name: check cpu info
       shell: bash
