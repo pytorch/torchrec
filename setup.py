@@ -43,7 +43,7 @@ if __name__ == "__main__":
         torchrec_dir = os.getcwd()
         os.chdir("third_party/fbgemm/fbgemm_gpu/")
         os.system(
-            'sudo env "PATH=$PATH"  TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
+            'env "PATH=$PATH"  TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
         )
         os.chdir(torchrec_dir)
 
