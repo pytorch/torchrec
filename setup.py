@@ -14,6 +14,7 @@ from datetime import date
 
 from setuptools import setup, find_packages
 from subprocess import check_call
+from subprocess import check_output
 
 def get_version():
     # get version string from version.py
@@ -40,13 +41,16 @@ if __name__ == "__main__":
 
     else:
         print("Installing fbgemm_gpu")
-#         torchrec_dir = os.getcwd()
-#         os.chdir("third_party/fbgemm/fbgemm_gpu/")
-#         os.system(
-#             'TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
-#         )
-#         os.chdir(torchrec_dir)
-        check_call([sys.executable, "setup.py", "build"], cwd="third_party/fbgemm/fbgemm_gpu", env={'TORCH_CUDA_ARCH_LIST': '7.0;8.0'})
+        # torchrec_dir = os.getcwd()
+        # os.chdir("third_party/fbgemm/fbgemm_gpu/")
+        # os.system(
+        #     'TORCH_CUDA_ARCH_LIST="7.0;8.0" python setup.py build'
+        # )
+        # os.chdir(torchrec_dir)
+        my_env = os.environ.copy()
+        my_env['TORCH_CUDA_ARCH_LIST'] = "7.0;8.0"
+        out = check_output([sys.executable, "setup.py", "build"], cwd="third_party/fbgemm/fbgemm_gpu", env=my_env)
+        print(out)
 
     name = "torchrec"
     NAME_ARG = "--override-name"
