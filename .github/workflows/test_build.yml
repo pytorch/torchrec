@@ -69,7 +69,7 @@ jobs:
         sudo pip3 install --upgrade pip
     - name: create virtual env
       run: |
-        sudo pip3 install --upgrade virtualenv
+        pip3 install --upgrade virtualenv
         virtualenv build_binary_3.8 -p python3.8
     - name: check python version
       run: |
@@ -114,16 +114,12 @@ jobs:
         echo "skbuild succeeded"
         python3 -c "import numpy"
         echo "numpy succeeded"
-    - name: sudo check cmake version
-      run: |
-        source build_binary_3.8/bin/activate
-        sudo env "PATH=$PATH" cmake --version
     - name: Build and Install TorchRec Nightly
       continue-on-error: true
       run: |
         source build_binary_3.8/bin/activate
         rm -r dist || true
-        sudo env "PATH=$PATH" python setup.py bdist_wheel --override-name torchrec-release
+        env "PATH=$PATH" python setup.py bdist_wheel --override-name torchrec-release
         pip3 install dist/*.whl
     - name: Test fbgemm_gpu and torchrec installation
       continue-on-error: true
