@@ -12,7 +12,6 @@
 #include <stdexcept>
 
 #include <c10/cuda/CUDAGuard.h>
-#include <caffe2/torch/csrc/deploy/deploy.h>
 #include <fmt/format.h>
 #include <folly/MPMCQueue.h>
 #include <folly/ScopeGuard.h>
@@ -23,6 +22,7 @@
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <torch/csrc/deploy/deploy.h> // @manual
 
 #include "torchrec/inference/BatchingQueue.h"
 
