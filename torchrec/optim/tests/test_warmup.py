@@ -50,7 +50,7 @@ class TestWarmupOptimizer(unittest.TestCase):
             warmup_optimizer_1.step()
 
         param_state = list(warmup_optimizer_1.state.values())[0]
-        self.assertEquals(
+        self.assertEqual(
             param_state["warmup"].tolist()[0],
             num_iters,
         )

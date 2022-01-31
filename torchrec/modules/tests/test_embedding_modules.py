@@ -178,7 +178,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
         ebc = EmbeddingBagCollection(tables=[config], device=torch.device("meta"))
-        self.assertEquals(torch.device("meta"), ebc.embedding_bags["t1"].weight.device)
+        self.assertEqual(torch.device("meta"), ebc.embedding_bags["t1"].weight.device)
 
 
 class EmbeddingCollectionTest(unittest.TestCase):
@@ -266,4 +266,4 @@ class EmbeddingCollectionTest(unittest.TestCase):
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
         eb = EmbeddingCollection(tables=[config], device=torch.device("meta"))
-        self.assertEquals(torch.device("meta"), eb.embeddings["t1"].weight.device)
+        self.assertEqual(torch.device("meta"), eb.embeddings["t1"].weight.device)
