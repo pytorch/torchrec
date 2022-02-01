@@ -69,13 +69,13 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for name, param in self.position_weights.items():
             yield append_prefix(prefix, f"position_weights.{name}"), param
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 
