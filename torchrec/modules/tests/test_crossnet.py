@@ -168,7 +168,3 @@ class TestLowRankMixtureCrossNet(unittest.TestCase):
         # dry-run to initialize lazy module
         gm = GraphModule(dcn, Tracer().trace(dcn))
         torch.jit.script(gm)
-
-
-if __name__ == "__main__":
-    unittest.main()

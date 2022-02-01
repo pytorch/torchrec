@@ -50,7 +50,3 @@ class PositionWeightsAttacherTest(unittest.TestCase):
 
         gm = torch.fx.GraphModule(pw, Tracer().trace(pw))
         torch.jit.script(gm)
-
-
-if __name__ == "__main__":
-    unittest.main()

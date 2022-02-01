@@ -20,7 +20,7 @@ from torchrec.distributed.planner.types import (
     Topology,
     PartitionByType,
 )
-from torchrec.distributed.tests.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import (

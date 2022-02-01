@@ -18,7 +18,7 @@ from torchrec.optim.keyed import (
     OptimizerWrapper,
     KeyedOptimizerWrapper,
 )
-from torchrec.tests.utils import get_free_port
+from torchrec.test_utils import get_free_port
 
 
 class TestKeyedOptimizer(unittest.TestCase):
@@ -235,7 +235,3 @@ class TestOptimizerWrapper(unittest.TestCase):
         # pyre-ignore[16]
         self.assertEqual(keyed_optimizer.param_groups[0]["param_group_val_0"], 998)
         self.assertEqual(optimizer_wrapper.param_groups[0]["param_group_val_0"], 998)
-
-
-if __name__ == "__main__":
-    unittest.main()

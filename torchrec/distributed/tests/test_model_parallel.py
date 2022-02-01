@@ -30,14 +30,16 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.tests.test_model import (
+from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
     TestSparseNNBase,
     TestEBCSharder,
     TestEBSharder,
     ModelInput,
 )
-from torchrec.distributed.tests.test_model_parallel_base import ModelParallelTestBase
+from torchrec.distributed.test_utils.test_model_parallel_base import (
+    ModelParallelTestBase,
+)
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardedTensor,
@@ -45,7 +47,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.tests.utils import (
+from torchrec.test_utils import (
     get_free_port,
     skip_if_asan_class,
     init_distributed_single_host,

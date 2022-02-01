@@ -11,9 +11,9 @@ import unittest
 import uuid
 
 from torch.distributed.launcher.api import elastic_launch, LaunchConfig
-from torchrec.datasets.tests.criteo_test_utils import CriteoTest
+from torchrec import test_utils
+from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
 from torchrec.examples.dlrm.dlrm_main import main
-from torchrec.tests import utils
 
 
 class MainTest(unittest.TestCase):
@@ -38,7 +38,7 @@ class MainTest(unittest.TestCase):
             ]
         )
 
-    @utils.skip_if_asan
+    @test_utils.skip_if_asan
     def test_main_function(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             lc = LaunchConfig(
@@ -80,7 +80,7 @@ class MainTest(unittest.TestCase):
                 ]
             )
 
-    @utils.skip_if_asan
+    @test_utils.skip_if_asan
     def test_main_function_criteo_in_memory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             lc = LaunchConfig(

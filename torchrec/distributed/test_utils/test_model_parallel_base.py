@@ -21,7 +21,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.tests.test_model import (
+from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestSparseNNBase,
 )
@@ -34,7 +34,7 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
-from torchrec.tests.utils import (
+from torchrec.test_utils import (
     get_free_port,
     seed_and_log,
     init_distributed_single_host,

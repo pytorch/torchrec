@@ -20,7 +20,7 @@ from torchrec.datasets.criteo import (
     CAT_FEATURE_COUNT,
 )
 from torchrec.datasets.criteo import criteo_kaggle, criteo_terabyte
-from torchrec.datasets.tests.criteo_test_utils import CriteoTest
+from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
 from torchrec.datasets.utils import Batch
 
 

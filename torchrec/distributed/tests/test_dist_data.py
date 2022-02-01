@@ -27,7 +27,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAllLengthsAwaitable,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.tests.utils import get_free_port, seed_and_log
+from torchrec.test_utils import get_free_port, seed_and_log
 
 
 T = TypeVar("T", int, float)

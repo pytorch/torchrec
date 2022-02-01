@@ -422,8 +422,13 @@ class TestSparseNN(TestSparseNNBase):
 
 class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any] = {}
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
+        if fused_params is None:
+            fused_params = {}
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
         self._fused_params = fused_params

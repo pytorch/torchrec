@@ -29,7 +29,3 @@ class CodeQualityTest(unittest.TestCase):
                         MAX_NUM_ARGS_IN_MODULE_CTOR, class_name, num_args_excluding_self
                     ),
                 )
-
-
-if __name__ == "__main__":
-    unittest.main()

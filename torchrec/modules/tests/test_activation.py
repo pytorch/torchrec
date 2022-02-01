@@ -26,7 +26,3 @@ class TestActivation(unittest.TestCase):
 
         gm = torch.fx.GraphModule(m, Tracer().trace(m))
         torch.jit.script(gm)
-
-
-if __name__ == "__main__":
-    unittest.main()

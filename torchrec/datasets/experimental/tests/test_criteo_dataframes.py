@@ -10,7 +10,7 @@ import contextlib
 import torcharrow as ta
 from torch.utils.data import IterDataPipe
 from torchrec.datasets.experimental.criteo_dataframes import criteo_dataframes_from_tsv
-from torchrec.datasets.tests.criteo_test_utils import CriteoTest
+from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
 
 
 class CriteoDataFramesTest(CriteoTest):

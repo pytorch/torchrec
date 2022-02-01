@@ -16,7 +16,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
 from torchrec.distributed.planner.types import Topology, ShardingOption
-from torchrec.distributed.tests.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 

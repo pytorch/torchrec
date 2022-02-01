@@ -22,7 +22,7 @@ from torchrec.distributed.embeddingbag import (
     ShardedEmbeddingBagCollection,
     EmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.tests.test_model import (
+from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
     ModelInput,
     TestEBCSharder,
@@ -45,7 +45,7 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
-from torchrec.tests.utils import get_free_port, init_distributed_single_host
+from torchrec.test_utils import get_free_port, init_distributed_single_host
 
 
 class TestShardedEmbeddingBagCollection(

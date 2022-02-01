@@ -297,7 +297,3 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
         net(torch.tensor(2.0))
         # pyre-ignore[29]
         self.assertTrue(torch.allclose(net[0].param, torch.tensor(7.0)))
-
-
-if __name__ == "__main__":
-    unittest.main()

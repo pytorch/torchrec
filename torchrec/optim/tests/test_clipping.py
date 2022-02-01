@@ -10,7 +10,7 @@ import unittest
 import torch
 from torch.autograd import Variable
 from torchrec.optim.clipping import GradientClippingOptimizer, GradientClipping
-from torchrec.optim.tests.test_utils import DummyKeyedOptimizer
+from torchrec.optim.test_utils import DummyKeyedOptimizer
 
 
 class TestGradientClippingOptimizer(unittest.TestCase):

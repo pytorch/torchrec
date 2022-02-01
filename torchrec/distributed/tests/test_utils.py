@@ -21,12 +21,12 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.tests.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.utils import get_unsharded_module_names
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.sparse.tests.tests_utils import keyed_jagged_tensor_equals
-from torchrec.tests.utils import get_free_port
+from torchrec.sparse.test_utils import keyed_jagged_tensor_equals
+from torchrec.test_utils import get_free_port
 
 
 class UtilsTest(unittest.TestCase):

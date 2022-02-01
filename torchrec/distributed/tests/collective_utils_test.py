@@ -18,7 +18,7 @@ from torchrec.distributed.collective_utils import (
     invoke_on_rank_and_broadcast_result,
     run_on_leader,
 )
-from torchrec.tests.utils import seed_and_log, get_free_port
+from torchrec.test_utils import seed_and_log, get_free_port
 
 
 class CollectiveUtilsTest(unittest.TestCase):

@@ -23,7 +23,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollectionSharder,
 )
-from torchrec.distributed.tests.test_model import (
+from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
     TestEBCSharder,
 )

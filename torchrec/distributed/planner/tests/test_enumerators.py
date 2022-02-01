@@ -26,7 +26,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import prod
-from torchrec.distributed.tests.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection

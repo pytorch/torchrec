@@ -70,7 +70,3 @@ class TestWarmupOptimizer(unittest.TestCase):
             warmup_optimizer_1.state_dict()["state"]["__warmup"],
             warmup_optimizer_2.state_dict()["state"]["__warmup"],
         )
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -107,7 +107,3 @@ class TestMLP(unittest.TestCase):
 
         gm = symbolic_trace(m)
         torch.jit.script(gm)
-
-
-if __name__ == "__main__":
-    unittest.main()
