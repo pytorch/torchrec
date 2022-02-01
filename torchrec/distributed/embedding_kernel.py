@@ -174,7 +174,7 @@ class GroupedEmbedding(BaseEmbedding):
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for config, emb_module in zip(
             self._config.embedding_tables,
@@ -320,7 +320,7 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for config, emb_module in zip(
             self._config.embedding_tables,
