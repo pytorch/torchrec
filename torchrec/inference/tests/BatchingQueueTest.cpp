@@ -24,7 +24,8 @@ std::shared_ptr<PredictionRequest> createRequest(
     size_t numFeatures,
     size_t batchSize) {
   auto ret = std::make_shared<PredictionRequest>();
-  ret->float_features.num_features = numFeatures;
+  FloatFeatures feature;
+  feature.num_features = numFeatures;
   auto values = std::unique_ptr<float[]>(new float[numFeatures * batchSize]);
 
   for (auto b = 0; b < batchSize; ++b) {
@@ -33,11 +34,13 @@ std::shared_ptr<PredictionRequest> createRequest(
     }
   }
   ret->batch_size = batchSize;
-  ret->float_features.values = folly::IOBuf(
+  feature.values = folly::IOBuf(
       folly::IOBuf::TAKE_OWNERSHIP,
       values.release(),
       numFeatures * batchSize * sizeof(float));
-  ret->float_features.num_features = numFeatures;
+  feature.num_features = numFeatures;
+  ret->features["float_features"] = std::move(feature);
+
   return ret;
 }
 
@@ -52,7 +55,10 @@ TEST(BatchingQueueTest, Basic) {
   std::vector<BatchQueueCb> batchQueueCbs;
   batchQueueCbs.push_back(
       [&](std::shared_ptr<PredictionBatch> batch) { res = batch; });
-  BatchingQueue queue(batchQueueCbs, BatchingQueue::Config{}, 1);
+  BatchingQueue queue(
+      batchQueueCbs,
+      BatchingQueue::Config{.batchingMetadata = {{"float_features", "dense"}}},
+      1);
   auto guard = folly::makeGuard([&] { queue.stop(); });
 
   queue.add(
@@ -72,7 +78,7 @@ TEST(BatchingQueueTest, Basic) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  ASSERT_EQ(2 * (2 + 4), value->float_features.numel());
+  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("float_features").numel());
 }
 
 } // namespace torchrec

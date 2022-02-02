@@ -10,6 +10,8 @@
 
 #include <map>
 #include <memory>
+#include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <folly/io/IOBuf.h>
@@ -32,12 +34,12 @@ struct FloatFeatures {
   folly::IOBuf values;
 };
 
+// TODO: Change the input format to torch::IValue.
+using Feature = std::variant<SparseFeatures, FloatFeatures>;
+
 struct PredictionRequest {
   uint32_t batch_size;
-  FloatFeatures float_features;
-  SparseFeatures id_list_features;
-  SparseFeatures id_score_list_features;
-  FloatFeatures embedding_features;
+  std::unordered_map<std::string, Feature> features;
 };
 
 struct PredictionResponse {

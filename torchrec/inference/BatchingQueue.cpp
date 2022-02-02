@@ -33,29 +33,20 @@ using namespace std::chrono_literals;
 namespace torchrec {
 
 void PredictionBatch::cuda() {
-  float_features = float_features.to(at::kCUDA, /* non_blocking */ true);
-  id_list_features.lengths =
-      id_list_features.lengths.to(at::kCUDA, /* non_blocking */ true);
-  id_list_features.values =
-      id_list_features.values.to(at::kCUDA, /* non_blocking */ true);
-  id_score_list_features.lengths =
-      id_score_list_features.lengths.to(at::kCUDA, /* non_blocking */ true);
-  id_score_list_features.values =
-      id_score_list_features.values.to(at::kCUDA, /* non_blocking */ true);
-  id_score_list_features.weights =
-      id_score_list_features.weights.to(at::kCUDA, /* non_blocking */ true);
-  embedding_features =
-      embedding_features.to(at::kCUDA, /* non_blocking */ true);
+  c10::Dict<std::string, at::Tensor> forwardArgsCuda;
+  for (auto& iter : forwardArgs) {
+    forwardArgsCuda.insert(
+        iter.key(), iter.value().to(at::kCUDA, /* non_blocking */ true));
+  }
+  forwardArgs = std::move(forwardArgsCuda);
 }
 
 size_t PredictionBatch::size() const {
-  const auto jaggedSize = [](const JaggedTensor& tensor) {
-    return tensor.lengths.storage().nbytes() +
-        tensor.values.storage().nbytes() + tensor.weights.storage().nbytes();
-  };
-  return float_features.storage().nbytes() + jaggedSize(id_list_features) +
-      jaggedSize(id_score_list_features) +
-      embedding_features.storage().nbytes();
+  size_t size = 0;
+  for (auto& iter : forwardArgs) {
+    size += iter.value().storage().nbytes();
+  }
+  return size;
 }
 
 BatchingQueue::BatchingQueue(
@@ -67,6 +58,13 @@ BatchingQueue::BatchingQueue(
       batchQueues_(worldSize),
       stopping_(false),
       worldSize_(worldSize) {
+  for (const auto& [_, batchingFuncName] : config_.batchingMetadata) {
+    if (batchingFuncs_.count(batchingFuncName) > 0) {
+      continue;
+    }
+    batchingFuncs_[batchingFuncName] =
+        TorchRecBatchingFuncRegistry()->Create(batchingFuncName);
+  }
   for (int i = 0; i < worldSize_; i++) {
     auto queue = std::make_shared<folly::MPMCQueue<BatchingQueueEntry>>(
         folly::MPMCQueue<BatchingQueueEntry>(1000));
@@ -198,23 +196,23 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         }
 
         BatchQueueEntry batchedEntry;
+
+        c10::Dict<std::string, at::Tensor> forwardArgs;
+        auto combineForwardArgs =
+            [&](std::unordered_map<std::string, at::Tensor> map) {
+              for (auto& [key, value] : map) {
+                CHECK(!forwardArgs.contains(key));
+                forwardArgs.insert(key, std::move(value));
+              }
+            };
+
+        for (auto& [featureName, batchingFuncName] : config_.batchingMetadata) {
+          combineForwardArgs(
+              batchingFuncs_[batchingFuncName]->batch(featureName, requests));
+        }
+
         batchedEntry.batch = std::make_shared<PredictionBatch>(PredictionBatch{
-            combinedBatchSize,
-            combineFloat(requests),
-            combineSparse(
-                requests,
-                [](const PredictionRequest& request) -> const SparseFeatures& {
-                  return request.id_list_features;
-                },
-                /* isWeighted */ false),
-            combineSparse(
-                requests,
-                [](const PredictionRequest& request) -> const SparseFeatures& {
-                  return request.id_score_list_features;
-                },
-                /* isWeighted */ true),
-            combineEmbedding(requests),
-            std::move(contexts)});
+            combinedBatchSize, std::move(forwardArgs), std::move(contexts)});
         batchedEntry.batch->cuda();
         batchedEntry.event.record();
         batchedEntry.addedTime = std::chrono::steady_clock::now();

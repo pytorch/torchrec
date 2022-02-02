@@ -49,6 +49,13 @@ class PredictFactory(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def batching_metadata(self) -> Dict[str, str]:
+        """
+        Returns a dict from input name to feature type. This infomation is used for batching.
+        """
+        pass
+
 
 class PredictModule(torch.nn.Module):
     """

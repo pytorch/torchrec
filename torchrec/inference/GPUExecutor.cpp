@@ -144,30 +144,9 @@ void GPUExecutor::process(int idx) {
     at::IValue predictions;
 
     try {
-      auto start = std::chrono::steady_clock::now();
-
-      c10::Dict<std::string, at::Tensor> input;
-      input.insert("float_features", std::move(batch->float_features));
-      input.insert(
-          "id_list_features.values", std::move(batch->id_list_features.values));
-      input.insert(
-          "id_list_features.lengths",
-          std::move(batch->id_list_features.lengths));
-      input.insert(
-          "id_score_list_features.values",
-          std::move(batch->id_score_list_features.values));
-      input.insert(
-          "id_score_list_features.lengths",
-          std::move(batch->id_score_list_features.lengths));
-      input.insert(
-          "id_score_list_features.weights",
-          std::move(batch->id_score_list_features.weights));
-      input.insert("embedding_features", std::move(batch->embedding_features));
-      {
-        RECORD_USER_SCOPE("Forward");
-        predictions =
-            model.self.attr("__call__")({std::move(input)}).toIValue();
-      }
+      RECORD_USER_SCOPE("Forward");
+      predictions = model.self.attr("__call__")({std::move(batch->forwardArgs)})
+                        .toIValue();
     } catch (const std::exception& ex) {
       LOG(ERROR) << "Exception during predict, msg: " << ex.what();
     }

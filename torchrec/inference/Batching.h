@@ -12,21 +12,43 @@
 #include <vector>
 
 #include <ATen/ATen.h>
+#include <c10/util/Registry.h>
 
 #include "torchrec/inference/JaggedTensor.h"
 #include "torchrec/inference/Types.h"
 
 namespace torchrec {
 
-at::Tensor combineFloat(
+class BatchingFunc {
+ public:
+  virtual ~BatchingFunc() = default;
+
+  virtual std::unordered_map<std::string, at::Tensor> batch(
+      const std::string& /* featureName */,
+      const std::vector<std::shared_ptr<PredictionRequest>>& /* requests */) {
+    return {};
+  }
+};
+
+/**
+ * TorchRecBatchingFuncRegistry is used to register custom batching functions.
+ */
+C10_DECLARE_REGISTRY(TorchRecBatchingFuncRegistry, BatchingFunc);
+
+#define REGISTER_TORCHREC_BATCHING_FUNC(name, ...) \
+  C10_REGISTER_CLASS(TorchRecBatchingFuncRegistry, name, __VA_ARGS__);
+
+std::unordered_map<std::string, at::Tensor> combineFloat(
+    const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests);
 
-JaggedTensor combineSparse(
+std::unordered_map<std::string, at::Tensor> combineSparse(
+    const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests,
-    std::function<const SparseFeatures&(const PredictionRequest&)> accessor,
     bool isWeighted);
 
-at::Tensor combineEmbedding(
+std::unordered_map<std::string, at::Tensor> combineEmbedding(
+    const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests);
 
 } // namespace torchrec

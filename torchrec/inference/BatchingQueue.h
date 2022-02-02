@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <queue>
+#include <unordered_map>
 
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAEvent.h> // @manual
@@ -37,14 +38,8 @@ struct RequestContext {
 
 struct PredictionBatch {
   size_t batch_size;
-  // B x F
-  at::Tensor float_features;
-  // T x B x L (jagged)
-  torchrec::JaggedTensor id_list_features;
-  // T x B x L (jagged)
-  torchrec::JaggedTensor id_score_list_features;
-  // B x E x F
-  at::Tensor embedding_features;
+
+  c10::Dict<std::string, at::Tensor> forwardArgs;
 
   std::vector<RequestContext> contexts;
 
@@ -65,6 +60,8 @@ class BatchingQueue {
     std::chrono::milliseconds queueTimeout = std::chrono::milliseconds(500);
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
+    // For feature name to BatchingFunc name.
+    std::unordered_map<std::string, std::string> batchingMetadata;
   };
 
   BatchingQueue(const BatchingQueue&) = delete;
@@ -109,6 +106,9 @@ class BatchingQueue {
 
   const Config config_;
 
+  // Batching func name to batching func instance.
+  std::unordered_map<std::string, std::unique_ptr<torchrec::BatchingFunc>>
+      batchingFuncs_;
   std::vector<BatchQueueCb> cbs_;
   std::thread batchingThread_;
   std::vector<std::thread> memPinnerThreads_;
