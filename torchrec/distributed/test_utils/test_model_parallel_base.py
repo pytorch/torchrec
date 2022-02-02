@@ -14,6 +14,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torchrec.distributed.comm import _INTRA_PG, _CROSS_PG
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import (
@@ -197,6 +198,11 @@ class ModelParallelTestBase(unittest.TestCase):
 
         # Compare predictions of sharded vs unsharded models.
         torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+
+        if _INTRA_PG is not None:
+            dist.destroy_process_group(_INTRA_PG)
+        if _CROSS_PG is not None:
+            dist.destroy_process_group(_CROSS_PG)
         dist.destroy_process_group(pg)
 
         torch.use_deterministic_algorithms(False)
