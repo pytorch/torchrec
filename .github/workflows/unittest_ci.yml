@@ -22,6 +22,7 @@ jobs:
       with:
         submodules: true
     # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
     - name: Git Sumbodule Update
       run: |
         git submodule init
@@ -91,16 +92,18 @@ jobs:
       run: |
         source build_binary_3.8/bin/activate
         rm -r dist || true
-        python setup.py bdist_wheel --override_name torchrec-test --TORCH_CUDA_ARCH_LIST '7.0;8.0'
+        python setup.py bdist_wheel --pacakge_name torchrec-test --TORCH_CUDA_ARCH_LIST '7.0;8.0'
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrec-test.whl
-        path: dist/*.whl
+        name: torchrec_test.whl
+        path: dist/torchrec_test-*.whl
 
   # download from GHA, test on gpu and push to pypi
   test_on_gpu:
     needs: build_on_cpu
+    # the glibc version should match the version of the one we used to build the binary
+    # for this case, it's 2.26
     runs-on: linux.4xlarge.nvidia.gpu
     steps:
     - name: Check ldd --version
@@ -137,6 +140,7 @@ jobs:
       with:
         submodules: true
     # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
     - name: Git Sumbodule Update
       run: |
         git submodule init
@@ -206,14 +210,14 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec-test.whl
+        name: torchrec_test.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Install TorchRec
       run: |
         source build_binary_3.8/bin/activate
         rm -r dist || true
-        pip3 install *.whl
+        pip3 install torchrec_test-*.whl
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
@@ -227,4 +231,4 @@ jobs:
         source build_binary_3.8/bin/activate
         pip3 install pytest
         cd torchrec
-        python3 -m pytest -s -v -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+        python3 -m pytest -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
