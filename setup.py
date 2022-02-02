@@ -112,7 +112,7 @@ def main(argv: List[str]) -> None:
         url="https://github.com/pytorch/torchrec",
         license="BSD-3",
         keywords=["pytorch", "recommendation systems", "sharding"],
-        python_requires=">=3.8",
+        python_requires=">=3.7",
         install_requires=reqs.strip().split("\n"),
         packages=find_packages(exclude=("*tests",))
         + find_packages(fbgemm_install_base),
@@ -132,7 +132,7 @@ def main(argv: List[str]) -> None:
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: BSD License",
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.7",
             "Topic :: Scientific/Engineering :: Artificial Intelligence",
         ],
     )
