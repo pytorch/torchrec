@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 import torch
 import torch.nn as nn
@@ -57,9 +57,10 @@ class PredictFactory(abc.ABC):
         pass
 
 
-class PredictModule(torch.nn.Module):
+class PredictModule(nn.Module):
     """
-    Interface for modules to work in a torch.deploy based backend.
+    Interface for modules to work in a torch.deploy based backend. Users should
+    override predict_forward to convert batch input format to module input format.
 
     Call Args:
         batch: a dict of input tensors
@@ -68,18 +69,31 @@ class PredictModule(torch.nn.Module):
         output: a dict of output tensors
 
     Constructor Args:
+        module: the actual predict module
         device: the primary device for this module that will be used in forward calls.
 
     Example:
         >>> module = PredictModule(torch.device("cuda", torch.cuda.current_device()))
     """
 
-    def __init__(self, device: Optional[torch.device] = None) -> None:
-        self.device: torch.device = (
+    def __init__(
+        self, module: nn.Module, device: Optional[torch.device] = None
+    ) -> None:
+        super().__init__()
+        self._module: nn.Module = module
+        self._device: torch.device = (
             torch.device("cuda", torch.cuda.current_device())
             if device is None
             else device
         )
+
+        self._module.eval()
+
+    @property
+    def predict_module(
+        self,
+    ) -> nn.Module:
+        return self._module
 
     @abc.abstractmethod
     def predict_forward(
@@ -88,8 +102,16 @@ class PredictModule(torch.nn.Module):
         pass
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        with torch.cuda.device(self.device), torch.inference_mode():
+        with torch.cuda.device(self._device), torch.inference_mode():
             return self.predict_forward(batch)
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        return self._module.state_dict(destination, prefix, keep_vars)
 
 
 class MultistreamPredictModule(PredictModule):
@@ -97,9 +119,11 @@ class MultistreamPredictModule(PredictModule):
     Interface derived from PredictModule that supports using different CUDA streams in forward calls.
     """
 
-    def __init__(self, device: Optional[torch.device] = None) -> None:
-        super().__init__(device)
-        self.stream: Optional[torch.cuda.streams.Stream] = None
+    def __init__(
+        self, module: nn.Module, device: Optional[torch.device] = None
+    ) -> None:
+        super().__init__(module, device)
+        self._stream: Optional[torch.cuda.streams.Stream] = None
 
     @abc.abstractmethod
     def predict_forward(
@@ -108,9 +132,9 @@ class MultistreamPredictModule(PredictModule):
         pass
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        if self.stream is None:
+        if self._stream is None:
             # Lazily initialize stream to make sure it's created in the correct device.
-            self.stream = torch.cuda.Stream(device=self.device)
+            self._stream = torch.cuda.Stream(device=self._device)
 
-        with torch.cuda.stream(self.stream):
+        with torch.cuda.stream(self._stream):
             return super().forward(batch)
