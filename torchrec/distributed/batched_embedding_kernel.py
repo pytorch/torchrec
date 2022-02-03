@@ -424,12 +424,12 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         return self._optim
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
             self._config.embedding_tables,
@@ -471,7 +471,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         return self._emb_module
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]
@@ -678,12 +678,12 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         return self._optim
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
             self._config.embedding_tables,
@@ -725,7 +725,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         return self._emb_module
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]

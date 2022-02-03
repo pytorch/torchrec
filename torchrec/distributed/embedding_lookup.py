@@ -184,13 +184,13 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
@@ -370,7 +370,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
@@ -378,7 +378,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
@@ -466,13 +466,13 @@ class InferGroupedPooledEmbeddingsLookup(
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for rank_modules in self._embedding_lookups_per_rank:
             yield from rank_modules.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for rank_modules in self._embedding_lookups_per_rank:
             yield from rank_modules.named_buffers(prefix, recurse)

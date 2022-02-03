@@ -396,11 +396,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         )
 
     def _named_parameters(
-        self,
-        module: nn.Module,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
+        self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
@@ -412,11 +408,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(
-            self.dmp_module, prefix, recurse, remove_duplicate
-        )
+        yield from self._named_parameters(self.dmp_module, prefix, recurse)
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
@@ -429,32 +423,21 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def _named_buffers(
-        self,
-        module: nn.Module,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
+        self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         if isinstance(module, ShardedModule):
-            yield from module.named_buffers(prefix, recurse, remove_duplicate)
+            yield from module.named_buffers(prefix, recurse)
         else:
-            yield from module.named_buffers(
-                prefix, recurse=False, remove_duplicate=True
-            )
+            yield from module.named_buffers(prefix, recurse=False)
             for name, child in module.named_children():
                 yield from self._named_buffers(
-                    child, append_prefix(prefix, name), recurse, remove_duplicate
+                    child, append_prefix(prefix, name), recurse
                 )
 
     def named_buffers(
-        self,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from self._named_buffers(
-            self.dmp_module, prefix, recurse, remove_duplicate
-        )
+        yield from self._named_buffers(self.dmp_module, prefix, recurse)
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

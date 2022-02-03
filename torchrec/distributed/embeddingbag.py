@@ -441,7 +441,7 @@ class ShardedEmbeddingBagCollectionBase(
         yield from [(prefix, self)]
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for lookup in self._lookups:
             yield from lookup.named_parameters(
@@ -460,7 +460,7 @@ class ShardedEmbeddingBagCollectionBase(
                 yield name
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for lookup in self._lookups:
             yield from lookup.named_buffers(
@@ -731,7 +731,7 @@ class ShardedEmbeddingBag(
         yield from [(prefix, self)]
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for name, parameter in self._lookup.named_parameters("", recurse):
             # update name to match embeddingBag parameter name
@@ -745,7 +745,7 @@ class ShardedEmbeddingBag(
                 yield append_prefix(prefix, name.split(".")[-1])
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for name, buffer in self._lookup.named_buffers("", recurse):
             yield append_prefix(prefix, name.split(".")[-1]), buffer

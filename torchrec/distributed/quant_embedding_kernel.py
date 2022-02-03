@@ -103,7 +103,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         )
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, weight in zip(
             self._config.embedding_tables,
