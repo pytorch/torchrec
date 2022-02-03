@@ -22,10 +22,15 @@ class TestAllToAll(unittest.TestCase):
     @seed_and_log
     def setUp(self) -> None:
         os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
         os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
-        os.environ["MASTER_PORT"] = str(get_free_port())
         self.WORLD_SIZE = 2
+
+    def tearDown(self) -> None:
+        del os.environ["GLOO_DEVICE_TRANSPORT"]
+        del os.environ["NCCL_SOCKET_IFNAME"]
+        super().tearDown()
 
     def _run_multi_process_test(
         self,

@@ -168,6 +168,12 @@ class DistDataTestCase(abc.ABC, unittest.TestCase):
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
         self.WORLD_SIZE = 2
 
+    def tearDown(self) -> None:
+        del os.environ["GLOO_DEVICE_TRANSPORT"]
+        del os.environ["NCCL_SOCKET_IFNAME"]
+        # pyre-fixme[16]
+        super().tearDown()
+
     def _run_multi_process_test(
         self,
         _input: Union[List[KeyedJaggedTensor], List[torch.Tensor]],

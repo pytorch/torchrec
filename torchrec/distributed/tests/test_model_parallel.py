@@ -476,44 +476,6 @@ class ModelParallelTest(ModelParallelTestBase):
             backend="gloo",
         )
 
-    def test_parameter_init(self) -> None:
-        class MyModel(nn.Module):
-            def __init__(self, device: str, val: float) -> None:
-                super().__init__()
-                self.p = nn.Parameter(
-                    torch.empty(3, dtype=torch.float32, device=device)
-                )
-                self.val = val
-                self.reset_parameters()
-
-            def reset_parameters(self) -> None:
-                nn.init.constant_(self.p, self.val)
-
-        pg = init_distributed_single_host(rank=0, world_size=1, backend="gloo")
-
-        # Check that already allocated parameters are left 'as is'.
-        cpu_model = MyModel(device="cpu", val=3.2)
-        sharded_model = DistributedModelParallel(
-            cpu_model,
-            env=ShardingEnv.from_process_group(pg),
-        )
-        sharded_param = next(sharded_model.parameters())
-        np.testing.assert_array_equal(
-            np.array([3.2, 3.2, 3.2], dtype=np.float32), sharded_param.detach().numpy()
-        )
-
-        # Check that parameters over 'meta' device are allocated and initialized.
-        meta_model = MyModel(device="meta", val=7.5)
-        sharded_model = DistributedModelParallel(
-            meta_model,
-            env=ShardingEnv.from_process_group(pg),
-        )
-        sharded_param = next(sharded_model.parameters())
-        np.testing.assert_array_equal(
-            np.array([7.5, 7.5, 7.5], dtype=np.float32), sharded_param.detach().numpy()
-        )
-        dist.destroy_process_group(pg)
-
     def _test_sharding(
         self,
         sharders: List[ModuleSharder[nn.Module]],
@@ -545,7 +507,6 @@ class ModelParallelStateDictTest(unittest.TestCase):
         os.environ["LOCAL_WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
@@ -581,8 +542,9 @@ class ModelParallelStateDictTest(unittest.TestCase):
         ]
 
     def tearDown(self) -> None:
-        super().tearDown()
         dist.destroy_process_group()
+        del os.environ["NCCL_SOCKET_IFNAME"]
+        super().tearDown()
 
     def _generate_dmps_and_batch(
         self, sharders: Optional[List[ModuleSharder[nn.Module]]] = None
@@ -621,6 +583,39 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 dmp.init_data_parallel()
             dmps.append(dmp)
         return (dmps, batch)
+
+    def test_parameter_init(self) -> None:
+        class MyModel(nn.Module):
+            def __init__(self, device: str, val: float) -> None:
+                super().__init__()
+                self.p = nn.Parameter(
+                    torch.empty(3, dtype=torch.float32, device=device)
+                )
+                self.val = val
+                self.reset_parameters()
+
+            def reset_parameters(self) -> None:
+                nn.init.constant_(self.p, self.val)
+
+        # Check that already allocated parameters are left 'as is'.
+        cpu_model = MyModel(device="cpu", val=3.2)
+        sharded_model = DistributedModelParallel(
+            cpu_model,
+        )
+        sharded_param = next(sharded_model.parameters())
+        np.testing.assert_array_equal(
+            np.array([3.2, 3.2, 3.2], dtype=np.float32), sharded_param.detach().numpy()
+        )
+
+        # Check that parameters over 'meta' device are allocated and initialized.
+        meta_model = MyModel(device="meta", val=7.5)
+        sharded_model = DistributedModelParallel(
+            meta_model,
+        )
+        sharded_param = next(sharded_model.parameters())
+        np.testing.assert_array_equal(
+            np.array([7.5, 7.5, 7.5], dtype=np.float32), sharded_param.detach().numpy()
+        )
 
     def test_meta_device_dmp_state_dict(self) -> None:
         env = ShardingEnv.from_process_group(dist.GroupMember.WORLD)
