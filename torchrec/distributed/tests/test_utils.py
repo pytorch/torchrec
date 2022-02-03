@@ -36,7 +36,6 @@ class UtilsTest(unittest.TestCase):
         os.environ["LOCAL_WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         device = torch.device("cpu")
         backend = "gloo"
         dist.init_process_group(backend=backend)

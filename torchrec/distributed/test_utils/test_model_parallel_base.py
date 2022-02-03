@@ -58,6 +58,8 @@ class ModelParallelTestBase(unittest.TestCase):
 
     def tearDown(self) -> None:
         torch.use_deterministic_algorithms(False)
+        del os.environ["GLOO_DEVICE_TRANSPORT"]
+        del os.environ["NCCL_SOCKET_IFNAME"]
         if torch.cuda.is_available():
             os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
         super().tearDown()
