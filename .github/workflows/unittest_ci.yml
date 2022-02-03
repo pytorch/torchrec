@@ -231,4 +231,4 @@ jobs:
         source build_binary_3.8/bin/activate
         pip3 install pytest
         cd torchrec
-        python3 -m pytest -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+        python3 -m pytest -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors --ignore-glob="*/experimental/*"

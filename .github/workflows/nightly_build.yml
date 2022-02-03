@@ -241,7 +241,7 @@ jobs:
           python -m pip install pytest
         cd torchrec
         conda run -n build_binary \
-          python -m pytest -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+          python -m pytest -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors --ignore-glob="*/experimental/*"
     # Push to Pypi
     - name: Push TorchRec Binary to PYPI
       env:
