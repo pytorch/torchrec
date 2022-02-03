@@ -13,6 +13,7 @@ import torch
 from torch.testing import FileCheck  # @manual
 from torchrec.fx import symbolic_trace
 from torchrec.models.dlrm import (
+    choose,
     SparseArch,
     DenseArch,
     InteractionArch,
@@ -540,16 +541,3 @@ class DLRMTest(unittest.TestCase):
 
         logits = scripted_gm(features, sparse_features)
         self.assertEqual(logits.size(), (B, 1))
-
-
-def choose(n: int, k: int) -> int:
-    if 0 <= k <= n:
-        ntok = 1
-        ktok = 1
-        for t in range(1, min(k, n - k) + 1):
-            ntok *= n
-            ktok *= t
-            n -= 1
-        return ntok // ktok
-    else:
-        return 0

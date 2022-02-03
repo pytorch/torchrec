@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from math import comb
 from typing import List, Optional
 
 import torch
@@ -31,6 +30,22 @@ B: batch_size
 num_features: number of dense features
 
 """
+
+
+def choose(n: int, k: int) -> int:
+    """
+    Simple implementation of math.comb for python 3.7 compatibility
+    """
+    if 0 <= k <= n:
+        ntok = 1
+        ktok = 1
+        for t in range(1, min(k, n - k) + 1):
+            ntok *= n
+            ktok *= t
+            n -= 1
+        return ntok // ktok
+    else:
+        return 0
 
 
 class SparseArch(nn.Module):
@@ -339,7 +354,7 @@ class DLRM(nn.Module):
         )
 
         over_in_features = (
-            embedding_dim + comb(num_feature_names, 2) + num_feature_names
+            embedding_dim + choose(num_feature_names, 2) + num_feature_names
         )
 
         self.sparse_arch = SparseArch(embedding_bag_collection)
