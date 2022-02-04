@@ -9,7 +9,6 @@ from typing import List, Optional, Dict, Any, Tuple
 
 import torch
 import torch.distributed as dist
-from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsReduceScatter,
     SequenceEmbeddingAllToAll,
@@ -39,6 +38,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     ShardedTensorMetadata,
+    ShardMetadata,
     Awaitable,
     ParameterSharding,
 )

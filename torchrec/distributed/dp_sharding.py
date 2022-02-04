@@ -8,7 +8,6 @@
 from typing import List, Optional, Dict, Any, Tuple, cast
 
 import torch
-from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
     GroupedEmbeddingsLookup,
@@ -29,7 +28,13 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
 )
-from torchrec.distributed.types import Awaitable, NoWait, ParameterSharding, ShardingEnv
+from torchrec.distributed.types import (
+    Awaitable,
+    NoWait,
+    ParameterSharding,
+    ShardingEnv,
+    ShardMetadata,
+)
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 

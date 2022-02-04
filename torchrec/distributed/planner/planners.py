@@ -12,7 +12,6 @@ from typing import Tuple, Dict, Optional, List, cast, Union
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.distributed._sharding_spec import EnumerableShardingSpec, ShardMetadata
 from torchrec.distributed.collective_utils import (
     invoke_on_rank_and_broadcast_result,
 )
@@ -38,6 +37,10 @@ from torchrec.distributed.planner.types import (
     Proposer,
     PerfModel,
     PlannerError,
+)
+from torchrec.distributed.types import (
+    EnumerableShardingSpec,
+    ShardMetadata,
 )
 from torchrec.distributed.types import (
     ShardingPlan,

@@ -21,8 +21,6 @@ from typing import (
     Iterator,
 )
 
-from torch.distributed._sharding_spec import ShardingSpec
-
 try:
     # For python 3.6 and below, GenericMeta will be used by
     # other metaclasses (i.e. AwaitableMeta) for customized
@@ -45,13 +43,21 @@ import torch
 import torch.distributed as dist
 import torch.fx
 from torch import nn
+
+# @manual
 from torch.distributed._sharded_tensor import (  # noqa
     Shard,
     ShardedTensor,
     ShardedTensorMetadata,
     TensorProperties,
 )
-from torch.distributed._sharding_spec import ShardMetadata  # noqa
+
+# @manual
+from torch.distributed._sharding_spec import (  # noqa
+    ShardingSpec,
+    ShardMetadata,
+    EnumerableShardingSpec,
+)
 from torchrec.streamable import Multistreamable
 
 

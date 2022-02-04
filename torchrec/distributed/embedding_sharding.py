@@ -12,7 +12,6 @@ from typing import TypeVar, Generic, List, Tuple, Optional, Dict, Any
 import torch
 import torch.distributed as dist
 from torch import nn
-from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTOneToAll,
@@ -28,7 +27,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
     ListOfSparseFeaturesList,
 )
-from torchrec.distributed.types import NoWait, Awaitable
+from torchrec.distributed.types import NoWait, Awaitable, ShardMetadata
 from torchrec.modules.embedding_configs import (
     PoolingType,
     DataType,

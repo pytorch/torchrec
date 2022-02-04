@@ -9,7 +9,6 @@ from typing import Callable, List, Optional, Any, Dict, Tuple
 
 import torch
 import torch.distributed as dist
-from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToOne,
     PooledEmbeddingsAllToAll,
@@ -45,6 +44,7 @@ from torchrec.distributed.types import (
     Awaitable,
     NoWait,
     ParameterSharding,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 

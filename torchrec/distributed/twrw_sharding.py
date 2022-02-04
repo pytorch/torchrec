@@ -11,7 +11,6 @@ from typing import List, Optional, Dict, Any, Tuple, cast
 
 import torch
 import torch.distributed as dist
-from torch.distributed._sharding_spec import ShardMetadata
 from torchrec.distributed.comm import (
     intra_and_cross_node_pg,
     get_local_size,
@@ -43,6 +42,7 @@ from torchrec.distributed.types import (
     ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 

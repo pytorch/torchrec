@@ -12,11 +12,12 @@ from typing import Generic, List, Optional, Dict, Any, TypeVar, Iterator
 
 import torch
 from torch import nn
-from torch.distributed._sharded_tensor import ShardMetadata, ShardedTensorMetadata
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
     ParameterStorage,
+    ShardMetadata,
+    ShardedTensorMetadata,
 )
 from torchrec.modules.embedding_configs import (
     PoolingType,

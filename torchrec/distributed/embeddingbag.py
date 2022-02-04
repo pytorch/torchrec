@@ -24,9 +24,6 @@ from typing import (
 import torch
 from torch import Tensor
 from torch import nn
-from torch.distributed._sharding_spec import (
-    EnumerableShardingSpec,
-)
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.cw_sharding import CwEmbeddingSharding
 from torchrec.distributed.dp_sharding import DpEmbeddingSharding
@@ -48,6 +45,7 @@ from torchrec.distributed.twcw_sharding import TwCwEmbeddingSharding
 from torchrec.distributed.twrw_sharding import TwRwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    EnumerableShardingSpec,
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
