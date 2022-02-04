@@ -9,8 +9,9 @@ import contextlib
 
 import torcharrow as ta
 from torch.utils.data import IterDataPipe
-from torchrec.datasets.experimental.criteo_dataframes import criteo_dataframes_from_tsv
 from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
+
+from ..criteo_dataframes import criteo_dataframes_from_tsv
 
 
 class CriteoDataFramesTest(CriteoTest):
