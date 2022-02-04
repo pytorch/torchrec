@@ -41,7 +41,7 @@ You can also use [torchrun](https://pytorch.org/docs/stable/elastic/run.html).
 
 **Reproduce**
 
-Run the following command to reproduce the results for a single node (8 GPUs) on AWS. This command makes use of the `aws_component.py` script found in the `torchrec/examples/dlrm` folder.
+Run the following command to reproduce the results for a single node (8 GPUs) on AWS. This command makes use of the `aws_component.py` script.
 
 Ensure to:
 - set $PATH_TO_1TB_NUMPY_FILES to the path with the pre-processed .npy files of the Criteo 1TB dataset.

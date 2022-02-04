@@ -1,4 +1,4 @@
-torchrec.examples
+torchrec.github.examples
 =================
 
 Subpackages
@@ -7,12 +7,12 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   torchrec.examples.dlrm
+   torchrec.github.examples.dlrm
 
 Module contents
 ---------------
 
-.. automodule:: torchrec.examples
+.. automodule:: torchrec.github.examples
    :members:
    :undoc-members:
    :show-inheritance:

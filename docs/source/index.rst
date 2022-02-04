@@ -26,10 +26,10 @@ https://github.com/pytorch/torchrec#readme
    torchrec.datasets.scripts.rst
    torchrec.distributed.planner.rst
    torchrec.distributed.rst
-   torchrec.examples.dlrm.data.rst
-   torchrec.examples.dlrm.modules.rst
-   torchrec.examples.dlrm.rst
-   torchrec.examples.rst
+   torchrec.github.examples.dlrm.data.rst
+   torchrec.github.examples.dlrm.modules.rst
+   torchrec.github.examples.dlrm.rst
+   torchrec.github.examples.rst
    torchrec.fx.rst
    torchrec.models.rst
    torchrec.modules.rst

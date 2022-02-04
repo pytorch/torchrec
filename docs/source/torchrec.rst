@@ -9,7 +9,7 @@ Subpackages
 
    torchrec.datasets
    torchrec.distributed
-   torchrec.examples
+   torchrec.github.examples
    torchrec.fx
    torchrec.models
    torchrec.modules
