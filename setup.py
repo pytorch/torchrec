@@ -37,10 +37,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec setup")
     parser.add_argument(
         "--skip_fbgemm",
-        type=bool,
-        default=False,
+        dest="skip_fbgemm",
+        action="store_true",
         help="if we need to skip the fbgemm_gpu installation",
     )
+    parser.set_defaults(skip_fbgemm=False)
     parser.add_argument(
         "--pacakge_name",
         type=str,
@@ -60,7 +61,13 @@ def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
     print("args: ", args)
     print("unknown: ", unknown)
-    if args.skip_fbgemm:
+    if "clean" in unknown:
+        print("Running clean for fbgemm_gpu first")
+        out = check_output(
+            [sys.executable, "setup.py", "clean"],
+            cwd="third_party/fbgemm/fbgemm_gpu",
+        )
+    elif args.skip_fbgemm:
         print("Skipping fbgemm_gpu installation")
     else:
         print("Installing fbgemm_gpu")
