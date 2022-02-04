@@ -1,13 +1,13 @@
-torchrec.examples.dlrm.modules
+torchrec.github.examples.dlrm.modules
 ==============================
 
 Submodules
 ----------
 
-torchrec.examples.dlrm.modules.dlrm\_train
+torchrec.github.examples.dlrm.modules.dlrm\_train
 ------------------------------------------
 
-.. automodule:: torchrec.examples.dlrm.modules.dlrm_train
+.. automodule:: torchrec.github.examples.dlrm.modules.dlrm_train
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ torchrec.examples.dlrm.modules.dlrm\_train
 Module contents
 ---------------
 
-.. automodule:: torchrec.examples.dlrm.modules
+.. automodule:: torchrec.github.examples.dlrm.modules
    :members:
    :undoc-members:
    :show-inheritance:

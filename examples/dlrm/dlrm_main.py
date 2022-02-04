@@ -21,11 +21,12 @@ from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.utils import Batch
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.examples.dlrm.data.dlrm_dataloader import get_dataloader, STAGES
-from torchrec.examples.dlrm.modules.dlrm_train import DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from tqdm import tqdm
+
+from .data.dlrm_dataloader import get_dataloader, STAGES
+from .modules.dlrm_train import DLRMTrain
 
 TRAIN_PIPELINE_STAGES = 3  # Number of stages in TrainPipelineSparseDist.
 

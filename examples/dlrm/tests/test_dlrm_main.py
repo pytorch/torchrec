@@ -13,7 +13,8 @@ import uuid
 from torch.distributed.launcher.api import elastic_launch, LaunchConfig
 from torchrec import test_utils
 from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
-from torchrec.examples.dlrm.dlrm_main import main
+
+from ..dlrm_main import main
 
 
 class MainTest(unittest.TestCase):

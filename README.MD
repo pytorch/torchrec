@@ -54,7 +54,7 @@ pip install torchx-nightly
 torchx run --scheduler local_cwd test_installation.py:test_installation
 ```
 
-6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/examples/dlrm/dlrm_main.py).
+6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/github/examples/dlrm/dlrm_main.py).
 
 That's it! In the near-to-mid future, we will simplify this process considerably. Stay tuned...
 

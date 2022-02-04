@@ -1,13 +1,13 @@
-torchrec.examples.dlrm.data
+torchrec.github.examples.dlrm.data
 ===========================
 
 Submodules
 ----------
 
-torchrec.examples.dlrm.data.dlrm\_dataloader
+torchrec.github.examples.dlrm.data.dlrm\_dataloader
 --------------------------------------------
 
-.. automodule:: torchrec.examples.dlrm.data.dlrm_dataloader
+.. automodule:: torchrec.github.examples.dlrm.data.dlrm_dataloader
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ torchrec.examples.dlrm.data.dlrm\_dataloader
 Module contents
 ---------------
 
-.. automodule:: torchrec.examples.dlrm.data
+.. automodule:: torchrec.github.examples.dlrm.data
    :members:
    :undoc-members:
    :show-inheritance:
