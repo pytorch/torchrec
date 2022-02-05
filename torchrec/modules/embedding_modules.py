@@ -257,7 +257,7 @@ class EmbeddingCollection(nn.Module):
 
     """
 
-    def __init__(
+    def __init__(  # noqa C901
         self,
         tables: List[EmbeddingConfig],
         device: Optional[torch.device] = None,
@@ -266,50 +266,66 @@ class EmbeddingCollection(nn.Module):
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self.embeddings: nn.ModuleDict = nn.ModuleDict()
         self.embedding_configs = tables
-        self._embedding_names: List[str] = []
+        self.embedding_dim: int = -1
         table_names = set()
         shared_feature: Dict[str, bool] = {}
-        for embedding_config in tables:
-            if embedding_config.name in table_names:
-                raise ValueError(f"Duplicate table name {embedding_config.name}")
-            table_names.add(embedding_config.name)
-            self.embeddings[embedding_config.name] = nn.Embedding(
-                num_embeddings=embedding_config.num_embeddings,
-                embedding_dim=embedding_config.embedding_dim,
-                device=device,
+        for config in tables:
+            if config.name in table_names:
+                raise ValueError(f"Duplicate table name {config.name}")
+            table_names.add(config.name)
+            self.embedding_dim = (
+                config.embedding_dim if self.embedding_dim < 0 else self.embedding_dim
             )
-            if not embedding_config.feature_names:
-                embedding_config.feature_names = [embedding_config.name]
-            for feature_name in embedding_config.feature_names:
+            if self.embedding_dim != config.embedding_dim:
+                raise ValueError(
+                    "All tables in a EmbeddingCollection are required to have same embedding dimension."
+                )
+            dtype = (
+                torch.float32 if config.data_type == DataType.FP32 else torch.float16
+            )
+            self.embeddings[config.name] = nn.Embedding(
+                num_embeddings=config.num_embeddings,
+                embedding_dim=config.embedding_dim,
+                device=device,
+                dtype=dtype,
+            )
+            if not config.feature_names:
+                config.feature_names = [config.name]
+            for feature_name in config.feature_names:
                 if feature_name not in shared_feature:
                     shared_feature[feature_name] = False
                 else:
                     shared_feature[feature_name] = True
 
-        for embedding_config in tables:
-            for feature_name in embedding_config.feature_names:
+        self.embedding_names_by_table: List[List[str]] = []
+        for config in tables:
+            embedding_names = []
+            for feature_name in config.feature_names:
                 if shared_feature[feature_name]:
-                    self._embedding_names.append(
-                        feature_name + "@" + embedding_config.name
-                    )
+                    embedding_names.append(feature_name + "@" + config.name)
                 else:
-                    self._embedding_names.append(feature_name)
+                    embedding_names.append(feature_name)
+            self.embedding_names_by_table.append(embedding_names)
 
-    def forward(self, features: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> Dict[str, JaggedTensor]:
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        idx = 0
-        for embedding_config, embedding in zip(
-            self.embedding_configs, self.embeddings.values()
+        for config, embedding_names, emb_module in zip(
+            self.embedding_configs,
+            self.embedding_names_by_table,
+            self.embeddings.values(),
         ):
-            for feature_name in embedding_config.feature_names:
+            for feature_name, embedding_name in zip(
+                config.feature_names, embedding_names
+            ):
                 f = features[feature_name]
-                lookup = embedding(
+                lookup = emb_module(
                     input=f.values(),
                 )
-                feature_embeddings[self._embedding_names[idx]] = JaggedTensor(
+                feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
-                    offsets=f.offsets(),
                     lengths=f.lengths(),
                 )
-                idx += 1
         return feature_embeddings
