@@ -225,8 +225,6 @@ jobs:
         python3 -c "import fbgemm_gpu"
         python3 -c "import torchrec"
     - name: Test with pytest
-      # remove this line when we fixed all the unit tests
-      continue-on-error: true
       run: |
         source build_binary_3.8/bin/activate
         pip3 install pytest
