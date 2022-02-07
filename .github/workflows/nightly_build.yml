@@ -234,8 +234,6 @@ jobs:
         conda run -n build_binary \
           python -c "import torchrec"
     - name: Test with pytest
-      # remove this line when we fixed all the unit tests
-      continue-on-error: true
       run: |
         conda run -n build_binary \
           python -m pip install pytest
