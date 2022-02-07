@@ -1,0 +1,139 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Push CPU Binary Nightly
+
+# on:
+#   # run every day at 11:15am
+#   schedule:
+#     - cron:  '15 11 * * *'
+#   # or manually trigger it
+#   workflow_dispatch:
+on: [push, pull_request]
+
+jobs:
+
+  # build, test and upload on cpu hosts
+  build_test_upload:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+         - os: linux.2xlarge
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cpu"
+         - os: linux.2xlarge
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: "cpu"
+         - os: linux.2xlarge
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: "cpu"
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Check ldd --version
+      run: ldd --version
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+    # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
+    - name: Git Sumbodule Update
+      run: |
+        git submodule init
+        git submodule update --remote --recursive
+        cd third_party/fbgemm/
+        git submodule sync
+        git submodule update --init --recursive
+        git log
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install gcc
+      shell: bash
+      run: |
+        sudo yum group install -y "Development Tools"
+    - name: setup Path
+      run: |
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install -r requirements.txt
+    - name: Test Installation of dependencies
+      run: |
+        conda run -n build_binary python -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary python -c "import skbuild"
+        echo "skbuild succeeded"
+        conda run -n build_binary python -c "import numpy"
+        echo "numpy succeeded"
+    # for the conda run with quotes, we have to use "\" and double quotes
+    # here is the issue: https://github.com/conda/conda/issues/10972
+    - name: Build TorchRec Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --pacakge_name torchrec-nightly-cpu \
+          --cpu_only \
+          --python-tag=${{ matrix.python-tag }}
+    - name: Upload wheel as GHA artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: torchrec_nightly_cpu${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/torchrec_nightly_cpu-*.whl
+    - name: Install TorchRec Nightly
+      run: |
+        conda run -n build_binary python -m pip install dist/torchrec_nightly_cpu-*.whl
+    - name: Test fbgemm_gpu and torchrec installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        conda run -n build_binary \
+          python -c "import torchrec"
+    - name: Test with pytest
+      run: |
+        conda run -n build_binary \
+          python -m pip install pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+    # Push to Pypi
+    - name: Push TorchRec Binary to PYPI
+      env:
+          PYPI_TOKEN: ${{ secrets.CPU_PYPI_TOKEN }}
+      run: |
+        conda run -n build_binary python -m pip install twine
+        conda run -n build_binary \
+          python -m twine upload \
+            --username __token__ \
+            --password "$PYPI_TOKEN" \
+            dist/torchrec_nightly_cpu-*.whl

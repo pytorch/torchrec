@@ -21,12 +21,15 @@ jobs:
          - os: linux.2xlarge
            python-version: 3.7
            python-tag: "py37"
+           cuda-tag: "cu11"
          - os: linux.2xlarge
            python-version: 3.8
            python-tag: "py38"
+           cuda-tag: "cu11"
          - os: linux.2xlarge
            python-version: 3.9
            python-tag: "py39"
+           cuda-tag: "cu11"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -114,7 +117,7 @@ jobs:
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrec_nightly_${{ matrix.python-version }}.whl
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
         path: dist/torchrec_nightly-*.whl
 
   # download from GHA, test on gpu and push to pypi
@@ -219,7 +222,7 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec_nightly_${{ matrix.python-version }}.whl
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Install TorchRec Nightly

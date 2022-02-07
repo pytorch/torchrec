@@ -54,6 +54,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default="7.0;8.0",
         help="the arch list of the torch cuda, check here for more detail: https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu",
     )
+    parser.add_argument(
+        "--cpu_only",
+        dest="cpu_only",
+        action="store_true",
+        help="if fbgemm_gpu will be installed with cpu_only flag",
+    )
     return parser.parse_known_args(argv)
 
 
@@ -72,15 +78,18 @@ def main(argv: List[str]) -> None:
     else:
         print("Installing fbgemm_gpu")
         print("TORCH_CUDA_ARCH_LIST: ", args.TORCH_CUDA_ARCH_LIST)
+        print(f"cpu_only: {args.cpu_only}")
         my_env = os.environ.copy()
         cuda_arch_arg = f"-DTORCH_CUDA_ARCH_LIST={args.TORCH_CUDA_ARCH_LIST}"
+        fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
         out = check_output(
-            [sys.executable, "setup.py", "build", cuda_arch_arg],
+            [sys.executable, "setup.py", "build", fbgemm_kw_args],
             cwd="third_party/fbgemm/fbgemm_gpu",
             env=my_env,
         )
         print(out)
 
+    # TODO clean up clean -> should not run most of this code
     name = args.pacakge_name
     print("name: ", name)
     is_nightly = "nightly" in name
