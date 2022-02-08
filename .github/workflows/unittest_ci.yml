@@ -92,7 +92,7 @@ jobs:
       run: |
         source build_binary_3.8/bin/activate
         rm -r dist || true
-        python setup.py bdist_wheel --pacakge_name torchrec-test --TORCH_CUDA_ARCH_LIST '7.0;8.0'
+        python setup.py bdist_wheel --package_name torchrec-test --TORCH_CUDA_ARCH_LIST '7.0;8.0'
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:

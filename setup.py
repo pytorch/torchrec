@@ -43,7 +43,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     )
     parser.set_defaults(skip_fbgemm=False)
     parser.add_argument(
-        "--pacakge_name",
+        "--package_name",
         type=str,
         default="torchrec",
         help="the name of this output wheel",
@@ -60,7 +60,6 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         action="store_true",
         help="if fbgemm_gpu will be installed with cpu_only flag",
     )
-    parser.set_defaults(cpu_only=False)
     return parser.parse_known_args(argv)
 
 
@@ -68,30 +67,9 @@ def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
     print("args: ", args)
     print("unknown: ", unknown)
-    if "clean" in unknown:
-        print("Running clean for fbgemm_gpu first")
-        out = check_output(
-            [sys.executable, "setup.py", "clean"],
-            cwd="third_party/fbgemm/fbgemm_gpu",
-        )
-    elif args.skip_fbgemm:
-        print("Skipping fbgemm_gpu installation")
-    else:
-        print("Installing fbgemm_gpu")
-        print("TORCH_CUDA_ARCH_LIST: ", args.TORCH_CUDA_ARCH_LIST)
-        print(f"cpu_only: {args.cpu_only}")
-        my_env = os.environ.copy()
-        cuda_arch_arg = f"-DTORCH_CUDA_ARCH_LIST={args.TORCH_CUDA_ARCH_LIST}"
-        fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
-        out = check_output(
-            [sys.executable, "setup.py", "build", fbgemm_kw_args],
-            cwd="third_party/fbgemm/fbgemm_gpu",
-            env=my_env,
-        )
-        print(out)
 
-    # TODO clean up clean -> should not run most of this code
-    name = args.pacakge_name
+    # Set up package name and version
+    name = args.package_name
     print("name: ", name)
     is_nightly = "nightly" in name
     is_test = "test" in name
@@ -100,20 +78,52 @@ def main(argv: List[str]) -> None:
         os.path.join(os.path.dirname(__file__), "README.MD"), encoding="utf8"
     ) as f:
         readme = f.read()
-
     with open(
         os.path.join(os.path.dirname(__file__), "requirements.txt"), encoding="utf8"
     ) as f:
         reqs = f.read()
-
     version = get_nightly_version() if is_nightly else get_version()
     if is_test:
         version = (f"0.0.{random.randint(0, 1000)}",)
     print(f"-- {name} building version: {version}")
-    # the path to find all the packages
-    fbgemm_install_base = glob.glob(
-        "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install"
-    )[0]
+
+    packages = find_packages(exclude=("*tests",))
+    fbgemm_gpu_package_dir = []
+
+    if "clean" in unknown:
+        print("Running clean for fbgemm_gpu first")
+        out = check_output(
+            [sys.executable, "setup.py", "clean"],
+            cwd="third_party/fbgemm/fbgemm_gpu",
+        )
+    # install/build
+    else:
+        if args.skip_fbgemm:
+            print("Skipping fbgemm_gpu installation")
+        else:
+            print("Installing fbgemm_gpu")
+            print("TORCH_CUDA_ARCH_LIST: ", args.TORCH_CUDA_ARCH_LIST)
+            print(f"cpu_only: {args.cpu_only}")
+            my_env = os.environ.copy()
+            cuda_arch_arg = f"-DTORCH_CUDA_ARCH_LIST={args.TORCH_CUDA_ARCH_LIST}"
+            fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
+            out = check_output(
+                [sys.executable, "setup.py", "build", fbgemm_kw_args],
+                cwd="third_party/fbgemm/fbgemm_gpu",
+                env=my_env,
+            )
+            print(out)
+
+        # the path to find all the packages
+        fbgemm_install_base = glob.glob(
+            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install"
+        )[0]
+        packages.extend(find_packages(fbgemm_install_base))
+        # to include the fbgemm_gpu.so
+        fbgemm_gpu_package_dir = glob.glob(
+            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install/fbgemm_gpu"
+        )[0]
+
     sys.argv = [sys.argv[0]] + unknown
     print("sys.argv", sys.argv)
 
@@ -131,14 +141,10 @@ def main(argv: List[str]) -> None:
         keywords=["pytorch", "recommendation systems", "sharding"],
         python_requires=">=3.7",
         install_requires=reqs.strip().split("\n"),
-        packages=find_packages(exclude=("*tests",))
-        + find_packages(fbgemm_install_base),
+        packages=packages,
         package_dir={
             "torchrec": "torchrec",
-            # to include the fbgemm_gpu.so
-            "fbgemm_gpu": glob.glob(
-                "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install/fbgemm_gpu"
-            )[0],
+            "fbgemm_gpu": fbgemm_gpu_package_dir,
         },
         zip_safe=False,
         package_data={"fbgemm_gpu": ["fbgemm_gpu_py.so"]},
