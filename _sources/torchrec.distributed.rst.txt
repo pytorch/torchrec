@@ -1,0 +1,189 @@
+torchrec.distributed
+====================
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   torchrec.distributed.planner
+
+Submodules
+----------
+
+torchrec.distributed.collective\_utils
+--------------------------------------
+
+.. automodule:: torchrec.distributed.collective_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.comm
+-------------------------
+
+.. automodule:: torchrec.distributed.comm
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.comm\_ops
+------------------------------
+
+.. automodule:: torchrec.distributed.comm_ops
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.cw\_sharding
+---------------------------------
+
+.. automodule:: torchrec.distributed.cw_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.dist\_data
+-------------------------------
+
+.. automodule:: torchrec.distributed.dist_data
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.dp\_sharding
+---------------------------------
+
+.. automodule:: torchrec.distributed.dp_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.embedding
+------------------------------
+
+.. automodule:: torchrec.distributed.embedding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.embedding\_lookup
+--------------------------------------
+
+.. automodule:: torchrec.distributed.embedding_lookup
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.embedding\_sharding
+----------------------------------------
+
+.. automodule:: torchrec.distributed.embedding_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.embedding\_types
+-------------------------------------
+
+.. automodule:: torchrec.distributed.embedding_types
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.embeddingbag
+---------------------------------
+
+.. automodule:: torchrec.distributed.embeddingbag
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.grouped\_position\_weighted
+------------------------------------------------
+
+.. automodule:: torchrec.distributed.grouped_position_weighted
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.model\_parallel
+------------------------------------
+
+.. automodule:: torchrec.distributed.model_parallel
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.quant\_embeddingbag
+----------------------------------------
+
+.. automodule:: torchrec.distributed.quant_embeddingbag
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.rw\_sharding
+---------------------------------
+
+.. automodule:: torchrec.distributed.rw_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.train\_pipeline
+------------------------------------
+
+.. automodule:: torchrec.distributed.train_pipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.tw\_sharding
+---------------------------------
+
+.. automodule:: torchrec.distributed.tw_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.twcw\_sharding
+-----------------------------------
+
+.. automodule:: torchrec.distributed.twcw_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.twrw\_sharding
+-----------------------------------
+
+.. automodule:: torchrec.distributed.twrw_sharding
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.types
+--------------------------
+
+.. automodule:: torchrec.distributed.types
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.utils
+--------------------------
+
+.. automodule:: torchrec.distributed.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: torchrec.distributed
+   :members:
+   :undoc-members:
+   :show-inheritance:

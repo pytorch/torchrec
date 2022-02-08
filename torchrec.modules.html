@@ -1,0 +1,2045 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrec.modules &mdash; TorchRec 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="torchrec.optim" href="torchrec.optim.html" />
+    <link rel="prev" title="torchrec.models" href="torchrec.models.html" />
+  <!-- Google Analytics -->
+  
+  <!-- End Google Analytics -->
+  
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+  <!-- Preload the theme fonts -->
+
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-book.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/FreightSans/freight-sans-medium-italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="_static/fonts/IBMPlexMono/IBMPlexMono-SemiBold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+
+<!-- Preload the katex fonts -->
+
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Math-Italic.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Main-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size1-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size4-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size2-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Size3-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/fonts/KaTeX_Caligraphic-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.2/css/all.css" integrity="sha384-vSIIfh2YWi9wW0r9iZe7RJPrKwp6bG+s9QZMoITbCckVJqGCCRhc+ccxNcdpHuYu" crossorigin="anonymous">
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/mobile">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-orange-arrow">
+                Docs
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/docs/stable/index.html">
+                  <span class="dropdown-title">PyTorch</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/audio/stable/index.html">
+                  <span class="dropdown-title">torchaudio</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/text/stable/index.html">
+                  <span class="dropdown-title">torchtext</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/vision/stable/index.html">
+                  <span class="dropdown-title">torchvision</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/elastic/">
+                  <span class="dropdown-title">TorchElastic</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
+                  <span class="dropdown-title">TorchServe</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/xla">
+                  <span class="dropdown-title">PyTorch on XLA Devices</span>
+                  <p></p>
+                </a>
+            </div>
+          </li>
+
+          <li>
+            <div id="resourcesDropdownButton" data-toggle="resources-dropdown" class="resources-dropdown">
+              <a class="resource-option with-down-arrow">
+                Resources
+              </a>
+              <div class="resources-dropdown-menu">
+                <a class="nav-dropdown-item" href="https://pytorch.org/features">
+                  <span class="dropdown-title">About</span>
+                  <p>Learn about PyTorch’s features and capabilities</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/#community-module">
+                  <span class="dropdown-title">Community</span>
+                  <p>Join the PyTorch developer community to contribute, learn, and get your questions answered.</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/resources">
+                  <span class="dropdown-title">Developer Resources</span>
+                  <p>Find resources and get questions answered</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://discuss.pytorch.org/" target="_blank">
+                  <span class="dropdown-title">Forums</span>
+                  <p>A place to discuss PyTorch code, issues, install, research</p>
+                </a>
+                <a class="nav-dropdown-item" href="https://pytorch.org/hub">
+                  <span class="dropdown-title">Models (Beta)</span>
+                  <p>Discover, publish, and reuse pre-trained models</p>
+                </a>
+              </div>
+            </div>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">GitHub</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+  </div>
+</div>
+
+<body class="pytorch-body">
+
+   
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+
+            
+              
+              
+            
+
+            
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+            
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="torchrec.html">torchrec</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.quant.html">torchrec.quant</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.sparse.html">torchrec.sparse</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+      <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+        <div class="pytorch-breadcrumbs-wrapper">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="torchrec.html">torchrec</a> &gt;</li>
+        
+      <li>torchrec.modules</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="_sources/torchrec.modules.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+        </div>
+
+        <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+          Shortcuts
+        </div>
+      </div>
+
+      <section data-toggle="wy-nav-shift" id="pytorch-content-wrap" class="pytorch-content-wrap">
+        <div class="pytorch-content-left">
+
+        
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
+              
+  <section id="torchrec-modules">
+<h1>torchrec.modules<a class="headerlink" href="#torchrec-modules" title="Permalink to this headline">¶</a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-torchrec.modules.activation">
+<span id="torchrec-modules-activation"></span><h2>torchrec.modules.activation<a class="headerlink" href="#module-torchrec.modules.activation" title="Permalink to this headline">¶</a></h2>
+<hr class="docutils" />
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.activation.SwishLayerNorm">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.activation.</span></span><span class="sig-name descname"><span class="pre">SwishLayerNorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Size</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.activation.SwishLayerNorm" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="simple">
+<dt>Applies the Swish function with layer normalization:</dt><dd><p>‘Y = X * Sigmoid(LayerNorm(X)).’</p>
+</dd>
+<dt>Call Args:</dt><dd><p>input: an input tensor</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>an output tensor</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>output</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><p>input_dims: dimensions to normalize over. E.g., If an input tensor has shape
+[batch_size, d1, d2, d3], set input_dim=[d2, d3] will do the layer normalization
+on last two dimensions.
+device: (Optional[torch.device]).</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sln</span> <span class="o">=</span> <span class="n">SwishLayerNorm</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.activation.SwishLayerNorm.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.activation.SwishLayerNorm.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.activation.SwishLayerNorm.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.activation.SwishLayerNorm.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.crossnet">
+<span id="torchrec-modules-crossnet"></span><h2>torchrec.modules.crossnet<a class="headerlink" href="#module-torchrec.modules.crossnet" title="Permalink to this headline">¶</a></h2>
+<hr class="docutils" />
+<dl class="simple">
+<dt>These modules do X:Y:Z</dt><dd><ul class="simple">
+<li><p>Class Cross Net does X</p></li>
+<li><p>Class Low Cross Net does Y</p></li>
+<li><p>Class …..</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.CrossNet">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">CrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.CrossNet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Cross Network: <a class="reference external" href="https://arxiv.org/abs/1708.05123">https://arxiv.org/abs/1708.05123</a></p>
+<p>Cross net is a stack of “crossing” operations on a tensor of shape <span class="math notranslate nohighlight">\((*, N)\)</span>
+to the same shape, effectively creating <span class="math notranslate nohighlight">\(N\)</span> learnable polynomical functions
+over the input tensor.</p>
+<p>In this module, the crossing operations are defined based on a full rank matrix (NxN),
+such that crossing effect can cover all bits on each layer. On each layer l, the tensor
+is transformed into:</p>
+<div class="math notranslate nohighlight">
+\[x_{l+1} = x_0 * (W_l \dot x_l + b_l) + x_l\]</div>
+<p>where <span class="math notranslate nohighlight">\(W_l\)</span> is a square matrix <span class="math notranslate nohighlight">\((NxN)\)</span>, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication, <span class="math notranslate nohighlight">\(\dot\)</span> means
+matrix multiplication.</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><ul class="simple">
+<li><p>in_features (int): the dimension of the input.</p></li>
+<li><p>num_layers (int): the number of layers in the module.</p></li>
+</ul>
+</dd>
+<dt>Call Args:</dt><dd><ul class="simple">
+<li><p>input (torch.Tensor): tensor with shape [batch_size, in_features]</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>tensor with shape [batch_size, in_features]</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>output (torch.Tensor)</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">CrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.CrossNet.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.crossnet.CrossNet.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.CrossNet.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.crossnet.CrossNet.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankCrossNet">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">LowRankCrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.LowRankCrossNet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<blockquote>
+<div><p>Low Rank Cross net is a high-efficient cross net. Instead of using full rank cross matrix (NxN)
+at each layer, it will use two kernels <span class="math notranslate nohighlight">\(W (N * r)\)</span> and <span class="math notranslate nohighlight">\(V (r * N)\)</span>, where <cite>r &lt;&lt; N</cite>, to simplify the matrix
+multiplication.</p>
+<p>On each layer l, the tensor is transformed into:</p>
+<div class="math notranslate nohighlight">
+\[x_{l+1} = x_0 * (W_l \dot (V_l \dot x_l) + b_l) + x_l\]</div>
+</div></blockquote>
+<p>where <span class="math notranslate nohighlight">\(W_l\)</span> is either a vector, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication, and <span class="math notranslate nohighlight">\(\dot\)</span> means matrix multiplication.</p>
+<blockquote>
+<div><p>Note that, rank <cite>r</cite> should be chosen smartly. Usually, we should expect <cite>r &lt; N/2</cite> to have computation saving; we should
+expect <span class="math notranslate nohighlight">\(r ~= N/4\)</span> to perserve the accuracy of full rank cross net.</p>
+<dl>
+<dt>Constructor Args:</dt><dd><ul class="simple">
+<li><p>in_features (int): the dimension of the input.</p></li>
+<li><p>num_layers (int): the number of layers in the module.</p></li>
+<li><p>low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always &gt;= 0</p></li>
+</ul>
+</dd>
+<dt>Call Args:</dt><dd><ul class="simple">
+<li><p>input (torch.Tensor): tensor with shape [batch_size, in_features]</p></li>
+</ul>
+</dd>
+<dt>Returns:</dt><dd><ul class="simple">
+<li><p>output (torch.Tensor): tensor with shape [batch_size, in_features]</p></li>
+</ul>
+</dd>
+<dt>Example:</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</div></blockquote>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankCrossNet.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.crossnet.LowRankCrossNet.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankCrossNet.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.crossnet.LowRankCrossNet.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankMixtureCrossNet">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">LowRankMixtureCrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_features:</span> <span class="pre">int,</span> <span class="pre">num_layers:</span> <span class="pre">int,</span> <span class="pre">num_experts:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">low_rank:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1,</span> <span class="pre">activation:</span> <span class="pre">typing.Union[torch.nn.modules.module.Module,</span> <span class="pre">typing.Callable[[torch.Tensor],</span> <span class="pre">torch.Tensor]]</span> <span class="pre">=</span> <span class="pre">&lt;built-in</span> <span class="pre">method</span> <span class="pre">relu</span> <span class="pre">of</span> <span class="pre">type</span> <span class="pre">object&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>LowRankMixtureCrossNet is a DCN V2 implementation from the paper: <a class="reference external" href="https://arxiv.org/pdf/2008.13535.pdf">https://arxiv.org/pdf/2008.13535.pdf</a></p>
+<p>LowRankMixtureCrossNet defines the learnable crossing parameter per layer as low-rank matrix <span class="math notranslate nohighlight">\((N*r)\)</span> together
+with mixture of expert. Compared to LowRankCrossNet, instead of relying on one single expert to learn
+feature crosses, this module leverages such <span class="math notranslate nohighlight">\(K\)</span> experts; each learning feature interactions in a
+different subspaces, and adaptively combine the learned crosses using a gating mechanism that depends
+on input <span class="math notranslate nohighlight">\(x\)</span>..</p>
+<p>On each layer l, the tensor is transformed into:</p>
+<div class="math notranslate nohighlight">
+\[x_{l+1} = MoE(expert_i foreach i in K experts) + x_l\]</div>
+<p>and each <span class="math notranslate nohighlight">\(expert_i\)</span> is defined as:</p>
+<div class="math notranslate nohighlight">
+\[expert_i = x_0 * (U_l_i \dot g(C_l_i \dot g(V_l_i \dot x_l)) + b_l)\]</div>
+<p>where <span class="math notranslate nohighlight">\(U_l_i (N, r)\)</span>, <span class="math notranslate nohighlight">\(C_l_i (r, r)\)</span> and <span class="math notranslate nohighlight">\(V_l_i (r, N)\)</span> are low-rank matrix, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication,
+<span class="math notranslate nohighlight">\(x\)</span> means matrix multiplication, and <span class="math notranslate nohighlight">\(g()\)</span> is the non-linear activation function.</p>
+<p>One optimization is when num_expert is 1, the gate evaluation and MOE will be skipped for computation saving.</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><ul class="simple">
+<li><p>in_features (int): the dimension of the input.</p></li>
+<li><p>num_layers (int): the number of layers in the module.</p></li>
+<li><p>low_rank (int): the rank setup of the cross matrix (default = 0). Value must be always &gt;= 0</p></li>
+<li><p>activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]): the non-linear activation function, used in defining experts. Default is relu.</p></li>
+</ul>
+</dd>
+<dt>Call Args:</dt><dd><ul class="simple">
+<li><p>input (torch.Tensor): tensor with shape [batch_size, in_features]</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>tensor with shape [batch_size, in_features]</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>output (torch.Tensor)</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">num_experts</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankMixtureCrossNet.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.LowRankMixtureCrossNet.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.VectorCrossNet">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">VectorCrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.VectorCrossNet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Vector Cross Network can be refered as DCN-V1 (<a class="reference external" href="https://arxiv.org/pdf/1708.05123.pdf">https://arxiv.org/pdf/1708.05123.pdf</a>).</p>
+<p>It is also a specialized low rank cross net, where rank=1. In this version, on each layer, instead
+of keeping two kernels W and V, we only keep one vector kernel W (Nx1). So, we will use dot
+operation to compute the “crossing” effect of features; thus, we can save two matrix multiplications
+to further reduce computational cost and cut the number of learnable parameter number.</p>
+<p>On each layer l, the tensor is transformed into</p>
+<div class="math notranslate nohighlight">
+\[x_{l+1} = x_0 * (W_l . x_l + b_l) + x_l\]</div>
+<p>where <span class="math notranslate nohighlight">\(W_l\)</span> is either a vector, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication; <span class="math notranslate nohighlight">\(.\)</span> means dot operations.</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><ul class="simple">
+<li><p>in_features (int): the dimension of the input.</p></li>
+<li><p>num_layers (int): the number of layers in the module.</p></li>
+</ul>
+</dd>
+<dt>Call Args:</dt><dd><ul class="simple">
+<li><p>input (torch.Tensor): tensor with shape [batch_size, in_features]</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>tensor with shape [batch_size, in_features]</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>output (torch.Tensor)</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">VectorCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.VectorCrossNet.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.crossnet.VectorCrossNet.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.crossnet.VectorCrossNet.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.crossnet.VectorCrossNet.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.deepfm">
+<span id="torchrec-modules-deepfm"></span><h2>torchrec.modules.deepfm<a class="headerlink" href="#module-torchrec.modules.deepfm" title="Permalink to this headline">¶</a></h2>
+<hr class="docutils" />
+<dl class="simple">
+<dt>The following modules are based off the Deep Factorization-Machine (DeepFM) paper which is located at this link: <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></dt><dd><ul class="simple">
+<li><p>Class DeepFM implents the DeepFM Framework</p></li>
+<li><p>Class FactorizationMachine implements FM as noted in the above paper.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.DeepFM">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.deepfm.</span></span><span class="sig-name descname"><span class="pre">DeepFM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.deepfm.DeepFM" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>This is the DeepFM module. Extenal source of DeepFM paper:
+<a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
+<p>This module is not to cover the end-end functionality of the published paper.
+Instead, it is only the deep component of the publication. It is used to learn
+high-order feature interactions. If low-order feature interaction should
+be learnt, please use FactorizationMachine module instead, which will share
+the same embedding input of this module.</p>
+<dl class="simple">
+<dt>To support modeling flexibility, we customize the key components as:</dt><dd><ul class="simple">
+<li><p>Different from the public paper, we change the input from raw sparse
+features to embeddings of the features. It can allow flexibility in
+embedding dimensions and number of embeddings, as long as all embedding
+tensors have the same batch size.</p></li>
+<li><p>On top of the public paper, we allow users to customize the hidden layer
+to be any module, not limited to just MLP.</p></li>
+</ul>
+</dd>
+</dl>
+<p>The general architecture of the module is like:</p>
+<blockquote>
+<div><blockquote>
+<div><dl>
+<dt>1 x 10                  output</dt><dd><dl>
+<dt>/<a href="#id1"><span class="problematic" id="id2">|</span></a></dt><dd><div class="line-block">
+<div class="line">pass into <cite>dense_module</cite></div>
+<div class="line"><br /></div>
+</div>
+</dd>
+</dl>
+</dd>
+<dt>1 x 90</dt><dd><dl>
+<dt>/<a href="#id3"><span class="problematic" id="id4">|</span></a></dt><dd><div class="line-block">
+<div class="line">concat</div>
+<div class="line"><br /></div>
+</div>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<p>1 x 20, 1 x 30, 1 x 40          list of embeddings</p>
+</div></blockquote>
+<dl>
+<dt>Constructor Args:</dt><dd><dl class="simple">
+<dt>dense_module: nn.Module.</dt><dd><p>any customerized module that can be used (such as MLP) in DeepFM. The in_features
+of this module must be equal to the elements counts. For example, the input
+embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the in_features should be:
+2*3+4*5.</p>
+</dd>
+</dl>
+</dd>
+<dt>Call Args:</dt><dd><dl>
+<dt>embeddings: List[torch.Tensor]:</dt><dd><p>The list of all embeddings (e.g. dense, common_sparse, specialized_sparse,
+embedding_features, raw_embedding_features) in the shape of:</p>
+<blockquote>
+<div><p>(batch_size, num_embeddings, embedding_dim)</p>
+</div></blockquote>
+<p>For the ease of operation, embeddings that have the same embedding dimension
+have the option to be stacked into a single tensor. For example, when we have
+1 trained embedding with dimension=32, 5 native embedding with dimension=64,
+and 3 dense features with dimension=16, we can prepare the embeddings list to
+be the list of:</p>
+<blockquote>
+<div><p>tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
+tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
+tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)</p>
+</div></blockquote>
+<p>Note that: batch_size of all input tensors need to be identical.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>output of <cite>dense_module</cite> with flattened and</dt><dd><p>concatenated <cite>embeddings</cite> as input.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>deepfm_output (torch.Tensor)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrec.fb.modules.deepfm</span> <span class="k">import</span> <span class="n">DeepFM</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrec.fb.modules.mlp</span> <span class="k">import</span> <span class="n">LazyMLP</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output_dim</span> <span class="o">=</span> <span class="mi">30</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="n">output_dim</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">deepfm</span> <span class="o">=</span> <span class="n">DeepFM</span><span class="p">(</span><span class="n">dense_module</span><span class="o">=</span><span class="n">dense_module</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">deep_fm_output</span> <span class="o">=</span> <span class="n">deepfm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.DeepFM.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.deepfm.DeepFM.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.DeepFM.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.deepfm.DeepFM.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.FactorizationMachine">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.deepfm.</span></span><span class="sig-name descname"><span class="pre">FactorizationMachine</span></span><a class="headerlink" href="#torchrec.modules.deepfm.FactorizationMachine" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>This is the Factorization Machine module, mentioned in the DeepFM paper:
+<a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
+<p>This module is not to cover the end-end functionality of the published paper.
+Instead, it is only the FM part of the publication. It is used to learn
+2nd-order feature interactions.</p>
+<dl class="simple">
+<dt>To support modeling flexibility, we customize the key components as:</dt><dd><ul class="simple">
+<li><p>Different from the public paper, we change the input from raw sparse
+features to embeddings of the features. It can allow flexibility in
+embedding dimensions and number of embeddings, as long as all embedding
+tensors have the same batch size.</p></li>
+</ul>
+</dd>
+</dl>
+<p>The general architecture of the module is like:</p>
+<blockquote>
+<div><blockquote>
+<div><dl>
+<dt>1 x 1                  output</dt><dd><dl>
+<dt>/<a href="#id5"><span class="problematic" id="id6">|</span></a></dt><dd><div class="line-block">
+<div class="line">pass into <cite>dense_module</cite></div>
+<div class="line"><br /></div>
+</div>
+</dd>
+</dl>
+</dd>
+<dt>1 x 90</dt><dd><dl>
+<dt>/<a href="#id7"><span class="problematic" id="id8">|</span></a></dt><dd><div class="line-block">
+<div class="line">concat</div>
+<div class="line"><br /></div>
+</div>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<p>1 x 20, 1 x 30, 1 x 40          list of embeddings</p>
+</div></blockquote>
+<dl>
+<dt>Constructor Args:</dt><dd><p>None</p>
+</dd>
+<dt>Call Args:</dt><dd><dl>
+<dt>embeddings: List[torch.Tensor]:</dt><dd><p>The list of all embeddings (e.g. dense, common_sparse, specialized_sparse,
+embedding_features, raw_embedding_features) in the shape of:</p>
+<blockquote>
+<div><p>(batch_size, num_embeddings, embedding_dim)</p>
+</div></blockquote>
+<p>For the ease of operation, embeddings that have the same embedding dimension
+have the option to be stacked into a single tensor. For example, when we have
+1 trained embedding with dimension=32, 5 native embedding with dimension=64,
+and 3 dense features with dimension=16, we can prepare the embeddings list to
+be the list of:</p>
+<blockquote>
+<div><p>tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
+tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
+tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)</p>
+</div></blockquote>
+<p>Note that: batch_size of all input tensors need to be identical.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>output of fm with flattened and</dt><dd><p>concatenated <cite>embeddings</cite> as input. Expected to be [B, 1]</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>output (torch.Tensor)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">fm</span> <span class="o">=</span> <span class="n">FactorizationMachine</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">fm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.FactorizationMachine.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.deepfm.FactorizationMachine.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.deepfm.FactorizationMachine.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.deepfm.FactorizationMachine.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.embedding_configs">
+<span id="torchrec-modules-embedding-configs"></span><h2>torchrec.modules.embedding_configs<a class="headerlink" href="#module-torchrec.modules.embedding_configs" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">BaseEmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_embeddings:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type:</span> <span class="pre">torchrec.modules.embedding_configs.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_max:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_min:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.data_type">
+<span class="sig-name descname"><span class="pre">data_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType" title="torchrec.modules.embedding_configs.DataType"><span class="pre">torchrec.modules.embedding_configs.DataType</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FP32'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.data_type" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.embedding_dim">
+<span class="sig-name descname"><span class="pre">embedding_dim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.embedding_dim" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.feature_names">
+<span class="sig-name descname"><span class="pre">feature_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.feature_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_max">
+<span class="sig-name descname"><span class="pre">get_weight_init_max</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_max" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_min">
+<span class="sig-name descname"><span class="pre">get_weight_init_min</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_min" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.name" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_embeddings">
+<span class="sig-name descname"><span class="pre">num_embeddings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_embeddings" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_features">
+<span class="sig-name descname"><span class="pre">num_features</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_features" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_max">
+<span class="sig-name descname"><span class="pre">weight_init_max</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_max" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_min">
+<span class="sig-name descname"><span class="pre">weight_init_min</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_min" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">DataType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>Our fusion impl supports only certain types of data
+so it makes sense to retrict in a non-fused version as well.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType.FP16">
+<span class="sig-name descname"><span class="pre">FP16</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FP16'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType.FP16" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType.FP32">
+<span class="sig-name descname"><span class="pre">FP32</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FP32'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType.FP32" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType.INT2">
+<span class="sig-name descname"><span class="pre">INT2</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'INT2'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType.INT2" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType.INT4">
+<span class="sig-name descname"><span class="pre">INT4</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'INT4'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType.INT4" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.DataType.INT8">
+<span class="sig-name descname"><span class="pre">INT8</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'INT8'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.DataType.INT8" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingBagConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_embeddings:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type:</span> <span class="pre">torchrec.modules.embedding_configs.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_max:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_min:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pooling:</span> <span class="pre">torchrec.modules.embedding_configs.PoolingType</span> <span class="pre">=</span> <span class="pre">&lt;PoolingType.SUM:</span> <span class="pre">'SUM'&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.embedding_configs.BaseEmbeddingConfig</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingBagConfig.pooling">
+<span class="sig-name descname"><span class="pre">pooling</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><span class="pre">torchrec.modules.embedding_configs.PoolingType</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SUM'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig.pooling" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_embeddings:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type:</span> <span class="pre">torchrec.modules.embedding_configs.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_max:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_min:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.embedding_configs.BaseEmbeddingConfig</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig.embedding_dim">
+<span class="sig-name descname"><span class="pre">embedding_dim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig.embedding_dim" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig.feature_names">
+<span class="sig-name descname"><span class="pre">feature_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig.feature_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig.num_embeddings">
+<span class="sig-name descname"><span class="pre">num_embeddings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig.num_embeddings" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingTableConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingTableConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_embeddings:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dim:</span> <span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type:</span> <span class="pre">torchrec.modules.embedding_configs.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_max:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_init_min:</span> <span class="pre">Union[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pooling:</span> <span class="pre">torchrec.modules.embedding_configs.PoolingType</span> <span class="pre">=</span> <span class="pre">&lt;PoolingType.SUM:</span> <span class="pre">'SUM'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_feature_processor:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.embedding_configs.BaseEmbeddingConfig</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingTableConfig.embedding_names">
+<span class="sig-name descname"><span class="pre">embedding_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.embedding_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingTableConfig.has_feature_processor">
+<span class="sig-name descname"><span class="pre">has_feature_processor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.has_feature_processor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingTableConfig.is_weighted">
+<span class="sig-name descname"><span class="pre">is_weighted</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.is_weighted" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingTableConfig.pooling">
+<span class="sig-name descname"><span class="pre">pooling</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><span class="pre">torchrec.modules.embedding_configs.PoolingType</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SUM'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.pooling" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">PoolingType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType.MEAN">
+<span class="sig-name descname"><span class="pre">MEAN</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'MEAN'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType.MEAN" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType.NONE">
+<span class="sig-name descname"><span class="pre">NONE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'NONE'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType.NONE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType.SUM">
+<span class="sig-name descname"><span class="pre">SUM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SUM'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType.SUM" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.embedding_modules">
+<span id="torchrec-modules-embedding-modules"></span><h2>torchrec.modules.embedding_modules<a class="headerlink" href="#module-torchrec.modules.embedding_modules" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface" title="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface</span></code></a></p>
+<p>EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags)
+It processes sparse data in the form of KeyedJaggedTensor
+with values of the form [F X B X L]
+F: features (keys)
+B: batch size
+L: Length of sparse features (jagged)</p>
+<p>and outputs a KeyedTensor with values of the form [B * (F * D)]
+where
+F: features (keys)
+D: each feature’s (key’s) embedding dimension
+B: batch size</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><p>tables (List[EmbeddingBagConfig]): list of embedding tables
+is_weighted: (bool): whether input KeyedJaggedTensor is weighted
+device: (Optional[torch.device]): default compute device</p>
+</dd>
+<dt>Call Args:</dt><dd><p>features: KeyedJaggedTensor,
+weighted_features: KeyedJaggedTensor,</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>KeyedTensor</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl class="simple">
+<dt>table_0 = EmbeddingBagConfig(</dt><dd><p>name=”t1”, embedding_dim=3, num_embeddings=10, feature_names=[“f1”]</p>
+</dd>
+</dl>
+<p>)
+table_1 = EmbeddingBagConfig(</p>
+<blockquote>
+<div><p>name=”t2”, embedding_dim=4, num_embeddings=10, feature_names=[“f2”]</p>
+</div></blockquote>
+<p>)</p>
+<p>ebc = EmbeddingBagCollection(tables=[table_0, table_1])</p>
+<p>#        0       1        2  &lt;– batch
+# “f1”   [0,1] None    [2]
+# “f2”   [3]    [4]    [5,6,7]
+#  ^
+# feature
+features = KeyedJaggedTensor(</p>
+<blockquote>
+<div><p>keys=[“f1”, “f2”],
+values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),</p>
+</div></blockquote>
+<p>)</p>
+<p>pooled_embeddings = ebc(features)
+print(pooled_embeddings.values())
+tensor([[-0.6149,  0.0000, -0.3176],
+[-0.8876,  0.0000, -1.5606],
+[ 1.6805,  0.0000,  0.6810],
+[-1.4206, -1.0409,  0.2249],
+[ 0.1823, -0.4697,  1.3823],
+[-0.2767, -0.9965, -0.1797],
+[ 0.8864,  0.1315, -2.0724]], grad_fn=&lt;TransposeBackward0&gt;)
+print(pooled_embeddings.keys())
+[‘f1’, ‘f2’]
+print(pooled_embeddings.offset_per_key())
+tensor([0, 3, 7])</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.embedding_bag_configs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.is_weighted">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_weighted</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.is_weighted" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollectionInterface</span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Interface for EmbeddingBagCollection, GroupedEmbeddingBag, and BaseBatchedEmbeddingBag.</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.embedding_bag_configs">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.forward">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.is_weighted">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_weighted</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.is_weighted" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>EmbeddingCollection represents a collection of non-pooled embeddings
+It processes sparse data in the form of KeyedJaggedTensor
+of the form [F X B X L]
+F: features (keys)
+B: batch size
+L: Length of sparse features (variable)</p>
+<p>and outputs Dict[feature (key), JaggedTensor].
+Each JaggedTensor contains values of the form (B * L) X D
+where
+B: batch size
+L: Length of sparse features (jagged)
+D: each feature’s (key’s) embedding dimension
+and lengths are of the form L</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><p>tables (List[EmbeddingBagConfig]): list of embedding tables
+device: (Optional[torch.device]): default compute device</p>
+</dd>
+<dt>Call Args:</dt><dd><p>features: KeyedJaggedTensor,</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Dict[str, JaggedTensor]</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">e1_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
+<span class="go">    name=&quot;t1&quot;, embedding_dim=2, num_embeddings=10, feature_names=[&quot;f1&quot;]</span>
+<span class="go">)</span>
+<span class="go">e2_config = EmbeddingConfig(</span>
+<span class="go">    name=&quot;t2&quot;, embedding_dim=3, num_embeddings=10, feature_names=[&quot;f2&quot;]</span>
+<span class="go">)</span>
+<span class="go">ec_config = EmbeddingCollectionConfig(tables=[e1_config, e2_config])</span>
+</pre></div>
+</div>
+<p>ec = EmbeddingCollection(config=ec_config)</p>
+<p>#     0       1        2  &lt;– batch
+# 0   [0,1] None    [2]
+# 1   [3]    [4]    [5,6,7]
+# ^
+# feature
+features = KeyedJaggedTensor.from_offsets_sync(</p>
+<blockquote>
+<div><p>keys=[“f1”, “f2”],
+values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),</p>
+</div></blockquote>
+<p>)
+feature_embeddings = ec(features)
+print(feature_embeddings[‘f2’].values())
+tensor([[-0.2050,  0.5478,  0.6054],
+[ 0.7352,  0.3210, -3.0399],
+[ 0.1279, -0.1756, -0.4130],
+[ 0.7519, -0.4341, -0.0499],
+[ 0.9329, -1.0697, -0.8095]], grad_fn=&lt;EmbeddingBackward&gt;)</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.feature_processor">
+<span id="torchrec-modules-feature-processor"></span><h2>torchrec.modules.feature_processor<a class="headerlink" href="#module-torchrec.modules.feature_processor" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.BaseFeatureProcessor">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.feature_processor.</span></span><span class="sig-name descname"><span class="pre">BaseFeatureProcessor</span></span><a class="headerlink" href="#torchrec.modules.feature_processor.BaseFeatureProcessor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>abstract base class for feature processor</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.BaseFeatureProcessor.forward">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.feature_processor.BaseFeatureProcessor.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.BaseFeatureProcessor.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.feature_processor.BaseFeatureProcessor.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.feature_processor.</span></span><span class="sig-name descname"><span class="pre">PositionWeightedModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_feature_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.modules.feature_processor.BaseFeatureProcessor" title="torchrec.modules.feature_processor.BaseFeatureProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.feature_processor.BaseFeatureProcessor</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.lazy_extension">
+<span id="torchrec-modules-lazy-extension"></span><h2>torchrec.modules.lazy_extension<a class="headerlink" href="#module-torchrec.modules.lazy_extension" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.lazy_extension.LazyModuleExtensionMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.lazy_extension.</span></span><span class="sig-name descname"><span class="pre">LazyModuleExtensionMixin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.lazy_extension.LazyModuleExtensionMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.lazy.LazyModuleMixin</span></code></p>
+<p>This is an temporary extension of LazyModuleMixin to support passing keyword
+arguments to lazy module’s <cite>forward</cite> method.</p>
+<p>The long-term plan is to upstream this feature to LazyModuleMixin. Please see
+<a class="reference external" href="https://github.com/pytorch/pytorch/issues/59923">https://github.com/pytorch/pytorch/issues/59923</a> for details.</p>
+<dl class="simple">
+<dt>Please see TestLazyModuleExtensionMixin, which contains unit tests that ensure:</dt><dd><ul class="simple">
+<li><p>LazyModuleExtensionMixin._infer_parameters has source code parity as
+torch.nn.modules.lazy.LazyModuleMixin._infer_parameters, except that the former
+can accept keyword arguments.</p></li>
+<li><p>LazyModuleExtensionMixin._call_impl has source code parity as
+torch.nn.Module._call_impl, except that the former can pass keyword arguments
+to forward pre hooks.”</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.lazy_extension.LazyModuleExtensionMixin.apply">
+<span class="sig-name descname"><span class="pre">apply</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.modules.lazy_extension.LazyModuleExtensionMixin.apply" title="Permalink to this definition">¶</a></dt>
+<dd><p>Applies <cite>fn</cite> recursively to every submodule (as returned by <cite>.children()</cite>)
+as well as self. Typical use includes initializing the parameters of a model.</p>
+<p>Note that calling <cite>apply()</cite> on an uninitialized lazy-module will result in an error.
+User is required to initialize a lazy-module (by doing a dummy forward pass) before
+calling <cite>apply()</cite> on the lazy-module.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fn</strong> (<em>torch.nn.Module -&gt; None</em>) – function to be applied to each submodule</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>self</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Module</p>
+</dd>
+</dl>
+<dl>
+<dt>Example::</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this fails, because `linear` (a lazy-module) hasn&#39;t been initialized yet</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># run a dummy forward pass to initialize the lazy-module</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this works now</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.lazy_extension.lazy_apply">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.lazy_extension.</span></span><span class="sig-name descname"><span class="pre">lazy_apply</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.modules.lazy_extension.lazy_apply" title="Permalink to this definition">¶</a></dt>
+<dd><p>Attaches a function to a module, which will be applied recursively to every submodule
+(as returned by <cite>.children()</cite>) of the module as well as the module itself right after
+the first forward pass (i.e. after all submodules and parameters have been initialized).
+Typical use includes initializing the numerical value of the parameters of
+a lazy module (i.e. modules inherited from LazyModuleMixin).</p>
+<p>Note that <cite>lazy_apply()</cite> can be used on both lazy and non-lazy modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>module</strong> (<em>torch.nn.Module</em>) – module to recursively apply <cite>fn</cite> on.</p></li>
+<li><p><strong>fn</strong> (<em>Callable</em><em>[</em><em>[</em><em>torch.nn.Module</em><em>]</em><em>, </em><em>None</em><em>]</em>) – function to be attached to <cite>module</cite> and later
+be applied to each submodule of <cite>module</cite> and the <cite>module</cite> itself.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><cite>module</cite> with <cite>fn</cite> attached.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_apply</span><span class="p">(</span><span class="n">linear</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_apply</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.mlp">
+<span id="torchrec-modules-mlp"></span><h2>torchrec.modules.mlp<a class="headerlink" href="#module-torchrec.modules.mlp" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.MLP">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.mlp.</span></span><span class="sig-name descname"><span class="pre">MLP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_size:</span> <span class="pre">int,</span> <span class="pre">layer_sizes:</span> <span class="pre">typing.List[int],</span> <span class="pre">bias:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">activation:</span> <span class="pre">typing.Union[str,</span> <span class="pre">typing.Callable[[],</span> <span class="pre">torch.nn.modules.module.Module],</span> <span class="pre">torch.nn.modules.module.Module,</span> <span class="pre">typing.Callable[[torch.Tensor],</span> <span class="pre">torch.Tensor]]</span> <span class="pre">=</span> <span class="pre">&lt;built-in</span> <span class="pre">method</span> <span class="pre">relu</span> <span class="pre">of</span> <span class="pre">type</span> <span class="pre">object&gt;,</span> <span class="pre">device:</span> <span class="pre">typing.Optional[torch.device]</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.mlp.MLP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Applies a stack of Perceptron modules sequentially (i.e. Multi-Layer Perceptron).</p>
+<dl>
+<dt>Constructor Args:</dt><dd><p>in_size (int): <cite>in_size</cite> of the input
+layer_sizes (List[int]): <cite>out_size</cite> of each Perceptron module.
+bias (bool): if set to False, the layer will not learn an additive bias.</p>
+<blockquote>
+<div><p>Default: True.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>activation (str, Union[Callable[[], torch.nn.Module], torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):</dt><dd><p>the activation function to apply to the output of linear transformation of each Perceptron module.
+If <cite>activation</cite> is a <cite>str</cite>, we currently only support the follow strings, as “relu”, “sigmoid”,
+and “swish_layernorm”.
+If <cite>activation</cite> is a <cite>Callable[[], torch.nn.Module]</cite>, <cite>activation()</cite> will be called once per Perceptron module
+to generate the activation module for that Perceptron module, and the parameters won’t be shared
+between those activation modules. One use case is when all the activation modules share the same
+constructor arguments, but don’t share the actual module parameters.
+Default: torch.relu.</p>
+</dd>
+</dl>
+<p>device: (Optional[torch.device]).</p>
+</dd>
+<dt>Call Args:</dt><dd><dl class="simple">
+<dt>input (torch.Tensor): tensor of shape (B, I) where I is number of elements</dt><dd><p>in each input sample.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>tensor of shape (B, O) where O is <cite>out_size</cite> of</dt><dd><p>the last Perceptron module.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>output (torch.Tensor)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">layer_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">mlp_module</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">mlp_module</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.MLP.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.mlp.MLP.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.MLP.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.mlp.MLP.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.Perceptron">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.mlp.</span></span><span class="sig-name descname"><span class="pre">Perceptron</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">in_size:</span> <span class="pre">int,</span> <span class="pre">out_size:</span> <span class="pre">int,</span> <span class="pre">bias:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True,</span> <span class="pre">activation:</span> <span class="pre">typing.Union[torch.nn.modules.module.Module,</span> <span class="pre">typing.Callable[[torch.Tensor],</span> <span class="pre">torch.Tensor]]</span> <span class="pre">=</span> <span class="pre">&lt;built-in</span> <span class="pre">method</span> <span class="pre">relu</span> <span class="pre">of</span> <span class="pre">type</span> <span class="pre">object&gt;,</span> <span class="pre">device:</span> <span class="pre">typing.Optional[torch.device]</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.mlp.Perceptron" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Applies a linear transformation and activation.</p>
+<dl>
+<dt>Constructor Args:</dt><dd><p>in_size (int): number of elements in each input sample.
+out_size (int): number of elements in each output sample.
+bias (bool): if set to <code class="docutils literal notranslate"><span class="pre">False</span></code>, the layer will not learn an additive bias.</p>
+<blockquote>
+<div><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):</dt><dd><p>the activation function to apply to the output of linear transformation.
+Default: torch.relu.</p>
+</dd>
+</dl>
+<p>device: (Optional[torch.device]).</p>
+</dd>
+<dt>Call Args:</dt><dd><dl class="simple">
+<dt>input (torch.Tensor): tensor of shape (B, I) where I is number of elements</dt><dd><p>in each input sample.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>tensor of shape (B, O) where O is number of elements</dt><dd><p>per channel in each output sample (i.e. <cite>out_size</cite>).</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>output (torch.Tensor)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out_size</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">perceptron</span> <span class="o">=</span> <span class="n">Perceptron</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">perceptron</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">]</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.Perceptron.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.mlp.Perceptron.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.mlp.Perceptron.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.mlp.Perceptron.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.score_learning">
+<span id="torchrec-modules-score-learning"></span><h2>torchrec.modules.score_learning<a class="headerlink" href="#module-torchrec.modules.score_learning" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.score_learning.PositionWeightsAttacher">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.score_learning.</span></span><span class="sig-name descname"><span class="pre">PositionWeightsAttacher</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features_max_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.score_learning.PositionWeightsAttacher" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Map id list features to id score list features using each id’s
+position in the sample.</p>
+<dl class="simple">
+<dt>Constructor Args:</dt><dd><dl class="simple">
+<dt>features_max_length (Dict[str, int]): feature name to max_length mapping.</dt><dd><p>max_length, a.k.a truncation size, specifies the maximum number of ids
+each sample has. For each feature, its position weight parameter size
+is max_length.</p>
+</dd>
+</dl>
+</dd>
+<dt>Call Args:</dt><dd><p>features: KeyedJaggedTensor</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>same as input features with weights</dt><dd><p>field being populated</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>weighted_features (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a>)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features_max_length</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;f1&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">}</span>
+<span class="go">pw = PositionWeightsAttacher(features_max_lengths)</span>
+</pre></div>
+</div>
+<p>#     0       1        2  &lt;– batch
+# 0   [0,1] None    [2]
+# 1   [3]    [4]    [5,6,7]
+# ^
+# feature
+features = KeyedJaggedTensor.from_offsets_sync(</p>
+<blockquote>
+<div><p>keys=[“f1”, “f2”],
+values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),</p>
+</div></blockquote>
+<p>)
+weighted_features = pw(features)</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.score_learning.PositionWeightsAttacher.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.modules.score_learning.PositionWeightsAttacher.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.score_learning.PositionWeightsAttacher.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.score_learning.PositionWeightsAttacher.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.score_learning.lengths_range_fill">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.score_learning.</span></span><span class="sig-name descname"><span class="pre">lengths_range_fill</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.score_learning.lengths_range_fill" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate arange list for each length element
+Example:
+lengths = torch.Tensor([3, 1, 2])
+return torch.Tensor([0, 1, 2, 0, 0, 1])</p>
+</dd></dl>
+
+</section>
+<section id="module-torchrec.modules.utils">
+<span id="torchrec-modules-utils"></span><h2>torchrec.modules.utils<a class="headerlink" href="#module-torchrec.modules.utils" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.check_module_output_dimension">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">check_module_output_dimension</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.modules.utils.check_module_output_dimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>Verify that the out_features of a given module or a list of modules matches the specified number.
+If a list of modules or a ModuleList is given, recursively check all the submodules.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.construct_modulelist_from_single_module">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">construct_modulelist_from_single_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.modules.utils.construct_modulelist_from_single_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a single module, construct a (nested) ModuleList of size of sizes by making copies of
+the provided module and reinitializing the Linear layers.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.convert_list_of_modules_to_modulelist">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">convert_list_of_modules_to_modulelist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.modules.utils.convert_list_of_modules_to_modulelist" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.extract_module_or_tensor_callable">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">extract_module_or_tensor_callable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_or_callable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.utils.extract_module_or_tensor_callable" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.get_module_output_dimension">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">get_module_output_dimension</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.modules.utils.get_module_output_dimension" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.init_mlp_weights_xavier_uniform">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">init_mlp_weights_xavier_uniform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.modules.utils.init_mlp_weights_xavier_uniform" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-torchrec.modules">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-torchrec.modules" title="Permalink to this headline">¶</a></h2>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="torchrec.optim.html" class="btn btn-neutral float-right" title="torchrec.optim" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="torchrec.models.html" class="btn btn-neutral" title="torchrec.models" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  
+
+    <hr>
+
+  
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+    
+      <div>
+        Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+      </div>
+     
+
+</footer>
+
+          </div>
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">torchrec.modules</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.activation">torchrec.modules.activation</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.crossnet">torchrec.modules.crossnet</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.deepfm">torchrec.modules.deepfm</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.embedding_configs">torchrec.modules.embedding_configs</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.embedding_modules">torchrec.modules.embedding_modules</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.feature_processor">torchrec.modules.feature_processor</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.lazy_extension">torchrec.modules.lazy_extension</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.mlp">torchrec.modules.mlp</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.score_learning">torchrec.modules.score_learning</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules.utils">torchrec.modules.utils</a></li>
+<li><a class="reference internal" href="#module-torchrec.modules">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  
+
+
+  
+
+     
+       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+         <script src="_static/jquery.js"></script>
+         <script src="_static/underscore.js"></script>
+         <script src="_static/doctools.js"></script>
+         <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+     
+
+  
+
+  <script type="text/javascript" src="_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="_static/js/vendor/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/1.5.0/list.min.js"></script>
+  <script type="text/javascript" src="_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Access comprehensive developer documentation for PyTorch</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Get in-depth tutorials for beginners and advanced developers</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Find development resources and get your questions answered</p>
+          <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://pytorch.org/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/">PyTorch</a></li>
+            <li><a href="https://pytorch.org/get-started">Get Started</a></li>
+            <li><a href="https://pytorch.org/features">Features</a></li>
+            <li><a href="https://pytorch.org/ecosystem">Ecosystem</a></li>
+            <li><a href="https://pytorch.org/blog/">Blog</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://pytorch.org/resources">Resources</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.org/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf" target="_blank">Brand Guidelines</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Stay Connected</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+            <a href="https://www.youtube.com/pytorch" target="_blank" class="youtube"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="cookie-banner-wrapper">
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://www.facebook.com/policies/cookies/">Cookies Policy</a>.</p>
+    <img class="close-button" src="_static/images/pytorch-x.svg">
+  </div>
+</div>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://pytorch.org/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://pytorch.org/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/mobile">Mobile</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/hub">PyTorch Hub</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li class="resources-mobile-menu-title">
+            Docs
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/docs/stable/index.html">PyTorch</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/audio/stable/index.html">torchaudio</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/text/stable/index.html">torchtext</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/vision/stable/index.html">torchvision</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/elastic/">TorchElastic</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/serve/">TorchServe</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/xla">PyTorch on XLA Devices</a>
+            </li>
+          </ul>
+
+          <li class="resources-mobile-menu-title">
+            Resources
+          </li>
+
+          <ul class="resources-mobile-menu-items">
+            <li>
+              <a href="https://pytorch.org/resources">Developer Resources</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/features">About</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/hub">Models (Beta)</a>
+            </li>
+
+            <li>
+              <a href="https://pytorch.org/#community-module">Community</a>
+            </li>
+
+            <li>
+              <a href="https://discuss.pytorch.org/">Forums</a>
+            </li>
+          </ul>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    $(document).ready(function() {
+      mobileMenu.bind();
+      mobileTOC.bind();
+      pytorchAnchors.bind();
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+      mainMenuDropdown.bind();
+      filterTags.bind();
+
+      // Add class to links that have code blocks, since we cannot create links in code blocks
+      $("article.pytorch-article a span.pre").each(function(e) {
+        $(this).closest("a").addClass("has-code");
+      });
+    })
+  </script>
+</body>
+</html>
