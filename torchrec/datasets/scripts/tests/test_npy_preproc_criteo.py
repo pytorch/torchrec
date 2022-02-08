@@ -11,7 +11,7 @@ import unittest
 
 import numpy as np
 from torchrec.datasets.criteo import INT_FEATURE_COUNT, CAT_FEATURE_COUNT
-from torchrec.datasets.scripts.preprocess_criteo import main
+from torchrec.datasets.scripts.npy_preproc_criteo import main
 from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
 
 

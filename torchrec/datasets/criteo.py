@@ -33,7 +33,7 @@ from torchrec.datasets.utils import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
-
+FREQUENCY_THRESHOLD = 3
 INT_FEATURE_COUNT = 13
 CAT_FEATURE_COUNT = 26
 DEFAULT_LABEL_NAME = "label"
@@ -374,6 +374,115 @@ class BinaryCriteoUtils:
             num_entries = num_rows * row_size
             data = np.fromfile(fin, dtype=dtype, count=num_entries)
             return data.reshape((num_rows, row_size))
+
+    @staticmethod
+    def sparse_to_contiguous(
+        in_files: List[str],
+        output_dir: str,
+        frequency_threshold: int = FREQUENCY_THRESHOLD,
+        columns: int = CAT_FEATURE_COUNT,
+        path_manager_key: str = PATH_MANAGER_KEY,
+        output_file_suffix: str = "_contig_freq.npy",
+    ) -> None:
+        """
+        Convert all sparse .npy files to have contiguous integers. Store in a separate
+        .npy file. All input files must be processed together because columns
+        can have matching IDs between files. Hence, they must be transformed
+        together. Also, the transformed IDs are not unique between columns. IDs
+        that appear less than frequency_threshold amount of times will be remapped
+        to have a value of 1.
+
+        Example transformation, frequenchy_threshold of 2:
+        day_0_sparse.npy
+        | col_0 | col_1 |
+        -----------------
+        | abc   | xyz   |
+        | iop   | xyz   |
+
+        day_1_sparse.npy
+        | col_0 | col_1 |
+        -----------------
+        | iop   | tuv   |
+        | lkj   | xyz   |
+
+        day_0_sparse_contig.npy
+        | col_0 | col_1 |
+        -----------------
+        | 1     | 2     |
+        | 2     | 2     |
+
+        day_1_sparse_contig.npy
+        | col_0 | col_1 |
+        -----------------
+        | 2     | 1     |
+        | 1     | 2     |
+
+        Args:
+            in_files List[str]: Input directory of npy files.
+            out_dir (str): Output directory of processed npy files.
+            frequency_threshold: IDs occuring less than this frequency will be remapped to a value of 1.
+            path_manager_key (str): Path manager key used to load from different filesystems.
+
+        Returns:
+            None.
+        """
+
+        # Load each .npy file of sparse features. Transformations are made along the columns.
+        # Thereby, transpose the input to ease operations.
+        # E.g. file_to_features = {"day_0_sparse": [array([[3,6,7],[7,9,3]]}
+        file_to_features: Dict[str, np.ndarray] = {}
+        for f in in_files:
+            name = os.path.basename(f).split(".")[0]
+            file_to_features[name] = np.load(f).transpose()
+            print(f"Successfully loaded file: {f}")
+
+        # Iterate through each column in each file and map the sparse ids to contiguous ids.
+        for col in range(columns):
+            print(f"Processing column: {col}")
+
+            # Iterate through each row in each file for the current column and determine the
+            # frequency of each sparse id.
+            sparse_to_frequency: Dict[int, int] = {}
+            if frequency_threshold > 1:
+                for f in file_to_features:
+                    for _, sparse in enumerate(file_to_features[f][col]):
+                        if sparse in sparse_to_frequency:
+                            sparse_to_frequency[sparse] += 1
+                        else:
+                            sparse_to_frequency[sparse] = 1
+
+            # Iterate through each row in each file for the current column and remap each
+            # sparse id to a contiguous id. The contiguous ints start at a value of 2 so that
+            # infrequenct IDs (determined by the frequency_threshold) can be remapped to 1.
+            running_sum = 2
+            sparse_to_contiguous_int: Dict[int, int] = {}
+
+            for f in file_to_features:
+                print(f"Processing file: {f}")
+
+                for i, sparse in enumerate(file_to_features[f][col]):
+                    if sparse not in sparse_to_contiguous_int:
+                        # If the ID appears less than frequency_threshold amount of times
+                        # remap the value to 1.
+                        if (
+                            frequency_threshold > 1
+                            and sparse_to_frequency[sparse] < frequency_threshold
+                        ):
+                            sparse_to_contiguous_int[sparse] = 1
+                        else:
+                            sparse_to_contiguous_int[sparse] = running_sum
+                            running_sum += 1
+
+                    # Re-map sparse value to contiguous in place.
+                    file_to_features[f][col][i] = sparse_to_contiguous_int[sparse]
+
+        path_manager = PathManagerFactory().get(path_manager_key)
+        for f, features in file_to_features.items():
+            output_file = os.path.join(output_dir, f + output_file_suffix)
+            with path_manager.open(output_file, "wb") as fout:
+                print(f"Writing file: {output_file}")
+                # Transpose back the features when saving, as they were transposed when loading.
+                np.save(fout, features.transpose())
 
 
 class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
