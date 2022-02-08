@@ -50,7 +50,7 @@ class SequenceModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(self, sharding_type: str, kernel_type: str) -> None:
         self._test_sharding(
             sharders=[
@@ -79,7 +79,7 @@ class SequenceModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_nccl_dp(self, sharding_type: str, kernel_type: str) -> None:
         self._test_sharding(
             sharders=[
@@ -109,7 +109,7 @@ class SequenceModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(self, sharding_type: str, kernel_type: str) -> None:
         self._test_sharding(
             sharders=[
