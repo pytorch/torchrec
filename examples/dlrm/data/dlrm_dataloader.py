@@ -15,12 +15,12 @@ from torchrec.datasets.criteo import (
     CAT_FEATURE_COUNT,
     DEFAULT_CAT_NAMES,
     DEFAULT_INT_NAMES,
+    DAYS,
     InMemoryBinaryCriteoIterDataPipe,
 )
 from torchrec.datasets.random import RandomRecDataset
 
 STAGES = ["train", "val", "test"]
-DAYS = 24
 
 
 def _get_random_dataloader(

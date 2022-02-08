@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import time
 from typing import (
     Iterator,
     Any,
@@ -36,6 +37,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 FREQUENCY_THRESHOLD = 3
 INT_FEATURE_COUNT = 13
 CAT_FEATURE_COUNT = 26
+DAYS = 24
 DEFAULT_LABEL_NAME = "label"
 DEFAULT_INT_NAMES: List[str] = [f"int_{idx}" for idx in range(INT_FEATURE_COUNT)]
 DEFAULT_CAT_NAMES: List[str] = [f"cat_{idx}" for idx in range(CAT_FEATURE_COUNT)]
@@ -483,6 +485,144 @@ class BinaryCriteoUtils:
                 print(f"Writing file: {output_file}")
                 # Transpose back the features when saving, as they were transposed when loading.
                 np.save(fout, features.transpose())
+
+    @staticmethod
+    def shuffle(
+        input_dir_labels_and_dense: str,
+        input_dir_sparse: str,
+        output_dir_shuffled: str,
+        rows_per_day: Dict[int, int],
+        output_dir_full_set: Optional[str] = None,
+        days: int = DAYS,
+        int_columns: int = INT_FEATURE_COUNT,
+        sparse_columns: int = CAT_FEATURE_COUNT,
+        path_manager_key: str = PATH_MANAGER_KEY,
+    ) -> None:
+        """
+        Shuffle the dataset. Expects the files to be in .npy format and the data
+        to be split by day and by dense, sparse and label data.
+        Dense data must be in: day_x_dense.npy
+        Sparse data must be in: day_x_sparse.npy
+        Labels data must be in: day_x_labels.npy
+
+        The dataset will be reconstructed, shuffled and then split back into
+        separate dense, sparse and labels files.
+
+        Args:
+            input_dir_labels_and_dense (str): Input directory of labels and dense npy files.
+            input_dir_sparse (str): Input directory of sparse npy files.
+            output_dir_shuffled (str): Output directory for shuffled labels, dense and sparse npy files.
+            rows_per_day Dict[int, int]: Number of rows in each file.
+            output_dir_full_set (str): Output directory of the full dataset, if desired.
+            days (int): Number of day files.
+            int_columns (int): Number of columns with dense features.
+            columns (int): Total number of columns.
+            path_manager_key (str): Path manager key used to load from different filesystems.
+        """
+
+        total_rows = sum(rows_per_day.values())
+        columns = int_columns + sparse_columns + 1  # add 1 for label column
+        full_dataset = np.zeros((total_rows, columns), dtype=np.float32)
+        curr_first_row = 0
+        curr_last_row = 0
+        for d in range(0, days):
+            curr_last_row += rows_per_day[d]
+
+            # dense
+            path_to_file = os.path.join(
+                input_dir_labels_and_dense, f"day_{d}_dense.npy"
+            )
+            data = np.load(path_to_file)
+            print(
+                f"Day {d} dense- {curr_first_row}-{curr_last_row} loaded files - {time.time()} - {path_to_file}"
+            )
+
+            full_dataset[curr_first_row:curr_last_row, 0:int_columns] = data
+            del data
+
+            # sparse
+            path_to_file = os.path.join(input_dir_sparse, f"day_{d}_sparse.npy")
+            data = np.load(path_to_file)
+            print(
+                f"Day {d} sparse- {curr_first_row}-{curr_last_row} loaded files - {time.time()} - {path_to_file}"
+            )
+
+            full_dataset[curr_first_row:curr_last_row, int_columns : columns - 1] = data
+            del data
+
+            # labels
+            path_to_file = os.path.join(
+                input_dir_labels_and_dense, f"day_{d}_labels.npy"
+            )
+            data = np.load(path_to_file)
+            print(
+                f"Day {d} labels- {curr_first_row}-{curr_last_row} loaded files - {time.time()} - {path_to_file}"
+            )
+
+            full_dataset[curr_first_row:curr_last_row, columns - 1 :] = data
+            del data
+
+            curr_first_row = curr_last_row
+
+        path_manager = PathManagerFactory().get(path_manager_key)
+
+        # Save the full dataset
+        if output_dir_full_set is not None:
+            full_output_file = os.path.join(output_dir_full_set, "full.npy")
+            with path_manager.open(full_output_file, "wb") as fout:
+                print(f"Writing full set file: {full_output_file}")
+                np.save(fout, full_dataset)
+
+        print("Shuffling dataset")
+        np.random.shuffle(full_dataset)
+
+        # Slice and save each portion into dense, sparse and labels
+        curr_first_row = 0
+        curr_last_row = 0
+        for d in range(0, days):
+            curr_last_row += rows_per_day[d]
+
+            # write dense columns
+            shuffled_dense_file = os.path.join(
+                output_dir_shuffled, f"day_{d}_dense.npy"
+            )
+            with path_manager.open(shuffled_dense_file, "wb") as fout:
+                print(
+                    f"Writing rows {curr_first_row}-{curr_last_row-1} dense file: {shuffled_dense_file}"
+                )
+                np.save(fout, full_dataset[curr_first_row:curr_last_row, 0:int_columns])
+
+            # write sparse columns
+            shuffled_sparse_file = os.path.join(
+                output_dir_shuffled, f"day_{d}_sparse.npy"
+            )
+            with path_manager.open(shuffled_sparse_file, "wb") as fout:
+                print(
+                    f"Writing rows {curr_first_row}-{curr_last_row-1} sparse file: {shuffled_sparse_file}"
+                )
+                np.save(
+                    fout,
+                    full_dataset[
+                        curr_first_row:curr_last_row, int_columns : columns - 1
+                    ].astype(np.int32),
+                )
+
+            # write labels columns
+            shuffled_labels_file = os.path.join(
+                output_dir_shuffled, f"day_{d}_labels.npy"
+            )
+            with path_manager.open(shuffled_labels_file, "wb") as fout:
+                print(
+                    f"Writing rows {curr_first_row}-{curr_last_row-1} labels file: {shuffled_labels_file}"
+                )
+                np.save(
+                    fout,
+                    full_dataset[curr_first_row:curr_last_row, columns - 1 :].astype(
+                        np.int32
+                    ),
+                )
+
+            curr_first_row = curr_last_row
 
 
 class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
