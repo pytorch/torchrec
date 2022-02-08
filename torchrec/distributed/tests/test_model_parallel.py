@@ -50,7 +50,6 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.test_utils import (
     get_free_port,
     skip_if_asan_class,
-    init_distributed_single_host,
     seed_and_log,
 )
 
@@ -129,7 +128,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_rw(
         self,
         sharder_type: str,
@@ -168,7 +167,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_dp(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
@@ -206,7 +205,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
@@ -253,9 +252,9 @@ class ModelParallelTest(ModelParallelTestBase):
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
-        local_size=st.sampled_from([2, 4]),
+        local_size=st.sampled_from([2]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_twcw(
         self,
         sharder_type: str,
@@ -302,7 +301,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
@@ -335,9 +334,9 @@ class ModelParallelTest(ModelParallelTestBase):
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
-        local_size=st.sampled_from([2, 4]),
+        local_size=st.sampled_from([2]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_twrw(
         self,
         sharder_type: str,
@@ -378,7 +377,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_tw(
         self,
         sharder_type: str,
@@ -416,7 +415,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_cw(
         self,
         sharder_type: str,
@@ -464,7 +463,7 @@ class ModelParallelTest(ModelParallelTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_dp(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:

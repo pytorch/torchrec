@@ -274,11 +274,11 @@ class KJTAllToAllTest(DistDataTestCase):
     # pyre-fixme[56]
     @given(
         backend=st.sampled_from(["gloo", "nccl"]),
-        B=st.integers(min_value=1, max_value=3),
-        features=st.integers(min_value=2, max_value=5),
+        B=st.integers(min_value=1, max_value=2),
+        features=st.integers(min_value=3, max_value=4),
         is_weighted=st.booleans(),
     )
-    @settings(max_examples=10, deadline=None)
+    @settings(max_examples=8, deadline=None)
     def test_features(
         self, backend: str, B: int, features: int, is_weighted: bool
     ) -> None:
@@ -340,11 +340,11 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
     # pyre-fixme[56]
     @given(
         backend=st.sampled_from(["gloo", "nccl"]),
-        B=st.integers(min_value=2, max_value=5),
-        features=st.integers(min_value=2, max_value=5),
+        B=st.integers(min_value=2, max_value=3),
+        features=st.integers(min_value=3, max_value=4),
         is_reversed=st.booleans(),
     )
-    @settings(max_examples=20, deadline=None)
+    @settings(max_examples=8, deadline=None)
     def test_pooled_embeddings(
         self, backend: str, B: int, features: int, is_reversed: bool
     ) -> None:
