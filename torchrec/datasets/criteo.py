@@ -641,6 +641,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         batch_size (int): batch size.
         rank (int): rank.
         world_size (int): world size.
+        shuffle_batches (bool): Whether to shuffle batches
         hashes (Optional[int]): List of max categorical feature value for each feature.
             Length of this list should be CAT_FEATURE_COUNT.
         path_manager_key (str): Path manager key used to load from different
@@ -667,6 +668,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         batch_size: int,
         rank: int,
         world_size: int,
+        shuffle_batches: bool = False,
         hashes: Optional[List[int]] = None,
         path_manager_key: str = PATH_MANAGER_KEY,
     ) -> None:
@@ -676,6 +678,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.batch_size = batch_size
         self.rank = rank
         self.world_size = world_size
+        self.shuffle_batches = shuffle_batches
         self.hashes = hashes
         self.path_manager_key = path_manager_key
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
@@ -739,6 +742,13 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
     def _np_arrays_to_batch(
         self, dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
     ) -> Batch:
+        if self.shuffle_batches:
+            # Shuffle all 3 in unison
+            shuffler = np.random.permutation(len(dense))
+            dense = dense[shuffler]
+            sparse = sparse[shuffler]
+            labels = labels[shuffler]
+
         return Batch(
             dense_features=torch.from_numpy(dense),
             sparse_features=KeyedJaggedTensor(
