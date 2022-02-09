@@ -191,6 +191,64 @@ class TestBinaryCriteoUtils(CriteoTest):
                 full[start_row : start_row + num_rows_to_select], partial
             )
 
+    def test_sparse_to_contiguous_ids(self) -> None:
+        # Build the day .npy files. 3 days, 3 columns, 9 rows.
+        unprocessed_data = [
+            np.array([[10, 70, 10], [20, 80, 20], [30, 90, 30]]),  # day 0
+            np.array([[20, 70, 40], [30, 80, 50], [40, 90, 60]]),  # day 1
+            np.array([[20, 70, 70], [20, 80, 80], [30, 90, 90]]),  # day 2
+        ]
+
+        expected_data_no_freq_threshold = [
+            np.array([[2, 2, 2], [3, 3, 3], [4, 4, 4]]),  # day 0
+            np.array([[3, 2, 5], [4, 3, 6], [5, 4, 7]]),  # day 1
+            np.array([[3, 2, 8], [3, 3, 9], [4, 4, 10]]),  # day 2
+        ]
+        self._validate_sparse_to_contiguous_preproc(
+            unprocessed_data, expected_data_no_freq_threshold, 0, 3
+        )
+
+        expected_data_freq_threshold_2 = [
+            np.array([[1, 2, 1], [2, 3, 1], [3, 4, 1]]),  # day 0
+            np.array([[2, 2, 1], [3, 3, 1], [1, 4, 1]]),  # day 1
+            np.array([[2, 2, 1], [2, 3, 1], [3, 4, 1]]),  # day 2
+        ]
+        self._validate_sparse_to_contiguous_preproc(
+            unprocessed_data, expected_data_freq_threshold_2, 2, 3
+        )
+
+    def _validate_sparse_to_contiguous_preproc(
+        self,
+        unprocessed_data: List[np.ndarray],
+        expected_data: List[np.ndarray],
+        freq_threshold: int,
+        columns: int,
+    ) -> None:
+        # Save the unprocessed data to temporary directory.
+        temp_input_dir: str
+        temp_output_dir: str
+        with tempfile.TemporaryDirectory() as temp_input_dir, tempfile.TemporaryDirectory() as temp_output_dir:
+            input_files = []
+            for i, data in enumerate(unprocessed_data):
+                file = os.path.join(temp_input_dir, f"day_{i}_sparse.npy")
+                input_files.append(file)
+                np.save(file, data)
+
+            BinaryCriteoUtils.sparse_to_contiguous(
+                input_files, temp_output_dir, freq_threshold, columns
+            )
+
+            output_files = list(
+                map(
+                    lambda f: os.path.join(temp_output_dir, f),
+                    os.listdir(temp_output_dir),
+                )
+            )
+            output_files.sort()
+            for day, file in enumerate(output_files):
+                processed_data = np.load(file)
+                self.assertTrue(np.array_equal(expected_data[day], processed_data))
+
 
 class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
     def _validate_batch(
