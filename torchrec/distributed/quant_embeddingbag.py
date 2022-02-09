@@ -52,12 +52,9 @@ class ShardedQuantEmbeddingBagCollection(
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
-        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
-        super().__init__(
-            module, table_name_to_parameter_sharding, env, fused_params, device
-        )
+        super().__init__(module, table_name_to_parameter_sharding, env, None, device)
 
     # pyre-ignore [3]
     def input_dist(
@@ -150,7 +147,7 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
-        return ShardedQuantEmbeddingBagCollection(module, params, env, None, device)
+        return ShardedQuantEmbeddingBagCollection(module, params, env, device)
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value, ShardingType.TABLE_WISE.value]

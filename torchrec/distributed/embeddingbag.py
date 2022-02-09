@@ -497,7 +497,7 @@ class ShardedEmbeddingBagCollectionBase(
 
 
 class ShardedEmbeddingBagCollection(
-    ShardedEmbeddingBagCollectionBase[F, T],
+    ShardedEmbeddingBagCollectionBase[SparseFeaturesList, List[torch.Tensor]],
     FusedOptimizerModule,
 ):
     """
@@ -549,7 +549,7 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> ShardedEmbeddingBagCollection[SparseFeaturesList, List[torch.Tensor]]:
+    ) -> ShardedEmbeddingBagCollection:
         return ShardedEmbeddingBagCollection(
             module, params, env, self.fused_params, device
         )
