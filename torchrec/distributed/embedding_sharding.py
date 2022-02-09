@@ -637,9 +637,6 @@ class EmbeddingSharding(abc.ABC, Generic[TRAIN_F, TRAIN_T, INFER_F, INFER_T]):
     table_wise.
     """
 
-    def __init__(self, permute_embeddings: bool = False) -> None:
-        self._permute_embeddings: bool = permute_embeddings
-
     @abc.abstractmethod
     def create_train_input_dist(self) -> BaseSparseFeaturesDist[TRAIN_F]:
         pass

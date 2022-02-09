@@ -274,9 +274,8 @@ class TwEmbeddingSharding(
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
-        permute_embeddings: bool = False,
     ) -> None:
-        super().__init__(permute_embeddings)
+        super().__init__()
         self._env = env
         self._device = device
         self._is_sequence = is_sequence

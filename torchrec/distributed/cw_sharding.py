@@ -40,8 +40,11 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
         permute_embeddings: bool = False,
     ) -> None:
         super().__init__(
-            embedding_configs, env, device, permute_embeddings=permute_embeddings
+            embedding_configs,
+            env,
+            device,
         )
+        self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
             self._init_combined_embeddings()
 
