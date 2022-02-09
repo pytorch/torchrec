@@ -209,7 +209,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 10
         keys = ["f1", "f2"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
 
         dense_features = torch.rand((B, D))
 
@@ -227,7 +227,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 20
         keys = ["f1", "f2", "f3", "f4"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
 
         dense_features = torch.rand((B, D))
 
@@ -246,7 +246,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 10
         keys = ["f1", "f2"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
         gm = symbolic_trace(inter_arch)
 
         dense_features = torch.rand((B, D))
@@ -267,7 +267,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 10
         keys = ["f1", "f2"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
         gm = symbolic_trace(inter_arch)
         scripted_gm = torch.jit.script(gm)
 
@@ -288,7 +288,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 25
         keys = ["f1", "f2", "f3", "f4", "f5", "f6"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
 
         dense_features = torch.rand((B, D))
 
@@ -347,7 +347,7 @@ class InteractionArchTest(unittest.TestCase):
         B = 6
         keys = ["f1", "f2"]
         F = len(keys)
-        inter_arch = InteractionArch(num_sparse_features=F)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
         torch.manual_seed(0)
         dense_features = torch.randint(0, 10, (B, D))
 
