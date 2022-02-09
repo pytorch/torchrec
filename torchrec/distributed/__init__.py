@@ -5,6 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from torchrec.distributed.comm import (  # noqa
+    get_local_rank,
+    get_local_size,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
     TrainPipeline,
