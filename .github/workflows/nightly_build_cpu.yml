@@ -124,7 +124,7 @@ jobs:
         conda run -n build_binary \
           python -m pip install pytest
         conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
     # Push to Pypi
     - name: Push TorchRec Binary to PYPI
       env:
