@@ -249,6 +249,77 @@ class TestBinaryCriteoUtils(CriteoTest):
                 processed_data = np.load(file)
                 self.assertTrue(np.array_equal(expected_data[day], processed_data))
 
+    def test_shuffle(self) -> None:
+        """
+        To ensure that the shuffle preserves the sanity of the input (no missing values), each row will
+        be uniquely identifiable by the value in the labels column. Each row will have a unique sequence.
+        The row ID will map to this sequence. The output map of row IDs to sequences must be the same as
+        the input map of row IDs to sequences.
+        """
+
+        days: int = 3  # need type annotation to be captured in local function
+        int_columns = 3
+        cat_columns = 3
+
+        temp_input_dir: str
+        temp_output_dir: str
+        with tempfile.TemporaryDirectory() as temp_input_dir, tempfile.TemporaryDirectory() as temp_output_dir:
+            dense_data = [  # 3 columns, 3 rows per day
+                np.array(
+                    [[i, i + 1, i + 2], [i + 3, i + 4, i + 5], [i + 6, i + 7, i + 8]]
+                )
+                for i in range(days)
+            ]
+            sparse_data = [
+                np.array(
+                    [[i, i + 1, i + 2], [i + 3, i + 4, i + 5], [i + 6, i + 7, i + 8]]
+                )
+                for i in range(days)
+            ]
+            labels_data = [np.array([[i], [i + 3], [i + 6]]) for i in range(3)]
+
+            def save_data_list(data: List[np.ndarray], data_type: str) -> None:
+                for day, data in enumerate(data):
+                    file = os.path.join(temp_input_dir, f"day_{day}_{data_type}.npy")
+                    np.save(file, data)
+
+            save_data_list(dense_data, "dense")
+            save_data_list(sparse_data, "sparse")
+            save_data_list(labels_data, "labels")
+
+            rows_per_day = {0: 3, 1: 3, 2: 3}
+            BinaryCriteoUtils.shuffle(
+                temp_input_dir,
+                temp_input_dir,
+                temp_output_dir,
+                rows_per_day,
+                None,
+                days,
+                int_columns,
+                cat_columns,
+            )
+
+            # The label is the row id in this test.
+            def row_id_to_sequence(data_dir: str) -> Dict[int, List[int]]:
+                id_to_sequence = {}
+                for d in range(days):
+                    label_data = np.load(os.path.join(data_dir, f"day_{d}_labels.npy"))
+                    dense_data = np.load(os.path.join(data_dir, f"day_{d}_dense.npy"))
+                    sparse_data = np.load(os.path.join(data_dir, f"day_{d}_sparse.npy"))
+
+                    for row in range(len(label_data)):
+                        label = label_data[row][0]
+                        id_to_sequence[label] = [label]
+                        id_to_sequence[label].extend(dense_data[row])
+                        id_to_sequence[label].extend(sparse_data[row])
+
+                return id_to_sequence
+
+            self.assertEqual(
+                row_id_to_sequence(temp_input_dir),
+                row_id_to_sequence(temp_output_dir),
+            )
+
 
 class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
     def _validate_batch(
