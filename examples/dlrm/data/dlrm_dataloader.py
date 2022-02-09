@@ -85,6 +85,7 @@ def _get_in_memory_dataloader(
             batch_size=args.batch_size,
             rank=rank,
             world_size=world_size,
+            shuffle_batches=args.shuffle_batches,
             hashes=args.num_embeddings_per_feature
             if args.num_embeddings is None
             else ([args.num_embeddings] * CAT_FEATURE_COUNT),

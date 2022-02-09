@@ -133,6 +133,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=15.0,
         help="Learning rate.",
     )
+    parser.add_argument(
+        "--shuffle_batches",
+        type=bool,
+        default=False,
+        help="Shuffle each batch during training.",
+    )
     parser.set_defaults(pin_memory=None)
     return parser.parse_args(argv)
 
