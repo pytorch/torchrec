@@ -8,15 +8,13 @@
 import os
 import unittest
 from collections import OrderedDict
-from enum import Enum
-from typing import List, Tuple, Optional, Dict, cast, Union
+from typing import List, Tuple, Optional, cast
 
 import hypothesis.strategies as st
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -32,13 +30,12 @@ from torchrec.distributed.planner import (
 )
 from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
-    TestSparseNNBase,
-    TestEBCSharder,
-    TestEBSharder,
     ModelInput,
 )
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelTestBase,
+from torchrec.distributed.test_utils.test_model_parallel import (
+    ModelParallelTestShared,
+    SharderType,
+    create_test_sharder,
 )
 from torchrec.distributed.types import (
     ModuleSharder,
@@ -47,61 +44,11 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.test_utils import (
-    get_free_port,
-    skip_if_asan_class,
-    seed_and_log,
-)
-
-
-class SharderType(Enum):
-    EMBEDDING_BAG = "embedding_bag"
-    EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
-
-
-def create_test_sharder(
-    sharder_type: str, sharding_type: str, kernel_type: str
-) -> Union[TestEBSharder, TestEBCSharder]:
-    if sharder_type == SharderType.EMBEDDING_BAG.value:
-        return TestEBSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    else:
-        raise ValueError(f"Sharder not supported {sharder_type}")
+from torchrec.test_utils import get_free_port, skip_if_asan_class
 
 
 @skip_if_asan_class
-class ModelParallelTest(ModelParallelTestBase):
-    @seed_and_log
-    def setUp(self) -> None:
-        super().setUp()
-
-        num_features = 4
-        num_weighted_features = 2
-
-        self.tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(num_features)
-        ]
-        self.weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(num_weighted_features)
-        ]
-
-        self.embedding_groups = {
-            "group_0": ["feature_" + str(i) for i in range(num_features)]
-        }
-
+class ModelParallelTest(ModelParallelTestShared):
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -180,8 +127,8 @@ class ModelParallelTest(ModelParallelTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 3,
-        "Not enough GPUs, this test requires at least four GPUs",
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-fixme[56]
     @given(
@@ -209,7 +156,6 @@ class ModelParallelTest(ModelParallelTestBase):
     def test_sharding_nccl_cw(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
-        world_size = 4
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -220,55 +166,6 @@ class ModelParallelTest(ModelParallelTestBase):
                 ),
             ],
             backend="nccl",
-            world_size=world_size,
-            constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
-            },
-        )
-
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 3,
-        "Not enough GPUs, this test requires at least four GPUs",
-    )
-    # pyre-fixme[56]
-    @given(
-        sharder_type=st.sampled_from(
-            [
-                SharderType.EMBEDDING_BAG.value,
-                SharderType.EMBEDDING_BAG_COLLECTION.value,
-            ]
-        ),
-        sharding_type=st.sampled_from(
-            [
-                ShardingType.TABLE_COLUMN_WISE.value,
-            ]
-        ),
-        kernel_type=st.sampled_from(
-            [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
-            ]
-        ),
-        local_size=st.sampled_from([2]),
-    )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_nccl_twcw(
-        self,
-        sharder_type: str,
-        sharding_type: str,
-        kernel_type: str,
-        local_size: int,
-    ) -> None:
-        world_size = 4
-        self._test_sharding(
-            # pyre-ignore[6]
-            sharders=[create_test_sharder(sharder_type, sharding_type, kernel_type)],
-            backend="nccl",
-            world_size=world_size,
-            local_size=local_size,
             constraints={
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
@@ -311,47 +208,6 @@ class ModelParallelTest(ModelParallelTestBase):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
-        )
-
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 3,
-        "Not enough GPUs, this test requires at least four GPUs",
-    )
-    # pyre-fixme[56]
-    @given(
-        sharder_type=st.sampled_from(
-            [
-                SharderType.EMBEDDING_BAG.value,
-                SharderType.EMBEDDING_BAG_COLLECTION.value,
-            ]
-        ),
-        sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
-        kernel_type=st.sampled_from(
-            [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
-            ]
-        ),
-        local_size=st.sampled_from([2]),
-    )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_nccl_twrw(
-        self,
-        sharder_type: str,
-        sharding_type: str,
-        kernel_type: str,
-        local_size: int,
-    ) -> None:
-        self._test_sharding(
-            # pyre-ignore[6]
-            sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
-            ],
-            backend="nccl",
-            world_size=4,
-            local_size=local_size,
         )
 
     # pyre-fixme[56]
@@ -473,29 +329,6 @@ class ModelParallelTest(ModelParallelTestBase):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="gloo",
-        )
-
-    def _test_sharding(
-        self,
-        sharders: List[ModuleSharder[nn.Module]],
-        backend: str = "gloo",
-        world_size: int = 2,
-        local_size: Optional[int] = None,
-        constraints: Optional[Dict[str, ParameterConstraints]] = None,
-    ) -> None:
-        self._run_multi_process_test(
-            # pyre-ignore [6]
-            callable=self._test_sharding_single_rank,
-            world_size=world_size,
-            local_size=local_size,
-            model_class=cast(TestSparseNNBase, TestSparseNN),
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-            embedding_groups=self.embedding_groups,
-            sharders=sharders,
-            backend=backend,
-            optim=EmbOptimType.EXACT_SGD,
-            constraints=constraints,
         )
 
 
