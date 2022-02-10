@@ -1,4 +1,4 @@
-# TorchRec (Experimental Release)
+# TorchRec (Beta Release)
 
 TorchRec is a PyTorch domain library built to provide common sparsity & parallelism primitives needed for large-scale recommender systems (RecSys). It allows authors to train models with large embedding tables sharded across many GPUs.
 
@@ -16,16 +16,26 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 
 # Installation
 
-You will need Python 3.7 or later. We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 11.3. This setup assumes you have conda installed.
-
+Torchrec requires Python >= 3.7 and CUDA >= 11.0 (CUDA is highly recommended for performance but not required). The example below shows how to install with CUDA 11.3. This setup assumes you have conda installed.
 
 ## Binaries
 
-Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pip wheels:
+Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pip wheels
+
+### CUDA
 ```
 conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
 pip install torchrec-nightly
 ```
+
+### CPU Only
+```
+conda install pytorch cpuonly -c pytorch-nightly
+pip install torchrec-nightly-cpu
+```
+
+### Colab example: introduction + install
+See this [colab notebook](https://colab.research.google.com/drive/1fG151tLmPpF4qw_kkEyD2-RhcywfDnbV) for an introduction to torchrec which includes runnable installation.
 
 ## From Source
 
@@ -58,6 +68,7 @@ git clone --recursive https://github.com/facebookresearch/torchrec
 cd torchrec
 python setup.py install develop --skip_fbgemm  # If you manually installed fbgemm_gpu in the previous step.
 python setup.py install develop                # Otherwise. This will run the fbgemm_gpu install step for you behind the scenes.
+python setup.py install develop --cpu_only     # For a CPU only installation of FBGEMM
 ```
 
 5. Test the installation.
@@ -66,8 +77,6 @@ torchx run --scheduler local_cwd test_installation.py:test_installation
 ```
 
 6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/github/examples/dlrm/dlrm_main.py).
-
-That's it! In the near-to-mid future, we will simplify this process considerably. Stay tuned...
 
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
