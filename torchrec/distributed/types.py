@@ -45,7 +45,7 @@ import torch.fx
 from torch import nn
 
 # @manual
-from torch.distributed._sharded_tensor import (  # noqa
+from torch.distributed._shard.sharded_tensor import (  # noqa
     Shard,
     ShardedTensor,
     ShardedTensorMetadata,
@@ -53,7 +53,7 @@ from torch.distributed._sharded_tensor import (  # noqa
 )
 
 # @manual
-from torch.distributed._sharding_spec import (  # noqa
+from torch.distributed._shard.sharding_spec import (  # noqa
     ShardingSpec,
     ShardMetadata,
     EnumerableShardingSpec,
