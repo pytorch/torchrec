@@ -92,12 +92,9 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 process_group=pg,
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
+                static_graph=True,
             ),
         )
-
-        # Enable static graph for better DPP performance
-        # pyre-ignore
-        dmp.module._set_static_graph()
 
 
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
