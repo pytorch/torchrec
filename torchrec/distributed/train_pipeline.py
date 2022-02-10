@@ -23,6 +23,7 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from torch.fx.node import Node
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
@@ -364,8 +365,10 @@ def _rewrite_model(  # noqa C901
 ) -> List[ShardedModule]:
 
     # Get underlying nn.Module
-    while isinstance(model, DistributedModelParallel) or isinstance(
-        model, DistributedDataParallel
+    while (
+        isinstance(model, DistributedModelParallel)
+        or isinstance(model, DistributedDataParallel)
+        or isinstance(model, FullyShardedDataParallel)
     ):
         model = model.module
 

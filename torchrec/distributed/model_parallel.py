@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embeddingbag import (
@@ -98,6 +99,14 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         # Enable static graph for better DPP performance
         # pyre-ignore
         dmp.module._set_static_graph()
+
+
+def _strip_DDP(module: nn.Module) -> nn.Module:
+    if isinstance(module, FullyShardedDataParallel) or isinstance(
+        module, DistributedDataParallel
+    ):
+        module = module.module
+    return module
 
 
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
@@ -208,6 +217,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         return (
             self.module.module
             if isinstance(self.module, DistributedDataParallel)
+            or isinstance(self.module, FullyShardedDataParallel)
             else self.module
         )
 
@@ -220,7 +230,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         See init_data_parallel c-tor argument for usage.
         It's safe to call this method multiple times.
         """
-        if not isinstance(self.module, DistributedDataParallel):
+        if not isinstance(self.module, DistributedDataParallel) and not isinstance(
+            self.module, FullyShardedDataParallel
+        ):
             # Allocate any 'meta' tensors
             if self.init_parameters:
                 self._init_parameters(self.module)
@@ -316,6 +328,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _sparse_grad_parameter_names(
         self, module: nn.Module, destination: List[str], prefix: str = ""
     ) -> List[str]:
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             module.sparse_grad_parameter_names(destination, prefix)
         elif isinstance(module, nn.Embedding):
@@ -351,6 +364,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str,
         keep_vars: bool,
     ) -> Dict[str, Any]:
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             module.state_dict(destination, prefix, keep_vars)
         else:
@@ -376,6 +390,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> _IncompatibleKeys:
         missing_keys = []
         unexpected_keys = []
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             return module.load_state_dict(state_dict, strict=strict)
         else:
@@ -398,6 +413,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _named_parameters(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
         else:
@@ -414,6 +430,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             yield from module.sharded_parameter_names(prefix)
         else:
@@ -425,6 +442,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _named_buffers(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        module = _strip_DDP(module)
         if isinstance(module, ShardedModule):
             yield from module.named_buffers(prefix, recurse)
         else:
