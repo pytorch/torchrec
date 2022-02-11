@@ -5,4 +5,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""Torchrec Tracer
+
+Custom FX tracer for torchrec
+
+See `Torch.FX documentation <https://pytorch.org/docs/stable/fx.html>`_
+"""
+
 from torchrec.fx.tracer import Tracer, symbolic_trace  # noqa

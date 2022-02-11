@@ -14,14 +14,13 @@ from torchrec.distributed.types import NoWait
 
 class Tracer(torch.fx.Tracer):
     """
-    NOTE [ Custom FX tracer for torchrec ]
+    Custom FX tracer for torchrec
 
-    See https://pytorch.org/docs/stable/fx.html for documentation
+    See `Torch.FX documentation <https://pytorch.org/docs/stable/fx.html>`_
 
     We create a custom FX tracer to trace torchrec based models. The custom tracer
-    right now have several purposes (the list might expand if we have more use cases):
-    1. Handling python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
-       TorchScript if needed
+    handles python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
+    TorchScript if needed
     """
 
     def __init__(self) -> None:
@@ -36,13 +35,10 @@ class Tracer(torch.fx.Tracer):
         Adds support for the NoWait type in addition to the default tracer
 
         Args:
-
             a (Any): The value to be emitted as an ``Argument`` in the ``Graph``.
 
-
         Returns:
-
-            The value ``a`` converted into the appropriate ``Argument``
+            Argument: The value ``a`` converted into the appropriate ``Argument``
         """
         if isinstance(a, NoWait):
             return self.create_node(
