@@ -12,6 +12,7 @@ from typing import Dict, Any, List
 import torch
 import torch.distributed as dist
 from torch.autograd import Variable
+from torch.distributed._shard import sharded_tensor
 from torchrec.optim.keyed import (
     CombinedOptimizer,
     KeyedOptimizer,
@@ -54,9 +55,9 @@ class TestKeyedOptimizer(unittest.TestCase):
                 param_1: {
                     "one": 1.0,
                     "tensor": torch.tensor([5.0, 6.0]),
-                    "sharded_tensor": dist._sharded_tensor.full(
+                    "sharded_tensor": sharded_tensor.full(
                         # pyre-ignore [28]
-                        dist._sharded_tensor.ChunkShardingSpec(
+                        sharded_tensor.ChunkShardingSpec(
                             dim=0, placements=["rank:0/cpu"]
                         ),
                         (4,),
@@ -85,11 +86,9 @@ class TestKeyedOptimizer(unittest.TestCase):
             "param_1": {
                 "one": 1.0,
                 "tensor": torch.tensor([5.0, 6.0]),
-                "sharded_tensor": dist._sharded_tensor.full(
+                "sharded_tensor": sharded_tensor.full(
                     # pyre-ignore [28]
-                    dist._sharded_tensor.ChunkShardingSpec(
-                        dim=0, placements=["rank:0/cpu"]
-                    ),
+                    sharded_tensor.ChunkShardingSpec(dim=0, placements=["rank:0/cpu"]),
                     (4,),
                     fill_value=1.0,
                 ),
@@ -122,11 +121,9 @@ class TestKeyedOptimizer(unittest.TestCase):
         # pyre-ignore [6]
         expected_state_dict["state"]["param_1"]["tensor"] = torch.tensor([50.0, 60.0])
         # pyre-ignore [6]
-        expected_state_dict["state"]["param_1"][
-            "sharded_tensor"
-        ] = dist._sharded_tensor.full(
+        expected_state_dict["state"]["param_1"]["sharded_tensor"] = sharded_tensor.full(
             # pyre-ignore [28]
-            dist._sharded_tensor.ChunkShardingSpec(dim=0, placements=["rank:0/cpu"]),
+            sharded_tensor.ChunkShardingSpec(dim=0, placements=["rank:0/cpu"]),
             (4,),
             fill_value=10.0,
         )
