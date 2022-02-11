@@ -25,8 +25,6 @@ import torch
 from torch import Tensor
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
-from torchrec.distributed.cw_sharding import CwEmbeddingSharding
-from torchrec.distributed.dp_sharding import DpEmbeddingSharding
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesListAwaitable,
@@ -39,10 +37,12 @@ from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
     ListOfSparseFeaturesList,
 )
-from torchrec.distributed.rw_sharding import RwEmbeddingSharding
-from torchrec.distributed.tw_sharding import TwEmbeddingSharding
-from torchrec.distributed.twcw_sharding import TwCwEmbeddingSharding
-from torchrec.distributed.twrw_sharding import TwRwEmbeddingSharding
+from torchrec.distributed.sharding.cw_sharding import CwEmbeddingSharding
+from torchrec.distributed.sharding.dp_sharding import DpEmbeddingSharding
+from torchrec.distributed.sharding.rw_sharding import RwEmbeddingSharding
+from torchrec.distributed.sharding.tw_sharding import TwEmbeddingSharding
+from torchrec.distributed.sharding.twcw_sharding import TwCwEmbeddingSharding
+from torchrec.distributed.sharding.twrw_sharding import TwRwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
     EnumerableShardingSpec,

@@ -26,7 +26,6 @@ from typing import (
 import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
-from torchrec.distributed.dp_sharding import DpEmbeddingSharding
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesListAwaitable,
@@ -41,8 +40,12 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     SparseFeaturesList,
 )
-from torchrec.distributed.rw_sharding import RwEmbeddingSharding, RwSparseFeaturesDist
-from torchrec.distributed.tw_sharding import TwEmbeddingSharding
+from torchrec.distributed.sharding.dp_sharding import DpEmbeddingSharding
+from torchrec.distributed.sharding.rw_sharding import (
+    RwEmbeddingSharding,
+    RwSparseFeaturesDist,
+)
+from torchrec.distributed.sharding.tw_sharding import TwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,

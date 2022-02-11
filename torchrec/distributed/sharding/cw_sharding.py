@@ -14,7 +14,10 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     EmbeddingComputeKernel,
 )
-from torchrec.distributed.tw_sharding import TwEmbeddingSharding, TwPooledEmbeddingDist
+from torchrec.distributed.sharding.tw_sharding import (
+    TwEmbeddingSharding,
+    TwPooledEmbeddingDist,
+)
 from torchrec.distributed.types import (
     ShardingEnv,
     ShardedTensorMetadata,
