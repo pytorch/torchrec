@@ -69,7 +69,7 @@ try:
 except OSError:
     pass
 
-# pyre-fixme [3]
+
 def create_embedding_sharding(
     sharding_type: str,
     embedding_configs: List[
@@ -77,7 +77,7 @@ def create_embedding_sharding(
     ],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
-) -> EmbeddingSharding[Any, Any, Any, Any]:
+) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     pg = env.process_group
     if pg is not None:
         if sharding_type == ShardingType.TABLE_WISE.value:
@@ -222,9 +222,8 @@ class ShardedEmbeddingCollection(
         sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
             module, table_name_to_parameter_sharding
         )
-        # pyre-fixme [4]
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[Any, Any, Any, Any]
+            str, EmbeddingSharding[SparseFeatures, torch.Tensor]
         ] = {
             sharding_type: create_embedding_sharding(
                 sharding_type, embedding_confings, env, device
@@ -271,7 +270,7 @@ class ShardedEmbeddingCollection(
         feature_names: List[str] = []
         self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
-            self._input_dists.append(sharding.create_train_input_dist())
+            self._input_dists.append(sharding.create_input_dist())
             feature_names.extend(sharding.id_list_feature_names())
             self._feature_splits.append(len(sharding.id_list_feature_names()))
         self._features_order: List[int] = []
@@ -294,7 +293,7 @@ class ShardedEmbeddingCollection(
             BaseEmbeddingLookup[SparseFeatures, torch.Tensor]
         ] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_train_lookup(fused_params))
+            self._lookups.append(sharding.create_lookup(fused_params=fused_params))
 
     def _create_output_dist(
         self,
@@ -303,7 +302,7 @@ class ShardedEmbeddingCollection(
         #  take parameters.
         self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
-            self._output_dists.append(sharding.create_train_sequence_output_dist())
+            self._output_dists.append(sharding.create_sequence_output_dist())
 
     # pyre-ignore [14]
     def input_dist(

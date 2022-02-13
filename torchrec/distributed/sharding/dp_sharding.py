@@ -85,7 +85,7 @@ class DpPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         return NoWait(local_embs)
 
 
-class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
+class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
     Distributes sequence embeddings to be data-parallel.
     """
@@ -109,9 +109,7 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
         return NoWait(local_embs)
 
 
-class DpEmbeddingSharding(
-    EmbeddingSharding[SparseFeatures, torch.Tensor, SparseFeatures, torch.Tensor]
-):
+class DpEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags using data-parallel, with no table sharding i.e.. a given
     embedding table is replicated across all ranks.
@@ -184,12 +182,15 @@ class DpEmbeddingSharding(
                 )
         return tables_per_rank
 
-    def create_train_input_dist(self) -> DpSparseFeaturesDist:
+    def create_input_dist(
+        self, device: Optional[torch.device] = None
+    ) -> DpSparseFeaturesDist:
         return DpSparseFeaturesDist()
 
-    def create_train_lookup(
+    def create_lookup(
         self,
-        fused_params: Optional[Dict[str, Any]],
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         if self._is_sequence:
@@ -197,7 +198,7 @@ class DpEmbeddingSharding(
                 grouped_configs=self._grouped_embedding_configs,
                 fused_params=fused_params,
                 pg=self._env.process_group,
-                device=self._device,
+                device=device if device is not None else self._device,
             )
         else:
             return GroupedPooledEmbeddingsLookup(
@@ -205,39 +206,20 @@ class DpEmbeddingSharding(
                 grouped_score_configs=self._score_grouped_embedding_configs,
                 fused_params=fused_params,
                 pg=self._env.process_group,
-                device=self._device,
+                device=device if device is not None else self._device,
                 feature_processor=feature_processor,
             )
 
-    def create_train_pooled_output_dist(
+    def create_pooled_output_dist(
         self,
         device: Optional[torch.device] = None,
     ) -> DpPooledEmbeddingDist:
         return DpPooledEmbeddingDist()
 
-    def create_train_sequence_output_dist(self) -> DpSequenceEmbeddingDist:
+    def create_sequence_output_dist(
+        self, device: Optional[torch.device] = None
+    ) -> DpSequenceEmbeddingDist:
         return DpSequenceEmbeddingDist()
-
-    def create_infer_input_dist(self) -> DpSparseFeaturesDist:
-        return DpSparseFeaturesDist()
-
-    def create_infer_lookup(
-        self,
-        fused_params: Optional[Dict[str, Any]],
-        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[SparseFeatures, torch.Tensor]:
-        return GroupedPooledEmbeddingsLookup(
-            grouped_configs=self._grouped_embedding_configs,
-            grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
-            device=self._device,
-        )
-
-    def create_infer_pooled_output_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> DpPooledEmbeddingDist:
-        return DpPooledEmbeddingDist()
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []

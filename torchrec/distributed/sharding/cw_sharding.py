@@ -168,10 +168,11 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
             else super().embedding_names()
         )
 
-    def create_train_pooled_output_dist(
+    def create_pooled_output_dist(
         self,
         device: Optional[torch.device] = None,
     ) -> TwPooledEmbeddingDist:
+        device = device if device is not None else self._device
         embedding_permute_op: Optional[PermutePooledEmbeddings] = None
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None
         if self._permute_embeddings and self._embedding_order != list(
@@ -181,8 +182,8 @@ class CwEmbeddingSharding(TwEmbeddingSharding):
             embedding_permute_op = PermutePooledEmbeddings(
                 self._embedding_dims,
                 self._embedding_order,
-            ).to(device=self._device)
+            ).to(device=device)
             callbacks = [embedding_permute_op]
         return TwPooledEmbeddingDist(
-            self._pg, self._dim_sum_per_rank(), self._device, callbacks
+            self._pg, self._dim_sum_per_rank(), device, callbacks
         )

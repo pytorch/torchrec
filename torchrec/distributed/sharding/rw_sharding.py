@@ -194,7 +194,7 @@ class RwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         return self._dist(local_embs)
 
 
-class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
+class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
     Redistributes sequence embedding tensor in RW fashion with an AlltoAll operation.
 
@@ -237,11 +237,7 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist):
         )
 
 
-class RwEmbeddingSharding(
-    EmbeddingSharding[
-        SparseFeatures, torch.Tensor, SparseFeaturesList, List[torch.Tensor]
-    ]
-):
+class RwEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
     by rows and table slices are placed on all ranks.
@@ -329,7 +325,10 @@ class RwEmbeddingSharding(
                 )
         return tables_per_rank
 
-    def create_train_input_dist(self) -> BaseSparseFeaturesDist[SparseFeatures]:
+    def create_input_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BaseSparseFeaturesDist[SparseFeatures]:
         num_id_list_features = self._get_id_list_features_num()
         num_id_score_list_features = self._get_id_score_list_features_num()
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
@@ -340,14 +339,15 @@ class RwEmbeddingSharding(
             num_id_score_list_features=num_id_score_list_features,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
             id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
-            device=self._device,
+            device=device if device is not None else self._device,
             is_sequence=self._is_sequence,
             has_feature_processor=self._has_feature_processor,
         )
 
-    def create_train_lookup(
+    def create_lookup(
         self,
-        fused_params: Optional[Dict[str, Any]],
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         if self._is_sequence:
@@ -355,7 +355,7 @@ class RwEmbeddingSharding(
                 grouped_configs=self._grouped_embedding_configs,
                 fused_params=fused_params,
                 pg=self._pg,
-                device=self._device,
+                device=device if device is not None else self._device,
             )
         else:
             return GroupedPooledEmbeddingsLookup(
@@ -363,21 +363,24 @@ class RwEmbeddingSharding(
                 grouped_score_configs=self._score_grouped_embedding_configs,
                 fused_params=fused_params,
                 pg=self._pg,
-                device=self._device,
+                device=device if device is not None else self._device,
                 feature_processor=feature_processor,
             )
 
-    def create_train_pooled_output_dist(
+    def create_pooled_output_dist(
         self,
         device: Optional[torch.device] = None,
     ) -> RwPooledEmbeddingDist:
         return RwPooledEmbeddingDist(self._pg)
 
-    def create_train_sequence_output_dist(self) -> RwSequenceEmbeddingDist:
+    def create_sequence_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> RwSequenceEmbeddingDist:
         return RwSequenceEmbeddingDist(
             self._pg,
             self._get_id_list_features_num(),
-            self._device,
+            device if device is not None else self._device,
         )
 
     def embedding_dims(self) -> List[int]:

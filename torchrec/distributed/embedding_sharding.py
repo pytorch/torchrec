@@ -504,14 +504,6 @@ def group_tables(
     )
 
 
-F = TypeVar("F", bound=Multistreamable)
-T = TypeVar("T")
-TRAIN_F = TypeVar("TRAIN_F", bound=Multistreamable)
-INFER_F = TypeVar("INFER_F", bound=Multistreamable)
-TRAIN_T = TypeVar("TRAIN_T")
-INFER_T = TypeVar("INFER_T")
-
-
 class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
     """
     Awaitable of SparseFeaturesList.
@@ -594,6 +586,10 @@ class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
         return ListOfSparseFeaturesList([w.wait() for w in self.awaitables])
 
 
+F = TypeVar("F", bound=Multistreamable)
+T = TypeVar("T")
+
+
 class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
     """
     Converts input from data-parallel to model-parallel.
@@ -617,7 +613,7 @@ class BasePooledEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
         pass
 
 
-class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
+class BaseSequenceEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
     """
     Converts output of sequence EmbeddingLookup from model-parallel to data-parallel.
     """
@@ -626,55 +622,44 @@ class BaseSequenceEmbeddingDist(abc.ABC, nn.Module):
 
     @abc.abstractmethod
     def forward(
-        self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
+        self, sharding_ctx: SequenceShardingContext, local_embs: T
     ) -> Awaitable[torch.Tensor]:
         pass
 
 
-class EmbeddingSharding(abc.ABC, Generic[TRAIN_F, TRAIN_T, INFER_F, INFER_T]):
+class EmbeddingSharding(abc.ABC, Generic[F, T]):
     """
     Used to implement different sharding types for EmbeddingBagCollection, e.g.
     table_wise.
     """
 
     @abc.abstractmethod
-    def create_train_input_dist(self) -> BaseSparseFeaturesDist[TRAIN_F]:
-        pass
-
-    @abc.abstractmethod
-    def create_train_pooled_output_dist(
+    def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BasePooledEmbeddingDist[TRAIN_T]:
+    ) -> BaseSparseFeaturesDist[F]:
         pass
 
     @abc.abstractmethod
-    def create_train_sequence_output_dist(self) -> BaseSequenceEmbeddingDist:
-        pass
-
-    @abc.abstractmethod
-    def create_train_lookup(
-        self,
-        fused_params: Optional[Dict[str, Any]],
-        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[TRAIN_F, TRAIN_T]:
-        pass
-
-    def create_infer_input_dist(self) -> BaseSparseFeaturesDist[INFER_F]:
-        raise NotImplementedError
-
-    def create_infer_pooled_output_dist(
+    def create_pooled_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BasePooledEmbeddingDist[INFER_T]:
+    ) -> BasePooledEmbeddingDist[T]:
+        pass
+
+    def create_sequence_output_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSequenceEmbeddingDist[T]:
         raise NotImplementedError
 
-    def create_infer_lookup(
+    @abc.abstractmethod
+    def create_lookup(
         self,
-        fused_params: Optional[Dict[str, Any]],
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[INFER_F, INFER_T]:
-        raise NotImplementedError
+    ) -> BaseEmbeddingLookup[F, T]:
+        pass
 
     @abc.abstractmethod
     def embedding_dims(self) -> List[int]:

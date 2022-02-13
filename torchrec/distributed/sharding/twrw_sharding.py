@@ -281,11 +281,7 @@ class TwRwEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         return self._cross_dist(self._intra_dist(local_embs).wait())
 
 
-class TwRwEmbeddingSharding(
-    EmbeddingSharding[
-        SparseFeatures, torch.Tensor, SparseFeaturesList, List[torch.Tensor]
-    ]
-):
+class TwRwEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags table-wise then row-wise.
     """
@@ -402,7 +398,9 @@ class TwRwEmbeddingSharding(
 
         return tables_per_rank
 
-    def create_train_input_dist(self) -> BaseSparseFeaturesDist[SparseFeatures]:
+    def create_input_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSparseFeaturesDist[SparseFeatures]:
         id_list_features_per_rank = self._features_per_rank(
             self._grouped_embedding_configs_per_rank
         )
@@ -418,13 +416,14 @@ class TwRwEmbeddingSharding(
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
             id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
-            device=self._device,
+            device=device if device is not None else self._device,
             has_feature_processor=self._has_feature_processor,
         )
 
-    def create_train_lookup(
+    def create_lookup(
         self,
-        fused_params: Optional[Dict[str, Any]],
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
@@ -434,11 +433,11 @@ class TwRwEmbeddingSharding(
             ],
             fused_params=fused_params,
             pg=self._pg,
-            device=self._device,
+            device=device if device is not None else self._device,
             feature_processor=feature_processor,
         )
 
-    def create_train_pooled_output_dist(
+    def create_pooled_output_dist(
         self,
         device: Optional[torch.device] = None,
     ) -> BasePooledEmbeddingDist[torch.Tensor]:
@@ -446,11 +445,8 @@ class TwRwEmbeddingSharding(
             cross_pg=cast(dist.ProcessGroup, self._cross_pg),
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
-            device=self._device,
+            device=device if device is not None else self._device,
         )
-
-    def create_train_sequence_output_dist(self) -> BaseSequenceEmbeddingDist:
-        raise NotImplementedError
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
