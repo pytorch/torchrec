@@ -28,7 +28,9 @@ def _env2int(env_list: List[str], default: int = -1) -> int:
     return default
 
 
-def get_local_size(world_size: int) -> int:
+def get_local_size(world_size: Optional[int] = None) -> int:
+    if world_size is None:
+        world_size = dist.get_world_size()
     """
     Get the local world size (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the size of workers on each node, or nproc_per_node
@@ -51,7 +53,7 @@ def get_local_size(world_size: int) -> int:
     return local_size
 
 
-def get_local_rank(world_size: int, rank: int) -> int:
+def get_local_rank(world_size: Optional[int] = None, rank: Optional[int] = None) -> int:
     """
     Get the local rank of the local processes (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the rank of the worker on its node
@@ -71,23 +73,29 @@ def get_local_rank(world_size: int, rank: int) -> int:
         logging.warning(
             "Could not determine LOCAL_RANK from environment, falling back to GLOBAL_RANK % LOCAL_SIZE."
         )
+        if rank is None:
+            rank = dist.get_rank()
         my_local_rank = rank % local_size
     return my_local_rank
 
 
-def get_group_rank(world_size: int, rank: int) -> int:
+def get_group_rank(world_size: Optional[int] = None, rank: Optional[int] = None) -> int:
     """
     Get the group rank of the worker group. Also available with GROUP_RANK environment varible
     A number between 0 and get_num_groups() (See https://pytorch.org/docs/stable/elastic/run.html)
     """
+    if rank is None:
+        rank = dist.get_rank()
     return rank // get_local_size(world_size)
 
 
-def get_num_groups(world_size: int) -> int:
+def get_num_groups(world_size: Optional[int] = None) -> int:
     """
     Get the number of worker groups.
     Usually equivalent to max_nnodes (See https://pytorch.org/docs/stable/elastic/run.html)
     """
+    if world_size is None:
+        world_size = dist.get_world_size()
     return world_size // get_local_size(world_size)
 
 
