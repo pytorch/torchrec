@@ -12,11 +12,9 @@ import torch.distributed as dist
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToOne,
     PooledEmbeddingsAllToAll,
-    SequenceEmbeddingAllToAll,
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
-    GroupedEmbeddingsLookup,
     InferGroupedPooledEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
@@ -24,10 +22,8 @@ from torchrec.distributed.embedding_sharding import (
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
     group_tables,
-    BasePooledEmbeddingDist,
-    BaseSequenceEmbeddingDist,
+    BaseEmbeddingDist,
     BaseSparseFeaturesDist,
-    SequenceShardingContext,
     BaseEmbeddingLookup,
 )
 from torchrec.distributed.embedding_types import (
@@ -66,12 +62,10 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         ],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-        is_sequence: bool = False,
     ) -> None:
         super().__init__()
         self._env = env
         self._device = device
-        self._is_sequence = is_sequence
         # pyre-ignore[11]
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
@@ -274,7 +268,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(sparse_features)
 
 
-class TwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
+class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     """
     Redistributes pooled embedding tensor in hierarchical fashion with an AlltoAll
     collective operation.
@@ -296,7 +290,10 @@ class TwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         super().__init__()
         self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on pooled embeddings tensor.
 
@@ -310,67 +307,11 @@ class TwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         return self._dist(local_embs)
 
 
-class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
-    """
-    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoAll
-    operation.
-
-    Constructor Args:
-        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        features_per_rank (List[int]): number of features (sum of dimensions) of the
-            embedding for each host.
-        device (Optional[torch.device]): device on which buffers will be allocated.
-    """
-
-    def __init__(
-        self,
-        pg: dist.ProcessGroup,
-        features_per_rank: List[int],
-        device: Optional[torch.device] = None,
-    ) -> None:
-        super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, features_per_rank, device)
-
-    def forward(
-        self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
-    ) -> Awaitable[torch.Tensor]:
-        """
-        Performs AlltoAll operation on sequence embeddings tensor.
-
-        Call Args:
-            sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
-                operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
-        """
-
-        return self._dist(
-            local_embs,
-            lengths=sharding_ctx.lengths_after_input_dist,
-            input_splits=sharding_ctx.input_splits,
-            output_splits=sharding_ctx.output_splits,
-            unbucketize_permute_tensor=None,
-        )
-
-
-class TwEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags table-wise, i.e.. a given embedding table is entirely placed
     on a selected rank.
     """
-
-    def __init__(
-        self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
-        env: ShardingEnv,
-        device: Optional[torch.device] = None,
-        is_sequence: bool = False,
-    ) -> None:
-        super().__init__(embedding_configs, env, device, is_sequence)
 
     def create_input_dist(
         self,
@@ -389,40 +330,22 @@ class TwEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor])
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
-        if self._is_sequence:
-            return GroupedEmbeddingsLookup(
-                grouped_configs=self._grouped_embedding_configs,
-                fused_params=fused_params,
-                pg=self._pg,
-                device=device if device is not None else self._device,
-            )
-        else:
-            return GroupedPooledEmbeddingsLookup(
-                grouped_configs=self._grouped_embedding_configs,
-                grouped_score_configs=self._score_grouped_embedding_configs,
-                fused_params=fused_params,
-                pg=self._pg,
-                device=device if device is not None else self._device,
-                feature_processor=feature_processor,
-            )
+        return GroupedPooledEmbeddingsLookup(
+            grouped_configs=self._grouped_embedding_configs,
+            grouped_score_configs=self._score_grouped_embedding_configs,
+            fused_params=fused_params,
+            pg=self._pg,
+            device=device if device is not None else self._device,
+            feature_processor=feature_processor,
+        )
 
-    def create_pooled_output_dist(
+    def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BasePooledEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[torch.Tensor]:
         return TwPooledEmbeddingDist(
             self._pg,
             self._dim_sum_per_rank(),
-            device if device is not None else self._device,
-        )
-
-    def create_sequence_output_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
-        return TwSequenceEmbeddingDist(
-            self._pg,
-            self._id_list_features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -470,7 +393,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
         return NoWait(self._dist.forward(sparse_features))
 
 
-class InferTwPooledEmbeddingDist(BasePooledEmbeddingDist[List[torch.Tensor]]):
+class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
     """
     Merges pooled embedding tensor from each device for inference.
 
@@ -490,7 +413,10 @@ class InferTwPooledEmbeddingDist(BasePooledEmbeddingDist[List[torch.Tensor]]):
             world_size,
         )
 
-    def forward(self, local_embs: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoOne operation on pooled embedding tensors.
 
@@ -534,12 +460,13 @@ class InferTwEmbeddingSharding(
             fused_params=fused_params,
         )
 
-    def create_pooled_output_dist(
+    def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> InferTwPooledEmbeddingDist:
+    ) -> BaseEmbeddingDist[List[torch.Tensor]]:
+        device = device if device is not None else self._device
         return InferTwPooledEmbeddingDist(
             # pyre-fixme [6]
-            device if device is not None else self._device,
+            device,
             self._world_size,
         )

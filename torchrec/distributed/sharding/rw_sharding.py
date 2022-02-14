@@ -5,31 +5,22 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import (
-    PooledEmbeddingsReduceScatter,
-    SequenceEmbeddingAllToAll,
-)
-from torchrec.distributed.embedding_lookup import (
-    GroupedPooledEmbeddingsLookup,
-    GroupedEmbeddingsLookup,
-)
+from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatter
+from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     group_tables,
     SparseFeaturesAllToAll,
-    BasePooledEmbeddingDist,
+    BaseEmbeddingDist,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
-    BaseSequenceEmbeddingDist,
-    SequenceShardingContext,
     BaseEmbeddingLookup,
     bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeaturesList,
     ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
     SparseFeatures,
@@ -43,6 +34,158 @@ from torchrec.distributed.types import (
     ParameterSharding,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.streamable import Multistreamable
+
+
+F = TypeVar("F", bound=Multistreamable)
+T = TypeVar("T")
+
+
+class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
+    """
+    base class for row-wise sharding
+    """
+
+    def __init__(
+        self,
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
+        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
+        pg: dist.ProcessGroup,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        # pyre-fixme[4]: Attribute must be annotated.
+        self._pg = pg
+        if device is None:
+            device = torch.device("cpu")
+        self._device = device
+        sharded_tables_per_rank = self._shard(embedding_configs)
+        self._grouped_embedding_configs_per_rank: List[
+            List[GroupedEmbeddingConfig]
+        ] = []
+        self._score_grouped_embedding_configs_per_rank: List[
+            List[GroupedEmbeddingConfig]
+        ] = []
+        (
+            self._grouped_embedding_configs_per_rank,
+            self._score_grouped_embedding_configs_per_rank,
+        ) = group_tables(sharded_tables_per_rank)
+        self._grouped_embedding_configs: List[
+            GroupedEmbeddingConfig
+        ] = self._grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+        self._score_grouped_embedding_configs: List[
+            GroupedEmbeddingConfig
+        ] = self._score_grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+
+        self._has_feature_processor: bool = False
+        for group_config in self._grouped_embedding_configs:
+            if group_config.has_feature_processor:
+                self._has_feature_processor = True
+
+    def _shard(
+        self,
+        embedding_configs: List[
+            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
+        ],
+    ) -> List[List[ShardedEmbeddingTable]]:
+        world_size = self._pg.size()
+        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
+            [] for i in range(world_size)
+        ]
+        for config in embedding_configs:
+            # pyre-fixme [16]
+            shards = config[1].sharding_spec.shards
+
+            # construct the global sharded_tensor_metadata
+            global_metadata = ShardedTensorMetadata(
+                shards_metadata=shards,
+                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+            )
+
+            for rank in range(world_size):
+                tables_per_rank[rank].append(
+                    ShardedEmbeddingTable(
+                        num_embeddings=config[0].num_embeddings,
+                        embedding_dim=config[0].embedding_dim,
+                        name=config[0].name,
+                        embedding_names=config[0].embedding_names,
+                        data_type=config[0].data_type,
+                        feature_names=config[0].feature_names,
+                        pooling=config[0].pooling,
+                        is_weighted=config[0].is_weighted,
+                        has_feature_processor=config[0].has_feature_processor,
+                        local_rows=shards[rank].shard_sizes[0],
+                        local_cols=config[0].embedding_dim,
+                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                        local_metadata=shards[rank],
+                        global_metadata=global_metadata,
+                        weight_init_max=config[0].weight_init_max,
+                        weight_init_min=config[0].weight_init_min,
+                    )
+                )
+        return tables_per_rank
+
+    def embedding_dims(self) -> List[int]:
+        embedding_dims = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_dims.extend(grouped_config.embedding_dims())
+        for grouped_config in self._score_grouped_embedding_configs:
+            embedding_dims.extend(grouped_config.embedding_dims())
+        return embedding_dims
+
+    def embedding_names(self) -> List[str]:
+        embedding_names = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_names.extend(grouped_config.embedding_names())
+        for grouped_config in self._score_grouped_embedding_configs:
+            embedding_names.extend(grouped_config.embedding_names())
+        return embedding_names
+
+    def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
+        embedding_shard_metadata = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
+        for grouped_config in self._score_grouped_embedding_configs:
+            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
+        return embedding_shard_metadata
+
+    def id_list_feature_names(self) -> List[str]:
+        id_list_feature_names = []
+        for grouped_config in self._grouped_embedding_configs:
+            id_list_feature_names.extend(grouped_config.feature_names())
+        return id_list_feature_names
+
+    def id_score_list_feature_names(self) -> List[str]:
+        id_score_list_feature_names = []
+        for grouped_config in self._score_grouped_embedding_configs:
+            id_score_list_feature_names.extend(grouped_config.feature_names())
+        return id_score_list_feature_names
+
+    def _get_id_list_features_num(self) -> int:
+        return sum(
+            group_config.num_features()
+            for group_config in self._grouped_embedding_configs
+        )
+
+    def _get_id_score_list_features_num(self) -> int:
+        return sum(
+            group_config.num_features()
+            for group_config in self._score_grouped_embedding_configs
+        )
+
+    def _get_id_list_features_hash_sizes(self) -> List[int]:
+        id_list_feature_hash_sizes: List[int] = []
+        for group_config in self._grouped_embedding_configs:
+            id_list_feature_hash_sizes.extend(group_config.feature_hash_sizes())
+        return id_list_feature_hash_sizes
+
+    def _get_id_score_list_features_hash_sizes(self) -> List[int]:
+        id_score_list_feature_hash_sizes: List[int] = []
+        for group_config in self._score_grouped_embedding_configs:
+            id_score_list_feature_hash_sizes.extend(group_config.feature_hash_sizes())
+        return id_score_list_feature_hash_sizes
 
 
 class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
@@ -66,7 +209,6 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def __init__(
         self,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         num_id_list_features: int,
         num_id_score_list_features: int,
@@ -164,7 +306,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(bucketized_sparse_features)
 
 
-class RwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
+class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     """
     Redistributes pooled embedding tensor in RW fashion by performing a reduce-scatter
     operation.
@@ -194,136 +336,11 @@ class RwPooledEmbeddingDist(BasePooledEmbeddingDist[torch.Tensor]):
         return self._dist(local_embs)
 
 
-class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
-    """
-    Redistributes sequence embedding tensor in RW fashion with an AlltoAll operation.
-
-    Constructor Args:
-        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        num_features (int): total number of features.
-        device (Optional[torch.device]): device on which buffers will be allocated.
-    """
-
-    def __init__(
-        self,
-        pg: dist.ProcessGroup,
-        num_features: int,
-        device: Optional[torch.device] = None,
-    ) -> None:
-        super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, [num_features] * pg.size(), device)
-
-    def forward(
-        self, sharding_ctx: SequenceShardingContext, local_embs: torch.Tensor
-    ) -> Awaitable[torch.Tensor]:
-        """
-        Performs AlltoAll operation on sequence embeddings tensor.
-
-        Call Args:
-            sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
-                operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
-        """
-
-        return self._dist(
-            local_embs,
-            lengths=sharding_ctx.lengths_after_input_dist,
-            input_splits=sharding_ctx.input_splits,
-            output_splits=sharding_ctx.output_splits,
-            unbucketize_permute_tensor=sharding_ctx.unbucketize_permute_tensor,
-        )
-
-
-class RwEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
+class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
     by rows and table slices are placed on all ranks.
     """
-
-    def __init__(
-        self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
-        pg: dist.ProcessGroup,
-        device: Optional[torch.device] = None,
-        is_sequence: bool = False,
-    ) -> None:
-        super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
-        self._pg = pg
-        if device is None:
-            device = torch.device("cpu")
-        self._device = device
-        self._is_sequence = is_sequence
-        sharded_tables_per_rank = self._shard(embedding_configs)
-        self._grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
-        self._score_grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
-        (
-            self._grouped_embedding_configs_per_rank,
-            self._score_grouped_embedding_configs_per_rank,
-        ) = group_tables(sharded_tables_per_rank)
-        self._grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[dist.get_rank(pg)]
-        self._score_grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._score_grouped_embedding_configs_per_rank[dist.get_rank(pg)]
-
-        self._has_feature_processor: bool = False
-        for group_config in self._grouped_embedding_configs:
-            if group_config.has_feature_processor:
-                self._has_feature_processor = True
-
-    def _shard(
-        self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._pg.size()
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
-        ]
-        for config in embedding_configs:
-            # pyre-fixme [16]
-            shards = config[1].sharding_spec.shards
-
-            # construct the global sharded_tensor_metadata
-            global_metadata = ShardedTensorMetadata(
-                shards_metadata=shards,
-                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
-            )
-
-            for rank in range(world_size):
-                tables_per_rank[rank].append(
-                    ShardedEmbeddingTable(
-                        num_embeddings=config[0].num_embeddings,
-                        embedding_dim=config[0].embedding_dim,
-                        name=config[0].name,
-                        embedding_names=config[0].embedding_names,
-                        data_type=config[0].data_type,
-                        feature_names=config[0].feature_names,
-                        pooling=config[0].pooling,
-                        is_weighted=config[0].is_weighted,
-                        has_feature_processor=config[0].has_feature_processor,
-                        local_rows=shards[rank].shard_sizes[0],
-                        local_cols=config[0].embedding_dim,
-                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
-                        local_metadata=shards[rank],
-                        global_metadata=global_metadata,
-                        weight_init_max=config[0].weight_init_max,
-                        weight_init_min=config[0].weight_init_min,
-                    )
-                )
-        return tables_per_rank
 
     def create_input_dist(
         self,
@@ -340,7 +357,7 @@ class RwEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
             id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
             device=device if device is not None else self._device,
-            is_sequence=self._is_sequence,
+            is_sequence=False,
             has_feature_processor=self._has_feature_processor,
         )
 
@@ -350,95 +367,17 @@ class RwEmbeddingSharding(EmbeddingSharding[SparseFeatures, torch.Tensor]):
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
-        if self._is_sequence:
-            return GroupedEmbeddingsLookup(
-                grouped_configs=self._grouped_embedding_configs,
-                fused_params=fused_params,
-                pg=self._pg,
-                device=device if device is not None else self._device,
-            )
-        else:
-            return GroupedPooledEmbeddingsLookup(
-                grouped_configs=self._grouped_embedding_configs,
-                grouped_score_configs=self._score_grouped_embedding_configs,
-                fused_params=fused_params,
-                pg=self._pg,
-                device=device if device is not None else self._device,
-                feature_processor=feature_processor,
-            )
+        return GroupedPooledEmbeddingsLookup(
+            grouped_configs=self._grouped_embedding_configs,
+            grouped_score_configs=self._score_grouped_embedding_configs,
+            fused_params=fused_params,
+            pg=self._pg,
+            device=device if device is not None else self._device,
+            feature_processor=feature_processor,
+        )
 
-    def create_pooled_output_dist(
+    def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> RwPooledEmbeddingDist:
+    ) -> BaseEmbeddingDist[torch.Tensor]:
         return RwPooledEmbeddingDist(self._pg)
-
-    def create_sequence_output_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> RwSequenceEmbeddingDist:
-        return RwSequenceEmbeddingDist(
-            self._pg,
-            self._get_id_list_features_num(),
-            device if device is not None else self._device,
-        )
-
-    def embedding_dims(self) -> List[int]:
-        embedding_dims = []
-        for grouped_config in self._grouped_embedding_configs:
-            embedding_dims.extend(grouped_config.embedding_dims())
-        for grouped_config in self._score_grouped_embedding_configs:
-            embedding_dims.extend(grouped_config.embedding_dims())
-        return embedding_dims
-
-    def embedding_names(self) -> List[str]:
-        embedding_names = []
-        for grouped_config in self._grouped_embedding_configs:
-            embedding_names.extend(grouped_config.embedding_names())
-        for grouped_config in self._score_grouped_embedding_configs:
-            embedding_names.extend(grouped_config.embedding_names())
-        return embedding_names
-
-    def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
-        embedding_shard_metadata = []
-        for grouped_config in self._grouped_embedding_configs:
-            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
-        for grouped_config in self._score_grouped_embedding_configs:
-            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
-        return embedding_shard_metadata
-
-    def id_list_feature_names(self) -> List[str]:
-        id_list_feature_names = []
-        for grouped_config in self._grouped_embedding_configs:
-            id_list_feature_names.extend(grouped_config.feature_names())
-        return id_list_feature_names
-
-    def id_score_list_feature_names(self) -> List[str]:
-        id_score_list_feature_names = []
-        for grouped_config in self._score_grouped_embedding_configs:
-            id_score_list_feature_names.extend(grouped_config.feature_names())
-        return id_score_list_feature_names
-
-    def _get_id_list_features_num(self) -> int:
-        return sum(
-            group_config.num_features()
-            for group_config in self._grouped_embedding_configs
-        )
-
-    def _get_id_score_list_features_num(self) -> int:
-        return sum(
-            group_config.num_features()
-            for group_config in self._score_grouped_embedding_configs
-        )
-
-    def _get_id_list_features_hash_sizes(self) -> List[int]:
-        id_list_feature_hash_sizes: List[int] = []
-        for group_config in self._grouped_embedding_configs:
-            id_list_feature_hash_sizes.extend(group_config.feature_hash_sizes())
-        return id_list_feature_hash_sizes
-
-    def _get_id_score_list_features_hash_sizes(self) -> List[int]:
-        id_score_list_feature_hash_sizes: List[int] = []
-        for group_config in self._score_grouped_embedding_configs:
-            id_score_list_feature_hash_sizes.extend(group_config.feature_hash_sizes())
-        return id_score_list_feature_hash_sizes

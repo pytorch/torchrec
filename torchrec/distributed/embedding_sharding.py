@@ -6,7 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from dataclasses import dataclass, field
 from typing import TypeVar, Generic, List, Tuple, Optional, Dict, Any
 
 import torch
@@ -34,35 +33,6 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
-
-
-@dataclass
-class SequenceShardingContext(Multistreamable):
-    """
-    SequenceEmbeddingAllToAll has the same comm pattern as KJTAllToAll.
-    Stores KJTAllToAll context and reuses it in SequenceEmbeddingAllToAll.
-
-    features_before_input_dist: stores the original KJT before input dist.
-    input_splits: stores the input splits of KJT AlltoAll.
-    output_splits: stores the output splits of KJT AlltoAll.
-    unbucketize_permute_tensor: stores the permute order of
-        KJT bucketize (for row-wise sharding only).
-    lengths_after_input_dist: stores the KJT length after input dist.
-    """
-
-    features_before_input_dist: Optional[KeyedJaggedTensor] = None
-    input_splits: List[int] = field(default_factory=list)
-    output_splits: List[int] = field(default_factory=list)
-    unbucketize_permute_tensor: Optional[torch.Tensor] = None
-    lengths_after_input_dist: Optional[torch.Tensor] = None
-
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        if self.features_before_input_dist is not None:
-            self.features_before_input_dist.record_stream(stream)
-        if self.unbucketize_permute_tensor is not None:
-            self.unbucketize_permute_tensor.record_stream(stream)
-        if self.lengths_after_input_dist is not None:
-            self.lengths_after_input_dist.record_stream(stream)
 
 
 class SparseFeaturesIndices(Awaitable[SparseFeatures]):
@@ -603,26 +573,15 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
         pass
 
 
-class BasePooledEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
+class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
     """
-    Converts output of pooled EmbeddingLookup from model-parallel to data-parallel.
+    Converts output of EmbeddingLookup from model-parallel to data-parallel.
     """
-
-    @abc.abstractmethod
-    def forward(self, local_embs: T) -> Awaitable[torch.Tensor]:
-        pass
-
-
-class BaseSequenceEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
-    """
-    Converts output of sequence EmbeddingLookup from model-parallel to data-parallel.
-    """
-
-    pass
 
     @abc.abstractmethod
     def forward(
-        self, sharding_ctx: SequenceShardingContext, local_embs: T
+        self,
+        local_embs: T,
     ) -> Awaitable[torch.Tensor]:
         pass
 
@@ -641,16 +600,11 @@ class EmbeddingSharding(abc.ABC, Generic[F, T]):
         pass
 
     @abc.abstractmethod
-    def create_pooled_output_dist(
+    def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BasePooledEmbeddingDist[T]:
+    ) -> BaseEmbeddingDist[T]:
         pass
-
-    def create_sequence_output_dist(
-        self, device: Optional[torch.device] = None
-    ) -> BaseSequenceEmbeddingDist[T]:
-        raise NotImplementedError
 
     @abc.abstractmethod
     def create_lookup(

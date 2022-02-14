@@ -96,17 +96,12 @@ class ShardedQuantEmbeddingBagCollection(
 
         self._is_weighted: bool = module.is_weighted
         self._device = device
+        self._input_dists: nn.ModuleList = nn.ModuleList()
+        self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups()
-
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
+        self._output_dists: nn.ModuleList = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
-
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
 
@@ -149,13 +144,12 @@ class ShardedQuantEmbeddingBagCollection(
     def _create_lookups(
         self,
     ) -> None:
-        self._lookups = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
             self._lookups.append(sharding.create_lookup())
 
     def _create_output_dist(self, device: Optional[torch.device] = None) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._output_dists.append(sharding.create_pooled_output_dist(device))
+            self._output_dists.append(sharding.create_output_dist(device))
             self._embedding_names.extend(sharding.embedding_names())
             self._embedding_dims.extend(sharding.embedding_dims())
 

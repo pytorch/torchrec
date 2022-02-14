@@ -29,7 +29,6 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesListAwaitable,
-    SequenceShardingContext,
     SparseFeaturesIndices,
 )
 from torchrec.distributed.embedding_types import (
@@ -37,15 +36,19 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
     ShardingType,
-    BaseEmbeddingLookup,
     SparseFeaturesList,
 )
-from torchrec.distributed.sharding.dp_sharding import DpEmbeddingSharding
-from torchrec.distributed.sharding.rw_sharding import (
-    RwEmbeddingSharding,
-    RwSparseFeaturesDist,
+from torchrec.distributed.sharding.dp_sequence_sharding import (
+    DpSequenceEmbeddingSharding,
 )
-from torchrec.distributed.sharding.tw_sharding import TwEmbeddingSharding
+from torchrec.distributed.sharding.rw_sequence_sharding import (
+    RwSequenceEmbeddingSharding,
+)
+from torchrec.distributed.sharding.rw_sharding import RwSparseFeaturesDist
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
+from torchrec.distributed.sharding.tw_sequence_sharding import (
+    TwSequenceEmbeddingSharding,
+)
 from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
@@ -81,16 +84,16 @@ def create_embedding_sharding(
     pg = env.process_group
     if pg is not None:
         if sharding_type == ShardingType.TABLE_WISE.value:
-            return TwEmbeddingSharding(embedding_configs, env, device, True)
+            return TwSequenceEmbeddingSharding(embedding_configs, env, device)
         elif sharding_type == ShardingType.ROW_WISE.value:
-            return RwEmbeddingSharding(embedding_configs, pg, device, True)
+            return RwSequenceEmbeddingSharding(embedding_configs, pg, device)
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpEmbeddingSharding(embedding_configs, env, device, True)
+            return DpSequenceEmbeddingSharding(embedding_configs, env, device)
         else:
             raise ValueError(f"Sharding not supported {sharding_type}")
     else:
         if sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpEmbeddingSharding(embedding_configs, env, device, True)
+            return DpSequenceEmbeddingSharding(embedding_configs, env, device)
         else:
             raise ValueError(f"Sharding not supported {sharding_type}")
 
@@ -232,11 +235,12 @@ class ShardedEmbeddingCollection(
         }
 
         self._device = device
+        self._input_dists: nn.ModuleList = nn.ModuleList()
+        self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups(fused_params)
+        self._output_dists: nn.ModuleList = nn.ModuleList()
         self._create_output_dist()
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
+
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
 
@@ -264,9 +268,6 @@ class ShardedEmbeddingCollection(
         self,
         input_feature_names: List[str],
     ) -> None:
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._input_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         feature_names: List[str] = []
         self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
@@ -287,22 +288,14 @@ class ShardedEmbeddingCollection(
         )
 
     def _create_lookups(self, fused_params: Optional[Dict[str, Any]]) -> None:
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._lookups: nn.ModuleList[
-            BaseEmbeddingLookup[SparseFeatures, torch.Tensor]
-        ] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
             self._lookups.append(sharding.create_lookup(fused_params=fused_params))
 
     def _create_output_dist(
         self,
     ) -> None:
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._output_dists: nn.ModuleList[nn.Module] = nn.ModuleList()
         for sharding in self._sharding_type_to_sharding.values():
-            self._output_dists.append(sharding.create_sequence_output_dist())
+            self._output_dists.append(sharding.create_output_dist())
 
     # pyre-ignore [14]
     def input_dist(
@@ -392,7 +385,7 @@ class ShardedEmbeddingCollection(
             # pyre-ignore [16]
             ctx.sharding_contexts,
         ):
-            awaitables_per_sharding.append(odist(sharding_ctx, embeddings))
+            awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
             features_before_all2all_per_sharding.append(
                 sharding_ctx.features_before_input_dist
             )
@@ -420,7 +413,7 @@ class ShardedEmbeddingCollection(
                 )
             )
             awaitables_per_sharding.append(
-                odist(sharding_ctx, lookup(features).view(-1, self._embedding_dim))
+                odist(lookup(features).view(-1, self._embedding_dim), sharding_ctx)
             )
             features_before_all2all_per_sharding.append(
                 sharding_ctx.features_before_input_dist

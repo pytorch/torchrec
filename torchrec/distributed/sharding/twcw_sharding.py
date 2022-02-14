@@ -9,14 +9,14 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.sharding.cw_sharding import CwEmbeddingSharding
+from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.types import (
     ParameterSharding,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
-class TwCwEmbeddingSharding(CwEmbeddingSharding):
+class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
     """
     Shards embedding bags table-wise column-wise, i.e.. a given embedding table is
     distributed by specified number of columns and table slices are placed on all ranks
