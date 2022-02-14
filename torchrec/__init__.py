@@ -19,7 +19,6 @@ from torchrec.modules.embedding_modules import (  # noqa
     EmbeddingCollection,
     EmbeddingBagCollectionInterface,
 )  # noqa
-from torchrec.modules.score_learning import PositionWeightsAttacher  # noqa
 from torchrec.sparse.jagged_tensor import (  # noqa
     JaggedTensor,
     KeyedJaggedTensor,
