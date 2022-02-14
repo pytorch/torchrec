@@ -50,8 +50,9 @@ def check_module_output_dimension(
     out_features: int,
 ) -> bool:
     """
-    Verify that the out_features of a given module or a list of modules matches the specified number.
-    If a list of modules or a ModuleList is given, recursively check all the submodules.
+    Verify that the out_features of a given module or a list of modules matches the
+    specified number. If a list of modules or a ModuleList is given, recursively check
+    all the submodules.
     """
     if isinstance(module, list) or isinstance(module, torch.nn.ModuleList):
         return all(
@@ -75,8 +76,8 @@ def construct_modulelist_from_single_module(
     module: torch.nn.Module, sizes: Tuple[int, ...]
 ) -> torch.nn.Module:
     """
-    Given a single module, construct a (nested) ModuleList of size of sizes by making copies of
-    the provided module and reinitializing the Linear layers.
+    Given a single module, construct a (nested) ModuleList of size of sizes by making
+    copies of the provided module and reinitializing the Linear layers.
     """
     if len(sizes) == 1:
         return torch.nn.ModuleList(

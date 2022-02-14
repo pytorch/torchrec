@@ -45,21 +45,24 @@ def _apply_functions_after_first_forward(
 def lazy_apply(
     module: torch.nn.Module, fn: Callable[[torch.nn.Module], None]
 ) -> torch.nn.Module:
-    r"""Attaches a function to a module, which will be applied recursively to every submodule
-    (as returned by `.children()`) of the module as well as the module itself right after
-    the first forward pass (i.e. after all submodules and parameters have been initialized).
-    Typical use includes initializing the numerical value of the parameters of
-    a lazy module (i.e. modules inherited from LazyModuleMixin).
+    """Attaches a function to a module, which will be applied recursively to every
+    submodule (as returned by `.children()`) of the module as well as the module itself
+    right after the first forward pass (i.e. after all submodules and parameters have
+    been initialized).
 
-    Note that `lazy_apply()` can be used on both lazy and non-lazy modules.
+    Typical use includes initializing the numerical value of the parameters of a lazy
+    module (i.e. modules inherited from LazyModuleMixin).
+
+    NOTE:
+        `lazy_apply()` can be used on both lazy and non-lazy modules.
 
     Args:
         module (torch.nn.Module): module to recursively apply `fn` on.
-        fn (Callable[[torch.nn.Module], None]): function to be attached to `module` and later
-            be applied to each submodule of `module` and the `module` itself.
+        fn (Callable[[torch.nn.Module], None]): function to be attached to `module` and
+            later be applied to each submodule of `module` and the `module` itself.
 
     Returns:
-        `module` with `fn` attached.
+        torch.nn.Module: `module` with `fn` attached.
 
     Example:
         >>> @torch.no_grad()
@@ -68,17 +71,18 @@ def lazy_apply(
         >>>     if type(m) == torch.nn.LazyLinear:
         >>>         m.weight.fill_(1.0)
         >>>         print(m.weight)
-        >>>
+
         >>> linear = torch.nn.LazyLinear(2)
         >>> lazy_apply(linear, init_weights)  # doesn't run `init_weights` immediately
         >>> input = torch.randn(2, 10)
         >>> linear(input)  # runs `init_weights` only once, right after first forward pass
-        >>>
+
         >>> seq = torch.nn.Sequential(torch.nn.LazyLinear(2), torch.nn.LazyLinear(2))
         >>> lazy_apply(seq, init_weights)  # doesn't run `init_weights` immediately
         >>> input = torch.randn(2, 10)
         >>> seq(input)  # runs `init_weights` only once, right after first forward pass
     """
+
     if not hasattr(module, "_functions_to_lazy_apply"):
         # pyre-ignore[16]
         module._functions_to_lazy_apply = []
@@ -116,18 +120,19 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
     """
 
     def apply(self, fn: Callable[[torch.nn.Module], None]) -> torch.nn.Module:
-        r"""Applies `fn` recursively to every submodule (as returned by `.children()`)
+        """Applies `fn` recursively to every submodule (as returned by `.children()`)
         as well as self. Typical use includes initializing the parameters of a model.
 
-        Note that calling `apply()` on an uninitialized lazy-module will result in an error.
-        User is required to initialize a lazy-module (by doing a dummy forward pass) before
-        calling `apply()` on the lazy-module.
+        NOTE:
+            Calling `apply()` on an uninitialized lazy-module will result in an error.
+            User is required to initialize a lazy-module (by doing a dummy forward pass)
+            before calling `apply()` on the lazy-module.
 
         Args:
-            fn (torch.nn.Module -> None): function to be applied to each submodule
+            fn (torch.nn.Module -> None): function to be applied to each submodule.
 
         Returns:
-            Module: self
+            torch.nn.Module: self
 
         Example::
             >>> @torch.no_grad()
@@ -136,15 +141,16 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
             >>>     if type(m) == torch.nn.LazyLinear:
             >>>         m.weight.fill_(1.0)
             >>>         print(m.weight)
-            >>>
+
             >>> linear = torch.nn.LazyLinear(2)
             >>> linear.apply(init_weights)  # this fails, because `linear` (a lazy-module) hasn't been initialized yet
-            >>>
+
             >>> input = torch.randn(2, 10)
             >>> linear(input)  # run a dummy forward pass to initialize the lazy-module
-            >>>
+
             >>> linear.apply(init_weights)  # this works now
         """
+
         if hasattr(self, "_initialize_hook"):
             raise RuntimeError(
                 "Module {} has not been initialized. ".format(self)
@@ -162,10 +168,12 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
     def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs):
         r"""Infers the size and initializes the parameters according to the
         provided input batch.
+
         Given a module that contains parameters that were declared inferrable
         using :class:`torch.nn.parameter.ParameterMode.Infer`, runs a forward pass
         in the complete module using the provided input to initialize all the parameters
         as needed.
+
         The module is set into evaluation mode before running the forward pass in order
         to avoid saving statistics or calculating gradients
         """
