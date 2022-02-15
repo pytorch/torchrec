@@ -44,7 +44,7 @@ class PositionWeightedModule(BaseFeatureProcessor):
         ret: Dict[str, JaggedTensor] = {}
         for key, pos_weight in self.position_weights.items():
             seq = torch.ops.fbgemm.offsets_range(
-                features[key].lengths().long(), features[key].values().long()
+                features[key].offsets().long(), torch.numel(features[key].values())
             )
             ret[key] = JaggedTensor(
                 values=features[key].values(),
