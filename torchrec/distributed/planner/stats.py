@@ -42,9 +42,9 @@ class EmbeddingStats(Stats):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         """
-        Log stats for a given sharding plan to stdout.
+        Logs stats for a given sharding plan to stdout.
 
-        Provide a tabular view of stats for the given sharding plan with per device
+        Provides a tabular view of stats for the given sharding plan with per device
         storage usage (HBM and DDR), perf, input (pooling factors), output (embedding
         dimension), and number and type of shards.
 
