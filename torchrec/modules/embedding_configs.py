@@ -21,7 +21,7 @@ class PoolingType(Enum):
 @unique
 class DataType(Enum):
     """
-    Our fusion impl supports only certain types of data
+    Our fusion implementation supports only certain types of data
     so it makes sense to retrict in a non-fused version as well.
     """
 

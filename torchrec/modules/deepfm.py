@@ -10,10 +10,10 @@
     Deep Factorization-Machine Modules
 =====
 
-The following modules are based off the Deep Factorization-Machine (DeepFM) paper which is located at this link: https://arxiv.org/pdf/1703.04247.pdf
+The following modules are based off the `Deep Factorization-Machine (DeepFM) paper
+<https://arxiv.org/pdf/1703.04247.pdf>`_
     * Class DeepFM implents the DeepFM Framework
     * Class FactorizationMachine implements FM as noted in the above paper.
-
 
 """
 
@@ -35,62 +35,40 @@ def _get_flatten_input(inputs: List[torch.Tensor]) -> torch.Tensor:
 
 class DeepFM(nn.Module):
     r"""
-    This is the DeepFM module. Extenal source of DeepFM paper:
-    https://arxiv.org/pdf/1703.04247.pdf
+    This is the `DeepFM module <https://arxiv.org/pdf/1703.04247.pdf>`_
 
-    This module is not to cover the end-end functionality of the published paper.
-    Instead, it is only the deep component of the publication. It is used to learn
-    high-order feature interactions. If low-order feature interaction should
-    be learnt, please use FactorizationMachine module instead, which will share
+    This module does not cover the end-end functionality of the published paper.
+    Instead, it covers only the deep component of the publication. It is used to learn
+    high-order feature interactions. If low-order feature interactions should
+    be learnt, please use `FactorizationMachine` module instead, which will share
     the same embedding input of this module.
 
     To support modeling flexibility, we customize the key components as:
         * Different from the public paper, we change the input from raw sparse
-          features to embeddings of the features. It can allow flexibility in
-          embedding dimensions and number of embeddings, as long as all embedding
-          tensors have the same batch size.
+          features to embeddings of the features. It allows flexibility in embedding
+          dimensions and the number of embeddings, as long as all embedding tensors
+          have the same batch size.
         * On top of the public paper, we allow users to customize the hidden layer
           to be any module, not limited to just MLP.
 
     The general architecture of the module is like:
 
-                                1 x 10                  output
-                                 /|\
-                                  |                     pass into `dense_module`
-                                  |
-                                1 x 90
-                                 /|\
-                                  |                     concat
-                                  |
-                        1 x 20, 1 x 30, 1 x 40          list of embeddings
+        * 1 x 10: output
+        * ^
+        * pass into `dense_module`
+        * ^
+        * 1 x 90
+        * ^
+        * concat
+        * ^
+        * 1 x 20, 1 x 30, 1 x 40: list of embeddings
 
-    Constructor Args:
-        dense_module: nn.Module.
-            any customerized module that can be used (such as MLP) in DeepFM. The in_features
-            of this module must be equal to the elements counts. For example, the input
-            embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the in_features should be:
-            2*3+4*5.
-
-    Call Args:
-        embeddings: List[torch.Tensor]:
-            The list of all embeddings (e.g. dense, common_sparse, specialized_sparse,
-            embedding_features, raw_embedding_features) in the shape of:
-                (batch_size, num_embeddings, embedding_dim)
-
-            For the ease of operation, embeddings that have the same embedding dimension
-            have the option to be stacked into a single tensor. For example, when we have
-            1 trained embedding with dimension=32, 5 native embedding with dimension=64,
-            and 3 dense features with dimension=16, we can prepare the embeddings list to
-            be the list of:
-                tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
-                tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
-                tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
-
-            Note that: batch_size of all input tensors need to be identical.
-
-    Returns:
-        deepfm_output (torch.Tensor): output of `dense_module` with flattened and
-            concatenated `embeddings` as input.
+    Args:
+        dense_module (nn.Module):
+            any customerized module that can be used (such as MLP) in DeepFM. The
+            `in_features` of this module must be equal to the elements counts. For
+            example, the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the
+            `in_features` should be: 2*3+4*5.
 
     Example:
         >>> import torch
@@ -98,7 +76,7 @@ class DeepFM(nn.Module):
         >>> from torchrec.fb.modules.mlp import LazyMLP
         >>> batch_size = 3
         >>> output_dim = 30
-        >>> # the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]
+        >>> # the input embedding are a torch.Tensor of [batch_size, num_embeddings, embedding_dim]
         >>> input_embeddings = [
         >>>     torch.randn(batch_size, 2, 64),
         >>>     torch.randn(batch_size, 2, 32),
@@ -119,6 +97,30 @@ class DeepFM(nn.Module):
         self,
         embeddings: List[torch.Tensor],
     ) -> torch.Tensor:
+        """
+        Args:
+            embeddings (List[torch.Tensor]):
+                The list of all embeddings (e.g. dense, common_sparse,
+                specialized_sparse,
+                embedding_features, raw_embedding_features) in the shape of:
+                    (batch_size, num_embeddings, embedding_dim)
+
+                For the ease of operation, embeddings that have the same embedding
+                dimension have the option to be stacked into a single tensor. For
+                example, when we have 1 trained embedding with dimension=32, 5 native
+                embeddings with dimension=64, and 3 dense features with dimension=16, we
+                can prepare the embeddings list to be the list of:
+                    tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
+                    tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
+                    tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
+
+                NOTE:
+                    `batch_size` of all input tensors need to be identical.
+
+        Returns:
+            torch.Tensor: output of `dense_module` with flattened and concatenated `embeddings` as input.
+        """
+
         # flatten each embedding to be [B, N, D] -> [B, N*D], then cat them all on dim=1
         deepfm_input = _get_flatten_input(embeddings)
         deepfm_output = self.dense_module(deepfm_input)
@@ -127,54 +129,30 @@ class DeepFM(nn.Module):
 
 class FactorizationMachine(nn.Module):
     r"""
-    This is the Factorization Machine module, mentioned in the DeepFM paper:
-    https://arxiv.org/pdf/1703.04247.pdf
+    This is the Factorization Machine module, mentioned in the `DeepFM paper
+    <https://arxiv.org/pdf/1703.04247.pdf>`_:
 
-    This module is not to cover the end-end functionality of the published paper.
-    Instead, it is only the FM part of the publication. It is used to learn
+    This module does not cover the end-end functionality of the published paper.
+    Instead, it covers only the FM part of the publication, and is used to learn
     2nd-order feature interactions.
 
     To support modeling flexibility, we customize the key components as:
         * Different from the public paper, we change the input from raw sparse
-          features to embeddings of the features. It can allow flexibility in
-          embedding dimensions and number of embeddings, as long as all embedding
-          tensors have the same batch size.
+          features to embeddings of the features. It allows flexibility in embedding
+          dimensions and the number of embeddings, as long as all embedding tensors
+          have the same batch size.
 
     The general architecture of the module is like:
 
-                                1 x 1                  output
-                                 /|\
-                                  |                     pass into `dense_module`
-                                  |
-                                1 x 90
-                                 /|\
-                                  |                     concat
-                                  |
-                        1 x 20, 1 x 30, 1 x 40          list of embeddings
-
-    Constructor Args:
-        None
-
-    Call Args:
-        embeddings: List[torch.Tensor]:
-            The list of all embeddings (e.g. dense, common_sparse, specialized_sparse,
-            embedding_features, raw_embedding_features) in the shape of:
-                (batch_size, num_embeddings, embedding_dim)
-
-            For the ease of operation, embeddings that have the same embedding dimension
-            have the option to be stacked into a single tensor. For example, when we have
-            1 trained embedding with dimension=32, 5 native embedding with dimension=64,
-            and 3 dense features with dimension=16, we can prepare the embeddings list to
-            be the list of:
-                tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
-                tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
-                tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
-
-            Note that: batch_size of all input tensors need to be identical.
-
-    Returns:
-        output (torch.Tensor): output of fm with flattened and
-            concatenated `embeddings` as input. Expected to be [B, 1]
+        * 1 x 1 output
+        * ^
+        * pass into `dense_module`
+        * ^
+        * 1 x 90
+        * ^
+        * concat
+        * ^
+        * 1 x 20, 1 x 30, 1 x 40 list of embeddings
 
     Example:
         >>> batch_size = 3
@@ -196,6 +174,30 @@ class FactorizationMachine(nn.Module):
         self,
         embeddings: List[torch.Tensor],
     ) -> torch.Tensor:
+        """
+        Args:
+            embeddings: List[torch.Tensor]:
+                The list of all embeddings (e.g. dense, common_sparse,
+                specialized_sparse, embedding_features, raw_embedding_features) in the
+                shape of:
+                    (batch_size, num_embeddings, embedding_dim)
+
+                For the ease of operation, embeddings that have the same embedding
+                dimension have the option to be stacked into a single tensor. For
+                example, when we have 1 trained embedding with dimension=32, 5 native
+                embeddings with dimension=64, and 3 dense features with dimension=16, we
+                can prepare the embeddings list to be the list of:
+                    tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
+                    tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
+                    tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
+
+                NOTE:
+                    batch_size of all input tensors need to be identical.
+
+        Returns:
+            torch.Tensor: output of fm with flattened and concatenated `embeddings` as input. Expected to be [B, 1].
+        """
+
         # flatten each embedding to be [B, N, D] -> [B, N*D], then cat them all on dim=1
         fm_input = _get_flatten_input(embeddings)
         sum_of_input = torch.sum(fm_input, dim=1, keepdim=True)

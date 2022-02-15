@@ -17,7 +17,7 @@ class Perceptron(torch.nn.Module):
     """
     Applies a linear transformation and activation.
 
-    Constructor Args:
+    Args:
         in_size (int): number of elements in each input sample.
         out_size (int): number of elements in each output sample.
         bias (bool): if set to ``False``, the layer will not learn an additive bias.
@@ -25,24 +25,16 @@ class Perceptron(torch.nn.Module):
         activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):
             the activation function to apply to the output of linear transformation.
             Default: torch.relu.
-        device: (Optional[torch.device]).
-
-    Call Args:
-        input (torch.Tensor): tensor of shape (B, I) where I is number of elements
-            in each input sample.
-
-    Returns:
-        output (torch.Tensor): tensor of shape (B, O) where O is number of elements
-            per channel in each output sample (i.e. `out_size`).
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> batch_size = 3
         >>> in_size = 40
         >>> input = torch.randn(batch_size, in_size)
-        >>>
+
         >>> out_size = 16
         >>> perceptron = Perceptron(in_size, out_size, bias=True)
-        >>>
+
         >>> output = perceptron(input)
         >>> assert list(output) == [batch_size, out_size]
     """
@@ -68,6 +60,15 @@ class Perceptron(torch.nn.Module):
         self._activation_fn: Callable[[torch.Tensor], torch.Tensor] = activation
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input (torch.Tensor): tensor of shape (B, I) where I is number of elements
+                in each input sample.
+
+        Returns:
+            torch.Tensor: tensor of shape (B, O) where O is number of elements per
+                channel in each output sample (i.e. `out_size`).
+        """
         return self._activation_fn(self._linear(input))
 
 
@@ -75,35 +76,30 @@ class MLP(torch.nn.Module):
     """
     Applies a stack of Perceptron modules sequentially (i.e. Multi-Layer Perceptron).
 
-    Constructor Args:
-        in_size (int): `in_size` of the input
+    Args:
+        in_size (int): `in_size` of the input.
         layer_sizes (List[int]): `out_size` of each Perceptron module.
         bias (bool): if set to False, the layer will not learn an additive bias.
             Default: True.
         activation (str, Union[Callable[[], torch.nn.Module], torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):
-            the activation function to apply to the output of linear transformation of each Perceptron module.
-            If `activation` is a `str`, we currently only support the follow strings, as "relu", "sigmoid",
-            and "swish_layernorm".
-            If `activation` is a `Callable[[], torch.nn.Module]`, `activation()` will be called once per Perceptron module
-            to generate the activation module for that Perceptron module, and the parameters won't be shared
-            between those activation modules. One use case is when all the activation modules share the same
-            constructor arguments, but don't share the actual module parameters.
+            the activation function to apply to the output of linear transformation of
+            each Perceptron module.
+            If `activation` is a `str`, we currently only support the follow strings, as
+            "relu", "sigmoid", and "swish_layernorm".
+            If `activation` is a `Callable[[], torch.nn.Module]`, `activation()` will be
+            called once per Perceptron module to generate the activation module for that
+            Perceptron module, and the parameters won't be shared between those activation
+            modules.
+            One use case is when all the activation modules share the same constructor
+            arguments, but don't share the actual module parameters.
             Default: torch.relu.
-        device: (Optional[torch.device]).
-
-    Call Args:
-        input (torch.Tensor): tensor of shape (B, I) where I is number of elements
-            in each input sample.
-
-    Returns:
-        output (torch.Tensor): tensor of shape (B, O) where O is `out_size` of
-            the last Perceptron module.
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> batch_size = 3
         >>> in_size = 40
         >>> input = torch.randn(batch_size, in_size)
-        >>>
+
         >>> layer_sizes = [16, 8, 4]
         >>> mlp_module = MLP(in_size, layer_sizes, bias=True)
         >>> output = mlp_module(input)
@@ -163,4 +159,12 @@ class MLP(torch.nn.Module):
                 ), "This MLP only support str version activation function of relu, sigmoid, and swish_layernorm"
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            input (torch.Tensor): tensor of shape (B, I) where I is number of elements
+                in each input sample.
+
+        Returns:
+            torch.Tensor: tensor of shape (B, O) where O is `out_size` of the last Perceptron module.
+        """
         return self._mlp(input)

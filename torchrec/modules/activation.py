@@ -20,24 +20,16 @@ from torch import nn
 
 class SwishLayerNorm(nn.Module):
     """
-    Applies the Swish function with layer normalization:
-        'Y = X * Sigmoid(LayerNorm(X)).'
+    Applies the Swish function with layer normalization: `Y = X * Sigmoid(LayerNorm(X))`.
 
-    Call Args:
-        input: an input tensor
-
-    Returns:
-        output: an output tensor
-
-    Constructor Args:
-        input_dims: dimensions to normalize over. E.g., If an input tensor has shape
-        [batch_size, d1, d2, d3], set input_dim=[d2, d3] will do the layer normalization
-        on last two dimensions.
-        device: (Optional[torch.device]).
+    Args:
+        input_dims (Union[int, List[int], torch.Size]): dimensions to normalize over.
+            If an input tensor has shape [batch_size, d1, d2, d3], setting
+            input_dim=[d2, d3] will do the layer normalization on last two dimensions.
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> sln = SwishLayerNorm(100)
-
     """
 
     def __init__(
@@ -55,4 +47,11 @@ class SwishLayerNorm(nn.Module):
         self,
         input: torch.Tensor,
     ) -> torch.Tensor:
+        """
+        Args:
+            input (torch.Tensor): an input tensor.
+
+        Returns:
+            torch.Tensor: an output tensor.
+        """
         return input * self.norm(input)

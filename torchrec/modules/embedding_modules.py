@@ -34,7 +34,8 @@ def _to_mode(pooling: PoolingType) -> str:
 
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     """
-    Interface for EmbeddingBagCollection, GroupedEmbeddingBag, and BaseBatchedEmbeddingBag.
+    Interface for `EmbeddingBagCollection`, `GroupedEmbeddingBag`, and
+    `BaseBatchedEmbeddingBag`.
     """
 
     @abc.abstractmethod
@@ -57,54 +58,48 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
-    EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags)
-    It processes sparse data in the form of KeyedJaggedTensor
-    with values of the form [F X B X L]
-    F: features (keys)
-    B: batch size
-    L: Length of sparse features (jagged)
+    EmbeddingBagCollection represents a collection of pooled embeddings (`EmbeddingBags`).
 
-    and outputs a KeyedTensor with values of the form [B * (F * D)]
-    where
-    F: features (keys)
-    D: each feature's (key's) embedding dimension
-    B: batch size
+    It processes sparse data in the form of `KeyedJaggedTensor` with values of the form
+    [F X B X L] where:
+        * F: features (keys)
+        * B: batch size
+        * L: Length of sparse features (jagged)
 
-    Constructor Args:
-        tables (List[EmbeddingBagConfig]): list of embedding tables
-        is_weighted: (bool): whether input KeyedJaggedTensor is weighted
-        device: (Optional[torch.device]): default compute device
+    and outputs a `KeyedTensor` with values of the form [B * (F * D)] where:
+        * F: features (keys)
+        * D: each feature's (key's) embedding dimension
+        * B: batch size
 
-    Call Args:
-        features: KeyedJaggedTensor,
-        weighted_features: KeyedJaggedTensor,
-
-    Returns:
-        KeyedTensor
+    Args:
+        tables (List[EmbeddingBagConfig]): list of embedding tables.
+        is_weighted (bool): whether input `KeyedJaggedTensor` is weighted.
+        device (Optional[torch.device]): default compute device.
 
     Example:
-        table_0 = EmbeddingBagConfig(
+        >>> table_0 = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
-        table_1 = EmbeddingBagConfig(
+        >>> table_1 = EmbeddingBagConfig(
             name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
         )
 
-        ebc = EmbeddingBagCollection(tables=[table_0, table_1])
+        >>> ebc = EmbeddingBagCollection(tables=[table_0, table_1])
 
-        #        0       1        2  <-- batch
-        # "f1"   [0,1] None    [2]
-        # "f2"   [3]    [4]    [5,6,7]
-        #  ^
-        # feature
-        features = KeyedJaggedTensor(
+        >>> #        0       1        2  <-- batch
+        >>> # "f1"   [0,1] None    [2]
+        >>> # "f2"   [3]    [4]    [5,6,7]
+        >>> #  ^
+        >>> # feature
+
+        >>> features = KeyedJaggedTensor(
             keys=["f1", "f2"],
             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
             offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
         )
 
-        pooled_embeddings = ebc(features)
-        print(pooled_embeddings.values())
+        >>> pooled_embeddings = ebc(features)
+        >>> print(pooled_embeddings.values())
         tensor([[-0.6149,  0.0000, -0.3176],
         [-0.8876,  0.0000, -1.5606],
         [ 1.6805,  0.0000,  0.6810],
@@ -112,9 +107,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         [ 0.1823, -0.4697,  1.3823],
         [-0.2767, -0.9965, -0.1797],
         [ 0.8864,  0.1315, -2.0724]], grad_fn=<TransposeBackward0>)
-        print(pooled_embeddings.keys())
+        >>> print(pooled_embeddings.keys())
         ['f1', 'f2']
-        print(pooled_embeddings.offset_per_key())
+        >>> print(pooled_embeddings.offset_per_key())
         tensor([0, 3, 7])
     """
 
@@ -169,6 +164,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     self._embedding_names.append(feature_name)
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+        """
+        Args:
+            features (KeyedJaggedTensor):
+
+        Returns:
+            KeyedTensor
+        """
+
         pooled_embeddings: List[torch.Tensor] = []
 
         feature_dict = features.to_dict()
@@ -201,60 +204,54 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
 class EmbeddingCollection(nn.Module):
     """
-    EmbeddingCollection represents a collection of non-pooled embeddings
-    It processes sparse data in the form of KeyedJaggedTensor
-    of the form [F X B X L]
-    F: features (keys)
-    B: batch size
-    L: Length of sparse features (variable)
+    EmbeddingCollection represents a collection of non-pooled embeddings.
 
-    and outputs Dict[feature (key), JaggedTensor].
-    Each JaggedTensor contains values of the form (B * L) X D
-    where
-    B: batch size
-    L: Length of sparse features (jagged)
-    D: each feature's (key's) embedding dimension
-    and lengths are of the form L
+    It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
+    where:
+        * F: features (keys)
+        * B: batch size
+        * L: Length of sparse features (variable)
 
-    Constructor Args:
-        tables (List[EmbeddingBagConfig]): list of embedding tables
-        device: (Optional[torch.device]): default compute device
+    and outputs `Dict[feature (key), JaggedTensor]`.
+    Each `JaggedTensor` contains values of the form (B * L) X D
+    where:
+        * B: batch size
+        * L: Length of sparse features (jagged)
+        * D: each feature's (key's) embedding dimension and lengths are of the form L
 
-    Call Args:
-        features: KeyedJaggedTensor,
-
-    Returns:
-        Dict[str, JaggedTensor]
+    Args:
+        tables (List[EmbeddingBagConfig]): list of embedding tables.
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> e1_config = EmbeddingConfig(
             name="t1", embedding_dim=2, num_embeddings=10, feature_names=["f1"]
         )
-        e2_config = EmbeddingConfig(
+        >>> e2_config = EmbeddingConfig(
             name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
         )
-        ec_config = EmbeddingCollectionConfig(tables=[e1_config, e2_config])
+        >>> ec_config = EmbeddingCollectionConfig(tables=[e1_config, e2_config])
 
-        ec = EmbeddingCollection(config=ec_config)
+        >>> ec = EmbeddingCollection(config=ec_config)
 
-        #     0       1        2  <-- batch
-        # 0   [0,1] None    [2]
-        # 1   [3]    [4]    [5,6,7]
-        # ^
-        # feature
-        features = KeyedJaggedTensor.from_offsets_sync(
+        >>> #     0       1        2  <-- batch
+        >>> # 0   [0,1] None    [2]
+        >>> # 1   [3]    [4]    [5,6,7]
+        >>> # ^
+        >>> # feature
+
+        >>> features = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2"],
             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
             offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
         )
-        feature_embeddings = ec(features)
-        print(feature_embeddings['f2'].values())
+        >>> feature_embeddings = ec(features)
+        >>> print(feature_embeddings['f2'].values())
         tensor([[-0.2050,  0.5478,  0.6054],
         [ 0.7352,  0.3210, -3.0399],
         [ 0.1279, -0.1756, -0.4130],
         [ 0.7519, -0.4341, -0.0499],
         [ 0.9329, -1.0697, -0.8095]], grad_fn=<EmbeddingBackward>)
-
     """
 
     def __init__(  # noqa C901
@@ -311,6 +308,14 @@ class EmbeddingCollection(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> Dict[str, JaggedTensor]:
+        """
+        Args:
+            features (KeyedJaggedTensor):
+
+        Returns:
+            Dict[str, JaggedTensor]
+        """
+
         feature_embeddings: Dict[str, JaggedTensor] = {}
         for config, embedding_names, emb_module in zip(
             self.embedding_configs,

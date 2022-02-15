@@ -15,7 +15,7 @@ from torchrec.sparse.jagged_tensor import JaggedTensor
 
 class BaseFeatureProcessor(nn.Module):
     """
-    abstract base class for feature processor
+    Abstract base class for feature processor.
     """
 
     @abc.abstractmethod
@@ -27,6 +27,16 @@ class BaseFeatureProcessor(nn.Module):
 
 
 class PositionWeightedModule(BaseFeatureProcessor):
+    """
+    Adds position weights to id list features.
+
+    Args:
+        max_feature_lengths (Dict[str, int]): feature name to `max_length` mapping.
+            `max_length`, a.k.a truncation size, specifies the maximum number of ids
+            each sample has. For each feature, its position weight parameter size is
+            `max_length`.
+    """
+
     def __init__(
         self,
         max_feature_lengths: Dict[str, int],
@@ -41,15 +51,24 @@ class PositionWeightedModule(BaseFeatureProcessor):
         self,
         features: Dict[str, JaggedTensor],
     ) -> Dict[str, JaggedTensor]:
-        ret: Dict[str, JaggedTensor] = {}
+        """
+        Args:
+            features (Dict[str, JaggedTensor]): dictionary of keys to `JaggedTensor`,
+                representing the features.
+
+        Returns:
+            Dict[str, JaggedTensor]: same as input features with `weights` field being populated.
+        """
+
+        weighted_features: Dict[str, JaggedTensor] = {}
         for key, pos_weight in self.position_weights.items():
             seq = torch.ops.fbgemm.offsets_range(
                 features[key].offsets().long(), torch.numel(features[key].values())
             )
-            ret[key] = JaggedTensor(
+            weighted_features[key] = JaggedTensor(
                 values=features[key].values(),
                 lengths=features[key].lengths(),
                 offsets=features[key].offsets(),
                 weights=torch.gather(pos_weight, dim=0, index=seq),
             )
-        return ret
+        return weighted_features
