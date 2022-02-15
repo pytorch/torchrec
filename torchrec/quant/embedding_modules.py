@@ -135,10 +135,15 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self.embedding_bags: nn.ModuleList[nn.Module] = nn.ModuleList()
+        self.embedding_bags: nn.ModuleList = nn.ModuleList()
+        self._embedding_names: List[str] = []
+        self._lengths_per_embedding: List[int] = []
+        shared_feature: Dict[str, bool] = {}
+        table_names = set()
         for emb_config in self._embedding_bag_configs:
+            if emb_config.name in table_names:
+                raise ValueError(f"Duplicate table name {emb_config.name}")
+            table_names.add(emb_config.name)
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
                     (
@@ -155,39 +160,51 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 weight_lists=[table_name_to_quantized_weights[emb_config.name]],
                 device=device,
             )
-
             self.embedding_bags.append(emb_module)
+            if not emb_config.feature_names:
+                emb_config.feature_names = [emb_config.name]
+            for feature_name in emb_config.feature_names:
+                if feature_name not in shared_feature:
+                    shared_feature[feature_name] = False
+                else:
+                    shared_feature[feature_name] = True
+                self._lengths_per_embedding.append(emb_config.embedding_dim)
+
+        for emb_config in self._embedding_bag_configs:
+            for feature_name in emb_config.feature_names:
+                if shared_feature[feature_name]:
+                    self._embedding_names.append(feature_name + "@" + emb_config.name)
+                else:
+                    self._embedding_names.append(feature_name)
 
     def forward(
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedTensor:
-        keys: List[str] = []
         pooled_embeddings: List[Tensor] = []
         length_per_key: List[int] = []
+        feature_dict = features.to_dict()
         for emb_config, emb_module in zip(
             self._embedding_bag_configs, self.embedding_bags
         ):
             for feature_name in emb_config.feature_names:
-                keys.append(feature_name)
-
-                values = features[feature_name].values()
-                offsets = features[feature_name].offsets()
-                weights = features[feature_name].weights_or_none()
+                f = feature_dict[feature_name]
+                values = f.values()
+                offsets = f.offsets()
                 pooled_embeddings.append(
                     emb_module(
                         indices=values.int(),
                         offsets=offsets.int(),
-                        per_sample_weights=weights,
+                        per_sample_weights=f.weights() if self._is_weighted else None,
                     ).float()
                 )
 
                 length_per_key.append(emb_config.embedding_dim)
 
         return KeyedTensor(
-            keys=keys,
+            keys=self._embedding_names,
             values=torch.cat(pooled_embeddings, dim=1),
-            length_per_key=length_per_key,
+            length_per_key=self._lengths_per_embedding,
         )
 
     def state_dict(
