@@ -76,13 +76,6 @@ torchrec.modules.mlp
    :undoc-members:
    :show-inheritance:
 
-torchrec.modules.score\_learning
---------------------------------
-
-.. automodule:: torchrec.modules.score_learning
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 torchrec.modules.utils
 ----------------------

@@ -36,10 +36,10 @@ torchrec.distributed.comm\_ops
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.cw\_sharding
+torchrec.distributed.sharding.cw\_sharding
 ---------------------------------
 
-.. automodule:: torchrec.distributed.cw_sharding
+.. automodule:: torchrec.distributed.sharding.cw_sharding
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,10 +52,10 @@ torchrec.distributed.dist\_data
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.dp\_sharding
+torchrec.distributed.sharding.dp\_sharding
 ---------------------------------
 
-.. automodule:: torchrec.distributed.dp_sharding
+.. automodule:: torchrec.distributed.sharding.sharding.dp_sharding
    :members:
    :undoc-members:
    :show-inheritance:
@@ -124,10 +124,10 @@ torchrec.distributed.quant\_embeddingbag
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.rw\_sharding
+torchrec.distributed.sharding.rw\_sharding
 ---------------------------------
 
-.. automodule:: torchrec.distributed.rw_sharding
+.. automodule:: torchrec.distributed.sharding.rw_sharding
    :members:
    :undoc-members:
    :show-inheritance:
@@ -140,26 +140,26 @@ torchrec.distributed.train\_pipeline
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.tw\_sharding
+torchrec.distributed.sharding.tw\_sharding
 ---------------------------------
 
-.. automodule:: torchrec.distributed.tw_sharding
+.. automodule:: torchrec.distributed.sharding.tw_sharding
    :members:
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.twcw\_sharding
+torchrec.distributed.sharding.twcw\_sharding
 -----------------------------------
 
-.. automodule:: torchrec.distributed.twcw_sharding
+.. automodule:: torchrec.distributed.sharding.twcw_sharding
    :members:
    :undoc-members:
    :show-inheritance:
 
-torchrec.distributed.twrw\_sharding
+torchrec.distributed.sharding.twrw\_sharding
 -----------------------------------
 
-.. automodule:: torchrec.distributed.twrw_sharding
+.. automodule:: torchrec.distributed.sharding.twrw_sharding
    :members:
    :undoc-members:
    :show-inheritance:

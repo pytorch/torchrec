@@ -306,70 +306,11 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </section>
-<section id="module-torchrec.fx.tracer">
-<span id="torchrec-fx-tracer"></span><h2>torchrec.fx.tracer<a class="headerlink" href="#module-torchrec.fx.tracer" title="Permalink to this headline">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">Tracer</span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.fx._symbolic_trace.Tracer</span></code></p>
-<p>NOTE [ Custom FX tracer for torchrec ]</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">https://pytorch.org/docs/stable/fx.html</a> for documentation</p>
-<p>We create a custom FX tracer to trace torchrec based models. The custom tracer
-right now have several purposes (the list might expand if we have more use cases):
-1. Handling python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to</p>
-<blockquote>
-<div><p>TorchScript if needed</p>
-</div></blockquote>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.create_arg">
-<span class="sig-name descname"><span class="pre">create_arg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Node</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.dtype</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.device</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.memory_format</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.layout</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.create_arg" title="Permalink to this definition">¶</a></dt>
-<dd><p>A method to specify the behavior of tracing when preparing values to
-be used as arguments to nodes in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-<p>Adds support for the NoWait type in addition to the default tracer</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>a</strong> (<em>Any</em>) – The value to be emitted as an <code class="docutils literal notranslate"><span class="pre">Argument</span></code> in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The value <code class="docutils literal notranslate"><span class="pre">a</span></code> converted into the appropriate <code class="docutils literal notranslate"><span class="pre">Argument</span></code></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.graph">
-<span class="sig-name descname"><span class="pre">graph</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.fx.graph.Graph</span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.graph" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.symbolic_trace">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">symbolic_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.fx.graph_module.GraphModule</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.symbolic_trace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Symbolic tracing API</p>
-<p>Given an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or function instance <code class="docutils literal notranslate"><span class="pre">root</span></code>, this function will return a <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code>
-constructed by recording operations seen while tracing through <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">concrete_args</span></code> allows you to partially specialize your function, whether it’s to remove control flow or data structures.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>root</strong> (<em>Union</em><em>[</em><em>torch.nn.Module</em><em>, </em><em>Callable</em><em>]</em>) – Module or function to be traced and converted
-into a Graph representation.</p></li>
-<li><p><strong>concrete_args</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>any</em><em>]</em><em>]</em>) – Inputs to be partially specialized</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>a Module created from the recorded operations from <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>GraphModule</p>
-</dd>
-</dl>
-</dd></dl>
-
+<section id="torchrec-fx-tracer">
+<h2>torchrec.fx.tracer<a class="headerlink" href="#torchrec-fx-tracer" title="Permalink to this headline">¶</a></h2>
 </section>
-<section id="module-torchrec.fx">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-torchrec.fx" title="Permalink to this headline">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this headline">¶</a></h2>
 </section>
 </section>
 
@@ -418,8 +359,8 @@ into a Graph representation.</p></li>
               <ul>
 <li><a class="reference internal" href="#">torchrec.fx</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-torchrec.fx.tracer">torchrec.fx.tracer</a></li>
-<li><a class="reference internal" href="#module-torchrec.fx">Module contents</a></li>
+<li><a class="reference internal" href="#torchrec-fx-tracer">torchrec.fx.tracer</a></li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
