@@ -2,6 +2,13 @@
 
 `dlrm_main.py` trains, validates, and tests a [Deep Learning Recommendation Model](https://arxiv.org/abs/1906.00091) (DLRM) with TorchRec. The DLRM model contains both data parallel components (e.g. multi-layer perceptrons & interaction arch) and model parallel components (e.g. embedding tables). The DLRM model is pipelined so that dataloading, data-parallel to model-parallel comms, and forward/backward are overlapped. Can be run with either a random dataloader or [Criteo 1 TB click logs dataset](https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/).
 
+It has been tested on the following cloud instance types:
+| Cloud  | Instance Type       | GPUs             | vCPUs | Memory (GB) |
+| ------ | ------------------- | ---------------- | ----- | ----------- | 
+| AWS    | p4d.24xlarge        | 8 x A100 (40GB)  | 96    | 1152        |
+| Azure  | Standard_ND96asr_v4 | 8 x A100 (40GB)  | 96    | 900         |
+| GCP    | a2-megagpu-16g      | 16 x A100 (40GB) | 96    | 1300        |
+
 # Running
 
 ## Install dependencies
