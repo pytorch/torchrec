@@ -35,7 +35,7 @@ pip install torchrec-nightly-cpu
 ```
 
 ### Colab example: introduction + install
-See this [colab notebook](https://colab.research.google.com/drive/1fG151tLmPpF4qw_kkEyD2-RhcywfDnbV) for an introduction to torchrec which includes runnable installation.
+See this [colab notebook](https://colab.research.google.com/drive/1xpcfMn5aFrCueDwUbJPl4hUOo54u0xMU) for an introduction to torchrec which includes runnable installation.
 
 ## From Source
 

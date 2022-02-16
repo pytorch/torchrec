@@ -25,12 +25,32 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from tqdm import tqdm
 
-from .data.dlrm_dataloader import get_dataloader, STAGES
-from .modules.dlrm_train import DLRMTrain
+
+# OSS import
+try:
+    # pyre-ignore[21]
+    # @manual=//torchrec/github/examples/dlrm/data:dlrm_dataloader
+    from data.dlrm_dataloader import get_dataloader, STAGES
+
+    # pyre-ignore[21]
+    # @manual=//torchrec/github/examples/dlrm/modules:dlrm_train
+    from modules.dlrm_train import DLRMTrain
+except ImportError:
+    pass
+
+# internal import
+try:
+    from .data.dlrm_dataloader import (  # noqa F811
+        get_dataloader,
+        STAGES,
+    )
+    from .modules.dlrm_train import DLRMTrain  # noqa F811
+except ImportError:
+    pass
 
 TRAIN_PIPELINE_STAGES = 3  # Number of stages in TrainPipelineSparseDist.
 
-# TODO(T102703283): Clean up configuration options for main module for OSS.
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec + lightning app")
     parser.add_argument(
@@ -335,12 +355,16 @@ def main(argv: List[str]) -> None:
         args.num_embeddings = None
 
     # TODO add CriteoIterDataPipe support and add random_dataloader arg
+    # pyre-ignore[16]
     train_dataloader = get_dataloader(args, backend, "train")
+    # pyre-ignore[16]
     val_dataloader = get_dataloader(args, backend, "val")
+    # pyre-ignore[16]
     test_dataloader = get_dataloader(args, backend, "test")
 
     # Sets default limits for random dataloader iterations when left unspecified.
     if args.in_memory_binary_criteo_path is None:
+        # pyre-ignore[16]
         for stage in STAGES:
             attr = f"limit_{stage}_batches"
             if getattr(args, attr) is None:
