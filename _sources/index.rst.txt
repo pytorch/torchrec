@@ -4,14 +4,14 @@
    contain the root `toctree` directive.
 
 Welcome to the TorchRec documentation!
-====================================
+======================================
 
-TorchRec is a PyTorch domain library built to provide common 
-sparsity & parallelism primitives needed for large-scale recommender 
-systems (RecSys). It allows authors to train models with large 
+TorchRec is a PyTorch domain library built to provide common
+sparsity & parallelism primitives needed for large-scale recommender
+systems (RecSys). It allows authors to train models with large
 embedding tables sharded across many GPUs.
 
-For installation instructions, visit 
+For installation instructions, visit
 
 https://github.com/pytorch/torchrec#readme
 
@@ -21,23 +21,14 @@ https://github.com/pytorch/torchrec#readme
    :maxdepth: 2
    :caption: Contents:
 
-   torchrec.rst
    torchrec.datasets.rst
-   torchrec.datasets.scripts.rst
-   torchrec.distributed.planner.rst
    torchrec.distributed.rst
-   torchrec.github.examples.dlrm.data.rst
-   torchrec.github.examples.dlrm.modules.rst
-   torchrec.github.examples.dlrm.rst
-   torchrec.github.examples.rst
    torchrec.fx.rst
    torchrec.models.rst
    torchrec.modules.rst
-   torchrec.modules.tests.rst
    torchrec.optim.rst
    torchrec.quant.rst
    torchrec.sparse.rst
-   torchrec.tests.rst
 
 Indices and tables
 ==================
