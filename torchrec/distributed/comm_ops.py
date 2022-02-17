@@ -91,17 +91,12 @@ class All2AllPooledInfo(object):
         cumsum_dim_sum_per_rank_tensor (Optional[Tensor]): cumulative sum of
             dim_sum_per_rank, this is only used by the fast kernel of
             `_recat_pooled_embedding_grad_out`.
-        mixed_dim (bool): the flag whether the input is mixed
-            dimensioned or not.
-        D (int): embedding dimension of the embedding table.
         B_local (int): local batch size before scattering.
     """
 
     dim_sum_per_rank: List[int]
     dim_sum_per_rank_tensor: Optional[Tensor]
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor]
-    mixed_dim: bool
-    D: int = -1  # -1 means doesn't use
     B_local: int = -1
 
 
@@ -192,7 +187,6 @@ def _get_split_lengths_by_len(
 def alltoall_pooled(
     a2a_pooled_embs_tensor: Tensor,
     dim_sum_per_rank: List[int],
-    mixed_dim: bool = False,
     dim_sum_per_rank_tensor: Optional[Tensor] = None,
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
     group: Optional[dist.ProcessGroup] = None,
@@ -205,14 +199,11 @@ def alltoall_pooled(
 
     Args:
         a2a_pooled_embs_tensor (Tensor): input pooled embeddings. Must be pooled
-            together before passing into this function. Usually with the shape of
-            B x T x D, where B - batch size, T - number of embedding tables,
-            D - embedding dimension. When `mixed_dim=True`, the input shape should be
-            B x D_local_sum, where D_local_sum is the dimension sum of all the local
+            together before passing into this function. Its shape is B x D_local_sum,
+            where D_local_sum is the dimension sum of all the local
             embedding tables.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
-        mixed_dim (bool): the flag whether the input is mixed dimensioned or not.
         dim_sum_per_rank_tensor (Optional[Tensor]): the tensor version of
             `dim_sum_per_rank`, this is only used by the fast kernel of
             `_recat_pooled_embedding_grad_out`.
@@ -241,7 +232,6 @@ def alltoall_pooled(
         dim_sum_per_rank=dim_sum_per_rank,
         dim_sum_per_rank_tensor=dim_sum_per_rank_tensor,
         cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
-        mixed_dim=mixed_dim,
     )
     # pyre-fixme[16]: `All2All_Pooled_Req` has no attribute `apply`.
     All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
@@ -409,8 +399,7 @@ def reduce_scatter_pooled(
     return myreq
 
 
-# TODO: improve performance of _recat_pooled_embedding_grad_out and
-# recat_pooled_embedding_mixed_dim_grad_out, see T87591139
+# TODO: improve performance of _recat_pooled_embedding_grad_out, see T87591139
 def _recat_pooled_embedding_grad_out(
     grad_output: Tensor, num_features_per_rank: List[int]
 ) -> Tensor:
@@ -467,12 +456,8 @@ class All2All_Pooled_Req(Function):
         input_embeddings: Tensor,
     ) -> Tensor:
         world_size = dist.get_world_size(pg)
-        if a2ai.mixed_dim:
-            (B_global, D_local_sum) = input_embeddings.shape
-        else:
-            (B_global, T_local, D) = input_embeddings.shape
-            D_local_sum = T_local * D
-            a2ai.D = D
+        (B_global, D_local_sum) = input_embeddings.shape
+
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         B_local = B_global // world_size
         a2ai.B_local = B_local
@@ -511,7 +496,6 @@ class All2All_Pooled_Req(Function):
         myreq.wait_function = All2All_Pooled_Wait
         ctx.myreq = myreq
         ctx.pg = pg
-        ctx.mixed_dim = a2ai.mixed_dim
         return sharded_output_embeddings
 
     @staticmethod
@@ -522,12 +506,8 @@ class All2All_Pooled_Req(Function):
         myreq.req.wait()
         myreq.req = None
         grad_output = myreq.tensor
-        if ctx.mixed_dim:
-            (W, B_local, D_local_sum) = grad_output.shape
-            grad_input = grad_output.view(W * B_local, D_local_sum)
-        else:
-            (W, B_local, T_local, D) = grad_output.shape
-            grad_input = grad_output.view(W * B_local, T_local, D)
+        (W, B_local, D_local_sum) = grad_output.shape
+        grad_input = grad_output.view(W * B_local, D_local_sum)
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
@@ -553,19 +533,12 @@ class All2All_Pooled_Wait(Function):
         ctx.myreq = myreq
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         B_local = a2ai.B_local
-        mixed_dim = a2ai.mixed_dim
         outputs_by_rank = sharded_output_embeddings.split(
             [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
         )
-        if mixed_dim:
-            result = torch.cat(
-                [output.view(B_local, -1) for output in outputs_by_rank], dim=1
-            )
-        else:
-            D = a2ai.D
-            result = torch.cat(
-                [output.view(B_local, -1, D) for output in outputs_by_rank], dim=1
-            )
+        result = torch.cat(
+            [output.view(B_local, -1) for output in outputs_by_rank], dim=1
+        )
         return result
 
     @staticmethod
@@ -580,15 +553,8 @@ class All2All_Pooled_Wait(Function):
         dim_sum_per_rank = a2ai.dim_sum_per_rank
 
         D_local_sum = dim_sum_per_rank[my_rank]
-        if a2ai.mixed_dim:
-            (B_local, D_global_sum) = grad_output.shape
-            sharded_grad_input_sizes = (world_size, B_local, D_local_sum)
-        else:
-            (B_local, T_global, D) = grad_output.shape
-            D_global_sum = T_global * D
-            grad_output = grad_output.view(B_local, -1)
-            T_local = D_local_sum // D
-            sharded_grad_input_sizes = (world_size, B_local, T_local, D)
+        (B_local, D_global_sum) = grad_output.shape
+        sharded_grad_input_sizes = (world_size, B_local, D_local_sum)
         assert sum(dim_sum_per_rank) == D_global_sum
 
         sharded_grad_output = _recat_pooled_embedding_grad_out(

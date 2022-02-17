@@ -56,6 +56,24 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
         pass
 
 
+def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
+    shared_feature: Dict[str, bool] = {}
+    embedding_names: List[str] = []
+    for embedding_config in tables:
+        for feature_name in embedding_config.feature_names:
+            if feature_name not in shared_feature:
+                shared_feature[feature_name] = False
+            else:
+                shared_feature[feature_name] = True
+    for embedding_config in tables:
+        for feature_name in embedding_config.feature_names:
+            if shared_feature[feature_name]:
+                embedding_names.append(feature_name + "@" + embedding_config.name)
+            else:
+                embedding_names.append(feature_name)
+    return embedding_names
+
+
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (`EmbeddingBags`).
@@ -124,10 +142,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._is_weighted = is_weighted
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
-        self._embedding_names: List[str] = []
         self._lengths_per_embedding: List[int] = []
         table_names = set()
-        shared_feature: Dict[str, bool] = {}
         for embedding_config in tables:
             if embedding_config.name in table_names:
                 raise ValueError(f"Duplicate table name {embedding_config.name}")
@@ -147,21 +163,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             )
             if not embedding_config.feature_names:
                 embedding_config.feature_names = [embedding_config.name]
-            for feature_name in embedding_config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
-                self._lengths_per_embedding.append(embedding_config.embedding_dim)
+            self._lengths_per_embedding.extend(
+                len(embedding_config.feature_names) * [embedding_config.embedding_dim]
+            )
 
-        for embedding_config in tables:
-            for feature_name in embedding_config.feature_names:
-                if shared_feature[feature_name]:
-                    self._embedding_names.append(
-                        feature_name + "@" + embedding_config.name
-                    )
-                else:
-                    self._embedding_names.append(feature_name)
+        self._embedding_names: List[str] = ebc_get_embedding_names(tables)
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """

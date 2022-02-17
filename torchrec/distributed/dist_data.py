@@ -559,7 +559,6 @@ class PooledEmbeddingsAllToAll(nn.Module):
         tensor_awaitable = alltoall_pooled(
             a2a_pooled_embs_tensor=local_embs,
             dim_sum_per_rank=self._dim_sum_per_rank,
-            mixed_dim=True,
             dim_sum_per_rank_tensor=self._dim_sum_per_rank_tensor,
             cumsum_dim_sum_per_rank_tensor=self._cumsum_dim_sum_per_rank_tensor,
             group=self._pg,
