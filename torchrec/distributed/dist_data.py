@@ -549,15 +549,25 @@ class PooledEmbeddingsAllToAll(nn.Module):
             torch.tensor(cumsum_dim_sum_per_rank, device=device, dtype=torch.int),
         )
 
-    def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
+    def forward(
+        self, local_embs: torch.Tensor, batch_size_per_rank: Optional[List[int]] = None
+    ) -> PooledEmbeddingsAwaitable:
         """
         Performs AlltoAll pooled operation on pooled embeddings tensor.
         """
 
         if local_embs.numel() == 0:
             local_embs.view(local_embs.size(0) * self._pg.size(), 0)
+        if batch_size_per_rank is None:
+            B_global = local_embs.size(0)
+            assert (
+                B_global % self._pg.size() == 0
+            ), f"num of ranks {self._pg.size()} doesn't divide global batch size {B_global}"
+            B_local = B_global // self._pg.size()
+            batch_size_per_rank = [B_local] * self._pg.size()
         tensor_awaitable = alltoall_pooled(
             a2a_pooled_embs_tensor=local_embs,
+            batch_size_per_rank=batch_size_per_rank,
             dim_sum_per_rank=self._dim_sum_per_rank,
             dim_sum_per_rank_tensor=self._dim_sum_per_rank_tensor,
             cumsum_dim_sum_per_rank_tensor=self._cumsum_dim_sum_per_rank_tensor,

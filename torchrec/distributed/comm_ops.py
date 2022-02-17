@@ -83,6 +83,7 @@ class All2AllPooledInfo(object):
     operation.
 
     Attributes:
+        batch_size_per_rank (List[int]): batch size in each rank
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
         dim_sum_per_rank_tensor (Optional[Tensor]): the tensor version of
@@ -94,10 +95,10 @@ class All2AllPooledInfo(object):
         B_local (int): local batch size before scattering.
     """
 
+    batch_size_per_rank: List[int]
     dim_sum_per_rank: List[int]
     dim_sum_per_rank_tensor: Optional[Tensor]
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor]
-    B_local: int = -1
 
 
 @dataclass
@@ -186,6 +187,7 @@ def _get_split_lengths_by_len(
 
 def alltoall_pooled(
     a2a_pooled_embs_tensor: Tensor,
+    batch_size_per_rank: List[int],
     dim_sum_per_rank: List[int],
     dim_sum_per_rank_tensor: Optional[Tensor] = None,
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
@@ -202,6 +204,7 @@ def alltoall_pooled(
             together before passing into this function. Its shape is B x D_local_sum,
             where D_local_sum is the dimension sum of all the local
             embedding tables.
+        batch_size_per_rank (List[int]): batch size in each rank.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
         dim_sum_per_rank_tensor (Optional[Tensor]): the tensor version of
@@ -229,6 +232,7 @@ def alltoall_pooled(
 
     myreq = Request(group)
     a2ai = All2AllPooledInfo(
+        batch_size_per_rank=batch_size_per_rank,
         dim_sum_per_rank=dim_sum_per_rank,
         dim_sum_per_rank_tensor=dim_sum_per_rank_tensor,
         cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
@@ -455,25 +459,22 @@ class All2All_Pooled_Req(Function):
         a2ai: All2AllPooledInfo,
         input_embeddings: Tensor,
     ) -> Tensor:
-        world_size = dist.get_world_size(pg)
+        my_rank = dist.get_rank(pg)
         (B_global, D_local_sum) = input_embeddings.shape
 
         dim_sum_per_rank = a2ai.dim_sum_per_rank
-        B_local = B_global // world_size
-        a2ai.B_local = B_local
-        assert (
-            B_global % world_size == 0
-        ), f"num of ranks {world_size} doesn't divide global batch size {B_global}"
+        batch_size_per_rank = a2ai.batch_size_per_rank
+        B_local = batch_size_per_rank[my_rank]
+        assert B_global == sum(batch_size_per_rank)
 
-        sharded_input_embeddings = input_embeddings.view(
-            world_size, B_local, D_local_sum
-        )
+        sharded_input_embeddings = input_embeddings.view(-1)
         D_global_sum = sum(dim_sum_per_rank)
         sharded_output_embeddings = torch.empty(
             B_local * D_global_sum,
             dtype=input_embeddings.dtype,
             device=input_embeddings.device,
         )
+
         with record_function("## alltoall_fwd_single ##"):
             req = dist.all_to_all_single(
                 output=sharded_output_embeddings,
@@ -481,14 +482,12 @@ class All2All_Pooled_Req(Function):
                 output_split_sizes=[
                     B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
                 ],
-                input_split_sizes=None,
+                input_split_sizes=[
+                    D_local_sum * B_rank for B_rank in batch_size_per_rank
+                ],
                 group=pg,
                 async_op=True,
             )
-        assert (
-            sum(B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank)
-            == B_local * D_global_sum
-        )
 
         myreq.req = req
         myreq.tensor = sharded_output_embeddings
@@ -502,12 +501,18 @@ class All2All_Pooled_Req(Function):
     # pyre-fixme[2]: Parameter must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
     def backward(ctx, *unused) -> Tuple[None, None, None, Tensor]:
+        pg = ctx.pg
+        my_rank = dist.get_rank(pg)
         myreq = ctx.myreq
+        a2ai = myreq.a2ai
         myreq.req.wait()
         myreq.req = None
         grad_output = myreq.tensor
-        (W, B_local, D_local_sum) = grad_output.shape
-        grad_input = grad_output.view(W * B_local, D_local_sum)
+        dim_sum_per_rank = a2ai.dim_sum_per_rank
+        batch_size_per_rank = a2ai.batch_size_per_rank
+        D_local_sum = dim_sum_per_rank[my_rank]
+        B_global = sum(batch_size_per_rank)
+        grad_input = grad_output.view(B_global, D_local_sum)
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
@@ -524,6 +529,7 @@ class All2All_Pooled_Wait(Function):
         myreq: Request[Tensor],
         sharded_output_embeddings: Tensor,
     ) -> Tensor:
+        my_rank = dist.get_rank(pg)
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
         myreq.req.wait()
@@ -532,7 +538,9 @@ class All2All_Pooled_Wait(Function):
         ctx.pg = pg
         ctx.myreq = myreq
         dim_sum_per_rank = a2ai.dim_sum_per_rank
-        B_local = a2ai.B_local
+        batch_size_per_rank = a2ai.batch_size_per_rank
+        B_local = batch_size_per_rank[my_rank]
+
         outputs_by_rank = sharded_output_embeddings.split(
             [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
         )
@@ -548,13 +556,14 @@ class All2All_Pooled_Wait(Function):
         myreq = ctx.myreq
         a2ai = ctx.a2ai
         pg = ctx.pg
-        world_size = dist.get_world_size(pg)
         my_rank = dist.get_rank(pg)
         dim_sum_per_rank = a2ai.dim_sum_per_rank
+        batch_size_per_rank = a2ai.batch_size_per_rank
 
         D_local_sum = dim_sum_per_rank[my_rank]
         (B_local, D_global_sum) = grad_output.shape
-        sharded_grad_input_sizes = (world_size, B_local, D_local_sum)
+        B_global = sum(batch_size_per_rank)
+        sharded_grad_input_sizes = B_global * D_local_sum
         assert sum(dim_sum_per_rank) == D_global_sum
 
         sharded_grad_output = _recat_pooled_embedding_grad_out(
@@ -565,11 +574,14 @@ class All2All_Pooled_Wait(Function):
         sharded_grad_input = torch.empty(
             sharded_grad_input_sizes, device=grad_output.device, dtype=grad_output.dtype
         )
+        output_split_sizes = [
+            D_local_sum * B_rank for B_rank in a2ai.batch_size_per_rank
+        ]
         with record_function("## alltoall_bwd_single ##"):
             req = dist.all_to_all_single(
                 output=sharded_grad_input,
                 input=sharded_grad_output,
-                output_split_sizes=None,
+                output_split_sizes=output_split_sizes,
                 input_split_sizes=[
                     B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
                 ],

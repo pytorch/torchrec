@@ -123,15 +123,17 @@ def _generate_sparse_features_batch(
 
 
 def _generate_pooled_embedding_batch(
-    keys: List[str], dims: List[int], splits: List[int], B: int
+    keys: List[str], dims: List[int], splits: List[int], batch_size_per_rank: List[int]
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     world_size = len(splits)
     offsets = [0] + list(itertools.accumulate(splits))
     local_emb = {}
+    B_global = sum(batch_size_per_rank)
+    B_offsets = [0] + list(itertools.accumulate(batch_size_per_rank))
 
     for key, dim in zip(keys, dims):
         local_emb[key] = [
-            [random.random() for _ in range(dim)] for _ in range(B * world_size)
+            [random.random() for _ in range(dim)] for _ in range(B_global)
         ]
 
     in_tensor: List[torch.Tensor] = []
@@ -140,19 +142,23 @@ def _generate_pooled_embedding_batch(
         in_keys = keys[offsets[i] : offsets[i + 1]]
         in_tensor.append(
             _to_tensor(
-                [local_emb[key][b] for b in range(B * world_size) for key in in_keys],
+                [local_emb[key][b] for b in range(B_global) for key in in_keys],
                 i,
                 torch.float,
-            ).view(B * world_size, -1)
+            ).view(B_global, -1)
             if in_keys
-            else torch.empty(B * world_size, 0, dtype=torch.float).cuda(i)
+            else torch.empty(B_global, 0, dtype=torch.float).cuda(i)
         )
         out_tensor.append(
             _to_tensor(
-                [local_emb[key][b] for b in range(B * i, B * (i + 1)) for key in keys],
+                [
+                    local_emb[key][b]
+                    for b in range(B_offsets[i], B_offsets[i + 1])
+                    for key in keys
+                ],
                 i,
                 torch.float,
-            ).view(B, -1)
+            ).view(batch_size_per_rank[i], -1)
         )
 
     return in_tensor, out_tensor
@@ -307,6 +313,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         output: torch.Tensor,
         backend: str,
         dim_sum_per_rank: List[int],
+        batch_size_per_rank: List[int],
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.group.WORLD
@@ -322,7 +329,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             device=device,
         )
         _input.requires_grad = True
-        res = a2a(_input).wait()
+        res = a2a(_input, batch_size_per_rank).wait()
         res.backward(res)
         assert_array_equal(
             res.cpu().detach(),
@@ -355,12 +362,13 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         if is_reversed:
             splits.reverse()
         dim_sum_per_rank = [sum(dims[: splits[0]]), sum(dims[splits[0] :])]
+        batch_size_per_rank = [random.randint(B, B + 2), random.randint(B, B + 2)]
 
         _input, output = _generate_pooled_embedding_batch(
             keys=keys,
             dims=dims,
             splits=splits,
-            B=B,
+            batch_size_per_rank=batch_size_per_rank,
         )
 
         self._run_multi_process_test(
@@ -368,6 +376,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             output=output,
             backend=backend,
             dim_sum_per_rank=dim_sum_per_rank,
+            batch_size_per_rank=batch_size_per_rank,
         )
 
 
