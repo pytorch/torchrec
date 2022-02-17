@@ -1,17 +1,7 @@
 torchrec.datasets
 =================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   torchrec.datasets.scripts
-   torchrec.datasets.tests
-
-Submodules
-----------
+.. automodule:: torchrec.datasets
 
 torchrec.datasets.criteo
 ------------------------
@@ -45,10 +35,10 @@ torchrec.datasets.utils
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
+torchrec.datasets.scripts.preprocess\_criteo
+--------------------------------------------
 
-.. automodule:: torchrec.datasets
+.. automodule:: torchrec.datasets.scripts.preprocess_criteo
    :members:
    :undoc-members:
    :show-inheritance:
