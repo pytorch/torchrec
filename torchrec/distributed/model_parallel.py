@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.distributed import fsdp  # noqa
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
