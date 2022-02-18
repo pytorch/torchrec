@@ -141,3 +141,6 @@ wordlist.dic
 pipeline.yaml
 
 /codecov
+
+#torchxconfig
+.torchxconfig
