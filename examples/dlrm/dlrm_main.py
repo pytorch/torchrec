@@ -191,7 +191,7 @@ def _evaluate(
     """
     model = train_pipeline._model
     model.eval()
-    device = model.device
+    device = train_pipeline._device
     limit_batches = (
         args.limit_val_batches if stage == "val" else args.limit_test_batches
     )
