@@ -34,8 +34,7 @@ def _to_mode(pooling: PoolingType) -> str:
 
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     """
-    Interface for `EmbeddingBagCollection`, `GroupedEmbeddingBag`, and
-    `BaseBatchedEmbeddingBag`.
+    Interface for `EmbeddingBagCollection`.
     """
 
     @abc.abstractmethod
