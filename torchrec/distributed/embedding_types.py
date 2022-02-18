@@ -191,7 +191,7 @@ T = TypeVar("T")
 class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
     """
     Interface implemented by different embedding implementations:
-    e.g. one, which relies on nn.EmbeddingBag or table-batched one, etc.
+    e.g. one, which relies on `nn.EmbeddingBag` or table-batched one, etc.
     """
 
     @abc.abstractmethod
@@ -278,7 +278,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
 
 class BaseGroupedFeatureProcessor(nn.Module):
     """
-    abstract base class for grouped feature processor
+    Abstract base class for grouped feature processor
     """
 
     @abc.abstractmethod

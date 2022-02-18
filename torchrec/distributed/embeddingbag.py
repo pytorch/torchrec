@@ -239,7 +239,7 @@ class ShardedEmbeddingBagCollection(
 ):
     """
     Sharded implementation of EmbeddingBagCollection.
-    This is part of public API to allow for manual data dist pipelining.
+    This is part of the public API to allow for manual data dist pipelining.
     """
 
     def __init__(
@@ -500,7 +500,7 @@ M = TypeVar("M", bound=nn.Module)
 
 class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
     """
-    This implementation uses non-fused EmbeddingBagCollection
+    This implementation uses non-fused `EmbeddingBagCollection`
     """
 
     def shard(
@@ -549,8 +549,8 @@ class ShardedEmbeddingBag(
     FusedOptimizerModule,
 ):
     """
-    Sharded implementation of nn.EmbeddingBag.
-    This is part of public API to allow for manual data dist pipelining.
+    Sharded implementation of `nn.EmbeddingBag`.
+    This is part of the public API to allow for manual data dist pipelining.
     """
 
     def __init__(
@@ -750,7 +750,7 @@ class ShardedEmbeddingBag(
 
 class EmbeddingBagSharder(BaseEmbeddingSharder[M]):
     """
-    This implementation uses non-fused nn.EmbeddingBag
+    This implementation uses non-fused `nn.EmbeddingBag`
     """
 
     def shard(
