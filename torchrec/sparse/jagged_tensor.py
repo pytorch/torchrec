@@ -742,7 +742,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             permuted_lengths,
             permuted_values,
             permuted_weights,
-        ) = torch.ops.fbgemm.permute_sparse_data(
+        ) = torch.ops.fbgemm.permute_2D_sparse_data(
             indices_tensor,
             self.lengths().view(len(self._keys), -1),
             self.values(),
