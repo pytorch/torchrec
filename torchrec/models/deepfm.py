@@ -19,38 +19,33 @@ class SparseArch(nn.Module):
     Processes the Sparse Features of DeepFMNN model. Does Embedding Lookup for all
     EmbeddingBag and Embedding features of each collection.
 
-    Constructor Args:
-        embedding_bag_collection: EmbeddingBagCollection,
-
-    Call Args:
-        features: KeyedJaggedTensor,
-
-    Returns:
-        KeyedJaggedTensor - size F * D X B
+    Args:
+        embedding_bag_collection (EmbeddingBagCollection): represents a
+            collection of pooled embeddings
 
     Example:
         >>> eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
-        )
-        eb2_config = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
-        )
-        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+        >>>     name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        >>> )
+        >>> eb2_config = EmbeddingBagConfig(
+        >>>     name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        >>> )
+        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        ebc = EmbeddingBagCollection(config=ebc_config)
+        >>> ebc = EmbeddingBagCollection(config=ebc_config)
 
-        #     0       1        2  <-- batch
-        # 0   [0,1] None    [2]
-        # 1   [3]    [4]    [5,6,7]
-        # ^
-        # feature
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        )
+        >>> #     0       1        2  <-- batch
+        >>> # 0   [0,1] None    [2]
+        >>> # 1   [3]    [4]    [5,6,7]
+        >>> # ^
+        >>> # feature
+        >>> features = KeyedJaggedTensor.from_offsets_sync(
+        >>>     keys=["f1", "f2"],
+        >>>     values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+        >>>     offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        >>> )
 
-        sparse_arch(features)
+        >>> sparse_arch(features)
     """
 
     def __init__(self, embedding_bag_collection: EmbeddingBagCollection) -> None:
@@ -61,25 +56,26 @@ class SparseArch(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedTensor:
+        """
+        Args:
+            features (KeyedJaggedTensor):
+
+        Returns:
+            KeyedJaggedTensor - size F * D X B
+        """
         return self.embedding_bag_collection(features)
 
 
 class DenseArch(nn.Module):
     """
     Processes the dense features of DeepFMNN model. Output layer is sized to
-    the embedding_dimension of the EmbeddingBagCollection embeddings
+    the embedding_dimension of the EmbeddingBagCollection embeddings.
 
-    Constructor Args:
-        in_features: int
-        hidden_layer_size: int
-        embedding_dim: int - the same size of the embedding_dimension of sparseArch
-        device: torch.device
-
-    Call Args:
-        features: torch.Tensor  - size B X num_features
-
-    Returns:
-        torch.Tensor  - size B X D
+    Args:
+        in_features (int): dimensionality of the dense input features.
+        hidden_layer_size (int): sizes of the hidden layers in the DenseArch.
+        embedding_dim (int): the same size of the embedding_dimension of sparseArch
+        device (torch.device): default compute device.
 
     Example:
         >>> B = 20
@@ -104,6 +100,13 @@ class DenseArch(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features (torch.Tensor): size B X num_features
+
+        Returns:
+            torch.Tensor  - size B X D
+        """
         return self.model(features)
 
 
@@ -113,21 +116,14 @@ class FMInteractionArch(nn.Module):
     (dense_features) and apply the general DeepFM interaction according to the
     extenal source of DeepFM paper: https://arxiv.org/pdf/1703.04247.pdf
 
-    The output dimension is expected to be a cat of dense_features, D
+    The output dimension is expected to be a cat of dense_features, D.
 
-    Constructor Args:
-        fm_in_features: int - the input dimension of dense_module in DeepFM. For example,
+    Args:
+        fm_in_features (int): the input dimension of dense_module in DeepFM. For example,
             the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the fm_in_features should
             be: 2*3+4*5.
-        sparse_feature_names: List[str] - length of F
-        deep_fm_dimension: int - output of the deep interaction (DI) in the DeepFM arch.
-
-    Call Args:
-        dense_features: torch.Tensor  - size B X D
-        sparse_features: KeyedJaggedTensor - size F * D X B
-
-    Returns:
-        torch.Tensor - B X (D + DI + 1)
+        sparse_feature_names (List[str]): length of F
+        deep_fm_dimension (int): output of the deep interaction (DI) in the DeepFM arch
 
     Example:
         >>> D = 3
@@ -163,6 +159,14 @@ class FMInteractionArch(nn.Module):
     def forward(
         self, dense_features: torch.Tensor, sparse_features: KeyedTensor
     ) -> torch.Tensor:
+        """
+        Args:
+            dense_features (torch.Tensor): size B X D
+            sparse_features (KeyedJaggedTensor): size F * D X B
+
+        Returns:
+            torch.Tensor - B X (D + DI + 1)
+        """
         if len(self.sparse_feature_names) == 0:
             return dense_features
 
@@ -179,17 +183,11 @@ class FMInteractionArch(nn.Module):
 
 
 class OverArch(nn.Module):
-    r"""
-    Final Arch - simple MLP. The output is just one target
+    """
+    Final Arch - simple MLP. The output is just one target.
 
-    Constructor Args:
-        in_features: int - the output dimension of interaction arch
-
-    Call Args:
-        features: torch.Tensor
-
-    Returns:
-        torch.Tensor  - size B X 1
+    Args:
+        in_features (int): the output dimension of interaction arch
 
     Example:
         >>> B = 20
@@ -205,11 +203,18 @@ class OverArch(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features (torch.Tensor):
+
+        Returns:
+            torch.Tensor  - size B X 1
+        """
         return self.model(features)
 
 
 class SimpleDeepFMNN(nn.Module):
-    r"""
+    """
     Basic recsys module with DeepFM arch. Processes sparse features by
     learning pooled embeddings for each feature. Learns the relationship between
     dense features and sparse features by projecting dense features into the same
@@ -219,58 +224,58 @@ class SimpleDeepFMNN(nn.Module):
     The module assumes all sparse features have the same embedding dimension
     (i.e, each EmbeddingBagConfig uses the same embedding_dim)
 
-    Constructor Args:
-        num_dense_features: int - the number of input dense features.
-        embedding_bag_collection: EmbeddingBagCollection,
-        hidden_layer_size: int, the hidden layer size that used in dense module
-        deep_fm_dimension: int, the output layer size that used in deep_fm's deep
+    The following notation is used throughout the documentation for the models:
+
+    F: number of sparse features
+    D: embedding_dimension of sparse features
+    B: batch size
+    num_features: number of dense features
+
+    Args:
+        num_dense_features (int): the number of input dense features.
+        embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
+            used to define SparseArch.
+        hidden_layer_size (int): the hidden layer size that's used in dense module
+        deep_fm_dimension (int): the output layer size that's used in deep_fm's deep
             interaction module
-
-
-    Call Args:
-        dense_features: torch.Tensodr,
-        sparse_features: KeyedJaggedTensor,
-
-    Returns:
-        torch.Tensor - logits with size B X 1
 
     Example:
         >>> B = 2
-        D = 8
+        >>> D = 8
 
-        eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
-        )
-        eb2_config = EmbeddingBagConfig(
-            name="t2",
-            embedding_dim=D,
-            num_embeddings=100,
-            feature_names=["f2"],
-        )
-        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+        >>> eb1_config = EmbeddingBagConfig(
+        >>>     name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        >>> )
+        >>> eb2_config = EmbeddingBagConfig(
+        >>>     name="t2",
+        >>>     embedding_dim=D,
+        >>>     num_embeddings=100,
+        >>>     feature_names=["f2"],
+        >>> )
+        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        ebc = EmbeddingBagCollection(config=ebc_config)
-        sparse_nn = SimpleDeepFMNN(
-            embedding_bag_collection=ebc, hidden_layer_size=20, over_embedding_dim=5
-        )
+        >>> ebc = EmbeddingBagCollection(config=ebc_config)
+        >>> sparse_nn = SimpleDeepFMNN(
+        >>>     embedding_bag_collection=ebc, hidden_layer_size=20, over_embedding_dim=5
+        >>> )
 
-        features = torch.rand((B, 100))
+        >>> features = torch.rand((B, 100))
 
-        #     0       1
-        # 0   [1,2] [4,5]
-        # 1   [4,3] [2,9]
-        # ^
-        # feature
-        sparse_features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f3"],
-            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
-            offsets=torch.tensor([0, 2, 4, 6, 8]),
-        )
+        >>> #     0       1
+        >>> # 0   [1,2] [4,5]
+        >>> # 1   [4,3] [2,9]
+        >>> # ^
+        >>> # feature
+        >>> sparse_features = KeyedJaggedTensor.from_offsets_sync(
+        >>>     keys=["f1", "f3"],
+        >>>     values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
+        >>>     offsets=torch.tensor([0, 2, 4, 6, 8]),
+        >>> )
 
-        logits = sparse_nn(
-            dense_features=features,
-            sparse_features=sparse_features,
-        )
+        >>> logits = sparse_nn(
+        >>>     dense_features=features,
+        >>>     sparse_features=sparse_features,
+        >>> )
     """
 
     def __init__(
@@ -321,6 +326,14 @@ class SimpleDeepFMNN(nn.Module):
         dense_features: torch.Tensor,
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
+        """
+        Args:
+            dense_features (torch.Tensor):
+            sparse_features (KeyedJaggedTensor):
+
+        Returns:
+            torch.Tensor - logits with size B X 1
+        """
         embedded_dense = self.dense_arch(dense_features)
         embedded_sparse = self.sparse_arch(sparse_features)
         concatenated_dense = self.inter_arch(
