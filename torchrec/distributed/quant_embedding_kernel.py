@@ -19,17 +19,13 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     rounded_row_size_in_bytes,
 )
 from torchrec.distributed.batched_embedding_kernel import BaseBatchedEmbeddingBag
-from torchrec.distributed.embedding_kernel import BaseEmbeddingBag
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DataType,
     DATA_TYPE_NUM_BITS,
 )
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-    KeyedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -90,17 +86,12 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
     ) -> IntNBitTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
 
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
-        values = self.emb_module(
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        return self.emb_module(
             indices=features.values().int(),
             offsets=features.offsets().int(),
             per_sample_weights=features.weights_or_none(),
         ).float()
-        return KeyedTensor(
-            keys=self._emb_names,
-            values=values,
-            length_per_key=self._lengths_per_emb,
-        )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True

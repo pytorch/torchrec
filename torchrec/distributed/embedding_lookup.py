@@ -21,7 +21,6 @@ from torchrec.distributed.batched_embedding_kernel import (
 )
 from torchrec.distributed.embedding_kernel import (
     BaseEmbedding,
-    BaseEmbeddingBag,
     GroupedEmbedding,
     GroupedEmbeddingBag,
 )
@@ -43,9 +42,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _load_state_dict(
-    # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot take
-    #  parameters.
-    emb_modules: "nn.ModuleList[nn.Module]",
+    emb_modules: "nn.ModuleList",
     state_dict: "OrderedDict[str, torch.Tensor]",
 ) -> Tuple[List[str], List[str]]:
     missing_keys = []
@@ -217,7 +214,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
-        ) -> BaseEmbeddingBag:
+        ) -> BaseEmbedding:
             if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
@@ -255,15 +252,11 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                 )
 
         super().__init__()
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
+        self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device))
 
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._score_emb_modules: nn.ModuleList[BaseEmbeddingBag] = nn.ModuleList()
+        self._score_emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_score_configs:
             self._score_emb_modules.append(_create_lookup(config, device))
 
@@ -315,7 +308,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     )
                 ):
                     features = self._feature_processor(features)
-                embeddings.append(emb_op(features).values())
+                embeddings.append(emb_op(features))
         if len(self._score_emb_modules) > 0:
             assert sparse_features.id_score_list_features is not None
             id_score_list_features_by_group = (
@@ -326,7 +319,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             for emb_op, features in zip(
                 self._score_emb_modules, id_score_list_features_by_group
             ):
-                embeddings.append(emb_op(features).values())
+                embeddings.append(emb_op(features))
 
         if len(embeddings) == 0:
             # a hack for empty ranks

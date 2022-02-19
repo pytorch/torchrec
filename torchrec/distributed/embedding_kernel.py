@@ -54,6 +54,11 @@ class BaseEmbedding(abc.ABC, nn.Module):
         destination = [] if destination is None else destination
         return destination
 
+    @property
+    @abc.abstractmethod
+    def config(self) -> GroupedEmbeddingConfig:
+        pass
+
 
 def get_state_dict(
     embedding_tables: List[ShardedEmbeddingTable],
@@ -198,28 +203,7 @@ class GroupedEmbedding(BaseEmbedding):
         return self._config
 
 
-class BaseEmbeddingBag(nn.Module):
-    """
-    abstract base class for grouped nn.EmbeddingBag
-    """
-
-    """
-    return sparse gradient parameter names
-    """
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
-
-    @property
-    @abc.abstractmethod
-    def config(self) -> GroupedEmbeddingConfig:
-        pass
-
-
-class GroupedEmbeddingBag(BaseEmbeddingBag):
+class GroupedEmbeddingBag(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -267,21 +251,8 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                     ),
                 )
             )
-            for feature_name in embedding_config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
-                self._lengths_per_emb.append(embedding_config.embedding_dim)
 
-        for embedding_config in self._config.embedding_tables:
-            for feature_name in embedding_config.feature_names:
-                if shared_feature[feature_name]:
-                    self._emb_names.append(feature_name + "@" + embedding_config.name)
-                else:
-                    self._emb_names.append(feature_name)
-
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         pooled_embeddings: List[torch.Tensor] = []
         for embedding_config, emb_module in zip(
             self._config.embedding_tables, self._emb_modules
@@ -299,11 +270,7 @@ class GroupedEmbeddingBag(BaseEmbeddingBag):
                         per_sample_weights=weights,
                     )
                 )
-        return KeyedTensor(
-            keys=self._emb_names,
-            values=torch.cat(pooled_embeddings, dim=1),
-            length_per_key=self._lengths_per_emb,
-        )
+        return torch.cat(pooled_embeddings, dim=1)
 
     def state_dict(
         self,

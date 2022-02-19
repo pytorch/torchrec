@@ -27,7 +27,6 @@ from torch import nn
 from torchrec.distributed.embedding_kernel import (
     BaseEmbedding,
     get_state_dict,
-    BaseEmbeddingBag,
 )
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
@@ -481,7 +480,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         )
 
 
-class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
+class BaseBatchedEmbeddingBag(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -512,7 +511,6 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
 
-        shared_feature: Dict[str, bool] = {}
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
             self._weight_init_mins.append(config.get_weight_init_min())
@@ -520,19 +518,6 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
             self._num_embeddings.append(config.num_embeddings)
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
-            for feature_name in config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
-                self._lengths_per_emb.append(config.embedding_dim)
-
-        for embedding_config in self._config.embedding_tables:
-            for feature_name in embedding_config.feature_names:
-                if shared_feature[feature_name]:
-                    self._emb_names.append(feature_name + "@" + embedding_config.name)
-                else:
-                    self._emb_names.append(feature_name)
 
     def init_parameters(self) -> None:
         # initialize embedding weights
@@ -550,19 +535,14 @@ class BaseBatchedEmbeddingBag(BaseEmbeddingBag):
                 weight_init_max,
             )
 
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         weights = features.weights_or_none()
         if weights is not None and not torch.is_floating_point(weights):
             weights = None
-        values = self.emb_module(
+        return self.emb_module(
             indices=features.values().long(),
             offsets=features.offsets().long(),
             per_sample_weights=weights,
-        )
-        return KeyedTensor(
-            keys=self._emb_names,
-            values=values,
-            length_per_key=self._lengths_per_emb,
         )
 
     def state_dict(
