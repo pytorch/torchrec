@@ -45,6 +45,79 @@ except ImportError:
     pass
 
 
+def to_data_type(dtype: torch.dtype) -> DataType:
+    if dtype == torch.quint8 or dtype == torch.qint8:
+        return DataType.INT8
+    elif dtype == torch.quint4 or dtype == torch.qint4:
+        return DataType.INT4
+    elif dtype == torch.quint2 or dtype == torch.qint2:
+        return DataType.INT2
+    else:
+        raise Exception(f"Invalid data type {dtype}")
+
+
+def to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
+    if pooling_type == PoolingType.SUM:
+        return PoolingMode.SUM
+    else:
+        assert pooling_type == PoolingType.MEAN
+        return PoolingMode.MEAN
+
+
+def to_sparse_type(data_type: DataType) -> SparseType:
+    if data_type == DataType.FP16:
+        return SparseType.FP16
+    elif data_type == DataType.INT8:
+        return SparseType.INT8
+    elif data_type == DataType.INT4:
+        return SparseType.INT4
+    elif data_type == DataType.INT2:
+        return SparseType.INT2
+    else:
+        raise ValueError(f"Invalid DataType {data_type}")
+
+
+def quantize_state_dict(
+    module: nn.Module,
+    table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
+    data_type: DataType,
+) -> torch.device:
+    device = torch.device("cpu")
+    for key, tensor in module.state_dict().items():
+        # Extract table name from state dict key.
+        # e.g. ebc.embedding_bags.t1.weight
+        splits = key.split(".")
+        assert splits[-1] == "weight"
+        table_name = splits[-2]
+        device = tensor.device
+        num_bits = DATA_TYPE_NUM_BITS[data_type]
+        if tensor.is_meta:
+            quant_weight = torch.empty(
+                (tensor.shape[0], (tensor.shape[1] * num_bits) // 8),
+                device="meta",
+                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
+                #  no attribute `weight`.
+                dtype=module.qconfig.weight().dtype,
+            )
+            scale_shift = torch.empty(
+                (tensor.shape[0], 4),
+                device="meta",
+                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
+                #  no attribute `weight`.
+                dtype=module.qconfig.weight().dtype,
+            )
+        else:
+            quant_res = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
+                tensor, num_bits
+            )
+            quant_weight, scale_shift = (
+                quant_res[:, :-4],
+                quant_res[:, -4:],
+            )
+        table_name_to_quantized_weights[table_name] = (quant_weight, scale_shift)
+    return device
+
+
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
@@ -112,24 +185,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         is_weighted: bool,
         device: torch.device,
     ) -> None:
-        def to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
-            if pooling_type == PoolingType.SUM:
-                return PoolingMode.SUM
-            else:
-                assert pooling_type == PoolingType.MEAN
-                return PoolingMode.MEAN
-
-        def to_sparse_type(data_type: DataType) -> SparseType:
-            if data_type == DataType.FP16:
-                return SparseType.FP16
-            elif data_type == DataType.INT8:
-                return SparseType.INT8
-            elif data_type == DataType.INT4:
-                return SparseType.INT4
-            elif data_type == DataType.INT2:
-                return SparseType.INT2
-            else:
-                raise ValueError(f"Invalid DataType {data_type}")
 
         super().__init__()
 
@@ -245,57 +300,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             module, "qconfig"
         ), "EmbeddingBagCollection input float module must have qconfig defined"
 
-        def _to_data_type(dtype: torch.dtype) -> DataType:
-            if dtype == torch.quint8 or dtype == torch.qint8:
-                return DataType.INT8
-            elif dtype == torch.quint4 or dtype == torch.qint4:
-                return DataType.INT4
-            elif dtype == torch.quint2 or dtype == torch.qint2:
-                return DataType.INT2
-            else:
-                raise Exception(f"Invalid data type {dtype}")
-
         # pyre-ignore [16]
-        data_type = _to_data_type(module.qconfig.weight().dtype)
+        data_type = to_data_type(module.qconfig.weight().dtype)
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs)
         for config in embedding_bag_configs:
             config.data_type = data_type
 
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
-        device = torch.device("cpu")
-        for key, tensor in module.state_dict().items():
-            # Extract table name from state dict key.
-            # e.g. ebc.embedding_bags.t1.weight
-            splits = key.split(".")
-            assert splits[-1] == "weight"
-            table_name = splits[-2]
-
-            num_bits = DATA_TYPE_NUM_BITS[data_type]
-            device = tensor.device
-            if tensor.is_meta:
-                quant_weight = torch.empty(
-                    (tensor.shape[0], (tensor.shape[1] * num_bits) // 8),
-                    device="meta",
-                    # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                    #  no attribute `weight`.
-                    dtype=module.qconfig.weight().dtype,
-                )
-                scale_shift = torch.empty(
-                    (tensor.shape[0], 4),
-                    device="meta",
-                    # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                    #  no attribute `weight`.
-                    dtype=module.qconfig.weight().dtype,
-                )
-            else:
-                quant_res = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-                    tensor, num_bits
-                )
-                quant_weight, scale_shift = (
-                    quant_res[:, :-4],
-                    quant_res[:, -4:],
-                )
-            table_name_to_quantized_weights[table_name] = (quant_weight, scale_shift)
+        device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
 
         return cls(
             table_name_to_quantized_weights,
