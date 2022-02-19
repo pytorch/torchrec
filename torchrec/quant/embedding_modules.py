@@ -11,18 +11,18 @@ from typing import Dict, Any, Optional, List, Iterator, Tuple
 
 import torch
 import torch.nn as nn
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
-    PoolingMode,
     IntNBitTableBatchedEmbeddingBagsCodegen,
     EmbeddingLocation,
 )
 from torch import Tensor
 from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
-    PoolingType,
     DataType,
     DATA_TYPE_NUM_BITS,
+    data_type_to_sparse_type,
+    dtype_to_data_type,
+    pooling_type_to_pooling_mode,
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection as OriginalEmbeddingBagCollection,
@@ -43,38 +43,6 @@ try:
     import fbgemm_gpu  # @manual # noqa
 except ImportError:
     pass
-
-
-def to_data_type(dtype: torch.dtype) -> DataType:
-    if dtype == torch.quint8 or dtype == torch.qint8:
-        return DataType.INT8
-    elif dtype == torch.quint4 or dtype == torch.qint4:
-        return DataType.INT4
-    elif dtype == torch.quint2 or dtype == torch.qint2:
-        return DataType.INT2
-    else:
-        raise Exception(f"Invalid data type {dtype}")
-
-
-def to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
-    if pooling_type == PoolingType.SUM:
-        return PoolingMode.SUM
-    else:
-        assert pooling_type == PoolingType.MEAN
-        return PoolingMode.MEAN
-
-
-def to_sparse_type(data_type: DataType) -> SparseType:
-    if data_type == DataType.FP16:
-        return SparseType.FP16
-    elif data_type == DataType.INT8:
-        return SparseType.INT8
-    elif data_type == DataType.INT4:
-        return SparseType.INT4
-    elif data_type == DataType.INT2:
-        return SparseType.INT2
-    else:
-        raise ValueError(f"Invalid DataType {data_type}")
 
 
 def quantize_state_dict(
@@ -205,13 +173,13 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                         "",
                         emb_config.num_embeddings,
                         emb_config.embedding_dim,
-                        to_sparse_type(emb_config.data_type),
+                        data_type_to_sparse_type(emb_config.data_type),
                         EmbeddingLocation.HOST
                         if device.type == "cpu"
                         else EmbeddingLocation.DEVICE,
                     )
                 ],
-                pooling_mode=to_pooling_mode(emb_config.pooling),
+                pooling_mode=pooling_type_to_pooling_mode(emb_config.pooling),
                 weight_lists=[table_name_to_quantized_weights[emb_config.name]],
                 device=device,
             )
@@ -301,7 +269,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         ), "EmbeddingBagCollection input float module must have qconfig defined"
 
         # pyre-ignore [16]
-        data_type = to_data_type(module.qconfig.weight().dtype)
+        data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs)
         for config in embedding_bag_configs:
             config.data_type = data_type

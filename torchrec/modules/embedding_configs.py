@@ -10,6 +10,10 @@ from enum import Enum, unique
 from math import sqrt
 from typing import Optional, List, Dict
 
+import torch
+from fbgemm_gpu.split_embedding_configs import SparseType
+from fbgemm_gpu.split_table_batched_embeddings_ops import PoolingMode
+
 
 @unique
 class PoolingType(Enum):
@@ -39,6 +43,50 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.INT4: 4,
     DataType.INT2: 2,
 }
+
+
+def dtype_to_data_type(dtype: torch.dtype) -> DataType:
+    if dtype == torch.quint8 or dtype == torch.qint8:
+        return DataType.INT8
+    elif dtype == torch.quint4 or dtype == torch.qint4:
+        return DataType.INT4
+    elif dtype == torch.quint2 or dtype == torch.qint2:
+        return DataType.INT2
+    else:
+        raise Exception(f"Invalid data type {dtype}")
+
+
+def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
+    if pooling_type == PoolingType.SUM:
+        return PoolingMode.SUM
+    elif pooling_type == PoolingType.MEAN:
+        return PoolingMode.MEAN
+    else:
+        raise Exception(f"Invalid pooling type {pooling_type}")
+
+
+def pooling_type_to_str(pooling_type: PoolingType) -> str:
+    if pooling_type == PoolingType.SUM:
+        return "sum"
+    elif pooling_type == PoolingType.MEAN:
+        return "mean"
+    else:
+        raise ValueError(f"Unsupported pooling type {pooling_type}")
+
+
+def data_type_to_sparse_type(data_type: DataType) -> SparseType:
+    if data_type == DataType.FP32:
+        return SparseType.FP32
+    elif data_type == DataType.FP16:
+        return SparseType.FP16
+    elif data_type == DataType.INT8:
+        return SparseType.INT8
+    elif data_type == DataType.INT4:
+        return SparseType.INT4
+    elif data_type == DataType.INT2:
+        return SparseType.INT2
+    else:
+        raise ValueError(f"Invalid DataType {data_type}")
 
 
 @dataclass

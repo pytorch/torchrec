@@ -5,26 +5,19 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
-import itertools
 import logging
 from typing import List, Optional, Tuple, Iterator
 
 import torch
 import torch.distributed as dist
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
-    rounded_row_size_in_bytes,
 )
 from torchrec.distributed.batched_embedding_kernel import BaseBatchedEmbeddingBag
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
 from torchrec.distributed.utils import append_prefix
-from torchrec.modules.embedding_configs import (
-    DataType,
-    DATA_TYPE_NUM_BITS,
-)
+from torchrec.modules.embedding_configs import data_type_to_sparse_type
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -47,7 +40,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                         "",
                         local_rows,
                         table.embedding_dim,
-                        QuantBatchedEmbeddingBag.to_sparse_type(config.data_type),
+                        data_type_to_sparse_type(config.data_type),
                         EmbeddingLocation.DEVICE
                         if (device is not None and device.type == "cuda")
                         else EmbeddingLocation.HOST,
@@ -63,19 +56,6 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         )
         if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
-
-    @staticmethod
-    def to_sparse_type(data_type: DataType) -> SparseType:
-        if data_type == DataType.FP16:
-            return SparseType.FP16
-        elif data_type == DataType.INT8:
-            return SparseType.INT8
-        elif data_type == DataType.INT4:
-            return SparseType.INT4
-        elif data_type == DataType.INT2:
-            return SparseType.INT2
-        else:
-            raise ValueError(f"Invalid DataType {data_type}")
 
     def init_parameters(self) -> None:
         pass

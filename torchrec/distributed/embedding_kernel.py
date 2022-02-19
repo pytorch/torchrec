@@ -23,7 +23,7 @@ from torchrec.distributed.types import (
     ShardedTensor,
 )
 from torchrec.distributed.utils import append_prefix
-from torchrec.modules.embedding_configs import PoolingType
+from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
@@ -211,14 +211,6 @@ class GroupedEmbeddingBag(BaseEmbedding):
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
     ) -> None:
-        def _to_mode(pooling: PoolingType) -> str:
-            if pooling == PoolingType.SUM:
-                return "sum"
-            elif pooling == PoolingType.MEAN:
-                return "mean"
-            else:
-                raise ValueError(f"Unsupported pooling {pooling}")
-
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
@@ -237,7 +229,7 @@ class GroupedEmbeddingBag(BaseEmbedding):
                 nn.EmbeddingBag(
                     num_embeddings=embedding_config.local_rows,
                     embedding_dim=embedding_config.local_cols,
-                    mode=_to_mode(embedding_config.pooling),
+                    mode=pooling_type_to_str(embedding_config.pooling),
                     device=device,
                     include_last_offset=True,
                     sparse=self._sparse,

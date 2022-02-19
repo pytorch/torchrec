@@ -14,7 +14,6 @@ from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
 import torch
 import torch.distributed as dist
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     ComputeDevice,
@@ -41,8 +40,8 @@ from torchrec.distributed.types import (
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
-    PoolingType,
-    DataType,
+    pooling_type_to_pooling_mode,
+    data_type_to_sparse_type,
 )
 from torchrec.optim.fused import FusedOptimizerModule, FusedOptimizer
 from torchrec.sparse.jagged_tensor import (
@@ -386,9 +385,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=PoolingMode.NONE,
-                weights_precision=BatchedFusedEmbeddingBag.to_sparse_type(
-                    config.data_type
-                ),
+                weights_precision=data_type_to_sparse_type(config.data_type),
                 device=device,
                 **fused_params,
             )
@@ -400,17 +397,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         )
 
         self.init_parameters()
-
-    @staticmethod
-    def to_sparse_type(data_type: DataType) -> SparseType:
-        if data_type == DataType.FP32:
-            return SparseType.FP32
-        elif data_type == DataType.FP16:
-            return SparseType.FP16
-        elif data_type == DataType.INT8:
-            return SparseType.INT8
-        else:
-            raise ValueError(f"Invalid DataType {data_type}")
 
     @property
     def emb_module(
@@ -493,14 +479,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
-        def to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
-            if pooling_type == PoolingType.SUM:
-                return PoolingMode.SUM
-            else:
-                assert pooling_type == PoolingType.MEAN
-                return PoolingMode.MEAN
-
-        self._pooling: PoolingMode = to_pooling_mode(config.pooling)
+        self._pooling: PoolingMode = pooling_type_to_pooling_mode(config.pooling)
 
         self._local_rows: List[int] = []
         self._weight_init_mins: List[float] = []
@@ -621,9 +600,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
-                weights_precision=BatchedFusedEmbeddingBag.to_sparse_type(
-                    config.data_type
-                ),
+                weights_precision=data_type_to_sparse_type(config.data_type),
                 device=device,
                 **fused_params,
             )
@@ -635,17 +612,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         )
 
         self.init_parameters()
-
-    @staticmethod
-    def to_sparse_type(data_type: DataType) -> SparseType:
-        if data_type == DataType.FP32:
-            return SparseType.FP32
-        elif data_type == DataType.FP16:
-            return SparseType.FP16
-        elif data_type == DataType.INT8:
-            return SparseType.INT8
-        else:
-            raise ValueError(f"Invalid DataType {data_type}")
 
     @property
     def emb_module(

@@ -14,22 +14,13 @@ from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingConfig,
     EmbeddingBagConfig,
-    PoolingType,
+    pooling_type_to_str,
 )
 from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     JaggedTensor,
     KeyedTensor,
 )
-
-
-def _to_mode(pooling: PoolingType) -> str:
-    if pooling == PoolingType.SUM:
-        return "sum"
-    elif pooling == PoolingType.MEAN:
-        return "mean"
-    else:
-        raise ValueError(f"Unsupported pooling {pooling}")
 
 
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
@@ -155,7 +146,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             self.embedding_bags[embedding_config.name] = nn.EmbeddingBag(
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
-                mode=_to_mode(embedding_config.pooling),
+                mode=pooling_type_to_str(embedding_config.pooling),
                 device=device,
                 include_last_offset=True,
                 dtype=dtype,
