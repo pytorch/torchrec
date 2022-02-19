@@ -143,4 +143,4 @@ pipeline.yaml
 /codecov
 
 #torchxconfig
-.torchxconfig
+*.torchxconfig
