@@ -427,6 +427,9 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
         for key, _ in self.named_parameters(prefix):
             yield key
 
+    def copy(self, device: torch.device) -> nn.Module:
+        return self.to(device)
+
 
 class ModuleSharder(abc.ABC, Generic[M]):
     """

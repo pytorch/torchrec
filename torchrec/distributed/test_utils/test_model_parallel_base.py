@@ -177,6 +177,7 @@ class ModelParallelTestBase(unittest.TestCase):
             dict(local_model.named_parameters()),
             lambda params: torch.optim.SGD(params, lr=0.1),
         )
+        # pyre-ignore [6]
         local_opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
 
         # Load model state from the global model.

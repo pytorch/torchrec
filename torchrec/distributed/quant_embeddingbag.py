@@ -23,7 +23,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import (
     create_embedding_configs_by_sharding,
-    replace_placement_with_meta_device,
     EmbeddingCollectionAwaitable,
     filter_state_dict,
 )
@@ -55,13 +54,10 @@ def create_infer_embedding_bag_sharding(
         Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
     ],
     env: ShardingEnv,
-    device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
 ) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
-    if device is not None and device.type == "meta":
-        replace_placement_with_meta_device(embedding_configs)
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwEmbeddingSharding(embedding_configs, env, device)
+        return InferTwEmbeddingSharding(embedding_configs, env, device=None)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
@@ -79,7 +75,6 @@ class ShardedQuantEmbeddingBagCollection(
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
@@ -89,13 +84,12 @@ class ShardedQuantEmbeddingBagCollection(
             str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
         ] = {
             sharding_type: create_infer_embedding_bag_sharding(
-                sharding_type, embedding_confings, env, device, permute_embeddings=True
+                sharding_type, embedding_confings, env, permute_embeddings=True
             )
             for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
         }
 
         self._is_weighted: bool = module.is_weighted
-        self._device = device
         self._input_dists: nn.ModuleList = nn.ModuleList()
         self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups()
@@ -202,9 +196,6 @@ class ShardedQuantEmbeddingBagCollection(
         ctx: ShardedModuleContext,
         output: List[List[torch.Tensor]],
     ) -> LazyAwaitable[KeyedTensor]:
-        if self._has_uninitialized_output_dist:
-            self._create_output_dist(self._device)
-            self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
@@ -216,9 +207,6 @@ class ShardedQuantEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
-        if self._has_uninitialized_output_dist:
-            self._create_output_dist(self._device)
-            self._has_uninitialized_output_dist = False
         return EmbeddingCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
@@ -264,6 +252,9 @@ class ShardedQuantEmbeddingBagCollection(
             missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
+    def copy(self, device: torch.device) -> nn.Module:
+        return self
+
 
 class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollection]):
     def shard(
@@ -273,7 +264,7 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
-        return ShardedQuantEmbeddingBagCollection(module, params, env, device)
+        return ShardedQuantEmbeddingBagCollection(module, params, env)
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value, ShardingType.TABLE_WISE.value]

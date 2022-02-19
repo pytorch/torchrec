@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import List, Set, Union
+from typing import Optional, List, Set, Union
 
 import torch
 from torchrec.distributed.types import ShardedModule
@@ -105,7 +105,7 @@ class sharded_model_copy:
                 m_cpu = copy.deepcopy(m)
     """
 
-    def __init__(self, device: Union[str, int, torch.device]) -> None:
+    def __init__(self, device: Optional[Union[str, int, torch.device]]) -> None:
         self.device = device
 
     def __enter__(self) -> None:
@@ -124,15 +124,17 @@ class sharded_model_copy:
                 return tensor.detach().clone()
 
         # pyre-ignore [2, 3]
-        def _param_copy(param, memo):
-            return torch.nn.Parameter(_tensor_copy(param, memo))
-
-        # pyre-ignore [2, 3]
         def _no_copy(obj, memo):
             return obj
 
+        _copy_or_not = _tensor_copy if self.device is not None else _no_copy
+
+        # pyre-ignore [2, 3, 53]
+        def _param_copy(param, memo):
+            return torch.nn.Parameter(_copy_or_not(param, memo))
+
         # pyre-ignore [16]
-        torch.Tensor.__deepcopy__ = _tensor_copy
+        torch.Tensor.__deepcopy__ = _copy_or_not
         torch.nn.Parameter.__deepcopy__ = _param_copy
         torch._C._distributed_c10d.ProcessGroupNCCL.__deepcopy__ = _no_copy
         torch._C._distributed_c10d.ProcessGroupGloo.__deepcopy__ = _no_copy

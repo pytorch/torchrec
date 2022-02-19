@@ -275,6 +275,7 @@ class ModelParallelTest(ModelParallelTestBase):
 
         # Load model & optimizer states from the global model.
         cls._copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        # pyre-ignore [16]
         for param_name, local_state in local_model.fused_optimizer.state_dict()[
             "state"
         ].items():

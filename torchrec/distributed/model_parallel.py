@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import copy
 from collections import OrderedDict
 from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
 
@@ -31,8 +32,11 @@ from torchrec.distributed.types import (
     ShardedModule,
     ShardingEnv,
 )
-from torchrec.distributed.utils import append_prefix
-from torchrec.distributed.utils import filter_state_dict
+from torchrec.distributed.utils import (
+    sharded_model_copy,
+    append_prefix,
+    filter_state_dict,
+)
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 
@@ -141,10 +145,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         None
     """
 
-    SHARE_SHARDED: bool = False
-    # pyre-fixme [4]
-    SHARED_SHARDED_MODULE: Dict[str, ShardedModule[Any, Any, Any]] = {}
-
     def __init__(
         self,
         module: nn.Module,
@@ -204,7 +204,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         )
         if init_data_parallel:
             self.init_data_parallel()
-        self._optim = CombinedOptimizer(fused_optims)
+        self._optim: Optional[KeyedOptimizer] = None
+        if len(fused_optims) > 0:
+            self._optim = CombinedOptimizer(fused_optims)
 
     @property
     def dmp_module(self) -> nn.Module:
@@ -218,6 +220,17 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             or isinstance(self.module, FullyShardedDataParallel)
             else self.module
         )
+
+    @dmp_module.setter
+    def dmp_module(self, value: nn.Module) -> None:
+        if isinstance(self.module, DistributedDataParallel) or isinstance(
+            self.module, FullyShardedDataParallel
+        ):
+            raise RuntimeError(
+                "dmp_module can't be set after calling init_data_parallel(...)"
+            )
+        else:
+            self.module = value
 
     # pyre-ignore [2, 3]
     def forward(self, *args, **kwargs) -> Any:
@@ -235,6 +248,40 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             if self.init_parameters:
                 self._init_parameters(self.module)
             self._data_parallel_wrapper.wrap(self, self._env, self.device)
+
+    def _copy(self, module: nn.Module, device: torch.device) -> nn.Module:
+        # if this is a sharded module, customize the copy
+        if isinstance(module, ShardedModule):
+            return module.copy(device)
+        # this could be dense or a compound module
+        for name, child in module.named_children():
+            # potential DFS cache or bottom-up can save runtime
+            # search immediate submodules
+            if not any(
+                [isinstance(submodule, ShardedModule) for submodule in child.modules()]
+            ):
+                # if not containing ShardedModule down this submodule (this is a dense module)
+                # copy it.
+                child_copy = child.to(device)
+            else:
+                # else this module contains a ShardedModule somewhere, recursively process it.
+                child_copy = self._copy(child, device)
+            setattr(module, name, child_copy)
+        return module
+
+    def copy(
+        self,
+        device: torch.device,
+    ) -> "DistributedModelParallel":
+        """
+        Recursively copy submodules to new device by calling per-module customized copy process.
+        since some modules needs to use the original references (like ShardedModule for inference).
+        """
+        with sharded_model_copy(device=None):
+            copy_dmp = copy.deepcopy(self)
+        copy_module = copy_dmp._copy(copy_dmp.dmp_module, device)
+        copy_dmp.dmp_module = copy_module
+        return copy_dmp
 
     def _init_dmp(
         self,
@@ -258,31 +305,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             sharded_params = self._plan.get_plan_for_module(curr_path)
             sharder_key = sharder_name(type(child))
             if sharded_params:
-                if DistributedModelParallel.SHARE_SHARDED:
-                    if name in DistributedModelParallel.SHARED_SHARDED_MODULE:
-                        sharded_child = DistributedModelParallel.SHARED_SHARDED_MODULE[
-                            name
-                        ]
-                    else:
-                        # Shard module device-agnostic
-                        # This is the multi-threading programming model case
-                        sharded_child = self._sharder_map[sharder_key].shard(
-                            child,
-                            sharded_params,
-                            self._env,
-                            self.device,
-                        )
-                        DistributedModelParallel.SHARED_SHARDED_MODULE[
-                            name
-                        ] = sharded_child
-                else:
-                    # Shard module
-                    sharded_child = self._sharder_map[sharder_key].shard(
-                        child,
-                        sharded_params,
-                        self._env,
-                        self.device,
-                    )
+                sharded_child = self._sharder_map[sharder_key].shard(
+                    child,
+                    sharded_params,
+                    self._env,
+                    self.device,
+                )
                 setattr(module, name, sharded_child)
                 if isinstance(sharded_child, FusedOptimizerModule):
                     fused_optims.append((curr_path, sharded_child.fused_optimizer))
@@ -456,7 +484,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         yield from self._named_buffers(self.dmp_module, prefix, recurse)
 
     @property
-    def fused_optimizer(self) -> KeyedOptimizer:
+    def fused_optimizer(self) -> Optional[KeyedOptimizer]:
         return self._optim
 
     @property
