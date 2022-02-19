@@ -16,21 +16,6 @@ from torchrec.sparse.jagged_tensor import (
     KeyedTensor,
 )
 
-# Sphinx Documentation Text (for user-facing classes only)
-
-"""
-.. fb:display_title::
-    DLRM API
-=====
-Notations uses throughout:
-
-F: number of sparseFeatures
-D: embedding_dimension of sparse features
-B: batch_size
-num_features: number of dense features
-
-"""
-
 
 def choose(n: int, k: int) -> int:
     """
@@ -53,38 +38,34 @@ class SparseArch(nn.Module):
     Processes the Sparse Features of DLRM. Does Embedding Lookup for all
     EmbeddingBag and Embedding features of each collection.
 
-    Constructor Args:
-        embedding_bag_collection: EmbeddingBagCollection,
-
-    Call Args:
-        features: KeyedJaggedTensor,
-
-    Returns:
-        KeyedJaggedTensor - size F * D X B
+    Args:
+        embedding_bag_collection (EmbeddingBagCollection): represents a
+            collection of pooled embeddings
 
     Example:
         >>> eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
-        )
-        eb2_config = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
-        )
-        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+        >>>    name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        >>> )
+        >>> eb2_config = EmbeddingBagConfig(
+        >>>    name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        >>> )
+        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        ebc = EmbeddingBagCollection(config=ebc_config)
+        >>> ebc = EmbeddingBagCollection(config=ebc_config)
+        >>> sparse_arch = SparseArch(embedding_bag_collection)
 
-        #     0       1        2  <-- batch
-        # 0   [0,1] None    [2]
-        # 1   [3]    [4]    [5,6,7]
-        # ^
-        # feature
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        )
+        >>> #     0       1        2  <-- batch
+        >>> # 0   [0,1] None    [2]
+        >>> # 1   [3]    [4]    [5,6,7]
+        >>> # ^
+        >>> # feature
+        >>> features = KeyedJaggedTensor.from_offsets_sync(
+        >>>    keys=["f1", "f2"],
+        >>>    values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+        >>>    offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        >>> )
 
-        sparse_arch(features)
+        >>> sparse_embedded = sparse_arch(features)
     """
 
     def __init__(self, embedding_bag_collection: EmbeddingBagCollection) -> None:
@@ -95,6 +76,13 @@ class SparseArch(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedTensor:
+        """
+        Args:
+            features (KeyedJaggedTensor): an input tensor of sparse features.
+
+        Returns:
+            KeyedTensor: an output tensor of size F * D X B.
+        """
         return self.embedding_bag_collection(features)
 
 
@@ -102,22 +90,16 @@ class DenseArch(nn.Module):
     """
     Processes the dense features of DLRM model.
 
-    Constructor Args:
-        in_features: int - size of the input.
-        layer_sizes: List[int] - list of layer sizes.
-        device: (Optional[torch.device]).
-
-    Call Args:
-        features: torch.Tensor  - size B X num_features
-
-    Returns:
-        torch.Tensor  - size B X D
+    Args:
+        in_features (int): dimensionality of the dense input features.
+        layer_sizes (List[int]): list of layer sizes.
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> B = 20
-        D = 3
-        dense_arch = DenseArch(10, layer_sizes=[15, D])
-        dense_embedded = dense_arch(torch.rand((B, 10)))
+        >>> D = 3
+        >>> dense_arch = DenseArch(10, layer_sizes=[15, D])
+        >>> dense_embedded = dense_arch(torch.rand((B, 10)))
     """
 
     def __init__(
@@ -132,6 +114,13 @@ class DenseArch(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features (torch.Tensor): an input tensor of dense features.
+
+        Returns:
+            torch.Tensor: an output tensor of size B X D
+        """
         return self.model(features)
 
 
@@ -146,33 +135,26 @@ class InteractionArch(nn.Module):
     dimensionality of the sparse_features so that the dot products between them can be
     computed.
 
-    Constructor Args:
-        sparse_feature_names: List[str] - size F
-
-    Call Args:
-        dense_features: torch.Tensor  - size B X D
-        sparse_features: KeyedJaggedTensor - size F * D X B
-
-    Returns:
-        torch.Tensor - B X (D + F + F choose 2)
+    Args:
+        sparse_feature_names (List[str]): size F
 
     Example:
         >>> D = 3
-        B = 10
-        keys = ["f1", "f2"]
-        F = len(keys)
-        inter_arch = InteractionArch(sparse_feature_names=keys)
+        >>> B = 10
+        >>> keys = ["f1", "f2"]
+        >>> F = len(keys)
+        >>> inter_arch = InteractionArch(sparse_feature_names=keys)
 
-        dense_features = torch.rand((B, D))
+        >>> dense_features = torch.rand((B, D))
 
-        sparse_features = KeyedTensor(
-            keys=keys,
-            length_per_key=[D, D],
-            values=torch.rand((B, D * F)),
-        )
+        >>> sparse_features = KeyedTensor(
+        >>>    keys=keys,
+        >>>    length_per_key=[D, D],
+        >>>    values=torch.rand((B, D * F)),
+        >>> )
 
-        #  B X (D + F + F choose 2)
-        concat_dense = inter_arch(dense_features, sparse_features)
+        >>> #  B X (D + F + F choose 2)
+        >>> concat_dense = inter_arch(dense_features, sparse_features)
     """
 
     def __init__(self, sparse_feature_names: List[str]) -> None:
@@ -186,6 +168,14 @@ class InteractionArch(nn.Module):
     def forward(
         self, dense_features: torch.Tensor, sparse_features: KeyedTensor
     ) -> torch.Tensor:
+        """
+        Args:
+            dense_features (torch.Tensor): an input tensor of size B X D.
+            sparse_features (KeyedJaggedTensor): an input tensor of size F * D X B.
+
+        Returns:
+            torch.Tensor: an output tensor of size B X (D + F + F choose 2).
+        """
         if self.F <= 0:
             return dense_features
         (B, D) = dense_features.shape
@@ -212,22 +202,16 @@ class OverArch(nn.Module):
     """
     Final Arch of DLRM - simple MLP over OverArch.
 
-    Constructor Args:
-        in_features: int
-        layer_sizes: list[int]
-        device: (Optional[torch.device]).
-
-    Call Args:
-        features: torch.Tensor
-
-    Returns:
-        torch.Tensor  - size B X layer_sizes[-1]
+    Args:
+        in_features (int): size of the input.
+        layer_sizes (List[int]): sizes of the layers of the OverArch.
+        device (Optional[torch.device]): default compute device.
 
     Example:
         >>> B = 20
-        D = 3
-        over_arch = OverArch(10, [5, 1])
-        logits = over_arch(torch.rand((B, 10)))
+        >>> D = 3
+        >>> over_arch = OverArch(10, [5, 1])
+        >>> logits = over_arch(torch.rand((B, 10)))
     """
 
     def __init__(
@@ -251,6 +235,13 @@ class OverArch(nn.Module):
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: torch.Tensor
+
+        Returns:
+            torch.Tensor  - size B X layer_sizes[-1]
+        """
         return self.model(features)
 
 
@@ -264,65 +255,65 @@ class DLRM(nn.Module):
     features.
 
     The module assumes all sparse features have the same embedding dimension
-    (i.e, each EmbeddingBagConfig uses the same embedding_dim)
+    (i.e. each EmbeddingBagConfig uses the same embedding_dim).
 
-    Constructor Args:
+    The following notation is used throughout the documentation for the models:
+
+    F: number of sparse features
+    D: embedding_dimension of sparse features
+    B: batch size
+    num_features: number of dense features
+
+    Args:
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
             used to define SparseArch.
         dense_in_features (int): the dimensionality of the dense input features.
-        dense_arch_layer_sizes (list[int]): the layer sizes for the DenseArch.
-        over_arch_layer_sizes (list[int]): the layer sizes for the OverArch. NOTE: The
+        dense_arch_layer_sizes (List[int]): the layer sizes for the DenseArch.
+        over_arch_layer_sizes (List[int]): the layer sizes for the OverArch. NOTE: The
             output dimension of the InteractionArch should not be manually specified
             here.
-        dense_device: (Optional[torch.device]).
-
-    Call Args:
-        dense_features: torch.Tensor,
-        sparse_features: KeyedJaggedTensor,
-
-    Returns:
-        torch.Tensor - logits with size B X 1
+        dense_device (Optional[torch.device]): default compute device.
 
     Example:
         >>> B = 2
-        D = 8
+        >>> D = 8
 
-        eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
-        )
-        eb2_config = EmbeddingBagConfig(
-            name="t2",
-            embedding_dim=D,
-            num_embeddings=100,
-            feature_names=["f2"],
-        )
-        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+        >>> eb1_config = EmbeddingBagConfig(
+        >>>    name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        >>> )
+        >>> eb2_config = EmbeddingBagConfig(
+        >>>    name="t2",
+        >>>    embedding_dim=D,
+        >>>    num_embeddings=100,
+        >>>    feature_names=["f2"],
+        >>> )
+        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        ebc = EmbeddingBagCollection(config=ebc_config)
-        model = DLRM(
-            embedding_bag_collection=ebc,
-            dense_in_features=100,
-            dense_arch_layer_sizes=[20],
-            over_arch_layer_sizes=[5, 1],
-        )
+        >>> ebc = EmbeddingBagCollection(config=ebc_config)
+        >>> model = DLRM(
+        >>>    embedding_bag_collection=ebc,
+        >>>    dense_in_features=100,
+        >>>    dense_arch_layer_sizes=[20],
+        >>>    over_arch_layer_sizes=[5, 1],
+        >>> )
 
-        features = torch.rand((B, 100))
+        >>> features = torch.rand((B, 100))
 
-        #     0       1
-        # 0   [1,2] [4,5]
-        # 1   [4,3] [2,9]
-        # ^
-        # feature
-        sparse_features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f3"],
-            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
-            offsets=torch.tensor([0, 2, 4, 6, 8]),
-        )
+        >>> #     0       1
+        >>> # 0   [1,2] [4,5]
+        >>> # 1   [4,3] [2,9]
+        >>> # ^
+        >>> # feature
+        >>> sparse_features = KeyedJaggedTensor.from_offsets_sync(
+        >>>    keys=["f1", "f3"],
+        >>>    values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
+        >>>    offsets=torch.tensor([0, 2, 4, 6, 8]),
+        >>> )
 
-        logits = model(
-            dense_features=features,
-            sparse_features=sparse_features,
-        )
+        >>> logits = model(
+        >>>    dense_features=features,
+        >>>    sparse_features=sparse_features,
+        >>> )
     """
 
     def __init__(
@@ -381,6 +372,14 @@ class DLRM(nn.Module):
         dense_features: torch.Tensor,
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
+        """
+        Args:
+            dense_features (torch.Tensor):
+            sparse_features (KeyedJaggedTensor):
+
+        Returns:
+            torch.Tensor
+        """
         embedded_dense = self.dense_arch(dense_features)
         embedded_sparse = self.sparse_arch(sparse_features)
         concatenated_dense = self.inter_arch(
