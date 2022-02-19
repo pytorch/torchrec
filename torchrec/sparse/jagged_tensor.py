@@ -916,7 +916,7 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     Example:
         kt is KeyedTensor holding
 
-                    0           1           2
+                                0           1           2
             "Embedding A"    [1,1]       [1,1]        [1,1]
             "Embedding B"    [2,1,2]     [2,1,2]      [2,1,2]
             "Embedding C"    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]

@@ -23,8 +23,7 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
-from torch.distributed import fsdp  # noqa
-from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
+from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.fx.node import Node
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
