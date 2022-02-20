@@ -113,9 +113,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
                 )
 
         super().__init__()
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._emb_modules: nn.ModuleList[BaseEmbedding] = nn.ModuleList()
+        self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config))
 

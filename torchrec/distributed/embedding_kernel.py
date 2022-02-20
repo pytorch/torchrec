@@ -129,9 +129,7 @@ class GroupedEmbedding(BaseEmbedding):
         self._config = config
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._emb_modules: nn.ModuleList[nn.Module] = nn.ModuleList()
+        self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._sparse = sparse
         for embedding_config in self._config.embedding_tables:
             self._emb_modules.append(
@@ -216,9 +214,7 @@ class GroupedEmbeddingBag(BaseEmbedding):
         self._config = config
         # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
-        # pyre-fixme[24]: Non-generic type `nn.modules.container.ModuleList` cannot
-        #  take parameters.
-        self._emb_modules: nn.ModuleList[nn.Module] = nn.ModuleList()
+        self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._sparse = sparse
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
