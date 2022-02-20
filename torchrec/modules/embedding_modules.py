@@ -48,13 +48,13 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
 
 def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
     shared_feature: Dict[str, bool] = {}
-    embedding_names: List[str] = []
     for embedding_config in tables:
         for feature_name in embedding_config.feature_names:
             if feature_name not in shared_feature:
                 shared_feature[feature_name] = False
             else:
                 shared_feature[feature_name] = True
+    embedding_names: List[str] = []
     for embedding_config in tables:
         for feature_name in embedding_config.feature_names:
             if shared_feature[feature_name]:

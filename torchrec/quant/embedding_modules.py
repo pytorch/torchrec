@@ -26,6 +26,7 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection as OriginalEmbeddingBagCollection,
+    ebc_get_embedding_names,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.sparse.jagged_tensor import (
@@ -153,15 +154,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         is_weighted: bool,
         device: torch.device,
     ) -> None:
-
         super().__init__()
-
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
         self.embedding_bags: nn.ModuleList = nn.ModuleList()
-        self._embedding_names: List[str] = []
         self._lengths_per_embedding: List[int] = []
-        shared_feature: Dict[str, bool] = {}
         table_names = set()
         for emb_config in self._embedding_bag_configs:
             if emb_config.name in table_names:
@@ -186,19 +183,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             self.embedding_bags.append(emb_module)
             if not emb_config.feature_names:
                 emb_config.feature_names = [emb_config.name]
-            for feature_name in emb_config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
-                self._lengths_per_embedding.append(emb_config.embedding_dim)
+            self._lengths_per_embedding.extend(
+                len(emb_config.feature_names) * [emb_config.embedding_dim]
+            )
 
-        for emb_config in self._embedding_bag_configs:
-            for feature_name in emb_config.feature_names:
-                if shared_feature[feature_name]:
-                    self._embedding_names.append(feature_name + "@" + emb_config.name)
-                else:
-                    self._embedding_names.append(feature_name)
+        self._embedding_names: List[str] = ebc_get_embedding_names(embedding_configs)
 
     def forward(
         self,
