@@ -6,29 +6,86 @@ on:
       - main
 jobs:
   build_docs_job:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [3.9]
+        include:
+         - os: linux.2xlarge
+           python-version: 3.9
     steps:
+    # Checkout the repository to the GitHub Actions runner
     - name: Checkout
       uses: actions/checkout@v2
-    - name: Dependencies
+      with:
+        submodules: true
+    # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
+    - name: Git Sumbodule Update
       run: |
-        echo `python3 --version`
-        sudo apt-get install -y python-setuptools
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools
-        python3 -m pip install -r requirements.txt
-        python3 -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
-        python3 -m pip install torchrec-nightly-cpu
-    - name: Check env
-      run: echo `which spinx-build`
+        git submodule init
+        git submodule update --remote --recursive
+        cd third_party/fbgemm/
+        git submodule sync
+        git submodule update --init --recursive
+        git log
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install gcc
+      shell: bash
+      run: |
+        sudo yum group install -y "Development Tools"
+    - name: setup Path
+      run: |
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install -r requirements.txt
+    - name: Test Installation of dependencies
+      run: |
+        conda run -n build_binary python -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary python -c "import skbuild"
+        echo "skbuild succeeded"
+        conda run -n build_binary python -c "import numpy"
+        echo "numpy succeeded"
+    - name: Install TorchRec Nightly
+      run: |
+        conda run -n build_binary python -m pip install torchrec-nightly-cpu
+    - name: Test fbgemm_gpu and torchrec installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        conda run -n build_binary \
+          python -c "import torchrec"
     - name: Build the docset
       run: |
+        conda run -n build_binary python -m pip install -r docs/requirements.txt
         cd ./docs
-        pip install -r requirements.txt
-        make html
+        conda run -n build_binary make html
         cd ..
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
