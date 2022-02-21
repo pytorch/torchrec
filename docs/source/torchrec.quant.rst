@@ -1,8 +1,7 @@
 torchrec.quant
 ==============
 
-Submodules
-----------
+.. automodule:: torchrec.quant
 
 torchrec.quant.embedding\_modules
 ---------------------------------

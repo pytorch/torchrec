@@ -1,16 +1,7 @@
 torchrec.modules
 ================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   torchrec.modules.tests
-
-Submodules
-----------
+.. automodule:: torchrec.modules
 
 torchrec.modules.activation
 ---------------------------
