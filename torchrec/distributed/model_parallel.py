@@ -77,15 +77,17 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         pg = env.process_group
         if pg is None:
             raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
-        sharded_parameter_names = set(
-            DistributedModelParallel._sharded_parameter_names(dmp.module)
-        )
+        sharded_parameter_names = {
+            key for key in DistributedModelParallel._sharded_parameter_names(dmp.module)
+        }
+        all_paramemeter_names = {key for key, _ in dmp.named_parameters()}
+        if sharded_parameter_names == all_paramemeter_names:
+            return
+
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp.module,
             params_and_buffers_to_ignore=[
-                key
-                for key, _ in dmp.named_parameters()
-                if key in sharded_parameter_names
+                key for key in all_paramemeter_names if key in sharded_parameter_names
             ],
         )
         # initailize DDP
