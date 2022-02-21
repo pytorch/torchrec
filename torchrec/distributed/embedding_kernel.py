@@ -34,7 +34,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 class BaseEmbedding(abc.ABC, nn.Module):
     """
-    abstract base class for grouped nn.Embedding
+    Abstract base class for grouped `nn.Embedding`
     """
 
     @abc.abstractmethod
@@ -42,11 +42,13 @@ class BaseEmbedding(abc.ABC, nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> torch.Tensor:
+        """
+        Args:
+            features (KeyedJaggedTensor):
+        Returns:
+            torch.Tensor: sparse gradient parameter names.
+        """
         pass
-
-    """
-    return sparse gradient parameter names
-    """
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
@@ -76,10 +78,11 @@ def get_state_dict(
         destination = OrderedDict()
         # pyre-ignore [16]
         destination._metadata = OrderedDict()
-
-    """ It is possible for there to be multiple shards from a table on a single rank. """
-    """ We accumulate them in key_to_local_shards. Repeat shards should have identical """
-    """ global ShardedTensorMetadata"""
+    """
+    It is possible for there to be multiple shards from a table on a single rank.
+    We accumulate them in key_to_local_shards. Repeat shards should have identical
+    global ShardedTensorMetadata.
+    """
     key_to_local_shards: Dict[str, List[Shard]] = defaultdict(list)
     key_to_global_metadata: Dict[str, ShardedTensorMetadata] = {}
 

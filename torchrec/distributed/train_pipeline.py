@@ -73,10 +73,10 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
 
 class TrainPipelineBase(TrainPipeline[In, Out]):
     """
-    This class runs training iterations using a pipeline of two stages, each as a CUDA stream,
-    namely, the current (default) stream and self._memcpy_stream. For each iteration,
-    self._memcpy_stream moves the input from host (CPU) memory to GPU memory, and the default
-    stream runs forward, backward, and optimization.
+    This class runs training iterations using a pipeline of two stages, each as a CUDA
+    stream, namely, the current (default) stream and `self._memcpy_stream`. For each
+    iteration, `self._memcpy_stream` moves the input from host (CPU) memory to GPU
+    memory, and the default stream runs forward, backward, and optimization.
     """
 
     def __init__(
@@ -272,7 +272,7 @@ def _start_data_dist(
 # pyre-ignore
 def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int]:
     """
-    Goes through the args/kwargs of a node and arranges them into a list of ArgInfos.
+    Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
     It also counts the number of (args + kwargs) found.
     """
 
@@ -404,19 +404,20 @@ def _rewrite_model(  # noqa C901
 
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     """
-    This pipeline overlaps device transfer, and ShardedModule.input_dist() with
-    forward and backward. This helps hiding all2all latency while preserving
-    the training forward / backward ordering.
+    This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
+    forward and backward. This helps hide the all2all latency while preserving the
+    training forward / backward ordering.
+
     stage 3: forward, backward - uses default CUDA stream
     stage 2: ShardedModule.input_dist() - uses data_dist CUDA stream
     stage 1: device transfer - uses memcpy CUDA stream
 
-    ShardedModule.input_dist() is only done for top-level modules in the call graph.
-    To be considered a top-level module,
-    a module can only depend on 'getattr' calls on input.
+    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
+    To be considered a top-level module, a module can only depend on 'getattr' calls on
+    input.
 
-    Input model must be symbolically traceable
-    with the exception of ShardedModule and DistributedDataParallel modules.
+    Input model must be symbolically traceable with the exception of `ShardedModule` and
+    `DistributedDataParallel` modules.
     """
 
     def __init__(

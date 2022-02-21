@@ -66,8 +66,8 @@ class ShardedQuantEmbeddingBagCollection(
     ShardedModule[ListOfSparseFeaturesList, List[List[torch.Tensor]], KeyedTensor],
 ):
     """
-    Sharded implementation of EmbeddingBagCollection.
-    This is part of public API to allow for manual data dist pipelining.
+    Sharded implementation of `EmbeddingBagCollection`.
+    This is part of the public API to allow for manual data dist pipelining.
     """
 
     def __init__(

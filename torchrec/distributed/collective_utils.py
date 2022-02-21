@@ -18,15 +18,14 @@ import torch.distributed as dist
 # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
 def is_leader(pg: Optional[dist.ProcessGroup], leader_rank: int = 0) -> bool:
     """
-    Check if the current processs is the leader.
+    Checks if the current processs is the leader.
 
     Args:
-        - pg: the process's rank within the pg is used to determine if
-          the process is the leader. pg being None implies that the process
-          is the only member in the group (e.g. a single process program).
-
-        - leader_rank: the definition of leader (defaults to 0). The caller can
-          override it with a context-specific definition.
+        pg (Optional[dist.ProcessGroup]): the process's rank within the pg is used to
+            determine if the process is the leader. pg being None implies that the
+            process is the only member in the group (e.g. a single process program).
+        leader_rank (int): the definition of leader (defaults to 0). The caller can
+            override it with a context-specific definition.
     """
     if pg is None:
         return leader_rank == 0
@@ -47,9 +46,8 @@ def invoke_on_rank_and_broadcast_result(
     Invokes a function on the designated rank and broadcasts the result to all
     members within the group.
 
-    Example usage:
-
-    >>> id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
+    Example:
+        >>> id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
     """
     if pg.rank() == rank:
         res = func(*args, **kwargs)

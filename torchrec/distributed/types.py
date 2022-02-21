@@ -324,8 +324,8 @@ class EmptyContext(ShardedModuleContext):
 
 class ShardingEnv:
     """
-    Provides an abstraction over torch.distributed.ProcessGroup, which practically
-    enables DistributedModelParallel to be used during inference.
+    Provides an abstraction over `torch.distributed.ProcessGroup`, which practically
+    enables `DistributedModelParallel` to be used during inference.
     """
 
     def __init__(
@@ -433,8 +433,8 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
 
 class ModuleSharder(abc.ABC, Generic[M]):
     """
-    ModuleSharder is per each module, which supports sharding,
-    e.g. EmbeddingBagCollection.
+    `ModuleSharder` is per each module, which supports sharding,
+    e.g. `EmbeddingBagCollection`.
     """
 
     def __init__(self) -> None:
@@ -456,8 +456,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
         Default implementation is data-parallel replication.
 
         Args:
-            module: module to shard.
-            params: dict of fully qualified parameter names
+            module (M): module to shard.
+            params (Dict[str, ParameterSharding]): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
             device (torch.device): compute device.
@@ -513,9 +513,10 @@ class ModuleSharder(abc.ABC, Generic[M]):
 class ShardingPlan:
     """
     Representation of sharding plan.
+    Attributes:
 
-    plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of dict
-        of parameter sharding specs keyed by parameter name.
+        plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of
+            dict of parameter sharding specs keyed by parameter name.
     """
 
     plan: Dict[str, Dict[str, ParameterSharding]]
@@ -525,12 +526,10 @@ class ShardingPlan:
     ) -> Optional[Dict[str, ParameterSharding]]:
         """
         Args:
-            module_path (str)
+            module_path (str):
 
         Returns:
-            Optional[Dict[str, ParameterSharding]]: dict of parameter sharding specs
-                keyed by parameter name. None if sharding specs do not exist for given
-                module_path.
+            Optional[Dict[str, ParameterSharding]]: dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.
         """
         return self.plan.get(module_path, None)
 

@@ -113,35 +113,35 @@ def _strip_DDP(module: nn.Module) -> nn.Module:
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     """
     Entry point to model parallelism.
+
+    Args:
+        module (nn.Module): module to wrap.
+        env (Optional[ShardingEnv]): sharding environment that has the process group.
+        device (Optional[torch.device]): compute device, defaults to cpu.
+        plan (Optional[ShardingPlan]): plan to use when sharding, defaults to
+            `EmbeddingShardingPlanner.collective_plan()`.
+        sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
+            to shard with, defaults to `EmbeddingBagCollectionSharder()`,
+        init_data_parallel (bool): data-parallel modules can be lazy, i.e. they delay
+            parameter initialization until the first forward pass. Pass `True` to delay
+            initialization of data parallel modules. Do first forward pass and then call
+            DistributedModelParallel.init_data_parallel().
+        init_parameters (bool): initialize parameters for modules still on meta device.
+        data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
+            parallel modules.
+
     Example:
         >>> @torch.no_grad()
-        def init_weights(m):
-            if isinstance(m, nn.Linear)
-                m.weight.fill_(1.0)
-            elif isinstance(m, EmbeddingBagCollection)
-                for param in m.parameters():
-                    init.kaiming_normal_(param)
+        >>> def init_weights(m):
+        >>>     if isinstance(m, nn.Linear):
+        >>>         m.weight.fill_(1.0)
+        >>>     elif isinstance(m, EmbeddingBagCollection):
+        >>>         for param in m.parameters():
+        >>>             init.kaiming_normal_(param)
 
-        m = MyModel(device='meta')
-        m = DistributedModelParallel(m)
-        m.apply(init_weights)
-
-    Constructor Args:
-        module: module to wrap,
-        pg: this processes' process group, defaults to dist.GroupMember.WORLD,
-        device: this device, defaults to cpu,
-        plan: plan to use when sharding, defaults to EmbeddingShardingPlanner.collective_plan(),
-        sharders: ModuleSharders available to shard with, defaults to EmbeddingBagCollectionSharder(),
-        init_data_parallel: data-parallel modules can be lazy, i.e. they delay parameter initialization until
-        the first forward pass. Pass True if that's a case to delay initialization of data parallel modules.
-        Do first forward pass and then call DistributedModelParallel.init_data_parallel().
-        init_parameters: initialize parameters for modules still on meta device.
-        data_parallel_wrapper: custom wrapper for data parallel modules.
-
-    Call Args:
-
-    Returns:
-        None
+        >>> m = MyModel(device='meta')
+        >>> m = DistributedModelParallel(m)
+        >>> m.apply(init_weights)
     """
 
     def __init__(

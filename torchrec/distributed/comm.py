@@ -32,7 +32,7 @@ def get_local_size(world_size: Optional[int] = None) -> int:
     if world_size is None:
         world_size = dist.get_world_size()
     """
-    Get the local world size (see https://pytorch.org/docs/stable/elastic/run.html)
+    Gets the local world size (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the size of workers on each node, or nproc_per_node
     """
     local_size = _env2int(
@@ -55,7 +55,7 @@ def get_local_size(world_size: Optional[int] = None) -> int:
 
 def get_local_rank(world_size: Optional[int] = None, rank: Optional[int] = None) -> int:
     """
-    Get the local rank of the local processes (see https://pytorch.org/docs/stable/elastic/run.html)
+    Gets the local rank of the local processes (see https://pytorch.org/docs/stable/elastic/run.html)
     This is usually the rank of the worker on its node
     """
     my_local_rank = _env2int(
@@ -81,7 +81,7 @@ def get_local_rank(world_size: Optional[int] = None, rank: Optional[int] = None)
 
 def get_group_rank(world_size: Optional[int] = None, rank: Optional[int] = None) -> int:
     """
-    Get the group rank of the worker group. Also available with GROUP_RANK environment varible
+    Gets the group rank of the worker group. Also available with GROUP_RANK environment varible
     A number between 0 and get_num_groups() (See https://pytorch.org/docs/stable/elastic/run.html)
     """
     if rank is None:
@@ -91,7 +91,7 @@ def get_group_rank(world_size: Optional[int] = None, rank: Optional[int] = None)
 
 def get_num_groups(world_size: Optional[int] = None) -> int:
     """
-    Get the number of worker groups.
+    Gets the number of worker groups.
     Usually equivalent to max_nnodes (See https://pytorch.org/docs/stable/elastic/run.html)
     """
     if world_size is None:
@@ -104,7 +104,7 @@ def intra_and_cross_node_pg(
     backend: str = "nccl",
 ) -> Tuple[Optional[dist.ProcessGroup], Optional[dist.ProcessGroup]]:
     """
-    This function creates sub process groups (intra and cross node)
+    Creates sub process groups (intra and cross node)
     """
     if device is not None and device.type == "meta":
         return None, None
