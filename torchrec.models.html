@@ -335,10 +335,13 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.deepfm.DenseArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – size B X num_features</p>
+<dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – size B X <cite>num_features</cite></p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor  - size B X D</p>
+<dd class="field-even"><p>an output tensor of size B X D</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -354,18 +357,18 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 <dt class="sig sig-object py" id="torchrec.models.deepfm.FMInteractionArch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.deepfm.</span></span><span class="sig-name descname"><span class="pre">FMInteractionArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fm_in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_feature_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deep_fm_dimension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.deepfm.FMInteractionArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>Processes the output of both SparseArch (sparse_features) and DenseArch
+<p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
 (dense_features) and apply the general DeepFM interaction according to the
 extenal source of DeepFM paper: <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
-<p>The output dimension is expected to be a cat of dense_features, D.</p>
+<p>The output dimension is expected to be a cat of <cite>dense_features</cite>, D.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>fm_in_features</strong> (<em>int</em>) – the input dimension of dense_module in DeepFM. For example,
-the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the fm_in_features should
-be: 2*3+4*5.</p></li>
-<li><p><strong>sparse_feature_names</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – length of F</p></li>
-<li><p><strong>deep_fm_dimension</strong> (<em>int</em>) – output of the deep interaction (DI) in the DeepFM arch</p></li>
+<li><p><strong>fm_in_features</strong> (<em>int</em>) – the input dimension of <cite>dense_module</cite> in DeepFM. For
+example, if the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], then
+the <cite>fm_in_features</cite> should be: 2 * 3 + 4 * 5.</p></li>
+<li><p><strong>sparse_feature_names</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – length of F.</p></li>
+<li><p><strong>deep_fm_dimension</strong> (<em>int</em>) – output of the deep interaction (DI) in the DeepFM arch.</p></li>
 </ul>
 </dd>
 </dl>
@@ -395,7 +398,10 @@ be: 2*3+4*5.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor - B X (D + DI + 1)</p>
+<dd class="field-even"><p>an output tensor of size B X (D + DI + 1)</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -414,7 +420,7 @@ be: 2*3+4*5.</p></li>
 <p>Final Arch - simple MLP. The output is just one target.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>in_features</strong> (<em>int</em>) – the output dimension of interaction arch</p>
+<dd class="field-odd"><p><strong>in_features</strong> (<em>int</em>) – the output dimension of the interaction arch.</p>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -431,7 +437,10 @@ be: 2*3+4*5.</p></li>
 <dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – </p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor  - size B X 1</p>
+<dd class="field-even"><p>an output tensor of size B X 1</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -453,7 +462,7 @@ dense features and sparse features by projecting dense features into the same
 embedding space. Learns the interaction among those dense and sparse features
 by deep_fm proposed in this paper: <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
 <p>The module assumes all sparse features have the same embedding dimension
-(i.e, each EmbeddingBagConfig uses the same embedding_dim)</p>
+(i.e, each <cite>EmbeddingBagConfig</cite> uses the same embedding_dim)</p>
 <p>The following notation is used throughout the documentation for the models:</p>
 <p>F: number of sparse features
 D: embedding_dimension of sparse features
@@ -464,10 +473,10 @@ num_features: number of dense features</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>num_dense_features</strong> (<em>int</em>) – the number of input dense features.</p></li>
 <li><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – collection of embedding bags
-used to define SparseArch.</p></li>
-<li><p><strong>hidden_layer_size</strong> (<em>int</em>) – the hidden layer size that’s used in dense module</p></li>
-<li><p><strong>deep_fm_dimension</strong> (<em>int</em>) – the output layer size that’s used in deep_fm’s deep
-interaction module</p></li>
+used to define <cite>SparseArch</cite>.</p></li>
+<li><p><strong>hidden_layer_size</strong> (<em>int</em>) – the hidden layer size used in dense module.</p></li>
+<li><p><strong>deep_fm_dimension</strong> (<em>int</em>) – the output layer size used in <cite>deep_fm</cite>’s deep
+interaction module.</p></li>
 </ul>
 </dd>
 </dl>
@@ -526,7 +535,10 @@ interaction module</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor - logits with size B X 1</p>
+<dd class="field-even"><p>logits with size B X 1</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -542,8 +554,8 @@ interaction module</p></li>
 <dt class="sig sig-object py" id="torchrec.models.deepfm.SparseArch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.deepfm.</span></span><span class="sig-name descname"><span class="pre">SparseArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_bag_collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">torchrec.modules.embedding_modules.EmbeddingBagCollection</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.deepfm.SparseArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>Processes the Sparse Features of DeepFMNN model. Does Embedding Lookup for all
-EmbeddingBag and Embedding features of each collection.</p>
+<p>Processes the sparse features of the DeepFMNN model. Does embedding lookups for all
+EmbeddingBag and embedding features of each collection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a
@@ -586,7 +598,10 @@ collection of pooled embeddings</p>
 <dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>KeyedJaggedTensor - size F * D X B</p>
+<dd class="field-even"><p>an output KJT of size F * D X B</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -622,12 +637,12 @@ num_features: number of dense features</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – collection of embedding bags
-used to define SparseArch.</p></li>
+used to define <cite>SparseArch</cite>.</p></li>
 <li><p><strong>dense_in_features</strong> (<em>int</em>) – the dimensionality of the dense input features.</p></li>
-<li><p><strong>dense_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the DenseArch.</p></li>
-<li><p><strong>over_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the OverArch. NOTE: The
-output dimension of the InteractionArch should not be manually specified
-here.</p></li>
+<li><p><strong>dense_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>DenseArch</cite>.</p></li>
+<li><p><strong>over_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>OverArch</cite>.
+NOTE: The output dimension of the <cite>InteractionArch</cite> should not be manually
+specified here.</p></li>
 <li><p><strong>dense_device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
 </ul>
 </dd>
@@ -689,7 +704,7 @@ here.</p></li>
 <li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Return type</dt>
 <dd class="field-even"><p>torch.Tensor</p>
 </dd>
 </dl>
@@ -750,12 +765,12 @@ here.</p></li>
 <dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionArch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sparse_feature_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>Processes the output of both SparseArch (sparse_features) and DenseArch
+<p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
 (dense_features). Returns the pairwise dot product of each sparse feature pair,
 the dot product of each sparse features with the output of the dense layer,
 and the dense layer itself (all concatenated).</p>
-<p>NOTE: The dimensionality of the dense_features (D) is expected to match the
-dimensionality of the sparse_features so that the dot products between them can be
+<p>NOTE: The dimensionality of the <cite>dense_features</cite> (D) is expected to match the
+dimensionality of the <cite>sparse_features</cite> so that the dot products between them can be
 computed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -819,7 +834,7 @@ computed.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_features</strong> (<em>int</em>) – size of the input.</p></li>
-<li><p><strong>layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – sizes of the layers of the OverArch.</p></li>
+<li><p><strong>layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – sizes of the layers of the <cite>OverArch</cite>.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
 </ul>
 </dd>
@@ -855,8 +870,8 @@ computed.</p>
 <dt class="sig sig-object py" id="torchrec.models.dlrm.SparseArch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">SparseArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_bag_collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">torchrec.modules.embedding_modules.EmbeddingBagCollection</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.SparseArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
-<p>Processes the Sparse Features of DLRM. Does Embedding Lookup for all
-EmbeddingBag and Embedding features of each collection.</p>
+<p>Processes the sparse features of DLRM. Does embedding lookups for all EmbeddingBag
+and embedding features of each collection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a
@@ -918,7 +933,7 @@ collection of pooled embeddings</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.choose">
 <span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">choose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.choose" title="Permalink to this definition">¶</a></dt>
-<dd><p>Simple implementation of math.comb for python 3.7 compatibility</p>
+<dd><p>Simple implementation of math.comb for python 3.7 compatibility.</p>
 </dd></dl>
 
 </section>
