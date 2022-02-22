@@ -1,8 +1,7 @@
 torchrec.fx
 ===========
 
-Submodules
-----------
+.. automodule:: torchrec.fx
 
 torchrec.fx.tracer
 ------------------

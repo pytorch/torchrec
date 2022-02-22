@@ -295,16 +295,24 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="torchrec-sparse">
-<h1>torchrec.sparse<a class="headerlink" href="#torchrec-sparse" title="Permalink to this headline">¶</a></h1>
-<section id="subpackages">
-<h2>Subpackages<a class="headerlink" href="#subpackages" title="Permalink to this headline">¶</a></h2>
-<div class="toctree-wrapper compound">
-</div>
-</section>
-<section id="submodules">
-<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
-</section>
+  <section id="module-torchrec.sparse">
+<span id="torchrec-sparse"></span><h1>torchrec.sparse<a class="headerlink" href="#module-torchrec.sparse" title="Permalink to this headline">¶</a></h1>
+<p>Torchrec Jagged Tensors</p>
+<p>It has 3 classes: JaggedTensor, KeyedJaggedTensor, KeyedTensor.</p>
+<p>JaggedTensor</p>
+<p>It represents an (optionally weighted) jagged tensor. A JaggedTensor is a
+tensor with a jagged dimension which is dimension whose slices may be of
+different lengths. See KeyedJaggedTensor docstring for full example and further
+information.</p>
+<p>KeyedJaggedTensor</p>
+<p>KeyedJaggedTensor has additional “Key” information. Keyed on first dimesion,
+and jagged on last dimension. Please refer to KeyedJaggedTensor docstring for full example and
+further information.</p>
+<p>KeyedTensor</p>
+<p>KeyedTensor holds a concatenated list of dense tensors each of which can be accessed by a key.
+Keyed dimension can be variable length (length_per_key). Common use cases uses include storage
+of pooled embeddings of different dimensions. Please refer to KeyedTensor docstring for full
+example and further information.</p>
 <section id="module-torchrec.sparse.jagged_tensor">
 <span id="torchrec-sparse-jagged-tensor"></span><h2>torchrec.sparse.jagged_tensor<a class="headerlink" href="#module-torchrec.sparse.jagged_tensor" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
@@ -622,8 +630,8 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 </dd></dl>
 
 </section>
-<section id="module-torchrec.sparse">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-torchrec.sparse" title="Permalink to this headline">¶</a></h2>
+<section id="module-0">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
 <p>Torchrec Jagged Tensors</p>
 <p>It has 3 classes: JaggedTensor, KeyedJaggedTensor, KeyedTensor.</p>
 <p>JaggedTensor</p>
@@ -685,10 +693,8 @@ example and further information.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.sparse</a><ul>
-<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
-<li><a class="reference internal" href="#submodules">Submodules</a></li>
 <li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a></li>
-<li><a class="reference internal" href="#module-torchrec.sparse">Module contents</a></li>
+<li><a class="reference internal" href="#module-0">Module contents</a></li>
 </ul>
 </li>
 </ul>

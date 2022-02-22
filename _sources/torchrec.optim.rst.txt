@@ -1,16 +1,7 @@
 torchrec.optim
 ==============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   torchrec.optim.tests
-
-Submodules
-----------
+.. automodule:: torchrec.optim
 
 torchrec.optim.clipping
 -----------------------

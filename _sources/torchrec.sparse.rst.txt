@@ -1,16 +1,7 @@
 torchrec.sparse
 ===============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   torchrec.sparse.tests
-
-Submodules
-----------
+.. automodule:: torchrec.sparse
 
 torchrec.sparse.jagged\_tensor
 ------------------------------

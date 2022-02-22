@@ -1,8 +1,7 @@
 torchrec.models
 ===============
 
-Submodules
-----------
+.. automodule:: torchrec.models
 
 torchrec.models.deepfm
 ----------------------

@@ -15,7 +15,18 @@ For installation instructions, visit
 
 https://github.com/pytorch/torchrec#readme
 
+Tutorial
+--------
+In this tutorial, we introduce the primary torchRec
+API called DistributedModelParallel, or DMP.
+Like pytorch’s DistributedDataParallel,
+DMP wraps a model to enable distributed training.
 
+* `Tutorial Source <https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb>`_
+* Open in `Google Colab <https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb>`_
+
+TorchRec API
+------------
 
 .. toctree::
    :maxdepth: 2
