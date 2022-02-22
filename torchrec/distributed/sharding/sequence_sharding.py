@@ -51,7 +51,8 @@ T = TypeVar("T")
 
 class BaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
     """
-    Converts output of Sequence EmbeddingLookup from model-parallel to data-parallel.
+    Base class for converting output of Sequence EmbeddingLookup
+    from model-parallel to data-parallel.
     """
 
     @abc.abstractmethod

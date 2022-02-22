@@ -223,7 +223,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
 
 class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
-    Redistributes sparse features in hierarchical fashion with an AlltoAll collective
+    Redistributes sparse features in TW fashion with an AlltoAll collective
     operation.
 
     Constructor Args:
@@ -270,7 +270,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
 class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     """
-    Redistributes pooled embedding tensor in hierarchical fashion with an AlltoAll
+    Redistributes pooled embedding tensor in TW fashion with an AlltoAll
     collective operation.
 
     Constructor Args:

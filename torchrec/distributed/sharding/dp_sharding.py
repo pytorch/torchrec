@@ -38,7 +38,7 @@ F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
 
 
-class BaseDpTwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseDpEmbeddingSharding(EmbeddingSharding[F, T]):
     """
     base class for data-parallel sharding
     """
@@ -192,9 +192,7 @@ class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         return NoWait(local_embs)
 
 
-class DpPooledEmbeddingSharding(
-    BaseDpTwEmbeddingSharding[SparseFeatures, torch.Tensor]
-):
+class DpPooledEmbeddingSharding(BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
     Shards embedding bags using data-parallel, with no table sharding i.e.. a given
     embedding table is replicated across all ranks.

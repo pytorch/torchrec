@@ -120,7 +120,7 @@ class RwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return RwSequenceEmbeddingDist(
             self._pg,
             self._get_id_list_features_num(),

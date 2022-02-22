@@ -10,11 +10,16 @@ from typing import Optional, Dict, Any
 import torch
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseSparseFeaturesDist,
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
 )
 from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
-from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
+from torchrec.distributed.embedding_types import SparseFeatures
+from torchrec.distributed.sharding.dp_sharding import (
+    BaseDpEmbeddingSharding,
+    DpSparseFeaturesDist,
+)
 from torchrec.distributed.sharding.sequence_sharding import (
     SequenceShardingContext,
     BaseSequenceEmbeddingDist,
@@ -48,11 +53,18 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         return NoWait(local_embs)
 
 
-class DpSequenceEmbeddingSharding(DpPooledEmbeddingSharding):
+class DpSequenceEmbeddingSharding(
+    BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]
+):
     """
     Shards sequence (unpooled) embedding using data-parallel, with no table sharding i.e.. a given
     embedding table is replicated across all ranks.
     """
+
+    def create_input_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+        return DpSparseFeaturesDist()
 
     def create_lookup(
         self,
@@ -70,5 +82,5 @@ class DpSequenceEmbeddingSharding(DpPooledEmbeddingSharding):
 
     def create_output_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return DpSequenceEmbeddingDist()

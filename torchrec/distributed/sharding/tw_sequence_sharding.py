@@ -5,33 +5,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Any, Dict, Tuple
+from typing import List, Optional, Any, Dict
 
 import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import SequenceEmbeddingAllToAll
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseSparseFeaturesDist,
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
 )
 from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
+from torchrec.distributed.embedding_types import SparseFeatures
 from torchrec.distributed.sharding.sequence_sharding import (
     SequenceShardingContext,
     BaseSequenceEmbeddingDist,
 )
-from torchrec.distributed.sharding.tw_sharding import TwPooledEmbeddingSharding
-from torchrec.distributed.types import (
-    ShardingEnv,
-    ParameterSharding,
-    Awaitable,
+from torchrec.distributed.sharding.tw_sharding import (
+    TwSparseFeaturesDist,
+    BaseTwEmbeddingSharding,
 )
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.distributed.types import Awaitable
 
 
 class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
-    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoAll
+    Redistributes sequence embedding tensor in TW fashion with an AlltoAll
     operation.
 
     Constructor Args:
@@ -77,21 +77,24 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         )
 
 
-class TwSequenceEmbeddingSharding(TwPooledEmbeddingSharding):
+class TwSequenceEmbeddingSharding(
+    BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
+):
     """
     Shards sequence (unpooled) table-wise, i.e.. a given embedding table is entirely placed
     on a selected rank.
     """
 
-    def __init__(
+    def create_input_dist(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
-        env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> None:
-        super().__init__(embedding_configs, env, device)
+    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+        return TwSparseFeaturesDist(
+            self._pg,
+            self._id_list_features_per_rank(),
+            self._id_score_list_features_per_rank(),
+            device if device is not None else self._device,
+        )
 
     def create_lookup(
         self,
@@ -110,7 +113,7 @@ class TwSequenceEmbeddingSharding(TwPooledEmbeddingSharding):
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return TwSequenceEmbeddingDist(
             self._pg,
             self._id_list_features_per_rank(),
