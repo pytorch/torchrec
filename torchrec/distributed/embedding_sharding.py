@@ -35,7 +35,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
-class SparseFeaturesIndices(Awaitable[SparseFeatures]):
+class SparseFeaturesIndicesAwaitable(Awaitable[SparseFeatures]):
     """
     Awaitable of sparse features redistributed with AlltoAll collective.
 
@@ -73,7 +73,7 @@ class SparseFeaturesIndices(Awaitable[SparseFeatures]):
         )
 
 
-class SparseFeaturesLengths(Awaitable[SparseFeaturesIndices]):
+class SparseFeaturesLengthsAwaitable(Awaitable[SparseFeaturesIndicesAwaitable]):
     """
     Awaitable of sparse features indices distribution.
 
@@ -100,15 +100,15 @@ class SparseFeaturesLengths(Awaitable[SparseFeaturesIndices]):
         self._id_list_features_awaitable = id_list_features_awaitable
         self._id_score_list_features_awaitable = id_score_list_features_awaitable
 
-    def _wait_impl(self) -> SparseFeaturesIndices:
+    def _wait_impl(self) -> SparseFeaturesIndicesAwaitable:
         """
-        Gets lengths of AlltoAll results, instantiates `SparseFeaturesIndices` for
+        Gets lengths of AlltoAll results, instantiates `SparseFeaturesIndicesAwaitable` for
         indices AlltoAll.
 
         Returns:
-            SparseFeaturesIndices.
+            SparseFeaturesIndicesAwaitable.
         """
-        return SparseFeaturesIndices(
+        return SparseFeaturesIndicesAwaitable(
             id_list_features_awaitable=self._id_list_features_awaitable.wait()
             if self._id_list_features_awaitable is not None
             else None,
@@ -284,7 +284,7 @@ class SparseFeaturesAllToAll(nn.Module):
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeaturesIndices]:
+    ) -> Awaitable[SparseFeaturesIndicesAwaitable]:
         """
         Sends sparse features to relevant ProcessGroup ranks. Instantiates lengths
         AlltoAll.
@@ -298,7 +298,7 @@ class SparseFeaturesAllToAll(nn.Module):
             Awaitable[SparseFeatures]: awaitable of SparseFeatures.
         """
 
-        return SparseFeaturesLengths(
+        return SparseFeaturesLengthsAwaitable(
             id_list_features_awaitable=self._id_list_features_all2all.forward(
                 sparse_features.id_list_features
             )

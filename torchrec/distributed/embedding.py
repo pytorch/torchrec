@@ -29,7 +29,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesListAwaitable,
-    SparseFeaturesIndices,
+    SparseFeaturesIndicesAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     SparseFeatures,
@@ -332,7 +332,7 @@ class ShardedEmbeddingCollection(
                 tensor_awaitable = tensor_awaitable.wait()  # finish lengths all2all
                 input_splits = []
                 output_splits = []
-                if isinstance(tensor_awaitable, SparseFeaturesIndices):
+                if isinstance(tensor_awaitable, SparseFeaturesIndicesAwaitable):
                     input_splits = (
                         # pyre-fixme[16]: `Optional` has no attribute
                         #  `_in_lengths_per_worker`.
