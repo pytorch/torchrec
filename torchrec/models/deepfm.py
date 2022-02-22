@@ -16,8 +16,8 @@ from torchrec.sparse.jagged_tensor import KeyedTensor
 
 class SparseArch(nn.Module):
     """
-    Processes the Sparse Features of DeepFMNN model. Does Embedding Lookup for all
-    EmbeddingBag and Embedding features of each collection.
+    Processes the sparse features of the DeepFMNN model. Does embedding lookups for all
+    EmbeddingBag and embedding features of each collection.
 
     Args:
         embedding_bag_collection (EmbeddingBagCollection): represents a
@@ -61,7 +61,7 @@ class SparseArch(nn.Module):
             features (KeyedJaggedTensor):
 
         Returns:
-            KeyedJaggedTensor - size F * D X B
+            KeyedJaggedTensor: an output KJT of size F * D X B
         """
         return self.embedding_bag_collection(features)
 
@@ -102,28 +102,28 @@ class DenseArch(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            features (torch.Tensor): size B X num_features
+            features (torch.Tensor): size B X `num_features`
 
         Returns:
-            torch.Tensor  - size B X D
+            torch.Tensor: an output tensor of size B X D
         """
         return self.model(features)
 
 
 class FMInteractionArch(nn.Module):
     """
-    Processes the output of both SparseArch (sparse_features) and DenseArch
+    Processes the output of both `SparseArch` (sparse_features) and `DenseArch`
     (dense_features) and apply the general DeepFM interaction according to the
     extenal source of DeepFM paper: https://arxiv.org/pdf/1703.04247.pdf
 
-    The output dimension is expected to be a cat of dense_features, D.
+    The output dimension is expected to be a cat of `dense_features`, D.
 
     Args:
-        fm_in_features (int): the input dimension of dense_module in DeepFM. For example,
-            the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the fm_in_features should
-            be: 2*3+4*5.
-        sparse_feature_names (List[str]): length of F
-        deep_fm_dimension (int): output of the deep interaction (DI) in the DeepFM arch
+        fm_in_features (int): the input dimension of `dense_module` in DeepFM. For
+            example, if the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], then
+            the `fm_in_features` should be: 2 * 3 + 4 * 5.
+        sparse_feature_names (List[str]): length of F.
+        deep_fm_dimension (int): output of the deep interaction (DI) in the DeepFM arch.
 
     Example:
         >>> D = 3
@@ -165,7 +165,7 @@ class FMInteractionArch(nn.Module):
             sparse_features (KeyedJaggedTensor): size F * D X B
 
         Returns:
-            torch.Tensor - B X (D + DI + 1)
+            torch.Tensor: an output tensor of size B X (D + DI + 1)
         """
         if len(self.sparse_feature_names) == 0:
             return dense_features
@@ -187,7 +187,7 @@ class OverArch(nn.Module):
     Final Arch - simple MLP. The output is just one target.
 
     Args:
-        in_features (int): the output dimension of interaction arch
+        in_features (int): the output dimension of the interaction arch.
 
     Example:
         >>> B = 20
@@ -208,7 +208,7 @@ class OverArch(nn.Module):
             features (torch.Tensor):
 
         Returns:
-            torch.Tensor  - size B X 1
+            torch.Tensor: an output tensor of size B X 1
         """
         return self.model(features)
 
@@ -222,7 +222,7 @@ class SimpleDeepFMNN(nn.Module):
     by deep_fm proposed in this paper: https://arxiv.org/pdf/1703.04247.pdf
 
     The module assumes all sparse features have the same embedding dimension
-    (i.e, each EmbeddingBagConfig uses the same embedding_dim)
+    (i.e, each `EmbeddingBagConfig` uses the same embedding_dim)
 
     The following notation is used throughout the documentation for the models:
 
@@ -234,10 +234,10 @@ class SimpleDeepFMNN(nn.Module):
     Args:
         num_dense_features (int): the number of input dense features.
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
-            used to define SparseArch.
-        hidden_layer_size (int): the hidden layer size that's used in dense module
-        deep_fm_dimension (int): the output layer size that's used in deep_fm's deep
-            interaction module
+            used to define `SparseArch`.
+        hidden_layer_size (int): the hidden layer size used in dense module.
+        deep_fm_dimension (int): the output layer size used in `deep_fm`'s deep
+            interaction module.
 
     Example:
         >>> B = 2
@@ -332,7 +332,7 @@ class SimpleDeepFMNN(nn.Module):
             sparse_features (KeyedJaggedTensor):
 
         Returns:
-            torch.Tensor - logits with size B X 1
+            torch.Tensor: logits with size B X 1
         """
         embedded_dense = self.dense_arch(dense_features)
         embedded_sparse = self.sparse_arch(sparse_features)

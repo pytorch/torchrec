@@ -10,13 +10,13 @@
 The torchrec modules contain a collection of various modules.
 
 These modules include:
-    - extensions of nn.Embedding and nn.EmbeddingBag, called EmbeddingBagCollection
-      and EmbeddingCollection respectively.
+    - extensions of `nn.Embedding` and `nn.EmbeddingBag`, called `EmbeddingBagCollection`
+      and `EmbeddingCollection` respectively.
     - established modules such as `DeepFM <https://arxiv.org/pdf/1703.04247.pdf>`_ and
       `CrossNet <https://arxiv.org/abs/1708.05123>`_.
-    - common module patterns such as MLP and SwishLayerNorm.
-    - custom modules for torchrec such as PositionWeightedModule and
-      LazyModuleExtensionMixin.
+    - common module patterns such as `MLP` and `SwishLayerNorm`.
+    - custom modules for torchrec such as `PositionWeightedModule` and
+      `LazyModuleExtensionMixin`.
 """
 
 from . import activation  # noqa
