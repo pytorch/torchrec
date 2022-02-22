@@ -224,13 +224,6 @@ class SimpleDeepFMNN(nn.Module):
     The module assumes all sparse features have the same embedding dimension
     (i.e, each EmbeddingBagConfig uses the same embedding_dim)
 
-    The following notation is used throughout the documentation for the models:
-
-    F: number of sparse features
-    D: embedding_dimension of sparse features
-    B: batch size
-    num_features: number of dense features
-
     Args:
         num_dense_features (int): the number of input dense features.
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
