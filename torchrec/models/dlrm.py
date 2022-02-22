@@ -19,7 +19,7 @@ from torchrec.sparse.jagged_tensor import (
 
 def choose(n: int, k: int) -> int:
     """
-    Simple implementation of math.comb for python 3.7 compatibility
+    Simple implementation of math.comb for python 3.7 compatibility.
     """
     if 0 <= k <= n:
         ntok = 1
@@ -35,8 +35,8 @@ def choose(n: int, k: int) -> int:
 
 class SparseArch(nn.Module):
     """
-    Processes the Sparse Features of DLRM. Does Embedding Lookup for all
-    EmbeddingBag and Embedding features of each collection.
+    Processes the sparse features of DLRM. Does embedding lookups for all EmbeddingBag
+    and embedding features of each collection.
 
     Args:
         embedding_bag_collection (EmbeddingBagCollection): represents a
@@ -126,13 +126,13 @@ class DenseArch(nn.Module):
 
 class InteractionArch(nn.Module):
     """
-    Processes the output of both SparseArch (sparse_features) and DenseArch
+    Processes the output of both `SparseArch` (sparse_features) and `DenseArch`
     (dense_features). Returns the pairwise dot product of each sparse feature pair,
     the dot product of each sparse features with the output of the dense layer,
     and the dense layer itself (all concatenated).
 
-    NOTE: The dimensionality of the dense_features (D) is expected to match the
-    dimensionality of the sparse_features so that the dot products between them can be
+    NOTE: The dimensionality of the `dense_features` (D) is expected to match the
+    dimensionality of the `sparse_features` so that the dot products between them can be
     computed.
 
     Args:
@@ -204,7 +204,7 @@ class OverArch(nn.Module):
 
     Args:
         in_features (int): size of the input.
-        layer_sizes (List[int]): sizes of the layers of the OverArch.
+        layer_sizes (List[int]): sizes of the layers of the `OverArch`.
         device (Optional[torch.device]): default compute device.
 
     Example:
@@ -266,12 +266,12 @@ class DLRM(nn.Module):
 
     Args:
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
-            used to define SparseArch.
+            used to define `SparseArch`.
         dense_in_features (int): the dimensionality of the dense input features.
-        dense_arch_layer_sizes (List[int]): the layer sizes for the DenseArch.
-        over_arch_layer_sizes (List[int]): the layer sizes for the OverArch. NOTE: The
-            output dimension of the InteractionArch should not be manually specified
-            here.
+        dense_arch_layer_sizes (List[int]): the layer sizes for the `DenseArch`.
+        over_arch_layer_sizes (List[int]): the layer sizes for the `OverArch`.
+            NOTE: The output dimension of the `InteractionArch` should not be manually
+            specified here.
         dense_device (Optional[torch.device]): default compute device.
 
     Example:
@@ -378,7 +378,7 @@ class DLRM(nn.Module):
             sparse_features (KeyedJaggedTensor):
 
         Returns:
-            torch.Tensor
+            torch.Tensor:
         """
         embedded_dense = self.dense_arch(dense_features)
         embedded_sparse = self.sparse_arch(sparse_features)
