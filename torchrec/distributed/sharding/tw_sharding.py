@@ -10,7 +10,7 @@ from typing import Callable, List, Optional, Any, Dict, Tuple, TypeVar
 import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
-    PooledEmbeddingsAllToOne,
+    EmbeddingsAllToOne,
     PooledEmbeddingsAllToAll,
 )
 from torchrec.distributed.embedding_lookup import (
@@ -408,10 +408,7 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
         world_size: int,
     ) -> None:
         super().__init__()
-        self._dist: PooledEmbeddingsAllToOne = PooledEmbeddingsAllToOne(
-            device,
-            world_size,
-        )
+        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(device, world_size, 1)
 
     def forward(
         self,
@@ -457,7 +454,6 @@ class InferTwEmbeddingSharding(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             grouped_score_configs_per_rank=self._score_grouped_embedding_configs_per_rank,
             world_size=self._world_size,
-            fused_params=fused_params,
         )
 
     def create_output_dist(
