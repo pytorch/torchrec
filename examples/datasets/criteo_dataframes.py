@@ -103,6 +103,6 @@ def criteo_dataframes_from_tsv(
 
     datapipe = CriteoIterDataPipe(paths, row_mapper=_torcharrow_row_mapper)
     datapipe = dp.iter.Batcher(datapipe, batch_size)
-    datapipe = dp.iter.Mapper(datapipe, lambda batch: ta.DataFrame(batch, dtype=DTYPE))
+    datapipe = dp.iter.Mapper(datapipe, lambda batch: ta.dataframe(batch, dtype=DTYPE))
 
     return datapipe
