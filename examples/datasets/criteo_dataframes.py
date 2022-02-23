@@ -90,12 +90,13 @@ def criteo_dataframes_from_tsv(
         paths (str or Iterable[str]): local paths to TSV files that constitute
             the Kaggle or Criteo 1TB dataset.
 
-    Example:
-        >>> datapipe = criteo_dataframes_from_tsv(
-        >>>     ["/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv"]
-        >>> )
-        >>> for df in datapipe:
-        >>>    print(df)
+    Example::
+
+        datapipe = criteo_dataframes_from_tsv(
+            ["/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv"]
+        )
+        for df in datapipe:
+           print(df)
     """
     if isinstance(paths, str):
         paths = [paths]

@@ -44,8 +44,15 @@ class DLRMTrain(nn.Module):
     Returns:
         Tuple[loss, Tuple[loss, logits, labels]]
 
-    Example:
-        >>> TODO
+    Example::
+
+        ebc = EmbeddingBagCollection(config=ebc_config)
+        model = DLRMTrain(
+           embedding_bag_collection=ebc,
+           dense_in_features=100,
+           dense_arch_layer_sizes=[20],
+           over_arch_layer_sizes=[5, 1],
+        )
     """
 
     def __init__(

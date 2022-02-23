@@ -72,8 +72,9 @@ class PredictModule(nn.Module):
         module: the actual predict module
         device: the primary device for this module that will be used in forward calls.
 
-    Example:
-        >>> module = PredictModule(torch.device("cuda", torch.cuda.current_device()))
+    Example::
+
+        module = PredictModule(torch.device("cuda", torch.cuda.current_device()))
     """
 
     def __init__(

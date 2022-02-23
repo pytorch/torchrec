@@ -146,6 +146,12 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. See KeyedJaggedTensor for full example.
 
     Implementation is torch.jit.script-able
+
+    Args:
+        values (torch.Tensor): values tensor in dense representation
+        weights (Optional[torch.Tensor]): if values have weights. Tensor with same shape as values.
+        lengths (Optional[torch.Tensor]): jagged slices, represented as lengths.
+        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative offsets.
     """
 
     def __init__(
@@ -435,29 +441,42 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
-    For example:
-                 0       1        2  <-- dim_1
-    "Feature0"   [V0,V1] None    [V2]
-    "Feature1"   [V3]    [V4]    [V5,V6,V7]
-      ^
-     dim_0
+    For example::
 
-    dim_0: keyed dimension (ie. `Feature0`, `Feature1`)
-    dim_1: optional second dimension (ie. batch size)
-    dim_2: The jagged dimension which has slice lengths between 0-3 in the above example
+        #              0       1        2  <-- dim_1
+        # "Feature0"   [V0,V1] None    [V2]
+        # "Feature1"   [V3]    [V4]    [V5,V6,V7]
+        #   ^
+        #  dim_0
 
-    We represent this data with following inputs:
+        dim_0: keyed dimension (ie. `Feature0`, `Feature1`)
+        dim_1: optional second dimension (ie. batch size)
+        dim_2: The jagged dimension which has slice lengths between 0-3 in the above example
 
-    values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7], V == any tensor datatype
-    weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7], W == any tensor datatype
-    lengths: torch.Tensor = [2, 0, 1, 1, 1, 3], representing the jagged slice
-    offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8], offsets from 0 for each jagged slice
-    keys: List[int] = ["Feature0", "Feature1"], which corresponds to each value of dim_0
-    index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}, index for each key
-    offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset
+        We represent this data with following inputs:
+
+        values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7], V == any tensor datatype
+        weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7], W == any tensor datatype
+        lengths: torch.Tensor = [2, 0, 1, 1, 1, 3], representing the jagged slice
+        offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8], offsets from 0 for each jagged slice
+        keys: List[int] = ["Feature0", "Feature1"], which corresponds to each value of dim_0
+        index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}, index for each key
+        offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset
 
 
     Implementation is torch.jit.script-able
+
+    Args:
+        keys (List[str]): keys to the jagged Tensor.
+        values (torch.Tensor): values tensor in dense representation.
+        weights (Optional[torch.Tensor]): if values have weights. Tensor with same shape as values.
+        lengths (Optional[torch.Tensor]): jagged slices, represented as lengths.
+        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative offsets.
+        stride (Optional[int]): number of examples per batch.
+        length_per_key (Optional[List[int]]): start length for each key.
+        offset_per_key (Optional[List[int]]): start offset for each key and final offset.
+        index_per_key (Optional[Dict[str, int]]): index for each key.
+        jt_dict (Optional[Dict[str, JaggedTensor]]):
     """
 
     def __init__(
@@ -903,7 +922,7 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     Keyed dimension can be variable length (length_per_key).
     Common use cases uses include storage of pooled embeddings of different dimensions.
 
-    Constructor Args:
+    Args:
         keys (List[str]): list of keys
         length_per_key (List[int]): length of each key along key dimension
         values (torch.Tensor): dense tensor, concatenated typically along key dimension
@@ -912,25 +931,26 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     Implementation is torch.jit.script-able
 
 
-    Example:
-        kt is KeyedTensor holding
+    Example::
 
-                                0           1           2
-            "Embedding A"    [1,1]       [1,1]        [1,1]
-            "Embedding B"    [2,1,2]     [2,1,2]      [2,1,2]
-            "Embedding C"    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]
-        >>> tensor_list = [
-                torch.tensor([[1,1]] * 3),
-                torch.tensor([[2,1,2]] * 3),
-                torch.tensor([[3,1,2,3]] * 3),
-            ]
-        >>> keys = ["Embedding A", "Embedding B", "Embedding C"]
-        >>> kt = KeyedTensor.from_tensor_list(keys, tensor_list)
-        >>> kt.values()
+        # kt is KeyedTensor holding
+
+        #                         0           1           2
+        #     "Embedding A"    [1,1]       [1,1]        [1,1]
+        #     "Embedding B"    [2,1,2]     [2,1,2]      [2,1,2]
+        #     "Embedding C"    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]
+        # tensor_list = [
+        #         torch.tensor([[1,1]] * 3),
+        #         torch.tensor([[2,1,2]] * 3),
+        #         torch.tensor([[3,1,2,3]] * 3),
+        #     ]
+        keys = ["Embedding A", "Embedding B", "Embedding C"]
+        kt = KeyedTensor.from_tensor_list(keys, tensor_list)
+        kt.values()
             tensor([[1, 1, 2, 1, 2, 3, 1, 2, 3],
             [1, 1, 2, 1, 2, 3, 1, 2, 3],
             [1, 1, 2, 1, 2, 3, 1, 2, 3]])
-        >>> kt["Embedding B"]
+        kt["Embedding B"]
             tensor([[2, 1, 2],
             [2, 1, 2],
             [2, 1, 2]])

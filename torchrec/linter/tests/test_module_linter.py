@@ -149,8 +149,9 @@ class F(${parent_class_list}):
     Returns:
         None
 
-    Example:
-        >>> pass
+    Example::
+
+        pass
     \"""
     def __init__(self, x, y='a'):
         pass
@@ -189,8 +190,9 @@ class F(${parent_class_list}):
     Returns:
         None
 
-    Example:
-        >>> pass
+    Example::
+
+        pass
     \"""
     def __init__(self, a, b, c, d, e='e'):
         pass
@@ -226,8 +228,9 @@ class F(${parent_class_list}):
     Returns:
         None
 
-    Example:
-        >>> pass
+    Example::
+
+        pass
     \"""
     def __init__(self, a, b, c, d, e, f='f'):
         pass
@@ -267,8 +270,9 @@ class F:
     Returns:
         None
 
-    Example:
-        >>> pass
+    Example::
+
+        pass
     \"""
     def __init__(self, a, b, c, d, e, f='f'):
         pass

@@ -116,7 +116,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     Returns:
         KeyedTensor
 
-    Example:
+    Example::
+
         table_0 = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
