@@ -267,13 +267,14 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         has_feature_processor (bool): existence of feature processor (ie. position
             weighted features).
 
-    Example:
+    Example::
+
         3 features
         2 hosts with 2 devices each
 
-        >>> Bucketize each feature into 2 buckets
-        >>> Staggered shuffle with feature splits [2, 1]
-        >>> AlltoAll operation
+        Bucketize each feature into 2 buckets
+        Staggered shuffle with feature splits [2, 1]
+        AlltoAll operation
 
         NOTE: result of staggered shuffle and AlltoAll operation look the same after
         reordering in AlltoAll

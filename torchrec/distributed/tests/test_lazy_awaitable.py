@@ -58,8 +58,9 @@ class AsyncModule(torch.nn.Module):
     Returns:
         LazyAwaitable[torch.Tensor]
 
-    Example:
-        >>> AsyncModule()
+    Example::
+
+        AsyncModule()
     """
 
     def forward(self, x: torch.Tensor) -> LazyAwaitable[torch.Tensor]:

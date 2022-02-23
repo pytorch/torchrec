@@ -205,8 +205,9 @@ class TestDenseArch(nn.Module):
     Returns:
         KeyedTensor
 
-    Example:
-        >>> TestDenseArch()
+    Example::
+
+        TestDenseArch()
     """
 
     def __init__(
@@ -239,8 +240,9 @@ class TestOverArch(nn.Module):
     Returns:
         torch.Tensor
 
-    Example:
-        >>> TestOverArch()
+    Example::
+
+        TestOverArch()
     """
 
     def __init__(
@@ -376,8 +378,9 @@ class TestSparseNN(TestSparseNNBase):
     Returns:
         torch.Tensor
 
-    Example:
-        >>> TestSparseNN()
+    Example::
+
+        TestSparseNN()
     """
 
     def __init__(

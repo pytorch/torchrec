@@ -130,18 +130,19 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
 
-    Example:
-        >>> @torch.no_grad()
-        >>> def init_weights(m):
-        >>>     if isinstance(m, nn.Linear):
-        >>>         m.weight.fill_(1.0)
-        >>>     elif isinstance(m, EmbeddingBagCollection):
-        >>>         for param in m.parameters():
-        >>>             init.kaiming_normal_(param)
+    Example::
 
-        >>> m = MyModel(device='meta')
-        >>> m = DistributedModelParallel(m)
-        >>> m.apply(init_weights)
+        @torch.no_grad()
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                m.weight.fill_(1.0)
+            elif isinstance(m, EmbeddingBagCollection):
+                for param in m.parameters():
+                    init.kaiming_normal_(param)
+
+        m = MyModel(device='meta')
+        m = DistributedModelParallel(m)
+        m.apply(init_weights)
     """
 
     def __init__(

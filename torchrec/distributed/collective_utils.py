@@ -46,8 +46,9 @@ def invoke_on_rank_and_broadcast_result(
     Invokes a function on the designated rank and broadcasts the result to all
     members within the group.
 
-    Example:
-        >>> id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
+    Example::
+
+        id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
     """
     if pg.rank() == rank:
         res = func(*args, **kwargs)

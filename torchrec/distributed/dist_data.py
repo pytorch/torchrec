@@ -50,11 +50,12 @@ def _recat(local_split: int, num_splits: int, stagger: int = 1) -> List[int]:
     Returns:
         List[int]
 
-    Example:
-        >>> _recat(2, 4, 1)
-            [0, 2, 4, 6, 1, 3, 5, 7]
-        >>> _recat(2, 4, 2)
-            [0, 4, 2, 6, 1, 5, 3, 7]
+    Example::
+
+        _recat(2, 4, 1)
+            # [0, 2, 4, 6, 1, 3, 5, 7]
+        _recat(2, 4, 2)
+            # [0, 4, 2, 6, 1, 5, 3, 7]
     """
 
     recat: List[int] = []
@@ -332,39 +333,40 @@ class KJTAllToAll(nn.Module):
         stagger (int): stagger value to apply to recat tensor, see _recat function for
             more detail.
 
-    Example:
-        >>> keys=['A','B','C']
-        >>> splits=[2,1]
-        >>> kjtA2A = KJTAllToAll(pg, splits, device)
-        >>> awaitable = kjtA2A(rank0_input)
+    Example::
 
-        where:
-            rank0_input is KeyedJaggedTensor holding
+        keys=['A','B','C']
+        splits=[2,1]
+        kjtA2A = KJTAllToAll(pg, splits, device)
+        awaitable = kjtA2A(rank0_input)
 
-                    0           1           2
-            'A'    [A.V0]       None        [A.V1, A.V2]
-            'B'    None         [B.V0]      [B.V1]
-            'C'    [C.V0]       [C.V1]      None
+        # where:
+        # rank0_input is KeyedJaggedTensor holding
 
-            rank1_input is KeyedJaggedTensor holding
+        #         0           1           2
+        # 'A'    [A.V0]       None        [A.V1, A.V2]
+        # 'B'    None         [B.V0]      [B.V1]
+        # 'C'    [C.V0]       [C.V1]      None
 
-                    0           1           2
-            'A'     [A.V3]      [A.V4]      None
-            'B'     None        [B.V2]      [B.V3, B.V4]
-            'C'     [C.V2]      [C.V3]      None
+        # rank1_input is KeyedJaggedTensor holding
 
-        >>> rank0_output = awaitable.wait()
+        #         0           1           2
+        # 'A'     [A.V3]      [A.V4]      None
+        # 'B'     None        [B.V2]      [B.V3, B.V4]
+        # 'C'     [C.V2]      [C.V3]      None
 
-        where:
-            rank0_output is KeyedJaggedTensor holding
+        rank0_output = awaitable.wait()
 
-                    0           1           2           3           4           5
-            'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
-            'B'     None        [B.V0]    [B.V1]        None        [B.V2]      [B.V3, B.V4]
+        # where:
+        # rank0_output is KeyedJaggedTensor holding
 
-            rank1_output is KeyedJaggedTensor holding
-                    0           1           2           3           4           5
-            'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
+        #         0           1           2           3           4           5
+        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+        # 'B'     None        [B.V0]    [B.V1]        None        [B.V2]      [B.V3, B.V4]
+
+        # rank1_output is KeyedJaggedTensor holding
+        #         0           1           2           3           4           5
+        # 'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
     """
 
     def __init__(
@@ -514,18 +516,19 @@ class PooledEmbeddingsAllToAll(nn.Module):
         device (Optional[torch.device]): device on which buffers will be allocated.
         callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]])
 
-    Example:
-        >>> dim_sum_per_rank = [2, 1]
-        >>> a2a = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device)
+    Example::
 
-        >>> t0 = torch.rand((6, 2))
-        >>> t1 = torch.rand((6, 1))
-        >>> rank0_output = a2a(t0).wait()
-        >>> rank1_output = a2a(t1).wait()
-        >>> print(rank0_output.size())
-            torch.Size([3, 3])
-        >>> print(rank1_output.size())
-            torch.Size([3, 3])
+        dim_sum_per_rank = [2, 1]
+        a2a = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device)
+
+        t0 = torch.rand((6, 2))
+        t1 = torch.rand((6, 1))
+        rank0_output = a2a(t0).wait()
+        rank1_output = a2a(t1).wait()
+        print(rank0_output.size())
+            # torch.Size([3, 3])
+        print(rank1_output.size())
+            # torch.Size([3, 3])
     """
 
     def __init__(
@@ -653,13 +656,14 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         pg (dist.ProcessGroup): The process group that the reduce-scatter communication
             happens within.
 
-    Example:
-        >>> init_distributed(rank=rank, size=2, backend="nccl")
-        >>> pg = dist.new_group(backend="nccl")
-        >>> input = torch.randn(2 * 2, 2)
-        >>> m = PooledEmbeddingsReduceScatter(pg)
-        >>> output = m(input)
-        >>> tensor = output.wait()
+    Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        input = torch.randn(2 * 2, 2)
+        m = PooledEmbeddingsReduceScatter(pg)
+        output = m(input)
+        tensor = output.wait()
     """
 
     def __init__(
@@ -740,21 +744,22 @@ class SequenceEmbeddingAllToAll(nn.Module):
         features_per_rank (List[int]): List of number of features per rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
 
-    Example:
-        >>> init_distributed(rank=rank, size=2, backend="nccl")
-        >>> pg = dist.new_group(backend="nccl")
-        >>> features_per_rank = [4, 4]
-        >>> m = SequenceEmbeddingAllToAll(pg, features_per_rank)
-        >>> local_embs = torch.rand((6, 2))
-        >>> sharding_ctx: SequenceShardingContext
-        >>> output = m(
+    Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        features_per_rank = [4, 4]
+        m = SequenceEmbeddingAllToAll(pg, features_per_rank)
+        local_embs = torch.rand((6, 2))
+        sharding_ctx: SequenceShardingContext
+        output = m(
             local_embs=local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,
             input_splits=sharding_ctx.input_splits,
             output_splits=sharding_ctx.output_splits,
             unbucketize_permute_tensor=None,
         )
-        >>> tensor = output.wait()
+        tensor = output.wait()
     """
 
     def __init__(

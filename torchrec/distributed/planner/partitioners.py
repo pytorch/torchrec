@@ -36,14 +36,15 @@ def greedy_partition(
         List[List[Tuple[int, int]]]: list of indices of (option_idx, shard_idx) that
             should be allocated to each partition.
 
-    Example:
-        >>> sharding_options = [
+    Example::
+
+        sharding_options = [
             [0,1,2,3] with perfs [10,20,30,40]
             [0,1] with perfs [200,300]
         ] with num_partitions=3
 
         The final output would be
-        >>> [
+        [
             partition_0 = [(1,1)], with a perf of 300
             partition_1 = [(1,0)], with a perf of 200
             partition_2 = [(0,0),(0,1),(0,2),(0,3)], with a perf of 100 (10+20+30+40)
@@ -123,14 +124,15 @@ def uniform_partition(
 ) -> List[List[Tuple[int, int]]]:
     """
     We assign one shard to each rank.
-    Example:
-        >>> sharding_options = [
+    Example::
+
+        sharding_options = [
             [0,1,2,3],
             [0,1,2,3],
         ] with num_partitions=4
 
         The final output would be
-        >>> [
+        [
             partition_0 = [(0,0),(1,0)]
             partition_1 = [(0,1),(1,1)]
             partition_2 = [(0,2),(1,2)]
@@ -194,9 +196,10 @@ class GreedyPerfPartitioner(Partitioner):
         Returns:
             List[ShardingOption]: list of sharding options for selected plan.
 
-        Example:
+        Example::
 
-            >>> sharding_options = [
+
+            sharding_options = [
                     ShardingOption(partition_by="uniform",
                             shards=[
                                 Shards(storage=1, perf=1),
@@ -218,20 +221,20 @@ class GreedyPerfPartitioner(Partitioner):
                                 Shards(storage=4, perf=4),
                             ]),
                 ]
-            >>> topology = Topology(world_size=2)
+            topology = Topology(world_size=2)
 
             First [sharding_options[0] and sharding_options[1]] will be placed on the
             topology with the uniform strategy, resulting in
 
-            >>> topology.devices[0].perf = (1,2)
-            >>> topology.devices[1].perf = (1,2)
+            topology.devices[0].perf = (1,2)
+            topology.devices[1].perf = (1,2)
 
             Finally sharding_options[2] and sharding_options[3]] will be placed on the
             topology with the device strategy (see docstring of partition_by_device for
             more details).
 
-            >>> topology.devices[0].perf = (1,2) + (3,4)
-            >>> topology.devices[1].perf = (1,2) + (3,4)
+            topology.devices[0].perf = (1,2) + (3,4)
+            topology.devices[1].perf = (1,2) + (3,4)
 
             The topology updates are done after the end of all the placements (the other
             in the example is just for clarity).

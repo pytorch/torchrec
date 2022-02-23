@@ -97,11 +97,12 @@ class sharded_model_copy:
     """
     Allows copying of DistributedModelParallel module to a target device.
 
-    Example:
-        >>> # Copying model to CPU.
+    Example::
 
-        >>> m = DistributedModelParallel(m)
-        >>> with sharded_model_copy("cpu"):
+        # Copying model to CPU.
+
+        m = DistributedModelParallel(m)
+        with sharded_model_copy("cpu"):
                 m_cpu = copy.deepcopy(m)
     """
 

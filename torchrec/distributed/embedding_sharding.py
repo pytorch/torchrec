@@ -198,70 +198,71 @@ class SparseFeaturesAllToAll(nn.Module):
         stagger (int): stagger value to apply to recat tensor, see `_recat` function for
             more detail.
 
-    Example:
-        >>> id_list_features_per_rank = [2, 1]
-        >>> id_score_list_features_per_rank = [1, 3]
-        >>> sfa2a = SparseFeaturesAllToAll(
+    Example::
+
+        id_list_features_per_rank = [2, 1]
+        id_score_list_features_per_rank = [1, 3]
+        sfa2a = SparseFeaturesAllToAll(
                 pg,
                 id_list_features_per_rank,
                 id_score_list_features_per_rank
             )
-        >>> awaitable = sfa2a(rank0_input: SparseFeatures)
+        awaitable = sfa2a(rank0_input: SparseFeatures)
 
-        >>> # where:
-        >>> #     rank0_input.id_list_features is KeyedJaggedTensor holding
+        # where:
+        #     rank0_input.id_list_features is KeyedJaggedTensor holding
 
-        >>> #             0           1           2
-        >>> #     'A'    [A.V0]       None        [A.V1, A.V2]
-        >>> #     'B'    None         [B.V0]      [B.V1]
-        >>> #     'C'    [C.V0]       [C.V1]      None
+        #             0           1           2
+        #     'A'    [A.V0]       None        [A.V1, A.V2]
+        #     'B'    None         [B.V0]      [B.V1]
+        #     'C'    [C.V0]       [C.V1]      None
 
-        >>> #     rank1_input.id_list_features is KeyedJaggedTensor holding
+        #     rank1_input.id_list_features is KeyedJaggedTensor holding
 
-        >>> #             0           1           2
-        >>> #     'A'     [A.V3]      [A.V4]      None
-        >>> #     'B'     None        [B.V2]      [B.V3, B.V4]
-        >>> #     'C'     [C.V2]      [C.V3]      None
+        #             0           1           2
+        #     'A'     [A.V3]      [A.V4]      None
+        #     'B'     None        [B.V2]      [B.V3, B.V4]
+        #     'C'     [C.V2]      [C.V3]      None
 
-        >>> #     rank0_input.id_score_list_features is KeyedJaggedTensor holding
+        #     rank0_input.id_score_list_features is KeyedJaggedTensor holding
 
-        >>> #             0           1           2
-        >>> #     'A'    [A.V0]       None        [A.V1, A.V2]
-        >>> #     'B'    None         [B.V0]      [B.V1]
-        >>> #     'C'    [C.V0]       [C.V1]      None
-        >>> #     'D'    None         [D.V0]      None
+        #             0           1           2
+        #     'A'    [A.V0]       None        [A.V1, A.V2]
+        #     'B'    None         [B.V0]      [B.V1]
+        #     'C'    [C.V0]       [C.V1]      None
+        #     'D'    None         [D.V0]      None
 
-        >>> #     rank1_input.id_score_list_features is KeyedJaggedTensor holding
+        #     rank1_input.id_score_list_features is KeyedJaggedTensor holding
 
-        >>> #             0           1           2
-        >>> #     'A'     [A.V3]      [A.V4]      None
-        >>> #     'B'     None        [B.V2]      [B.V3, B.V4]
-        >>> #     'C'     [C.V2]      [C.V3]      None
-        >>> #     'D'     [D.V1]      [D.V2]      [D.V3, D.V4]
+        #             0           1           2
+        #     'A'     [A.V3]      [A.V4]      None
+        #     'B'     None        [B.V2]      [B.V3, B.V4]
+        #     'C'     [C.V2]      [C.V3]      None
+        #     'D'     [D.V1]      [D.V2]      [D.V3, D.V4]
 
-        >>> rank0_output: SparseFeatures = awaitable.wait()
+        rank0_output: SparseFeatures = awaitable.wait()
 
-        >>> # rank0_output.id_list_features is KeyedJaggedTensor holding
+        # rank0_output.id_list_features is KeyedJaggedTensor holding
 
-        >>> #         0           1           2           3           4           5
-        >>> # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
-        >>> # 'B'     None        [B.V0]    [B.V1]        None        [B.V2]     [B.V3, B.V4]
+        #         0           1           2           3           4           5
+        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+        # 'B'     None        [B.V0]    [B.V1]        None        [B.V2]     [B.V3, B.V4]
 
-        >>> # rank1_output.id_list_features is KeyedJaggedTensor holding
-        >>> #         0           1           2           3           4           5
-        >>> # 'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
+        # rank1_output.id_list_features is KeyedJaggedTensor holding
+        #         0           1           2           3           4           5
+        # 'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
 
-        >>> # rank0_output.id_score_list_features is KeyedJaggedTensor holding
+        # rank0_output.id_score_list_features is KeyedJaggedTensor holding
 
-        >>> #         0           1           2           3           4           5
-        >>> # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+        #         0           1           2           3           4           5
+        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
 
-        >>> # rank1_output.id_score_list_features is KeyedJaggedTensor holding
+        # rank1_output.id_score_list_features is KeyedJaggedTensor holding
 
-        >>> #         0           1           2           3           4           5
-        >>> # 'B'     None        [B.V0]      [B.V1]      None        [B.V2]      [B.V3, B.V4]
-        >>> # 'C'     [C.V0]       [C.V1]      None       [C.V2]      [C.V3]      None
-        >>> # 'D      None         [D.V0]      None       [D.V1]      [D.V2]      [D.V3, D.V4]
+        #         0           1           2           3           4           5
+        # 'B'     None        [B.V0]      [B.V1]      None        [B.V2]      [B.V3, B.V4]
+        # 'C'     [C.V0]       [C.V1]      None       [C.V2]      [C.V3]      None
+        # 'D      None         [D.V0]      None       [D.V1]      [D.V2]      [D.V3, D.V4]
     """
 
     def __init__(
