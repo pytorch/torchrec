@@ -303,14 +303,14 @@
 and the <a class="reference external" href="https://grouplens.org/datasets/movielens/20m/">MovieLens 20M</a> Dataset.</p>
 <p>Additionally, it contains a RandomDataset, which is useful to generate random data in the same format as the above.</p>
 <p>Lastly, it contains scripts and utilities for pr-eprocessing, loading, etc.</p>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrec.datasets.criteo</span> <span class="kn">import</span> <span class="n">criteo_kaggle</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrec.datasets.criteo</span> <span class="kn">import</span> <span class="n">criteo_kaggle</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 <section id="module-torchrec.datasets.criteo">
@@ -520,13 +520,13 @@ iopath.common.file_io.PathManager.open.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">CriteoIterDataPipe</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">CriteoIterDataPipe</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -557,37 +557,43 @@ filesystems.</p></li>
 </ul>
 </dd>
 </dl>
-<p>Example:
-&gt;&gt;&gt; template = “/home/datasets/criteo/1tb_binary/day_{}_{}.npy”
-&gt;&gt;&gt; datapipe = InMemoryBinaryCriteoIterDataPipe(
-&gt;&gt;&gt;     dense_paths=[template.format(0, “dense”), template.format(1, “dense”)],
-&gt;&gt;&gt;     sparse_paths=[template.format(0, “sparse”), template.format(1, “sparse”)],
-&gt;&gt;&gt;     labels_paths=[template.format(0, “labels”), template.format(1, “labels”)],
-&gt;&gt;&gt;     batch_size=1024,
-&gt;&gt;&gt;     rank=torch.distributed.get_rank(),
-&gt;&gt;&gt;     world_size=torch.distributed.get_world_size(),
-&gt;&gt;&gt; )
-&gt;&gt;&gt; batch = next(iter(datapipe))</p>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span> <span class="o">=</span> <span class="s2">&quot;/home/datasets/criteo/1tb_binary/day_</span><span class="si">{}</span><span class="s2">_</span><span class="si">{}</span><span class="s2">.npy&quot;</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">InMemoryBinaryCriteoIterDataPipe</span><span class="p">(</span>
+    <span class="n">dense_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">)],</span>
+    <span class="n">sparse_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;sparse&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;sparse&quot;</span><span class="p">)],</span>
+    <span class="n">labels_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)],</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
+    <span class="n">rank</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(),</span>
+    <span class="n">world_size</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.datasets.criteo.criteo_kaggle">
 <span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">criteo_kaggle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">path:</span> <span class="pre">str,</span> <span class="pre">*,</span> <span class="pre">row_mapper:</span> <span class="pre">typing.Optional[typing.Callable[[typing.List[str]],</span> <span class="pre">typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.utils.data.dataset.IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.criteo_kaggle" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">Kaggle/Criteo Display Advertising</a> Dataset
-:param root: local path to train or test dataset file.
-:type root: str
-:param row_mapper: function to apply to each split TSV line.
-:type row_mapper: Optional[Callable[[List[str]], Any]]
-:param open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">train_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="s2">&quot;/home/datasets/criteo_kaggle/train.txt&quot;</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">test_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="s2">&quot;/home/datasets/criteo_kaggle/test.txt&quot;</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">test_datapipe</span><span class="p">))</span>
+<dd><p><a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">Kaggle/Criteo Display Advertising</a> Dataset</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>root</strong> (<em>str</em>) – local path to train or test dataset file.</p></li>
+<li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each split TSV line.</p></li>
+<li><p><strong>open_kw</strong> – options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">train_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
+    <span class="s2">&quot;/home/datasets/criteo_kaggle/train.txt&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
+<span class="n">test_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
+    <span class="s2">&quot;/home/datasets/criteo_kaggle/test.txt&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">test_datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -595,14 +601,12 @@ filesystems.</p></li>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.datasets.criteo.criteo_terabyte">
 <span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">criteo_terabyte</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">paths:</span> <span class="pre">typing.Iterable[str],</span> <span class="pre">*,</span> <span class="pre">row_mapper:</span> <span class="pre">typing.Optional[typing.Callable[[typing.List[str]],</span> <span class="pre">typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.utils.data.dataset.IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.criteo_terabyte" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/">Criteo 1TB Click Logs</a> Dataset
-:param paths: local paths to TSV files that constitute the Criteo 1TB</p>
-<blockquote>
-<div><p>dataset.</p>
-</div></blockquote>
+<dd><p><a class="reference external" href="https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/">Criteo 1TB Click Logs</a> Dataset</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>paths</strong> (<em>Iterable</em><em>[</em><em>str</em><em>]</em>) – local paths to TSV files that constitute the Criteo 1TB
+dataset.</p></li>
 <li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each
 split TSV line.</p></li>
 <li><p><strong>open_kw</strong> – options to pass to underlying invocation of
@@ -610,13 +614,13 @@ iopath.common.file_io.PathManager.open.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -635,11 +639,11 @@ iopath.common.file_io.PathManager.open.</p></li>
 :param row_mapper: function to apply to each split line.
 :type row_mapper: Optional[Callable[[List[str]], Any]]
 :param open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_20m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-20&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_20m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-20&quot;</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -655,11 +659,11 @@ iopath.common.file_io.PathManager.open.</p></li>
 :param row_mapper: function to apply to each split line.
 :type row_mapper: Optional[Callable[[List[str]], Any]]
 :param open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_25m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-25&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_25m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-25&quot;</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -689,15 +693,15 @@ sparse ID will be taken modulo the corresponding value from this argument.</p></
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dataset</span> <span class="o">=</span> <span class="n">RandomRecDataset</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;feat1&quot;</span><span class="p">,</span> <span class="s2">&quot;feat2&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">hash_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ids_per_feature</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">num_dense</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">RandomRecDataset</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;feat1&quot;</span><span class="p">,</span> <span class="s2">&quot;feat2&quot;</span><span class="p">],</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">hash_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>
+    <span class="n">ids_per_feature</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">num_dense</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span>
+<span class="p">),</span>
+<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -771,18 +775,18 @@ to allow for parallel reading.
 :param datapipes: IterDataPipe instances to read from.
 :param dp_selector: function that each DataLoader worker would use to determine the subset of datapipes
 :param to read from.:</p>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipes</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">criteo_terabyte</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>        <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/home/local/datasets/criteo/shard_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">.tsv&quot;</span><span class="p">,),</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="o">.</span><span class="n">collate</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">ParallelReadConcat</span><span class="p">(</span><span class="o">*</span><span class="n">datapipes</span><span class="p">),</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipes</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">criteo_terabyte</span><span class="p">(</span>
+        <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/home/local/datasets/criteo/shard_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">.tsv&quot;</span><span class="p">,),</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">collate</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">dataloader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
+    <span class="n">ParallelReadConcat</span><span class="p">(</span><span class="o">*</span><span class="n">datapipes</span><span class="p">),</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -802,27 +806,26 @@ to allow for parallel reading.
 <dt class="sig sig-object py" id="torchrec.datasets.utils.rand_split_train_val">
 <span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">rand_split_train_val</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datapipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.utils.data.dataset.IterDataPipe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_perc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.utils.data.dataset.IterDataPipe</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.utils.data.dataset.IterDataPipe</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.datasets.utils.rand_split_train_val" title="Permalink to this definition">¶</a></dt>
 <dd><p>Via uniform random sampling, generates two IterDataPipe instances representing
-disjoint train and val splits of the given IterDataPipe.
-:param datapipe: datapipe to split.
-:type datapipe: IterDataPipe
-:param train_perc: value in range (0.0, 1.0) specifying target proportion of</p>
-<blockquote>
-<div><p>datapipe samples to include in train split. Note that the actual proportion
-is not guaranteed to match train_perc exactly.</p>
-</div></blockquote>
+disjoint train and val splits of the given IterDataPipe.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>random_seed</strong> (<em>int</em>) – determines split membership for a given sample
-and train_perc. Use the same value across calls to generate consistent splits.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>datapipe</strong> (<em>IterDataPipe</em>) – datapipe to split.</p></li>
+<li><p><strong>train_perc</strong> (<em>float</em>) – value in range (0.0, 1.0) specifying target proportion of
+datapipe samples to include in train split. Note that the actual proportion
+is not guaranteed to match train_perc exactly.</p></li>
+<li><p><strong>random_seed</strong> (<em>int</em>) – determines split membership for a given sample
+and train_perc. Use the same value across calls to generate consistent splits.</p></li>
+</ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">train_datapipe</span><span class="p">,</span> <span class="n">val_datapipe</span> <span class="o">=</span> <span class="n">rand_split_train_val</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">train_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">val_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">val_datapipe</span><span class="p">))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">train_datapipe</span><span class="p">,</span> <span class="n">val_datapipe</span> <span class="o">=</span> <span class="n">rand_split_train_val</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">)</span>
+<span class="n">train_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
+<span class="n">val_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">val_datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -843,8 +846,51 @@ and train_perc. Use the same value across calls to generate consistent splits.</
 <dd></dd></dl>
 
 </section>
-<section id="torchrec-datasets-scripts-preprocess-criteo">
-<h2>torchrec.datasets.scripts.preprocess_criteo<a class="headerlink" href="#torchrec-datasets-scripts-preprocess-criteo" title="Permalink to this headline">¶</a></h2>
+<section id="torchrec-datasets-scripts-contiguous-preproc-criteo">
+<h2>torchrec.datasets.scripts.contiguous_preproc_criteo<a class="headerlink" href="#torchrec-datasets-scripts-contiguous-preproc-criteo" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="module-torchrec.datasets.scripts.contiguous_preproc_criteo"></span><dl class="py function">
+<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.main">
+<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function processes the sparse features (.npy) to be contiguous
+and saves the result in a separate (.npy) file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args">
+<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">argparse.Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="torchrec-datasets-scripts-npy-preproc-criteo">
+<h2>torchrec.datasets.scripts.npy_preproc_criteo<a class="headerlink" href="#torchrec-datasets-scripts-npy-preproc-criteo" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="module-torchrec.datasets.scripts.npy_preproc_criteo"></span><dl class="py function">
+<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.main">
+<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function preprocesses the raw Criteo tsvs into the format (npy binary)
+expected by InMemoryBinaryCriteoIterDataPipe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.parse_args">
+<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">argparse.Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </section>
 </section>
 
@@ -896,7 +942,8 @@ and train_perc. Use the same value across calls to generate consistent splits.</
 <li><a class="reference internal" href="#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a></li>
 <li><a class="reference internal" href="#module-torchrec.datasets.random">torchrec.datasets.random</a></li>
 <li><a class="reference internal" href="#module-torchrec.datasets.utils">torchrec.datasets.utils</a></li>
-<li><a class="reference internal" href="#torchrec-datasets-scripts-preprocess-criteo">torchrec.datasets.scripts.preprocess_criteo</a></li>
+<li><a class="reference internal" href="#torchrec-datasets-scripts-contiguous-preproc-criteo">torchrec.datasets.scripts.contiguous_preproc_criteo</a></li>
+<li><a class="reference internal" href="#torchrec-datasets-scripts-npy-preproc-criteo">torchrec.datasets.scripts.npy_preproc_criteo</a></li>
 </ul>
 </li>
 </ul>

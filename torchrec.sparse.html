@@ -323,6 +323,16 @@ example and further information.</p>
 <p>A <cite>JaggedTensor</cite> is a tensor with a <em>jagged dimension</em> which is dimension whose
 slices may be of different lengths. See KeyedJaggedTensor for full example.</p>
 <p>Implementation is torch.jit.script-able</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – values tensor in dense representation</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – if values have weights. Tensor with same shape as values.</p></li>
+<li><p><strong>lengths</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – jagged slices, represented as lengths.</p></li>
+<li><p><strong>offsets</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – jagged slices, represented as cumulative offsets.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.empty">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.empty" title="Permalink to this definition">¶</a></dt>
@@ -390,30 +400,45 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 <p>A <cite>JaggedTensor</cite> is a tensor with a <em>jagged dimension</em> which is dimension whose
 slices may be of different lengths. Keyed on first dimension and jagged on the last
 dimension.</p>
-<dl class="simple">
-<dt>For example:</dt><dd><p>0       1        2  &lt;– dim_1</p>
-</dd>
-</dl>
-<p>“Feature0”   [V0,V1] None    [V2]
-“Feature1”   [V3]    [V4]    [V5,V6,V7]</p>
-<blockquote>
-<div><blockquote>
-<div><p>^</p>
-</div></blockquote>
-<p>dim_0</p>
-</div></blockquote>
-<p>dim_0: keyed dimension (ie. <cite>Feature0</cite>, <cite>Feature1</cite>)
+<p>For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>#              0       1        2  &lt;-- dim_1
+# &quot;Feature0&quot;   [V0,V1] None    [V2]
+# &quot;Feature1&quot;   [V3]    [V4]    [V5,V6,V7]
+#   ^
+#  dim_0
+
+dim_0: keyed dimension (ie. `Feature0`, `Feature1`)
 dim_1: optional second dimension (ie. batch size)
-dim_2: The jagged dimension which has slice lengths between 0-3 in the above example</p>
-<p>We represent this data with following inputs:</p>
-<p>values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7], V == any tensor datatype
+dim_2: The jagged dimension which has slice lengths between 0-3 in the above example
+
+We represent this data with following inputs:
+
+values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7], V == any tensor datatype
 weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7], W == any tensor datatype
 lengths: torch.Tensor = [2, 0, 1, 1, 1, 3], representing the jagged slice
 offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8], offsets from 0 for each jagged slice
-keys: List[int] = [“Feature0”, “Feature1”], which corresponds to each value of dim_0
-index_per_key: Dict[str, int] = {“Feature0”: 0, “Feature1”: 1}, index for each key
-offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset</p>
+keys: List[int] = [&quot;Feature0&quot;, &quot;Feature1&quot;], which corresponds to each value of dim_0
+index_per_key: Dict[str, int] = {&quot;Feature0&quot;: 0, &quot;Feature1&quot;: 1}, index for each key
+offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset
+</pre></div>
+</div>
 <p>Implementation is torch.jit.script-able</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – keys to the jagged Tensor.</p></li>
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – values tensor in dense representation.</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – if values have weights. Tensor with same shape as values.</p></li>
+<li><p><strong>lengths</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – jagged slices, represented as lengths.</p></li>
+<li><p><strong>offsets</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – jagged slices, represented as cumulative offsets.</p></li>
+<li><p><strong>stride</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – number of examples per batch.</p></li>
+<li><p><strong>length_per_key</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – start length for each key.</p></li>
+<li><p><strong>offset_per_key</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – start offset for each key and final offset.</p></li>
+<li><p><strong>index_per_key</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>int</em><em>]</em><em>]</em>) – index for each key.</p></li>
+<li><p><strong>jt_dict</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a><em>]</em><em>]</em>) – </p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">concat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat" title="Permalink to this definition">¶</a></dt>
@@ -538,39 +563,39 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 each of which can be accessed by a key.
 Keyed dimension can be variable length (length_per_key).
 Common use cases uses include storage of pooled embeddings of different dimensions.</p>
-<dl class="simple">
-<dt>Constructor Args:</dt><dd><p>keys (List[str]): list of keys
-length_per_key (List[int]): length of each key along key dimension
-values (torch.Tensor): dense tensor, concatenated typically along key dimension
-key_dim (int): key dimension, zero indexed - defaults to 1 (typically B is 0-dimension)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of keys</p></li>
+<li><p><strong>length_per_key</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – length of each key along key dimension</p></li>
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – dense tensor, concatenated typically along key dimension</p></li>
+<li><p><strong>key_dim</strong> (<em>int</em>) – key dimension, zero indexed - defaults to 1 (typically B is 0-dimension)</p></li>
+</ul>
 </dd>
 </dl>
 <p>Implementation is torch.jit.script-able</p>
-<p class="rubric">Example</p>
-<p>kt is KeyedTensor holding</p>
-<blockquote>
-<div><blockquote>
-<div><p>0           1           2</p>
-</div></blockquote>
-<p>“Embedding A”    [1,1]       [1,1]        [1,1]
-“Embedding B”    [2,1,2]     [2,1,2]      [2,1,2]
-“Embedding C”    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]</p>
-</div></blockquote>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tensor_list</span> <span class="o">=</span> <span class="p">[</span>
-<span class="go">        torch.tensor([[1,1]] * 3),</span>
-<span class="go">        torch.tensor([[2,1,2]] * 3),</span>
-<span class="go">        torch.tensor([[3,1,2,3]] * 3),</span>
-<span class="go">    ]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Embedding A&quot;</span><span class="p">,</span> <span class="s2">&quot;Embedding B&quot;</span><span class="p">,</span> <span class="s2">&quot;Embedding C&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">kt</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="o">.</span><span class="n">from_tensor_list</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">tensor_list</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">kt</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-<span class="go">    tensor([[1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
-<span class="go">    [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
-<span class="go">    [1, 1, 2, 1, 2, 3, 1, 2, 3]])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">kt</span><span class="p">[</span><span class="s2">&quot;Embedding B&quot;</span><span class="p">]</span>
-<span class="go">    tensor([[2, 1, 2],</span>
-<span class="go">    [2, 1, 2],</span>
-<span class="go">    [2, 1, 2]])</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># kt is KeyedTensor holding</span>
+
+<span class="c1">#                         0           1           2</span>
+<span class="c1">#     &quot;Embedding A&quot;    [1,1]       [1,1]        [1,1]</span>
+<span class="c1">#     &quot;Embedding B&quot;    [2,1,2]     [2,1,2]      [2,1,2]</span>
+<span class="c1">#     &quot;Embedding C&quot;    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]</span>
+<span class="c1"># tensor_list = [</span>
+<span class="c1">#         torch.tensor([[1,1]] * 3),</span>
+<span class="c1">#         torch.tensor([[2,1,2]] * 3),</span>
+<span class="c1">#         torch.tensor([[3,1,2,3]] * 3),</span>
+<span class="c1">#     ]</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Embedding A&quot;</span><span class="p">,</span> <span class="s2">&quot;Embedding B&quot;</span><span class="p">,</span> <span class="s2">&quot;Embedding C&quot;</span><span class="p">]</span>
+<span class="n">kt</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="o">.</span><span class="n">from_tensor_list</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">tensor_list</span><span class="p">)</span>
+<span class="n">kt</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+    <span class="n">tensor</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]])</span>
+<span class="n">kt</span><span class="p">[</span><span class="s2">&quot;Embedding B&quot;</span><span class="p">]</span>
+    <span class="n">tensor</span><span class="p">([[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]])</span>
 </pre></div>
 </div>
 <dl class="py method">

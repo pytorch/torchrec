@@ -330,8 +330,8 @@ input_dim=[d2, d3] will do the layer normalization on last two dimensions.</p></
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sln</span> <span class="o">=</span> <span class="n">SwishLayerNorm</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sln</span> <span class="o">=</span> <span class="n">SwishLayerNorm</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -384,13 +384,13 @@ multiplication, <span class="math notranslate nohighlight">\(\dot\)</span> means
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">CrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="n">dcn</span> <span class="o">=</span> <span class="n">CrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -444,13 +444,13 @@ Value must be always &gt;= 0.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -510,13 +510,13 @@ Default is relu.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">num_experts</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="n">dcn</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">,</span> <span class="n">num_experts</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">low_rank</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -566,13 +566,13 @@ the number of learnable parameters.</p>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dcn</span> <span class="o">=</span> <span class="n">VectorCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">num_layers</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_features</span><span class="p">)</span>
+<span class="n">dcn</span> <span class="o">=</span> <span class="n">VectorCrossNet</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="n">num_layers</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">dcn</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -603,12 +603,10 @@ the number of learnable parameters.</p>
 <span id="torchrec-modules-deepfm"></span><h2>torchrec.modules.deepfm<a class="headerlink" href="#module-torchrec.modules.deepfm" title="Permalink to this headline">¶</a></h2>
 <hr class="docutils" />
 <p>The following modules are based off the <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">Deep Factorization-Machine (DeepFM) paper</a></p>
-<blockquote>
-<div><ul class="simple">
+<ul class="simple">
 <li><p>Class DeepFM implents the DeepFM Framework</p></li>
 <li><p>Class FactorizationMachine implements FM as noted in the above paper.</p></li>
 </ul>
-</div></blockquote>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.deepfm.DeepFM">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.deepfm.</span></span><span class="sig-name descname"><span class="pre">DeepFM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.deepfm.DeepFM" title="Permalink to this definition">¶</a></dt>
@@ -619,31 +617,33 @@ Instead, it covers only the deep component of the publication. It is used to lea
 high-order feature interactions. If low-order feature interactions should
 be learnt, please use <cite>FactorizationMachine</cite> module instead, which will share
 the same embedding input of this module.</p>
-<dl class="simple">
-<dt>To support modeling flexibility, we customize the key components as:</dt><dd><ul class="simple">
-<li><p>Different from the public paper, we change the input from raw sparse
-features to embeddings of the features. It allows flexibility in embedding
+<p>To support modeling flexibility, we customize the key components as:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Different from the public paper, we change the input from raw sparse</dt><dd><p>features to embeddings of the features. It allows flexibility in embedding
 dimensions and the number of embeddings, as long as all embedding tensors
-have the same batch size.</p></li>
-<li><p>On top of the public paper, we allow users to customize the hidden layer
-to be any module, not limited to just MLP.</p></li>
-</ul>
+have the same batch size.</p>
 </dd>
 </dl>
-<p>The general architecture of the module is like:</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>1 x 10: output</p></li>
-<li><p>^</p></li>
-<li><p>pass into <cite>dense_module</cite></p></li>
-<li><p>^</p></li>
-<li><p>1 x 90</p></li>
-<li><p>^</p></li>
-<li><p>concat</p></li>
-<li><p>^</p></li>
-<li><p>1 x 20, 1 x 30, 1 x 40: list of embeddings</p></li>
+</li>
+<li><dl class="simple">
+<dt>On top of the public paper, we allow users to customize the hidden layer</dt><dd><p>to be any module, not limited to just MLP.</p>
+</dd>
+</dl>
+</li>
 </ul>
-</div></blockquote>
+<p>The general architecture of the module is like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1 x 1 output</span>
+<span class="c1"># ^</span>
+<span class="c1"># pass into `dense_module`</span>
+<span class="c1"># ^</span>
+<span class="c1"># 1 x 90</span>
+<span class="c1"># ^</span>
+<span class="c1"># concat</span>
+<span class="c1"># ^</span>
+<span class="c1"># 1 x 20, 1 x 30, 1 x 40 list of embeddings</span>
+</pre></div>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>dense_module</strong> (<em>nn.Module</em>) – any customerized module that can be used (such as MLP) in DeepFM. The
@@ -652,20 +652,20 @@ example, the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the
 <cite>in_features</cite> should be: 2*3+4*5.</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrec.fb.modules.deepfm</span> <span class="kn">import</span> <span class="n">DeepFM</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrec.fb.modules.mlp</span> <span class="kn">import</span> <span class="n">LazyMLP</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output_dim</span> <span class="o">=</span> <span class="mi">30</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the input embedding are a torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="n">output_dim</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">deepfm</span> <span class="o">=</span> <span class="n">DeepFM</span><span class="p">(</span><span class="n">dense_module</span><span class="o">=</span><span class="n">dense_module</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">deep_fm_output</span> <span class="o">=</span> <span class="n">deepfm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torchrec.fb.modules.deepfm</span> <span class="kn">import</span> <span class="n">DeepFM</span>
+<span class="kn">from</span> <span class="nn">torchrec.fb.modules.mlp</span> <span class="kn">import</span> <span class="n">LazyMLP</span>
+<span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">output_dim</span> <span class="o">=</span> <span class="mi">30</span>
+<span class="c1"># the input embedding are a torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
+<span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">dense_module</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">192</span><span class="p">,</span> <span class="n">output_dim</span><span class="p">)</span>
+<span class="n">deepfm</span> <span class="o">=</span> <span class="n">DeepFM</span><span class="p">(</span><span class="n">dense_module</span><span class="o">=</span><span class="n">dense_module</span><span class="p">)</span>
+<span class="n">deep_fm_output</span> <span class="o">=</span> <span class="n">deepfm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -676,19 +676,19 @@ example, the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the
 <dd class="field-odd"><p><strong>embeddings</strong> (<em>List</em><em>[</em><em>torch.Tensor</em><em>]</em>) – <p>The list of all embeddings (e.g. dense, common_sparse,
 specialized_sparse,
 embedding_features, raw_embedding_features) in the shape of:</p>
-<blockquote>
-<div><p>(batch_size, num_embeddings, embedding_dim)</p>
-</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="p">)</span>
+</pre></div>
+</div>
 <p>For the ease of operation, embeddings that have the same embedding
 dimension have the option to be stacked into a single tensor. For
 example, when we have 1 trained embedding with dimension=32, 5 native
 embeddings with dimension=64, and 3 dense features with dimension=16, we
 can prepare the embeddings list to be the list of:</p>
-<blockquote>
-<div><p>tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
-tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
-tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)</p>
-</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span> <span class="p">(</span><span class="n">trained_embedding</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span> <span class="p">(</span><span class="n">native_embedding</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="p">(</span><span class="n">dense_features</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+</pre></div>
+</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p><cite>batch_size</cite> of all input tensors need to be identical.</p>
@@ -719,38 +719,39 @@ tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)</p>
 <p>This module does not cover the end-end functionality of the published paper.
 Instead, it covers only the FM part of the publication, and is used to learn
 2nd-order feature interactions.</p>
-<dl class="simple">
-<dt>To support modeling flexibility, we customize the key components as:</dt><dd><ul class="simple">
-<li><p>Different from the public paper, we change the input from raw sparse
-features to embeddings of the features. It allows flexibility in embedding
-dimensions and the number of embeddings, as long as all embedding tensors
-have the same batch size.</p></li>
-</ul>
-</dd>
-</dl>
-<p>The general architecture of the module is like:</p>
+<p>To support modeling flexibility, we customize the key components as:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>1 x 1 output</p></li>
-<li><p>^</p></li>
-<li><p>pass into <cite>dense_module</cite></p></li>
-<li><p>^</p></li>
-<li><p>1 x 90</p></li>
-<li><p>^</p></li>
-<li><p>concat</p></li>
-<li><p>^</p></li>
-<li><p>1 x 20, 1 x 30, 1 x 40 list of embeddings</p></li>
+<li><dl class="simple">
+<dt>Different from the public paper, we change the input from raw sparse</dt><dd><p>features to embeddings of the features. It allows flexibility in embedding
+dimensions and the number of embeddings, as long as all embedding tensors
+have the same batch size.</p>
+</dd>
+</dl>
+</li>
 </ul>
 </div></blockquote>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">fm</span> <span class="o">=</span> <span class="n">FactorizationMachine</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">fm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
+<p>The general architecture of the module is like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1 x 1 output</span>
+<span class="c1"># ^</span>
+<span class="c1"># pass into `dense_module`</span>
+<span class="c1"># ^</span>
+<span class="c1"># 1 x 90</span>
+<span class="c1"># ^</span>
+<span class="c1"># concat</span>
+<span class="c1"># ^</span>
+<span class="c1"># 1 x 20, 1 x 30, 1 x 40 list of embeddings</span>
+</pre></div>
+</div>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="c1"># the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]</span>
+<span class="n">input_embeddings</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">32</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">fm</span> <span class="o">=</span> <span class="n">FactorizationMachine</span><span class="p">()</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">fm</span><span class="p">(</span><span class="n">embeddings</span><span class="o">=</span><span class="n">input_embeddings</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -762,19 +763,19 @@ have the same batch size.</p></li>
 The list of all embeddings (e.g. dense, common_sparse,
 specialized_sparse, embedding_features, raw_embedding_features) in the
 shape of:</p>
-<blockquote>
-<div><p>(batch_size, num_embeddings, embedding_dim)</p>
-</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="p">)</span>
+</pre></div>
+</div>
 <p>For the ease of operation, embeddings that have the same embedding
 dimension have the option to be stacked into a single tensor. For
 example, when we have 1 trained embedding with dimension=32, 5 native
 embeddings with dimension=64, and 3 dense features with dimension=16, we
 can prepare the embeddings list to be the list of:</p>
-<blockquote>
-<div><p>tensor(B, 1, 32) (trained_embedding with num_embeddings=1, embedding_dim=32)
-tensor(B, 5, 64) (native_embedding with num_embeddings=5, embedding_dim=64)
-tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)</p>
-</div></blockquote>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span> <span class="p">(</span><span class="n">trained_embedding</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span> <span class="p">(</span><span class="n">native_embedding</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="p">(</span><span class="n">dense_features</span> <span class="k">with</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+</pre></div>
+</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>batch_size of all input tensors need to be identical.</p>
@@ -999,21 +1000,17 @@ so it makes sense to retrict in a non-fused version as well.</p>
 <p>EmbeddingBagCollection represents a collection of pooled embeddings (<cite>EmbeddingBags</cite>).</p>
 <p>It processes sparse data in the form of <cite>KeyedJaggedTensor</cite> with values of the form
 [F X B X L] where:</p>
-<blockquote>
-<div><ul class="simple">
+<ul class="simple">
 <li><p>F: features (keys)</p></li>
 <li><p>B: batch size</p></li>
 <li><p>L: Length of sparse features (jagged)</p></li>
 </ul>
-</div></blockquote>
-<dl class="simple">
-<dt>and outputs a <cite>KeyedTensor</cite> with values of the form [B * (F * D)] where:</dt><dd><ul class="simple">
+<p>and outputs a <cite>KeyedTensor</cite> with values of the form [B * (F * D)] where:</p>
+<ul class="simple">
 <li><p>F: features (keys)</p></li>
 <li><p>D: each feature’s (key’s) embedding dimension</p></li>
 <li><p>B: batch size</p></li>
 </ul>
-</dd>
-</dl>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -1023,45 +1020,41 @@ so it makes sense to retrict in a non-fused version as well.</p>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">table_0</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="go">    name=&quot;t1&quot;, embedding_dim=3, num_embeddings=10, feature_names=[&quot;f1&quot;]</span>
-<span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table_1</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="go">    name=&quot;t2&quot;, embedding_dim=4, num_embeddings=10, feature_names=[&quot;f2&quot;]</span>
-<span class="go">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">table_0</span><span class="p">,</span> <span class="n">table_1</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#        0       1        2  &lt;-- batch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># &quot;f1&quot;   [0,1] None    [2]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># &quot;f2&quot;   [3]    [4]    [5,6,7]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1">#  ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="p">(</span>
-<span class="go">    keys=[&quot;f1&quot;, &quot;f2&quot;],</span>
-<span class="go">    values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),</span>
-<span class="go">    offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),</span>
-<span class="go">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">ebc</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-<span class="go">tensor([[-0.6149,  0.0000, -0.3176],</span>
-<span class="go">[-0.8876,  0.0000, -1.5606],</span>
-<span class="go">[ 1.6805,  0.0000,  0.6810],</span>
-<span class="go">[-1.4206, -1.0409,  0.2249],</span>
-<span class="go">[ 0.1823, -0.4697,  1.3823],</span>
-<span class="go">[-0.2767, -0.9965, -0.1797],</span>
-<span class="go">[ 0.8864,  0.1315, -2.0724]], grad_fn=&lt;TransposeBackward0&gt;)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-<span class="go">[&#39;f1&#39;, &#39;f2&#39;]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">offset_per_key</span><span class="p">())</span>
-<span class="go">tensor([0, 3, 7])</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">table_0</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">table_1</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">table_0</span><span class="p">,</span> <span class="n">table_1</span><span class="p">])</span>
+
+<span class="c1">#        0       1        2  &lt;-- batch</span>
+<span class="c1"># &quot;f1&quot;   [0,1] None    [2]</span>
+<span class="c1"># &quot;f2&quot;   [3]    [4]    [5,6,7]</span>
+<span class="c1">#  ^</span>
+<span class="c1"># feature</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">ebc</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="n">tensor</span><span class="p">([[</span><span class="o">-</span><span class="mf">0.6149</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.3176</span><span class="p">],</span>
+<span class="p">[</span><span class="o">-</span><span class="mf">0.8876</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5606</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">1.6805</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span>  <span class="mf">0.6810</span><span class="p">],</span>
+<span class="p">[</span><span class="o">-</span><span class="mf">1.4206</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0409</span><span class="p">,</span>  <span class="mf">0.2249</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.1823</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4697</span><span class="p">,</span>  <span class="mf">1.3823</span><span class="p">],</span>
+<span class="p">[</span><span class="o">-</span><span class="mf">0.2767</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.9965</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1797</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.8864</span><span class="p">,</span>  <span class="mf">0.1315</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.0724</span><span class="p">]],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">TransposeBackward0</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="p">[</span><span class="s1">&#39;f1&#39;</span><span class="p">,</span> <span class="s1">&#39;f2&#39;</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">offset_per_key</span><span class="p">())</span>
+<span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">])</span>
 </pre></div>
 </div>
 <dl class="py property">
@@ -1137,23 +1130,19 @@ registered hooks while the latter silently ignores them.</p>
 <p>EmbeddingCollection represents a collection of non-pooled embeddings.</p>
 <p>It processes sparse data in the form of <cite>KeyedJaggedTensor</cite> of the form [F X B X L]
 where:</p>
-<blockquote>
-<div><ul class="simple">
+<ul class="simple">
 <li><p>F: features (keys)</p></li>
 <li><p>B: batch size</p></li>
 <li><p>L: Length of sparse features (variable)</p></li>
 </ul>
-</div></blockquote>
 <p>and outputs <cite>Dict[feature (key), JaggedTensor]</cite>.
 Each <cite>JaggedTensor</cite> contains values of the form (B * L) X D
 where:</p>
-<blockquote>
-<div><ul class="simple">
+<ul class="simple">
 <li><p>B: batch size</p></li>
 <li><p>L: Length of sparse features (jagged)</p></li>
 <li><p>D: each feature’s (key’s) embedding dimension and lengths are of the form L</p></li>
 </ul>
-</div></blockquote>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -1162,38 +1151,35 @@ where:</p>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">e1_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
-<span class="go">    name=&quot;t1&quot;, embedding_dim=2, num_embeddings=10, feature_names=[&quot;f1&quot;]</span>
-<span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">e2_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
-<span class="go">    name=&quot;t2&quot;, embedding_dim=3, num_embeddings=10, feature_names=[&quot;f2&quot;]</span>
-<span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ec_config</span> <span class="o">=</span> <span class="n">EmbeddingCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">e1_config</span><span class="p">,</span> <span class="n">e2_config</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ec</span> <span class="o">=</span> <span class="n">EmbeddingCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ec_config</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#     0       1        2  &lt;-- batch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 0   [0,1] None    [2]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 1   [3]    [4]    [5,6,7]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
-<span class="go">    keys=[&quot;f1&quot;, &quot;f2&quot;],</span>
-<span class="go">    values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),</span>
-<span class="go">    offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),</span>
-<span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">feature_embeddings</span> <span class="o">=</span> <span class="n">ec</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">feature_embeddings</span><span class="p">[</span><span class="s1">&#39;f2&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-<span class="go">tensor([[-0.2050,  0.5478,  0.6054],</span>
-<span class="go">[ 0.7352,  0.3210, -3.0399],</span>
-<span class="go">[ 0.1279, -0.1756, -0.4130],</span>
-<span class="go">[ 0.7519, -0.4341, -0.0499],</span>
-<span class="go">[ 0.9329, -1.0697, -0.8095]], grad_fn=&lt;EmbeddingBackward&gt;)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">e1_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">e2_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">ec_config</span> <span class="o">=</span> <span class="n">EmbeddingCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">e1_config</span><span class="p">,</span> <span class="n">e2_config</span><span class="p">])</span>
+
+<span class="n">ec</span> <span class="o">=</span> <span class="n">EmbeddingCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ec_config</span><span class="p">)</span>
+
+<span class="c1">#     0       1        2  &lt;-- batch</span>
+<span class="c1"># 0   [0,1] None    [2]</span>
+<span class="c1"># 1   [3]    [4]    [5,6,7]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+<span class="n">feature_embeddings</span> <span class="o">=</span> <span class="n">ec</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">feature_embeddings</span><span class="p">[</span><span class="s1">&#39;f2&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="n">tensor</span><span class="p">([[</span><span class="o">-</span><span class="mf">0.2050</span><span class="p">,</span>  <span class="mf">0.5478</span><span class="p">,</span>  <span class="mf">0.6054</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.7352</span><span class="p">,</span>  <span class="mf">0.3210</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.0399</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.1279</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1756</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4130</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.7519</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4341</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.0499</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.9329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0697</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8095</span><span class="p">]],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">EmbeddingBackward</span><span class="o">&gt;</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -1331,24 +1317,21 @@ before calling <cite>apply()</cite> on the lazy-module.</p>
 <dd class="field-odd"><p>torch.nn.Module</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
-<span class="gp">&gt;&gt;&gt; </span>        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this fails, because `linear` (a lazy-module) hasn&#39;t been initialized yet</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># run a dummy forward pass to initialize the lazy-module</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this works now</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
+        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+
+<span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this fails, because `linear` (a lazy-module) hasn&#39;t been initialized yet</span>
+
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># run a dummy forward pass to initialize the lazy-module</span>
+
+<span class="n">linear</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># this works now</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -1383,25 +1366,23 @@ later be applied to each submodule of <cite>module</cite> and the <cite>module</
 <dd class="field-odd"><p>torch.nn.Module</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
-<span class="gp">&gt;&gt;&gt; </span>        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_apply</span><span class="p">(</span><span class="n">linear</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_apply</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">seq</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">:</span>
+        <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+
+<span class="n">linear</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">lazy_apply</span><span class="p">(</span><span class="n">linear</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">linear</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
+
+<span class="n">seq</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="n">lazy_apply</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">init_weights</span><span class="p">)</span>  <span class="c1"># doesn&#39;t run `init_weights` immediately</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">seq</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>  <span class="c1"># runs `init_weights` only once, right after first forward pass</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -1436,16 +1417,15 @@ Default: torch.relu.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">layer_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">mlp_module</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">mlp_module</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
+
+<span class="n">layer_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+<span class="n">mlp_module</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">mlp_module</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -1490,18 +1470,16 @@ Default: torch.relu.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">out_size</span> <span class="o">=</span> <span class="mi">16</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">perceptron</span> <span class="o">=</span> <span class="n">Perceptron</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">output</span> <span class="o">=</span> <span class="n">perceptron</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">]</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">in_size</span> <span class="o">=</span> <span class="mi">40</span>
+<span class="nb">input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">in_size</span><span class="p">)</span>
+
+<span class="n">out_size</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="n">perceptron</span> <span class="o">=</span> <span class="n">Perceptron</span><span class="p">(</span><span class="n">in_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">output</span> <span class="o">=</span> <span class="n">perceptron</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+<span class="k">assert</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">out_size</span><span class="p">]</span>
 </pre></div>
 </div>
 <dl class="py method">

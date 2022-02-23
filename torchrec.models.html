@@ -322,12 +322,12 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_arch</span> <span class="o">=</span> <span class="n">DenseArch</span><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">hidden_layer_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_embedded</span> <span class="o">=</span> <span class="n">dense_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">in_features</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">dense_arch</span> <span class="o">=</span> <span class="n">DenseArch</span><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">hidden_layer_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">)</span>
+<span class="n">dense_embedded</span> <span class="o">=</span> <span class="n">dense_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -359,7 +359,7 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
 <p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
 (dense_features) and apply the general DeepFM interaction according to the
-extenal source of DeepFM paper: <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
+external source of DeepFM paper: <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">https://arxiv.org/pdf/1703.04247.pdf</a></p>
 <p>The output dimension is expected to be a cat of <cite>dense_features</cite>, D.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -372,19 +372,19 @@ the <cite>fm_in_features</cite> should be: 2 * 3 + 4 * 5.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">fm_inter_arch</span> <span class="o">=</span> <span class="n">FMInteractionArch</span><span class="p">(</span><span class="n">sparse_feature_names</span><span class="o">=</span><span class="n">keys</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">length_per_key</span><span class="o">=</span><span class="p">[</span><span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span><span class="p">)),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">cat_fm_output</span> <span class="o">=</span> <span class="n">fm_inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+<span class="n">fm_inter_arch</span> <span class="o">=</span> <span class="n">FMInteractionArch</span><span class="p">(</span><span class="n">sparse_feature_names</span><span class="o">=</span><span class="n">keys</span><span class="p">)</span>
+<span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span>
+    <span class="n">length_per_key</span><span class="o">=</span><span class="p">[</span><span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span><span class="p">)),</span>
+<span class="p">)</span>
+<span class="n">cat_fm_output</span> <span class="o">=</span> <span class="n">fm_inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -423,10 +423,10 @@ the <cite>fm_in_features</cite> should be: 2 * 3 + 4 * 5.</p></li>
 <dd class="field-odd"><p><strong>in_features</strong> (<em>int</em>) – the output dimension of the interaction arch.</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">over_arch</span> <span class="o">=</span> <span class="n">OverArch</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">over_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">over_arch</span> <span class="o">=</span> <span class="n">OverArch</span><span class="p">()</span>
+<span class="n">logits</span> <span class="o">=</span> <span class="n">over_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -464,10 +464,12 @@ by deep_fm proposed in this paper: <a class="reference external" href="https://a
 <p>The module assumes all sparse features have the same embedding dimension
 (i.e, each <cite>EmbeddingBagConfig</cite> uses the same embedding_dim)</p>
 <p>The following notation is used throughout the documentation for the models:</p>
-<p>F: number of sparse features
-D: embedding_dimension of sparse features
-B: batch size
-num_features: number of dense features</p>
+<ul class="simple">
+<li><p>F: number of sparse features</p></li>
+<li><p>D: embedding_dimension of sparse features</p></li>
+<li><p>B: batch size</p></li>
+<li><p>num_features: number of dense features</p></li>
+</ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -480,48 +482,43 @@ interaction module.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">8</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_nn</span> <span class="o">=</span> <span class="n">SimpleDeepFMNN</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span> <span class="n">hidden_layer_size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">over_embedding_dim</span><span class="o">=</span><span class="mi">5</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#     0       1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 0   [1,2] [4,5]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 1   [4,3] [2,9]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">sparse_nn</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">dense_features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">sparse_features</span><span class="o">=</span><span class="n">sparse_features</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">8</span>
+
+<span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span>
+    <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span>
+    <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">sparse_nn</span> <span class="o">=</span> <span class="n">SimpleDeepFMNN</span><span class="p">(</span>
+    <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span> <span class="n">hidden_layer_size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">over_embedding_dim</span><span class="o">=</span><span class="mi">5</span>
+<span class="p">)</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1">#     0       1</span>
+<span class="c1"># 0   [1,2] [4,5]</span>
+<span class="c1"># 1   [4,3] [2,9]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">logits</span> <span class="o">=</span> <span class="n">sparse_nn</span><span class="p">(</span>
+    <span class="n">dense_features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
+    <span class="n">sparse_features</span><span class="o">=</span><span class="n">sparse_features</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -562,32 +559,29 @@ EmbeddingBag and embedding features of each collection.</p>
 collection of pooled embeddings</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#     0       1        2  &lt;-- batch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 0   [0,1] None    [2]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 1   [3]    [4]    [5,6,7]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span>    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+
+<span class="c1">#     0       1        2  &lt;-- batch</span>
+<span class="c1"># 0   [0,1] None    [2]</span>
+<span class="c1"># 1   [3]    [4]    [5,6,7]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+<span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -629,10 +623,12 @@ features.</p>
 <p>The module assumes all sparse features have the same embedding dimension
 (i.e. each EmbeddingBagConfig uses the same embedding_dim).</p>
 <p>The following notation is used throughout the documentation for the models:</p>
-<p>F: number of sparse features
-D: embedding_dimension of sparse features
-B: batch size
-num_features: number of dense features</p>
+<ul class="simple">
+<li><p>F: number of sparse features</p></li>
+<li><p>D: embedding_dimension of sparse features</p></li>
+<li><p>B: batch size</p></li>
+<li><p>num_features: number of dense features</p></li>
+</ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -641,57 +637,51 @@ used to define <cite>SparseArch</cite>.</p></li>
 <li><p><strong>dense_in_features</strong> (<em>int</em>) – the dimensionality of the dense input features.</p></li>
 <li><p><strong>dense_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>DenseArch</cite>.</p></li>
 <li><p><strong>over_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>OverArch</cite>.
-NOTE: The output dimension of the <cite>InteractionArch</cite> should not be manually
-specified here.</p></li>
+The output dimension of the <cite>InteractionArch</cite> should not be manually specified here.</p></li>
 <li><p><strong>dense_device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">2</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">8</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">DLRM</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">dense_in_features</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">dense_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">20</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">over_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#     0       1</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 0   [1,2] [4,5]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 1   [4,3] [2,9]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">dense_features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">sparse_features</span><span class="o">=</span><span class="n">sparse_features</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">8</span>
+
+<span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span>
+   <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span>
+   <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+   <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">DLRM</span><span class="p">(</span>
+   <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
+   <span class="n">dense_in_features</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+   <span class="n">dense_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">20</span><span class="p">],</span>
+   <span class="n">over_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1">#     0       1</span>
+<span class="c1"># 0   [1,2] [4,5]</span>
+<span class="c1"># 1   [4,3] [2,9]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">],</span>
+   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span>
+   <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+   <span class="n">dense_features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
+   <span class="n">sparse_features</span><span class="o">=</span><span class="n">sparse_features</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -731,11 +721,11 @@ specified here.</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_arch</span> <span class="o">=</span> <span class="n">DenseArch</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">15</span><span class="p">,</span> <span class="n">D</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dense_embedded</span> <span class="o">=</span> <span class="n">dense_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">dense_arch</span> <span class="o">=</span> <span class="n">DenseArch</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">15</span><span class="p">,</span> <span class="n">D</span><span class="p">])</span>
+<span class="n">dense_embedded</span> <span class="o">=</span> <span class="n">dense_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -769,34 +759,34 @@ specified here.</p></li>
 (dense_features). Returns the pairwise dot product of each sparse feature pair,
 the dot product of each sparse features with the output of the dense layer,
 and the dense layer itself (all concatenated).</p>
-<p>NOTE: The dimensionality of the <cite>dense_features</cite> (D) is expected to match the
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The dimensionality of the <cite>dense_features</cite> (D) is expected to match the
 dimensionality of the <cite>sparse_features</cite> so that the dot products between them can be
 computed.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>sparse_feature_names</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – size F</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionArch</span><span class="p">(</span><span class="n">sparse_feature_names</span><span class="o">=</span><span class="n">keys</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">length_per_key</span><span class="o">=</span><span class="p">[</span><span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span><span class="p">)),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#  B X (D + F + F choose 2)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">concat_dense</span> <span class="o">=</span> <span class="n">inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionArch</span><span class="p">(</span><span class="n">sparse_feature_names</span><span class="o">=</span><span class="n">keys</span><span class="p">)</span>
+
+<span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
+
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="p">(</span>
+   <span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span>
+   <span class="n">length_per_key</span><span class="o">=</span><span class="p">[</span><span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
+   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span><span class="p">)),</span>
+<span class="p">)</span>
+
+<span class="c1">#  B X (D + F + F choose 2)</span>
+<span class="n">concat_dense</span> <span class="o">=</span> <span class="n">inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -839,11 +829,11 @@ computed.</p>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">over_arch</span> <span class="o">=</span> <span class="n">OverArch</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">logits</span> <span class="o">=</span> <span class="n">over_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">over_arch</span> <span class="o">=</span> <span class="n">OverArch</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="n">logits</span> <span class="o">=</span> <span class="n">over_arch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">10</span><span class="p">)))</span>
 </pre></div>
 </div>
 <dl class="py method">
@@ -878,33 +868,30 @@ and embedding features of each collection.</p>
 collection of pooled embeddings</p>
 </dd>
 </dl>
-<p class="rubric">Example</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_arch</span> <span class="o">=</span> <span class="n">SparseArch</span><span class="p">(</span><span class="n">embedding_bag_collection</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1">#     0       1        2  &lt;-- batch</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 0   [0,1] None    [2]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># 1   [3]    [4]    [5,6,7]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># ^</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># feature</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span>   <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">sparse_embedded</span> <span class="o">=</span> <span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">sparse_arch</span> <span class="o">=</span> <span class="n">SparseArch</span><span class="p">(</span><span class="n">embedding_bag_collection</span><span class="p">)</span>
+
+<span class="c1">#     0       1        2  &lt;-- batch</span>
+<span class="c1"># 0   [0,1] None    [2]</span>
+<span class="c1"># 1   [3]    [4]    [5,6,7]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+<span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+   <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">sparse_embedded</span> <span class="o">=</span> <span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
