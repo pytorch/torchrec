@@ -265,7 +265,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
-
         return cls(
             table_name_to_quantized_weights,
             embedding_bag_configs,

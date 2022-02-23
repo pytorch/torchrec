@@ -738,6 +738,7 @@ class InferGroupedPooledEmbeddingsLookup(
         ] = []
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
+                # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     grouped_score_configs=grouped_score_configs_per_rank[rank],
