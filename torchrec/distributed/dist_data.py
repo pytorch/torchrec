@@ -196,13 +196,23 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
 
         with record_function("## all2all_data:recat_values ##"):
             if self._recat.numel():
-                lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
-                    self._recat,
-                    lengths.view(self._workers * self._splits[self._pg.rank()], -1),
-                    values,
-                    weights,
-                    values.numel(),
-                )
+                try:
+                    lengths, values, weights = torch.ops.fbgemm.permute_sparse_data(
+                        self._recat,
+                        lengths.view(self._workers * self._splits[self._pg.rank()], -1),
+                        values,
+                        weights,
+                        values.numel(),
+                    )
+                except RuntimeError:
+                    lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
+                        self._recat,
+                        lengths.view(self._workers * self._splits[self._pg.rank()], -1),
+                        values,
+                        weights,
+                        values.numel(),
+                    )
+
                 lengths = lengths.view(-1)
 
         ret = KeyedJaggedTensor.from_lengths_sync(
