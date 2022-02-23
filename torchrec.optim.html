@@ -298,6 +298,10 @@
               
   <section id="module-torchrec.optim">
 <span id="torchrec-optim"></span><h1>torchrec.optim<a class="headerlink" href="#module-torchrec.optim" title="Permalink to this headline">¶</a></h1>
+<p>Torchrec Optimizers</p>
+<p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
+torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
+<p>It also contains several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper</p>
 <section id="module-torchrec.optim.clipping">
 <span id="torchrec-optim-clipping"></span><h2>torchrec.optim.clipping<a class="headerlink" href="#module-torchrec.optim.clipping" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
@@ -818,6 +822,10 @@ returns the loss. Optional for most optimizers.</p>
 </section>
 <section id="module-0">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
+<p>Torchrec Optimizers</p>
+<p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
+torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
+<p>It also contains several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper</p>
 </section>
 </section>
 
