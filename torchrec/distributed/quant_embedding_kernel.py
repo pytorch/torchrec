@@ -10,11 +10,16 @@ from typing import List, Optional, Tuple, Iterator
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    PoolingMode,
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
-from torchrec.distributed.batched_embedding_kernel import BaseBatchedEmbeddingBag
+from torchrec.distributed.batched_embedding_kernel import (
+    BaseBatchedEmbeddingBag,
+    BaseBatchedEmbedding,
+)
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import data_type_to_sparse_type
@@ -52,6 +57,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
+                output_dtype=SparseType.FP32,
             )
         )
         if device is not None and device.type != "meta":
@@ -89,3 +95,67 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 split_scale_shifts=False
             )
         ]
+
+
+class QuantBatchedEmbedding(BaseBatchedEmbedding):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(config, pg, device)
+
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
+            IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=[
+                    (
+                        "",
+                        local_rows,
+                        table.embedding_dim,
+                        data_type_to_sparse_type(config.data_type),
+                        EmbeddingLocation.DEVICE
+                        if (device is not None and device.type == "cuda")
+                        else EmbeddingLocation.HOST,
+                    )
+                    for local_rows, table in zip(
+                        self._local_rows, config.embedding_tables
+                    )
+                ],
+                device=device,
+                pooling_mode=PoolingMode.NONE,
+                feature_table_map=self._feature_table_map,
+                output_dtype=SparseType.FP32,
+            )
+        )
+        if device is not None and device.type != "meta":
+            self._emb_module.initialize_weights()
+
+    @property
+    def emb_module(
+        self,
+    ) -> IntNBitTableBatchedEmbeddingBagsCodegen:
+        return self._emb_module
+
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        return [
+            weight
+            for weight, _ in self.emb_module.split_embedding_weights(
+                split_scale_shifts=False
+            )
+        ]
+
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        return self.emb_module(
+            indices=features.values().int(),
+            offsets=features.offsets().int(),
+        )
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, weight in zip(
+            self._config.embedding_tables,
+            self.emb_module.split_embedding_weights(),
+        ):
+            yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
