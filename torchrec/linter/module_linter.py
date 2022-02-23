@@ -138,8 +138,9 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
             '"Example:" section, that start from ">>> ". Please fix the docstring',
         )
 
+    # TODO: also check for "Returns" and "Args" in forward
     # Check correctness of the Args for a class definition:
-    required_keywords = ["Constructor Args:", "Call Args:", "Returns:"]
+    required_keywords = ["Args:"]
     missing_keywords = []
     for keyword in required_keywords:
         if keyword not in docstring:
@@ -151,7 +152,7 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
             node,
             "Missing required keywords from TorchRec module",
             "TorchRec modules are required to description of their args and "
-            'results in "Constructor Args:", "Call Args:", "Returns:". '
+            'results in "Args:". '
             "Missing keywords: {}.".format(missing_keywords),
         )
 
