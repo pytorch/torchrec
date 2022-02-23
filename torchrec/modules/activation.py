@@ -8,6 +8,7 @@
 """
 .. fb:display_title::
     Activation Modules
+
 =====
 
 """
@@ -28,8 +29,9 @@ class SwishLayerNorm(nn.Module):
             input_dim=[d2, d3] will do the layer normalization on last two dimensions.
         device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> sln = SwishLayerNorm(100)
+    Example::
+
+        sln = SwishLayerNorm(100)
     """
 
     def __init__(

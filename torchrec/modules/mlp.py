@@ -27,16 +27,17 @@ class Perceptron(torch.nn.Module):
             Default: torch.relu.
         device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> batch_size = 3
-        >>> in_size = 40
-        >>> input = torch.randn(batch_size, in_size)
+    Example::
 
-        >>> out_size = 16
-        >>> perceptron = Perceptron(in_size, out_size, bias=True)
+        batch_size = 3
+        in_size = 40
+        input = torch.randn(batch_size, in_size)
 
-        >>> output = perceptron(input)
-        >>> assert list(output) == [batch_size, out_size]
+        out_size = 16
+        perceptron = Perceptron(in_size, out_size, bias=True)
+
+        output = perceptron(input)
+        assert list(output) == [batch_size, out_size]
     """
 
     def __init__(
@@ -95,15 +96,16 @@ class MLP(torch.nn.Module):
             Default: torch.relu.
         device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> batch_size = 3
-        >>> in_size = 40
-        >>> input = torch.randn(batch_size, in_size)
+    Example::
 
-        >>> layer_sizes = [16, 8, 4]
-        >>> mlp_module = MLP(in_size, layer_sizes, bias=True)
-        >>> output = mlp_module(input)
-        >>> assert list(output.shape) == [batch_size, layer_sizes[-1]]
+        batch_size = 3
+        in_size = 40
+        input = torch.randn(batch_size, in_size)
+
+        layer_sizes = [16, 8, 4]
+        mlp_module = MLP(in_size, layer_sizes, bias=True)
+        output = mlp_module(input)
+        assert list(output.shape) == [batch_size, layer_sizes[-1]]
     """
 
     def __init__(

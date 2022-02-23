@@ -64,23 +64,24 @@ def lazy_apply(
     Returns:
         torch.nn.Module: `module` with `fn` attached.
 
-    Example:
-        >>> @torch.no_grad()
-        >>> def init_weights(m):
-        >>>     print(m)
-        >>>     if type(m) == torch.nn.LazyLinear:
-        >>>         m.weight.fill_(1.0)
-        >>>         print(m.weight)
+    Example::
 
-        >>> linear = torch.nn.LazyLinear(2)
-        >>> lazy_apply(linear, init_weights)  # doesn't run `init_weights` immediately
-        >>> input = torch.randn(2, 10)
-        >>> linear(input)  # runs `init_weights` only once, right after first forward pass
+        @torch.no_grad()
+        def init_weights(m):
+            print(m)
+            if type(m) == torch.nn.LazyLinear:
+                m.weight.fill_(1.0)
+                print(m.weight)
 
-        >>> seq = torch.nn.Sequential(torch.nn.LazyLinear(2), torch.nn.LazyLinear(2))
-        >>> lazy_apply(seq, init_weights)  # doesn't run `init_weights` immediately
-        >>> input = torch.randn(2, 10)
-        >>> seq(input)  # runs `init_weights` only once, right after first forward pass
+        linear = torch.nn.LazyLinear(2)
+        lazy_apply(linear, init_weights)  # doesn't run `init_weights` immediately
+        input = torch.randn(2, 10)
+        linear(input)  # runs `init_weights` only once, right after first forward pass
+
+        seq = torch.nn.Sequential(torch.nn.LazyLinear(2), torch.nn.LazyLinear(2))
+        lazy_apply(seq, init_weights)  # doesn't run `init_weights` immediately
+        input = torch.randn(2, 10)
+        seq(input)  # runs `init_weights` only once, right after first forward pass
     """
 
     if not hasattr(module, "_functions_to_lazy_apply"):
@@ -134,21 +135,22 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         Returns:
             torch.nn.Module: self
 
-        Example:
-            >>> @torch.no_grad()
-            >>> def init_weights(m):
-            >>>     print(m)
-            >>>     if type(m) == torch.nn.LazyLinear:
-            >>>         m.weight.fill_(1.0)
-            >>>         print(m.weight)
+        Example::
 
-            >>> linear = torch.nn.LazyLinear(2)
-            >>> linear.apply(init_weights)  # this fails, because `linear` (a lazy-module) hasn't been initialized yet
+            @torch.no_grad()
+            def init_weights(m):
+                print(m)
+                if type(m) == torch.nn.LazyLinear:
+                    m.weight.fill_(1.0)
+                    print(m.weight)
 
-            >>> input = torch.randn(2, 10)
-            >>> linear(input)  # run a dummy forward pass to initialize the lazy-module
+            linear = torch.nn.LazyLinear(2)
+            linear.apply(init_weights)  # this fails, because `linear` (a lazy-module) hasn't been initialized yet
 
-            >>> linear.apply(init_weights)  # this works now
+            input = torch.randn(2, 10)
+            linear(input)  # run a dummy forward pass to initialize the lazy-module
+
+            linear.apply(init_weights)  # this works now
         """
 
         if hasattr(self, "_initialize_hook"):

@@ -90,10 +90,11 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
             is enabled, with the hook definition as:
                 valid_input_only_hook(self, module, input)
 
-            if we run the TestModule as:
-            >>> m = TestModule()
-            >>> output = m()
-            >>> expected_output = torch.zeros(2, 2)
+            if we run the TestModule as::
+
+                m = TestModule()
+                output = m()
+                expected_output = torch.zeros(2, 2)
             """
 
             def __init__(self, *args, **kwargs):
@@ -125,14 +126,14 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
             with the hook definition as:
                 valid_input_only_hook(self, module, input)
 
-            if we run the TestModule as:
-            >>> def input_only_hook(module, input_tuple):
-            >>>     return input_tuple[0] + 1
-            >>>
-            >>> m = TestModule()
-            >>> m.register_forward_pre_hook(input_only_hook)
-            >>> output = m(torch.zeros(2, 2))
-            >>> expected_output = torch.ones(2, 2)
+            if we run the TestModule as::
+
+                def input_only_hook(module, input_tuple):
+                    return input_tuple[0] + 1
+                m = TestModule()
+                m.register_forward_pre_hook(input_only_hook)
+                output = m(torch.zeros(2, 2))
+                expected_output = torch.ones(2, 2)
             """
 
             def __init__(self, *args, **kwargs):

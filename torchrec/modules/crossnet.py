@@ -10,6 +10,7 @@
 """
 .. fb:display_title::
     CrossNet API
+
 =====
 
 """
@@ -40,13 +41,14 @@ class CrossNet(torch.nn.Module):
         in_features (int): the dimension of the input.
         num_layers (int): the number of layers in the module.
 
-    Example:
-        >>> batch_size = 3
-        >>> num_layers = 2
-        >>> in_features = 10
-        >>> input = torch.randn(batch_size, in_features)
-        >>> dcn = CrossNet(num_layers=num_layers)
-        >>> output = dcn(input)
+    Example::
+
+        batch_size = 3
+        num_layers = 2
+        in_features = 10
+        input = torch.randn(batch_size, in_features)
+        dcn = CrossNet(num_layers=num_layers)
+        output = dcn(input)
     """
 
     def __init__(
@@ -115,13 +117,14 @@ class LowRankCrossNet(torch.nn.Module):
         low_rank (int): the rank setup of the cross matrix (default = 0).
             Value must be always >= 0.
 
-    Example:
-        >>> batch_size = 3
-        >>> num_layers = 2
-        >>> in_features = 10
-        >>> input = torch.randn(batch_size, in_features)
-        >>> dcn = LowRankCrossNet(num_layers=num_layers, low_rank=3)
-        >>> output = dcn(input)
+    Example::
+
+        batch_size = 3
+        num_layers = 2
+        in_features = 10
+        input = torch.randn(batch_size, in_features)
+        dcn = LowRankCrossNet(num_layers=num_layers, low_rank=3)
+        output = dcn(input)
     """
 
     def __init__(
@@ -211,13 +214,14 @@ class VectorCrossNet(torch.nn.Module):
         in_features (int): the dimension of the input.
         num_layers (int): the number of layers in the module.
 
-    Example:
-        >>> batch_size = 3
-        >>> num_layers = 2
-        >>> in_features = 10
-        >>> input = torch.randn(batch_size, in_features)
-        >>> dcn = VectorCrossNet(num_layers=num_layers)
-        >>> output = dcn(input)
+    Example::
+
+        batch_size = 3
+        num_layers = 2
+        in_features = 10
+        input = torch.randn(batch_size, in_features)
+        dcn = VectorCrossNet(num_layers=num_layers)
+        output = dcn(input)
     """
 
     def __init__(
@@ -304,13 +308,14 @@ class LowRankMixtureCrossNet(torch.nn.Module):
             the non-linear activation function, used in defining experts.
             Default is relu.
 
-    Example:
-        >>> batch_size = 3
-        >>> num_layers = 2
-        >>> in_features = 10
-        >>> input = torch.randn(batch_size, in_features)
-        >>> dcn = LowRankCrossNet(num_layers=num_layers, num_experts=5, low_rank=3)
-        >>> output = dcn(input)
+    Example::
+
+        batch_size = 3
+        num_layers = 2
+        in_features = 10
+        input = torch.randn(batch_size, in_features)
+        dcn = LowRankCrossNet(num_layers=num_layers, num_experts=5, low_rank=3)
+        output = dcn(input)
     """
 
     def __init__(
