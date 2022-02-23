@@ -298,6 +298,30 @@
               
   <section id="module-torchrec.quant">
 <span id="torchrec-quant"></span><h1>torchrec.quant<a class="headerlink" href="#module-torchrec.quant" title="Permalink to this headline">¶</a></h1>
+<p>Torchrec Quantization</p>
+<p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
+It relies on fbgemm quantized ops.
+This reduces the size of the model weights and speeds up model execution.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch.quantization</span> <span class="k">as</span> <span class="nn">quant</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torchrec.quant</span> <span class="k">as</span> <span class="nn">trec_quant</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torchrec</span> <span class="k">as</span> <span class="nn">trec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qconfig</span> <span class="o">=</span> <span class="n">quant</span><span class="o">.</span><span class="n">QConfig</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">activation</span><span class="o">=</span><span class="n">quant</span><span class="o">.</span><span class="n">PlaceholderObserver</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">weight</span><span class="o">=</span><span class="n">quant</span><span class="o">.</span><span class="n">PlaceholderObserver</span><span class="o">.</span><span class="n">with_args</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">quantized</span> <span class="o">=</span> <span class="n">quant</span><span class="o">.</span><span class="n">quantize_dynamic</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">module</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">qconfig_spec</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">trec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">:</span> <span class="n">qconfig</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">},</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">trec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">:</span> <span class="n">trec_quant</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">},</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+</pre></div>
+</div>
 <section id="module-torchrec.quant.embedding_modules">
 <span id="torchrec-quant-embedding-modules"></span><h2>torchrec.quant.embedding_modules<a class="headerlink" href="#module-torchrec.quant.embedding_modules" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
@@ -458,6 +482,30 @@ Parameters and buffers set to <code class="docutils literal notranslate"><span c
 </section>
 <section id="module-0">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
+<p>Torchrec Quantization</p>
+<p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
+It relies on fbgemm quantized ops.
+This reduces the size of the model weights and speeds up model execution.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch.quantization</span> <span class="k">as</span> <span class="nn">quant</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torchrec.quant</span> <span class="k">as</span> <span class="nn">trec_quant</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torchrec</span> <span class="k">as</span> <span class="nn">trec</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">qconfig</span> <span class="o">=</span> <span class="n">quant</span><span class="o">.</span><span class="n">QConfig</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">activation</span><span class="o">=</span><span class="n">quant</span><span class="o">.</span><span class="n">PlaceholderObserver</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">weight</span><span class="o">=</span><span class="n">quant</span><span class="o">.</span><span class="n">PlaceholderObserver</span><span class="o">.</span><span class="n">with_args</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">qint8</span><span class="p">),</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">quantized</span> <span class="o">=</span> <span class="n">quant</span><span class="o">.</span><span class="n">quantize_dynamic</span><span class="p">(</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">module</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">qconfig_spec</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">trec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">:</span> <span class="n">qconfig</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">},</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">mapping</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="n">trec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">:</span> <span class="n">trec_quant</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="p">},</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 
