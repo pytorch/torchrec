@@ -129,13 +129,13 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
         return
 
     # Check presence of the example:
-    if "Example:" not in docstring or ">>> " not in docstring:
+    if "Example:" not in docstring:
         print_error_message(
             python_path,
             node,
             "No runnable example in a TorchRec module",
             "TorchRec modules are required to have runnable examples in "
-            '"Example:" section, that start from ">>> ". Please fix the docstring',
+            '"Example:" section. Please fix the docstring',
         )
 
     # TODO: also check for "Returns" and "Args" in forward
