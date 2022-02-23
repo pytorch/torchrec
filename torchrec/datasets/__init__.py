@@ -14,14 +14,15 @@ Additionally, it contains a RandomDataset, which is useful to generate random da
 
 Lastly, it contains scripts and utilities for pr-eprocessing, loading, etc.
 
-Example:
-    >>> from torchrec.datasets.criteo import criteo_kaggle
-    >>> datapipe = criteo_terabyte(
-    >>>     ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
-    >>> )
-    >>> datapipe = dp.iter.Batcher(datapipe, 100)
-    >>> datapipe = dp.iter.Collator(datapipe)
-    >>> batch = next(iter(datapipe))
+Example::
+
+    from torchrec.datasets.criteo import criteo_kaggle
+    datapipe = criteo_terabyte(
+        ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
+    )
+    datapipe = dp.iter.Batcher(datapipe, 100)
+    datapipe = dp.iter.Collator(datapipe)
+    batch = next(iter(datapipe))
 """
 
 import torchrec.datasets.criteo  # noqa

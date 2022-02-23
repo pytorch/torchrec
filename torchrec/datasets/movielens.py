@@ -94,11 +94,12 @@ def movielens_20m(
         row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each split line.
         open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.
 
-    Examples:
-        >>> datapipe = movielens_20m("/home/datasets/ml-20")
-        >>> datapipe = dp.iter.Batch(datapipe, 100)
-        >>> datapipe = dp.iter.Collate(datapipe)
-        >>> batch = next(iter(datapipe))
+    Example::
+
+        datapipe = movielens_20m("/home/datasets/ml-20")
+        datapipe = dp.iter.Batch(datapipe, 100)
+        datapipe = dp.iter.Collate(datapipe)
+        batch = next(iter(datapipe))
     """
     return _movielens(
         root,
@@ -124,11 +125,12 @@ def movielens_25m(
         row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each split line.
         open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.
 
-    Examples:
-        >>> datapipe = movielens_25m("/home/datasets/ml-25")
-        >>> datapipe = dp.iter.Batch(datapipe, 100)
-        >>> datapipe = dp.iter.Collate(datapipe)
-        >>> batch = next(iter(datapipe))
+    Example::
+
+        datapipe = movielens_25m("/home/datasets/ml-25")
+        datapipe = dp.iter.Batch(datapipe, 100)
+        datapipe = dp.iter.Collate(datapipe)
+        batch = next(iter(datapipe))
     """
     return _movielens(
         root,

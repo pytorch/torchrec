@@ -143,15 +143,16 @@ class RandomRecDataset(IterableDataset[Batch]):
         num_dense (int): Number of dense features.
         manual_seed (int): Seed for deterministic behavior.
 
-    Example:
-        >>> dataset = RandomRecDataset(
-        >>>     keys=["feat1", "feat2"],
-        >>>     batch_size=16,
-        >>>     hash_size=100_000,
-        >>>     ids_per_feature=1,
-        >>>     num_dense=13,
-        >>> ),
-        >>> example = next(iter(dataset))
+    Example::
+
+        dataset = RandomRecDataset(
+            keys=["feat1", "feat2"],
+            batch_size=16,
+            hash_size=100_000,
+            ids_per_feature=1,
+            num_dense=13,
+        ),
+        example = next(iter(dataset))
     """
 
     def __init__(

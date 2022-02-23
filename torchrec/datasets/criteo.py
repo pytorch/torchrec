@@ -78,13 +78,14 @@ class CriteoIterDataPipe(IterDataPipe):
         open_kw: options to pass to underlying invocation of
             iopath.common.file_io.PathManager.open.
 
-    Example:
-        >>> datapipe = CriteoIterDataPipe(
-        >>>     ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
-        >>> )
-        >>> datapipe = dp.iter.Batcher(datapipe, 100)
-        >>> datapipe = dp.iter.Collator(datapipe)
-        >>> batch = next(iter(datapipe))
+    Example::
+
+        datapipe = CriteoIterDataPipe(
+            ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
+        )
+        datapipe = dp.iter.Batcher(datapipe, 100)
+        datapipe = dp.iter.Collator(datapipe)
+        batch = next(iter(datapipe))
     """
 
     def __init__(
@@ -126,6 +127,7 @@ def criteo_terabyte(
     **open_kw,
 ) -> IterDataPipe:
     """`Criteo 1TB Click Logs <https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/>`_ Dataset
+
     Args:
         paths (Iterable[str]): local paths to TSV files that constitute the Criteo 1TB
             dataset.
@@ -134,13 +136,14 @@ def criteo_terabyte(
         open_kw: options to pass to underlying invocation of
             iopath.common.file_io.PathManager.open.
 
-    Example:
-        >>> datapipe = criteo_terabyte(
-        >>>     ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
-        >>> )
-        >>> datapipe = dp.iter.Batcher(datapipe, 100)
-        >>> datapipe = dp.iter.Collator(datapipe)
-        >>> batch = next(iter(datapipe))
+    Example::
+
+        datapipe = criteo_terabyte(
+            ("/home/datasets/criteo/day_0.tsv", "/home/datasets/criteo/day_1.tsv")
+        )
+        datapipe = dp.iter.Batcher(datapipe, 100)
+        datapipe = dp.iter.Collator(datapipe)
+        batch = next(iter(datapipe))
     """
     return CriteoIterDataPipe(paths, row_mapper=row_mapper, **open_kw)
 
@@ -154,20 +157,22 @@ def criteo_kaggle(
     **open_kw,
 ) -> IterDataPipe:
     """`Kaggle/Criteo Display Advertising <https://www.kaggle.com/c/criteo-display-ad-challenge/>`_ Dataset
+
     Args:
         root (str): local path to train or test dataset file.
         row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each split TSV line.
         open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.
 
-    Example:
-        >>> train_datapipe = criteo_kaggle(
-        >>>     "/home/datasets/criteo_kaggle/train.txt",
-        >>> )
-        >>> example = next(iter(train_datapipe))
-        >>> test_datapipe = criteo_kaggle(
-        >>>     "/home/datasets/criteo_kaggle/test.txt",
-        >>> )
-        >>> example = next(iter(test_datapipe))
+    Example::
+
+        train_datapipe = criteo_kaggle(
+            "/home/datasets/criteo_kaggle/train.txt",
+        )
+        example = next(iter(train_datapipe))
+        test_datapipe = criteo_kaggle(
+            "/home/datasets/criteo_kaggle/test.txt",
+        )
+        example = next(iter(test_datapipe))
     """
     return CriteoIterDataPipe((path,), row_mapper=row_mapper, **open_kw)
 
@@ -647,17 +652,18 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         path_manager_key (str): Path manager key used to load from different
             filesystems.
 
-    Example:
-    >>> template = "/home/datasets/criteo/1tb_binary/day_{}_{}.npy"
-    >>> datapipe = InMemoryBinaryCriteoIterDataPipe(
-    >>>     dense_paths=[template.format(0, "dense"), template.format(1, "dense")],
-    >>>     sparse_paths=[template.format(0, "sparse"), template.format(1, "sparse")],
-    >>>     labels_paths=[template.format(0, "labels"), template.format(1, "labels")],
-    >>>     batch_size=1024,
-    >>>     rank=torch.distributed.get_rank(),
-    >>>     world_size=torch.distributed.get_world_size(),
-    >>> )
-    >>> batch = next(iter(datapipe))
+    Example::
+
+        template = "/home/datasets/criteo/1tb_binary/day_{}_{}.npy"
+        datapipe = InMemoryBinaryCriteoIterDataPipe(
+            dense_paths=[template.format(0, "dense"), template.format(1, "dense")],
+            sparse_paths=[template.format(0, "sparse"), template.format(1, "sparse")],
+            labels_paths=[template.format(0, "labels"), template.format(1, "labels")],
+            batch_size=1024,
+            rank=torch.distributed.get_rank(),
+            world_size=torch.distributed.get_world_size(),
+        )
+        batch = next(iter(datapipe))
     """
 
     def __init__(
