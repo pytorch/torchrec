@@ -42,30 +42,31 @@ class SparseArch(nn.Module):
         embedding_bag_collection (EmbeddingBagCollection): represents a
             collection of pooled embeddings
 
-    Example:
-        >>> eb1_config = EmbeddingBagConfig(
-        >>>    name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
-        >>> )
-        >>> eb2_config = EmbeddingBagConfig(
-        >>>    name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
-        >>> )
-        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+    Example::
 
-        >>> ebc = EmbeddingBagCollection(config=ebc_config)
-        >>> sparse_arch = SparseArch(embedding_bag_collection)
+        eb1_config = EmbeddingBagConfig(
+           name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+           name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        >>> #     0       1        2  <-- batch
-        >>> # 0   [0,1] None    [2]
-        >>> # 1   [3]    [4]    [5,6,7]
-        >>> # ^
-        >>> # feature
-        >>> features = KeyedJaggedTensor.from_offsets_sync(
-        >>>    keys=["f1", "f2"],
-        >>>    values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-        >>>    offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        >>> )
+        ebc = EmbeddingBagCollection(config=ebc_config)
+        sparse_arch = SparseArch(embedding_bag_collection)
 
-        >>> sparse_embedded = sparse_arch(features)
+        #     0       1        2  <-- batch
+        # 0   [0,1] None    [2]
+        # 1   [3]    [4]    [5,6,7]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_offsets_sync(
+           keys=["f1", "f2"],
+           values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+           offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        sparse_embedded = sparse_arch(features)
     """
 
     def __init__(self, embedding_bag_collection: EmbeddingBagCollection) -> None:
@@ -95,11 +96,12 @@ class DenseArch(nn.Module):
         layer_sizes (List[int]): list of layer sizes.
         device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> B = 20
-        >>> D = 3
-        >>> dense_arch = DenseArch(10, layer_sizes=[15, D])
-        >>> dense_embedded = dense_arch(torch.rand((B, 10)))
+    Example::
+
+        B = 20
+        D = 3
+        dense_arch = DenseArch(10, layer_sizes=[15, D])
+        dense_embedded = dense_arch(torch.rand((B, 10)))
     """
 
     def __init__(
@@ -131,30 +133,33 @@ class InteractionArch(nn.Module):
     the dot product of each sparse features with the output of the dense layer,
     and the dense layer itself (all concatenated).
 
-    NOTE: The dimensionality of the `dense_features` (D) is expected to match the
-    dimensionality of the `sparse_features` so that the dot products between them can be
-    computed.
+    .. note::
+        The dimensionality of the `dense_features` (D) is expected to match the
+        dimensionality of the `sparse_features` so that the dot products between them can be
+        computed.
+
 
     Args:
         sparse_feature_names (List[str]): size F
 
-    Example:
-        >>> D = 3
-        >>> B = 10
-        >>> keys = ["f1", "f2"]
-        >>> F = len(keys)
-        >>> inter_arch = InteractionArch(sparse_feature_names=keys)
+    Example::
 
-        >>> dense_features = torch.rand((B, D))
+        D = 3
+        B = 10
+        keys = ["f1", "f2"]
+        F = len(keys)
+        inter_arch = InteractionArch(sparse_feature_names=keys)
 
-        >>> sparse_features = KeyedTensor(
-        >>>    keys=keys,
-        >>>    length_per_key=[D, D],
-        >>>    values=torch.rand((B, D * F)),
-        >>> )
+        dense_features = torch.rand((B, D))
 
-        >>> #  B X (D + F + F choose 2)
-        >>> concat_dense = inter_arch(dense_features, sparse_features)
+        sparse_features = KeyedTensor(
+           keys=keys,
+           length_per_key=[D, D],
+           values=torch.rand((B, D * F)),
+        )
+
+        #  B X (D + F + F choose 2)
+        concat_dense = inter_arch(dense_features, sparse_features)
     """
 
     def __init__(self, sparse_feature_names: List[str]) -> None:
@@ -207,11 +212,12 @@ class OverArch(nn.Module):
         layer_sizes (List[int]): sizes of the layers of the `OverArch`.
         device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> B = 20
-        >>> D = 3
-        >>> over_arch = OverArch(10, [5, 1])
-        >>> logits = over_arch(torch.rand((B, 10)))
+    Example::
+
+        B = 20
+        D = 3
+        over_arch = OverArch(10, [5, 1])
+        logits = over_arch(torch.rand((B, 10)))
     """
 
     def __init__(
@@ -259,10 +265,10 @@ class DLRM(nn.Module):
 
     The following notation is used throughout the documentation for the models:
 
-    F: number of sparse features
-    D: embedding_dimension of sparse features
-    B: batch size
-    num_features: number of dense features
+    * F: number of sparse features
+    * D: embedding_dimension of sparse features
+    * B: batch size
+    * num_features: number of dense features
 
     Args:
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
@@ -270,50 +276,50 @@ class DLRM(nn.Module):
         dense_in_features (int): the dimensionality of the dense input features.
         dense_arch_layer_sizes (List[int]): the layer sizes for the `DenseArch`.
         over_arch_layer_sizes (List[int]): the layer sizes for the `OverArch`.
-            NOTE: The output dimension of the `InteractionArch` should not be manually
-            specified here.
+            The output dimension of the `InteractionArch` should not be manually specified here.
         dense_device (Optional[torch.device]): default compute device.
 
-    Example:
-        >>> B = 2
-        >>> D = 8
+    Example::
 
-        >>> eb1_config = EmbeddingBagConfig(
-        >>>    name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
-        >>> )
-        >>> eb2_config = EmbeddingBagConfig(
-        >>>    name="t2",
-        >>>    embedding_dim=D,
-        >>>    num_embeddings=100,
-        >>>    feature_names=["f2"],
-        >>> )
-        >>> ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
+        B = 2
+        D = 8
 
-        >>> ebc = EmbeddingBagCollection(config=ebc_config)
-        >>> model = DLRM(
-        >>>    embedding_bag_collection=ebc,
-        >>>    dense_in_features=100,
-        >>>    dense_arch_layer_sizes=[20],
-        >>>    over_arch_layer_sizes=[5, 1],
-        >>> )
+        eb1_config = EmbeddingBagConfig(
+           name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+           name="t2",
+           embedding_dim=D,
+           num_embeddings=100,
+           feature_names=["f2"],
+        )
+        ebc_config = EmbeddingBagCollectionConfig(tables=[eb1_config, eb2_config])
 
-        >>> features = torch.rand((B, 100))
+        ebc = EmbeddingBagCollection(config=ebc_config)
+        model = DLRM(
+           embedding_bag_collection=ebc,
+           dense_in_features=100,
+           dense_arch_layer_sizes=[20],
+           over_arch_layer_sizes=[5, 1],
+        )
 
-        >>> #     0       1
-        >>> # 0   [1,2] [4,5]
-        >>> # 1   [4,3] [2,9]
-        >>> # ^
-        >>> # feature
-        >>> sparse_features = KeyedJaggedTensor.from_offsets_sync(
-        >>>    keys=["f1", "f3"],
-        >>>    values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
-        >>>    offsets=torch.tensor([0, 2, 4, 6, 8]),
-        >>> )
+        features = torch.rand((B, 100))
 
-        >>> logits = model(
-        >>>    dense_features=features,
-        >>>    sparse_features=sparse_features,
-        >>> )
+        #     0       1
+        # 0   [1,2] [4,5]
+        # 1   [4,3] [2,9]
+        # ^
+        # feature
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+           keys=["f1", "f3"],
+           values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
+           offsets=torch.tensor([0, 2, 4, 6, 8]),
+        )
+
+        logits = model(
+           dense_features=features,
+           sparse_features=sparse_features,
+        )
     """
 
     def __init__(
