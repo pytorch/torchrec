@@ -1,4 +1,5 @@
 # TorchRec (Beta Release)
+[Docs](https://pytorch.org/torchrec/)
 
 TorchRec is a PyTorch domain library built to provide common sparsity & parallelism primitives needed for large-scale recommender systems (RecSys). It allows authors to train models with large embedding tables sharded across many GPUs.
 
@@ -35,7 +36,9 @@ pip install torchrec-nightly-cpu
 ```
 
 ### Colab example: introduction + install
-See this [colab notebook](https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb) for an introduction to torchrec which includes runnable installation.
+See our colab notebook for an introduction to torchrec which includes runnable installation.
+    - [Tutorial Source](https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb)
+    - Open in [Google Colab](https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb)
 
 ## From Source
 
