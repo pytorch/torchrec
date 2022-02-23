@@ -42,6 +42,86 @@ from torchrec.test_utils import (
 )
 
 
+def _generate_inputs(
+    world_size: int,
+    tables: List[EmbeddingTableConfig],
+    weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
+    batch_size: int = 4,
+    num_float_features: int = 16,
+) -> Tuple[ModelInput, List[ModelInput]]:
+    return ModelInput.generate(
+        batch_size=batch_size,
+        world_size=world_size,
+        num_float_features=num_float_features,
+        tables=tables,
+        weighted_tables=weighted_tables or [],
+    )
+
+
+def _gen_model_and_input(
+    model_class: TestSparseNNBase,
+    tables: List[EmbeddingTableConfig],
+    embedding_groups: Dict[str, List[str]],
+    world_size: int,
+    weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
+    num_float_features: int = 16,
+    dense_device: Optional[torch.device] = None,
+    sparse_device: Optional[torch.device] = None,
+) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
+    torch.manual_seed(0)
+
+    model = model_class(
+        tables=cast(List[BaseEmbeddingConfig], tables),
+        num_float_features=num_float_features,
+        weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+        embedding_groups=embedding_groups,
+        dense_device=dense_device,
+        sparse_device=sparse_device,
+    )
+    inputs = [
+        _generate_inputs(
+            world_size=world_size,
+            tables=tables,
+            weighted_tables=weighted_tables,
+            num_float_features=num_float_features,
+        )
+    ]
+    return (model, inputs)
+
+
+def _copy_state_dict(
+    loc: Dict[str, Union[torch.Tensor, ShardedTensor]],
+    glob: Dict[str, torch.Tensor],
+) -> None:
+    for name, tensor in loc.items():
+        assert name in glob
+        global_tensor = glob[name]
+        if isinstance(global_tensor, ShardedTensor):
+            global_tensor = global_tensor.local_shards()[0].tensor
+        if isinstance(tensor, ShardedTensor):
+            for local_shard in tensor.local_shards():
+                assert global_tensor.ndim == local_shard.tensor.ndim
+                shard_meta = local_shard.metadata
+                t = global_tensor.detach()
+                if t.ndim == 1:
+                    t = t[
+                        shard_meta.shard_offsets[0] : shard_meta.shard_offsets[0]
+                        + local_shard.tensor.shape[0]
+                    ]
+                elif t.ndim == 2:
+                    t = t[
+                        shard_meta.shard_offsets[0] : shard_meta.shard_offsets[0]
+                        + local_shard.tensor.shape[0],
+                        shard_meta.shard_offsets[1] : shard_meta.shard_offsets[1]
+                        + local_shard.tensor.shape[1],
+                    ]
+                else:
+                    raise ValueError("Tensors with ndim > 2 are not supported")
+                local_shard.tensor.copy_(t)
+        else:
+            tensor.copy_(global_tensor)
+
+
 class ModelParallelTestBase(unittest.TestCase):
     @seed_and_log
     def setUp(self) -> None:
@@ -107,7 +187,7 @@ class ModelParallelTestBase(unittest.TestCase):
         )
 
         # Generate model & inputs.
-        (global_model, inputs) = cls._gen_model_and_input(
+        (global_model, inputs) = _gen_model_and_input(
             model_class=model_class,
             tables=tables,
             weighted_tables=weighted_tables,
@@ -181,7 +261,7 @@ class ModelParallelTestBase(unittest.TestCase):
         local_opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
 
         # Load model state from the global model.
-        cls._copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        _copy_state_dict(local_model.state_dict(), global_model.state_dict())
 
         # Run a single training step of the sharded model.
         local_pred = cls._gen_full_pred_after_one_step(
@@ -355,3 +435,88 @@ class ModelParallelTestBase(unittest.TestCase):
                     local_shard.tensor.copy_(t)
             else:
                 tensor.copy_(global_tensor)
+
+
+class InferenceModelParallelTestBase(unittest.TestCase):
+    @seed_and_log
+    def setUp(self) -> None:
+        torch.use_deterministic_algorithms(True)
+        if torch.cuda.is_available():
+            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+    def tearDown(self) -> None:
+        torch.use_deterministic_algorithms(False)
+        if torch.cuda.is_available():
+            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
+        super().tearDown()
+
+    def _test_sharded_forward(
+        self,
+        world_size: int,
+        model_class: TestSparseNNBase,
+        embedding_groups: Dict[str, List[str]],
+        tables: List[EmbeddingTableConfig],
+        sharders: List[ModuleSharder[nn.Module]],
+        quantize_callable: Callable[[nn.Module], nn.Module],
+        weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    ) -> None:
+        default_rank = 0
+        cuda_device = torch.device(f"cuda:{default_rank}")
+        torch.cuda.set_device(cuda_device)
+
+        # Generate model & inputs.
+        (global_model, inputs) = _gen_model_and_input(
+            model_class=model_class,
+            tables=tables,
+            weighted_tables=weighted_tables,
+            embedding_groups=embedding_groups,
+            world_size=1,  # generate only one copy of feature for inference
+            num_float_features=16,
+            dense_device=cuda_device,
+            sparse_device=cuda_device,
+        )
+        global_model = quantize_callable(global_model)
+        local_input = inputs[0][1][default_rank].to(cuda_device)
+
+        # Shard model.
+        local_model = model_class(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=cuda_device,
+            sparse_device=torch.device("meta"),
+            num_float_features=16,
+        )
+        local_model = quantize_callable(local_model)
+
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(world_size, "cuda"),
+            constraints=constraints,
+        )
+        plan: ShardingPlan = planner.plan(local_model, sharders)
+
+        # Generate a sharded model on a default rank.
+        local_model = DistributedModelParallel(
+            local_model,
+            env=ShardingEnv.from_local(world_size, default_rank),
+            plan=plan,
+            sharders=sharders,
+            init_data_parallel=False,
+        )
+
+        # Load model state from the global model.
+        _copy_state_dict(local_model.state_dict(), global_model.state_dict())
+
+        # Run a single training step of the sharded model.
+        with torch.inference_mode():
+            shard_pred = local_model(local_input)
+
+        # Run second training step of the unsharded model.
+        with torch.inference_mode():
+            global_pred = global_model(local_input)
+
+        # Compare predictions of sharded vs unsharded models.
+        torch.testing.assert_allclose(global_pred, shard_pred)
