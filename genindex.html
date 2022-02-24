@@ -110,8 +110,12 @@
                   <span class="dropdown-title">torchvision</span>
                   <p></p>
                 </a>
-                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/elastic/">
-                  <span class="dropdown-title">TorchElastic</span>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/torchrec">
+                  <span class="dropdown-title">TorchRec</span>
+                  <p></p>
+                </a>
+                <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/data">
+                  <span class="dropdown-title">TorchData</span>
                   <p></p>
                 </a>
                 <a class="doc-dropdown-option nav-dropdown-item" href="https://pytorch.org/serve/">
@@ -808,6 +812,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator">EmbeddingPerfEstimator (class in torchrec.distributed.planner.shard_estimators)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne">EmbeddingsAllToOne (class in torchrec.distributed.dist_data)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingSharding">EmbeddingSharding (class in torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.planner.planners.EmbeddingShardingPlanner">EmbeddingShardingPlanner (class in torchrec.distributed.planner.planners)</a>
@@ -899,13 +905,13 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait.forward">(torchrec.distributed.comm_ops.ReduceScatter_Wait static method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward">(torchrec.distributed.dist_data.EmbeddingsAllToOne method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll.forward">(torchrec.distributed.dist_data.KJTAllToAll method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTOneToAll.forward">(torchrec.distributed.dist_data.KJTOneToAll method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.forward">(torchrec.distributed.dist_data.PooledEmbeddingsAllToAll method)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToOne.forward">(torchrec.distributed.dist_data.PooledEmbeddingsAllToOne method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter.forward">(torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter method)</a>
 </li>
@@ -915,7 +921,11 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.forward">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist.forward">(torchrec.distributed.embedding_sharding.BaseEmbeddingDist method)</a>
 </li>
@@ -1164,6 +1174,10 @@
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.idx_split_train_val">idx_split_train_val() (in module torchrec.datasets.utils)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup">InferGroupedEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin">InferGroupedLookupMixin (class in torchrec.distributed.embedding_lookup)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup">InferGroupedPooledEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.sharding.tw_sharding.InferTwEmbeddingSharding">InferTwEmbeddingSharding (class in torchrec.distributed.sharding.tw_sharding)</a>
@@ -1338,10 +1352,10 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.Proposer.load">(torchrec.distributed.planner.types.Proposer method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range">load_npy_range() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.load_state_dict">load_state_dict() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -1349,7 +1363,11 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.load_state_dict">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.load_state_dict">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.load_state_dict">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.load_state_dict">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.load_state_dict">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.load_state_dict">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag method)</a>
 </li>
@@ -1401,6 +1419,10 @@
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.max_iters">max_iters (torchrec.optim.warmup.WarmupStage attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.PoolingType.MEAN">MEAN (torchrec.modules.embedding_configs.PoolingType attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup">MetaInferGroupedEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup">MetaInferGroupedPooledEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.ParameterConstraints.min_partition">min_partition (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>
 </li>
@@ -1584,7 +1606,11 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.named_buffers">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.named_buffers">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.named_buffers">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.named_buffers">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.named_buffers">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.named_buffers">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag method)</a>
 </li>
@@ -1612,7 +1638,11 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.named_parameters">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.named_parameters">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.named_parameters">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.named_parameters">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.named_parameters">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.named_parameters">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag method)</a>
 </li>
@@ -1792,8 +1822,6 @@
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.POLY">POLY (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">PooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToOne">PooledEmbeddingsAllToOne (class in torchrec.distributed.dist_data)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>
 </li>
@@ -2074,8 +2102,6 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.sparse_grad_parameter_names">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.sparse_grad_parameter_names">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
-</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.sparse_grad_parameter_names">(torchrec.distributed.embedding_types.BaseEmbeddingLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor.sparse_grad_parameter_names">(torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor method)</a>
@@ -2128,7 +2154,11 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.state_dict">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.state_dict">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.state_dict">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.state_dict">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.state_dict">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.state_dict">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag method)</a>
 </li>
@@ -2547,8 +2577,6 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.activation">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.crossnet
 
@@ -2556,6 +2584,8 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.crossnet">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.deepfm
 
@@ -2676,14 +2706,14 @@
       </ul></li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.train_filter">train_filter() (in module torchrec.datasets.utils)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll.training">training (torchrec.distributed.dist_data.KJTAllToAll attribute)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.training">training (torchrec.distributed.dist_data.EmbeddingsAllToOne attribute)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll.training">(torchrec.distributed.dist_data.KJTAllToAll attribute)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTOneToAll.training">(torchrec.distributed.dist_data.KJTOneToAll attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.training">(torchrec.distributed.dist_data.PooledEmbeddingsAllToAll attribute)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToOne.training">(torchrec.distributed.dist_data.PooledEmbeddingsAllToOne attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter.training">(torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter attribute)</a>
 </li>
@@ -2695,7 +2725,13 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup attribute)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup attribute)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup attribute)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup attribute)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist.training">(torchrec.distributed.embedding_sharding.BaseEmbeddingDist attribute)</a>
 </li>
