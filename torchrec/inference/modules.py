@@ -106,6 +106,7 @@ class PredictModule(nn.Module):
         with torch.cuda.device(self._device), torch.inference_mode():
             return self.predict_forward(batch)
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,

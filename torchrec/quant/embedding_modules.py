@@ -220,6 +220,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             length_per_key=self._lengths_per_embedding,
         )
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,

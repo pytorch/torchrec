@@ -79,6 +79,7 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,

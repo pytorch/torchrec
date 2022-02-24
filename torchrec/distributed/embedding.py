@@ -424,6 +424,7 @@ class ShardedEmbeddingCollection(
             embedding_names_per_sharding=self._embedding_names_per_sharding,
         )
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,

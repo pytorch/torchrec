@@ -165,6 +165,7 @@ class GroupedEmbedding(BaseEmbedding):
                 unpooled_embeddings.append(emb_module(input=indices_dict[feature_name]))
         return torch.cat(unpooled_embeddings, dim=0)
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,
@@ -263,6 +264,7 @@ class GroupedEmbeddingBag(BaseEmbedding):
                 )
         return torch.cat(pooled_embeddings, dim=1)
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,

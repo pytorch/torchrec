@@ -411,6 +411,7 @@ class ShardedEmbeddingBagCollection(
             embedding_names=self._embedding_names,
         )
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,
@@ -661,6 +662,7 @@ class ShardedEmbeddingBag(
             awaitable=self._output_dist(output),
         )
 
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
         destination: Optional[Dict[str, Any]] = None,
