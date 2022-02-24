@@ -102,7 +102,7 @@ def perf_func_emb_wall_time(
     """
     Attempts to model perfs as a function of relative wall times.
     Only models forward perfs (ignores backward perfs).
-    The computation perf estimation is based on EmbeddingBagCollectionSharder
+    The computation perf estimation is based on `EmbeddingBagCollectionSharder`
     (pooledEmbedding).
 
     Args:

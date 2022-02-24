@@ -46,7 +46,7 @@ class HeuristicalStorageReservation(StorageReservation):
     reservation is comprised of unshardable tensor storage, KJT storage, and an extra
     percentage.
 
-    Constructor Args:
+    Args:
         percentage (float): extra storage percentage to reserve that acts as a margin of
             error beyond heuristic calculation of storage.
     """

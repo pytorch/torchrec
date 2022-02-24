@@ -33,10 +33,10 @@ from torchrec.distributed.types import ModuleSharder, ShardingType
 
 class EmbeddingEnumerator(Enumerator):
     """
-    Generates embedding sharding options for given nn.Module, considering user provided
+    Generates embedding sharding options for given `nn.Module`, considering user provided
     constraints.
 
-    Constructor Args:
+    Args:
         topology (Topology): device topology.
         constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names
             to provided ParameterConstraints.
@@ -184,7 +184,7 @@ def get_partition_by_type(sharding_type: str) -> str:
         sharding_type (str): sharding type string.
 
     Returns:
-        str: the corresponding PartitionByType value.
+        str: the corresponding `PartitionByType` value.
     """
 
     device_sharding_types = {
@@ -230,9 +230,7 @@ def calculate_shard_sizes_and_offsets(
         col_wise_shard_dim (Optional[int]): dimension for column wise sharding split.
 
     Returns:
-        Tuple[List[List[int]], List[List[int]]]: shard sizes, represented as a list of
-            the dimensions of the sharded tensor on each device, and shard offsets,
-            represented as a list of coordinates of placement on each device.
+        Tuple[List[List[int]], List[List[int]]]: shard sizes, represented as a list of the dimensions of the sharded tensor on each device, and shard offsets, represented as a list of coordinates of placement on each device.
 
     Raises:
         ValueError: If `sharding_type` is not a valid ShardingType.
@@ -268,8 +266,8 @@ def _calculate_rw_shard_sizes_and_offsets(
     For example if hash_size = 10, num_devices = 3, we will allocate the rows as 3,3,3,1
     (rather than 3,3,2,2).
     This is due to implementation in RW sharding that sets block_size_lists to be ceil.
-    The balanced way is harder to support on GPU. For more details see
-    https://fb.quip.com/xbgbAchCTOL0
+    The balanced way is harder to support on GPU.
+    For more details see https://fb.quip.com/xbgbAchCTOL0
 
     Also consider the example of hash_size = 5, num_devices = 4. The expected rows per
     rank is [2,2,1,0].
