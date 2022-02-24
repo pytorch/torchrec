@@ -79,7 +79,7 @@ python setup.py install develop --cpu_only     # For a CPU only installation of 
 torchx run --scheduler local_cwd test_installation.py:test_installation
 ```
 
-6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/github/examples/dlrm/dlrm_main.py).
+6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](examples/dlrm/dlrm_main.py).
 
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
