@@ -26,7 +26,7 @@ namespace torchrec {
 class GPUExecutor {
  public:
   GPUExecutor(
-      torch::deploy::InterpreterManager& manager,
+      std::shared_ptr<torch::deploy::InterpreterManager> manager,
       torch::deploy::ReplicatedObj model,
       int rank,
       int worldSize);
@@ -40,7 +40,7 @@ class GPUExecutor {
 
  private:
   // torch deploy
-  torch::deploy::InterpreterManager& manager_;
+  std::shared_ptr<torch::deploy::InterpreterManager> manager_;
   torch::deploy::ReplicatedObj model_;
   int rank_;
   int worldSize_;

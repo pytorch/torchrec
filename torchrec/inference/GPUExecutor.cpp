@@ -64,7 +64,7 @@ void init_cuda_runtime() {
 } // namespace
 
 GPUExecutor::GPUExecutor(
-    torch::deploy::InterpreterManager& manager,
+    std::shared_ptr<torch::deploy::InterpreterManager> manager,
     torch::deploy::ReplicatedObj model,
     int rank,
     int worldSize)
@@ -76,7 +76,7 @@ GPUExecutor::GPUExecutor(
   at::cuda::CUDAGuard guard(rank_);
   init_cuda_runtime();
 
-  int num_threads_per_gpu = manager_.allInstances().size() / worldSize_;
+  int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
   for (int i = 0; i < num_threads_per_gpu; ++i) {
     LOG(INFO) << "Starting Thread " << i << " for Model Shard Rank " << rank_
               << ", as Global thread: " << rank * num_threads_per_gpu + i;
@@ -108,7 +108,7 @@ void GPUExecutor::callback(std::shared_ptr<PredictionBatch> batch) {
 }
 
 void GPUExecutor::process(int idx) {
-  int num_threads_per_gpu = manager_.allInstances().size() / worldSize_;
+  int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
   folly::setThreadName(
       fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
 
@@ -140,7 +140,7 @@ void GPUExecutor::process(int idx) {
     }
 
     // Free session to avoid accumulating too many PyObjects.
-    auto model = model_.acquireSession(&manager_.allInstances().at(idx));
+    auto model = model_.acquireSession(&manager_->allInstances().at(idx));
     at::IValue predictions;
 
     try {
@@ -148,7 +148,7 @@ void GPUExecutor::process(int idx) {
       predictions = model.self.attr("__call__")({std::move(batch->forwardArgs)})
                         .toIValue();
     } catch (const std::exception& ex) {
-      LOG(ERROR) << "Exception during predict, msg: " << ex.what();
+      LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
     auto remainingBatchSize = batch->batch_size;

@@ -255,4 +255,8 @@ void BatchingQueue::processCallback(int gpuIdx) {
   }
 }
 
+BatchingQueue::~BatchingQueue() {
+  stop();
+}
+
 } // namespace torchrec
