@@ -29,6 +29,8 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
+    _copy_state_dict,
+    _gen_model_and_input,
 )
 from torchrec.distributed.types import (
     ModuleSharder,
@@ -233,7 +235,7 @@ class ModelParallelTest(ModelParallelTestBase):
             global_pg = dist.new_group(ranks=[1], backend=backend)
 
         # Generate model & inputs.
-        (global_model, inputs) = cls._gen_model_and_input(
+        (global_model, inputs) = _gen_model_and_input(
             model_class=model_class,
             tables=tables,
             weighted_tables=weighted_tables,
@@ -274,7 +276,7 @@ class ModelParallelTest(ModelParallelTestBase):
         local_opt = torch.optim.SGD(local_model.parameters(), lr=0.1)
 
         # Load model & optimizer states from the global model.
-        cls._copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        _copy_state_dict(local_model.state_dict(), global_model.state_dict())
         # pyre-ignore [16]
         for param_name, local_state in local_model.fused_optimizer.state_dict()[
             "state"
@@ -282,7 +284,7 @@ class ModelParallelTest(ModelParallelTestBase):
             global_state = global_model.fused_optimizer.state_dict()["state"][
                 param_name
             ]
-            cls._copy_state_dict(local_state, global_state)
+            _copy_state_dict(local_state, global_state)
 
         # Run a single training step of the sharded model.
         local_pred = cls._gen_full_pred_after_one_step(
