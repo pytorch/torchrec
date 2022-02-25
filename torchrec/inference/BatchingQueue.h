@@ -71,6 +71,7 @@ class BatchingQueue {
       std::vector<BatchQueueCb> cbs,
       const Config& config,
       int worldSize);
+  ~BatchingQueue();
 
   void add(
       std::shared_ptr<PredictionRequest> request,
