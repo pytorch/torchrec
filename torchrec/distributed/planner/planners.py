@@ -134,6 +134,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         performance_model: Optional[PerfModel] = None,
         stats: Optional[Stats] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        debug: bool = False,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
@@ -167,6 +168,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             performance_model if performance_model else NoopPerfModel(topology=topology)
         )
         self._stats: Stats = stats if stats else EmbeddingStats()
+        self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
 
@@ -280,6 +282,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 num_plans=self._num_plans,
                 best_plan=best_plan,
                 constraints=self._constraints,
+                debug=self._debug,
             )
             return sharding_plan
         else:
