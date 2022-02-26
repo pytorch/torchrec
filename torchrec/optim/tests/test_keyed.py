@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import io
 import os
 import unittest
 from typing import Dict, Any, List
@@ -165,8 +166,62 @@ class TestKeyedOptimizer(unittest.TestCase):
         self.assertTrue(sparse.grad.is_sparse)
         self.assertTrue("momentum_buffer" in opt.state_dict()["state"]["sparse"])
 
+    def test_pickle(self) -> None:
+        dense = torch.nn.Parameter(torch.ones((2, 3), dtype=torch.float))
+        sparse = torch.nn.Parameter(torch.ones((1, 4), dtype=torch.float))
+        opt = KeyedOptimizerWrapper(
+            {"dense": dense, "sparse": sparse},
+            lambda params: torch.optim.SGD(params, lr=0.1),
+        )
+        opt.init_state({"sparse"})
+
+        bytesIO = io.BytesIO()
+        torch.save(opt, bytesIO)
+        bytesIO.seek(0)
+        reload_opt = torch.load(bytesIO)
+
+        for k in reload_opt.state_dict():
+            self.assertEqual(
+                opt.state_dict()[k],
+                reload_opt.state_dict()[k],
+            )
+
 
 class TestCombinedOptimizer(unittest.TestCase):
+    def test_pickle(self) -> None:
+        # Set up example KeyedOptimizer 1.
+        param_1_t = torch.tensor([1.0, 2.0])
+        param_1 = Variable(param_1_t)
+        keyed_optimizer_1 = KeyedOptimizer(
+            {"param_1": param_1},
+            {param_1: {"one": 1.0}},
+            [{"params": [param_1], "param_group_val_0": 2.0}],
+        )
+
+        # Set up example KeyedOptimizer 2.
+        param_2_t = torch.tensor([-1.0, -2.0])
+        param_2 = Variable(param_2_t)
+        keyed_optimizer_2 = KeyedOptimizer(
+            {"param_2": param_2},
+            {param_2: {"two": -1.0}},
+            [{"params": [param_2], "param_group_val_0": -2.0}],
+        )
+
+        combined_optimizer = CombinedOptimizer(
+            [("ko1", keyed_optimizer_1), ("", keyed_optimizer_2)]
+        )
+
+        bytesIO = io.BytesIO()
+        torch.save(combined_optimizer, bytesIO)
+        bytesIO.seek(0)
+        reload_combined_optimizer = torch.load(bytesIO)
+
+        for k in reload_combined_optimizer.state_dict():
+            self.assertEqual(
+                combined_optimizer.state_dict()[k],
+                reload_combined_optimizer.state_dict()[k],
+            )
+
     def test_load_state_dict(self) -> None:
         # Set up example KeyedOptimizer 1.
         param_1_t = torch.tensor([1.0, 2.0])

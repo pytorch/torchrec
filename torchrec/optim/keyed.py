@@ -55,8 +55,7 @@ class KeyedOptimizer(optim.Optimizer):
         self.state: Mapping[Any, Any] = state
         self.param_groups: Collection[Mapping[str, Any]] = param_groups
         self.params = params
-        self.defaults: Dict[str, Any] = {}
-        self._save_param_groups = False
+        self.defaults: Dict[str, Any] = {"_save_param_groups": False}
 
         params_set = set(params.values())
         non_param_state_keys = [key for key in self.state if key not in params_set]
@@ -95,7 +94,7 @@ class KeyedOptimizer(optim.Optimizer):
             ret_groups.append(ret_group)
 
         ret: Dict[str, object] = {"state": ret_state}
-        if self._save_param_groups:
+        if self.defaults["_save_param_groups"]:
             ret["param_groups"] = ret_groups
         return ret
 
@@ -160,7 +159,7 @@ class KeyedOptimizer(optim.Optimizer):
                     state[param][state_key] = deepcopy(new_state_val)
 
         # Load param_groups.
-        if self._save_param_groups:
+        if self.defaults["_save_param_groups"]:
             new_param_groups = state_dict["param_groups"]
             param_groups = self.param_groups
 
@@ -189,7 +188,7 @@ class KeyedOptimizer(optim.Optimizer):
                     raise ValueError(
                         f"Different param_group size: {len(group)} vs {len(new_group)}"
                     )
-                for k, v in group.items():
+                for k in group:
                     if k not in new_group:
                         raise ValueError(
                             f"Group key {k} not found for group {group_key}"
@@ -227,7 +226,10 @@ class KeyedOptimizer(optim.Optimizer):
         self.step(closure=None)
 
     def save_param_groups(self, save: bool) -> None:
-        self._save_param_groups = True
+        self.defaults["_save_param_groups"] = save
+
+    def __getstate__(self) -> Dict[str, Any]:
+        return self.__dict__
 
 
 class CombinedOptimizer(KeyedOptimizer):
@@ -241,7 +243,6 @@ class CombinedOptimizer(KeyedOptimizer):
         self, optims: List[Union[KeyedOptimizer, Tuple[str, KeyedOptimizer]]]
     ) -> None:
         self.defaults: Dict[str, Any] = {}
-        self._save_param_groups = False
         # Append empty optimizer key if not passed.
         self._optims: List[Tuple[str, KeyedOptimizer]] = []
         for key_value in optims:
@@ -250,7 +251,17 @@ class CombinedOptimizer(KeyedOptimizer):
             self._optims.append(key_value)
 
         all_keys: Set[str] = set()
+        self.defaults["_save_param_groups"] = (
+            False
+            if len(self._optims) == 0
+            else self._optims[0][1].defaults["_save_param_groups"]
+        )
         for opt_key, opt in self._optims:
+            assert (
+                self.defaults["_save_param_groups"]
+                == opt.defaults["_save_param_groups"]
+            )
+
             for param_key in opt.params.keys():
                 new_param = CombinedOptimizer._prepend_opt_key(param_key, opt_key)
                 if new_param in all_keys:
@@ -307,6 +318,11 @@ class CombinedOptimizer(KeyedOptimizer):
         for _, opt in self._optims:
             opt.post_load_state_dict()
 
+    def save_param_groups(self, save: bool) -> None:
+        self.defaults["_save_param_groups"] = save
+        for _, opt in self._optims:
+            opt.save_param_groups(save)
+
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
     """
@@ -344,7 +360,6 @@ class OptimizerWrapper(KeyedOptimizer):
         # pyre-ignore [4]
         self.state: Mapping[Any, Any] = optimizer.state
         self.param_groups: Collection[Mapping[str, Any]] = optimizer.param_groups
-        self._save_param_groups = False
 
     def __repr__(self) -> str:
         return self._optimizer.__repr__()
