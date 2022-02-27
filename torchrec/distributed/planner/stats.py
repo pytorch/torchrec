@@ -23,8 +23,7 @@ from torchrec.distributed.types import ShardingType, ParameterSharding, Sharding
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-STATS_DIVIDER = "####################################################################################################"
-STATS_BAR = f"#{'------------------------------------------------------------------------------------------------': ^98}#"
+MIN_WIDTH = 90
 
 
 class EmbeddingStats(Stats):
@@ -40,6 +39,7 @@ class EmbeddingStats(Stats):
         num_plans: int,
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        debug: bool = False,
     ) -> None:
         """
         Logs stats for a given sharding plan to stdout.
@@ -152,36 +152,75 @@ class EmbeddingStats(Stats):
                     rank_shards,
                 ]
             )
+        formatted_table = _format_table(table)
+        width = max(MIN_WIDTH, len(formatted_table[0]) + 8)
 
-        logger.info(STATS_DIVIDER)
+        if debug:
+            param_table: List[List[Union[str, int]]] = [
+                ["FQN", "Sharding", "Compute Kernel", "Perf", "Ranks"],
+                [
+                    "-----",
+                    "----------",
+                    "----------------",
+                    "------",
+                    "-------",
+                ],
+            ]
+            for so in best_plan:
+                # pyre-ignore[6]
+                ranks = sorted([shard.rank for shard in so.shards])
+                if len(ranks) > 1 and ranks == list(range(min(ranks), max(ranks) + 1)):
+                    ranks = [f"{min(ranks)}-{max(ranks)}"]
+                param_table.append(
+                    [
+                        so.fqn,
+                        _get_sharding_type_abbr(so.sharding_type),
+                        so.compute_kernel,
+                        # pyre-ignore[58]
+                        f"{sum([shard.perf for shard in so.shards])/ 1000:,.0f}",
+                        ",".join([str(rank) for rank in ranks]),
+                    ]
+                )
+            formatted_param_table = _format_table(param_table)
+            width = max(width, len(formatted_param_table[0]) + 6)
+
+        logger.info("#" * width)
         header_text = "--- Planner Statistics ---"
-        logger.info(f"#{header_text: ^98}#")
+        logger.info(f"#{header_text: ^{width-2}}#")
 
         iter_text = (
             f"--- Evalulated {num_proposals} proposal(s), "
             f"found {num_plans} possible plan(s) ---"
         )
-        logger.info(f"#{iter_text: ^98}#")
-        logger.info(STATS_BAR)
+        logger.info(f"#{iter_text: ^{width-2}}#")
 
-        formatted_table = _format_table(table)
+        divider = "-" * (width - 4)
+        logger.info(f"#{divider: ^{width-2}}#")
+
         for row in formatted_table:
-            logger.info(f"# {row: <97}#")
+            logger.info(f"# {row: <{width-3}}#")
 
-        logger.info(f"#{'' : ^98}#")
+        logger.info(f"#{'' : ^{width-2}}#")
         legend = "Input: pooling factor, Output: embedding dimension, Shards: number of tables"
-        logger.info(f"# {legend: <97}#")
-        logger.info(f"#{'' : ^98}#")
+        logger.info(f"# {legend: <{width-3}}#")
+        logger.info(f"#{'' : ^{width-2}}#")
 
         compute_kernels_count = [
             f"{compute_kernel}: {count}"
             for compute_kernel, count in sorted(compute_kernels_to_count.items())
         ]
-        logger.info(f"# {'Compute Kernels:' : <97}#")
+        logger.info(f"# {'Compute Kernels:' : <{width-3}}#")
         for compute_kernel_count in compute_kernels_count:
-            logger.info(f"#   {compute_kernel_count : <95}#")
+            logger.info(f"#   {compute_kernel_count : <{width-5}}#")
 
-        logger.info(STATS_DIVIDER)
+        if debug:
+            logger.info(f"#{'' : ^{width-2}}#")
+            logger.info(f"# {'Parameter Info:' : <{width-3}}#")
+
+            for row in formatted_param_table:
+                logger.info(f"# {row: <{width-3}}#")
+
+        logger.info("#" * width)
 
     def _get_shard_stats(
         self,
