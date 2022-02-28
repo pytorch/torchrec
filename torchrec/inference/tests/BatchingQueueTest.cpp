@@ -59,7 +59,6 @@ TEST(BatchingQueueTest, Basic) {
       batchQueueCbs,
       BatchingQueue::Config{.batchingMetadata = {{"float_features", "dense"}}},
       1);
-  auto guard = folly::makeGuard([&] { queue.stop(); });
 
   queue.add(
       createRequest(2, 2),
