@@ -360,6 +360,7 @@ class OptimizerWrapper(KeyedOptimizer):
         # pyre-ignore [4]
         self.state: Mapping[Any, Any] = optimizer.state
         self.param_groups: Collection[Mapping[str, Any]] = optimizer.param_groups
+        self.defaults: Dict[str, Any] = {"_save_param_groups": False}
 
     def __repr__(self) -> str:
         return self._optimizer.__repr__()
