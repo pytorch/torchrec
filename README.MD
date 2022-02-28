@@ -45,39 +45,39 @@ See our colab notebook for an introduction to torchrec which includes runnable i
 We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 11.3. This setup assumes you have conda installed.
 
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/)
-```
-conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
-```
+   ```
+   conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
+   ```
 
 2. Install Requirements
-```
-pip install -r requirements.txt
-```
+   ```
+   pip install -r requirements.txt
+   ```
 
 3. Next, install FBGEMM_GPU from source (included in third_party folder of torchrec) by following the directions [here](https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu). Installing fbgemm GPU is optional, but using FBGEMM w/ CUDA will be much faster. For CUDA 11.3 and SM80 (Ampere) architecture, the following instructions can be used:
-```
-export CUB_DIR=/usr/local/cuda-11.3/include/cub
-export CUDA_BIN_PATH=/usr/local/cuda-11.3/
-export CUDACXX=/usr/local/cuda-11.3/bin/nvcc
-python setup.py install -DTORCH_CUDA_ARCH_LIST="7.0;8.0"
-```
-The last line of the above code block (`python setup.py install`...) which manually installs fbgemm_gpu can be skipped if you do not need to build fbgemm_gpu with custom build-related flags. Skip to the next step if that is the case.
+   ```
+   export CUB_DIR=/usr/local/cuda-11.3/include/cub
+   export CUDA_BIN_PATH=/usr/local/cuda-11.3/
+   export CUDACXX=/usr/local/cuda-11.3/bin/nvcc
+   python setup.py install -DTORCH_CUDA_ARCH_LIST="7.0;8.0"
+   ```
+   The last line of the above code block (`python setup.py install`...) which manually installs fbgemm_gpu can be skipped if you do not need to build fbgemm_gpu with custom build-related flags. Skip to the next step if that is the case.
 
 4. Download and install TorchRec.
-```
-git clone --recursive https://github.com/facebookresearch/torchrec
+   ```
+   git clone --recursive https://github.com/facebookresearch/torchrec
 
-# cd to the directory where torchrec's setup.py is located. Then run one of the below:
-cd torchrec
-python setup.py install develop --skip_fbgemm  # If you manually installed fbgemm_gpu in the previous step.
-python setup.py install develop                # Otherwise. This will run the fbgemm_gpu install step for you behind the scenes.
-python setup.py install develop --cpu_only     # For a CPU only installation of FBGEMM
-```
+   # cd to the directory where torchrec's setup.py is located. Then run one of the below:
+   cd torchrec
+   python setup.py install develop --skip_fbgemm  # If you manually installed fbgemm_gpu in the previous step.
+   python setup.py install develop                # Otherwise. This will run the fbgemm_gpu install step for you behind the scenes.
+   python setup.py install develop --cpu_only     # For a CPU only installation of FBGEMM
+   ```
 
 5. Test the installation.
-```
-torchx run --scheduler local_cwd test_installation.py:test_installation
-```
+   ```
+   torchx run --scheduler local_cwd test_installation.py:test_installation
+   ```
 
 6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](torchrec/github/examples/dlrm/dlrm_main.py).
 
