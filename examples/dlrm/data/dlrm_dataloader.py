@@ -25,29 +25,29 @@ STAGES = ["train", "val", "test"]
 
 def _get_random_dataloader(
     args: argparse.Namespace,
-    pin_memory: bool,
 ) -> DataLoader:
     return DataLoader(
         RandomRecDataset(
             keys=DEFAULT_CAT_NAMES,
             batch_size=args.batch_size,
             hash_size=args.num_embeddings,
-            hash_sizes=args.num_embeddings_per_feature,
-            manual_seed=args.seed,
+            hash_sizes=args.num_embeddings_per_feature
+            if hasattr(args, "num_embeddings_per_feature")
+            else None,
+            manual_seed=args.seed if hasattr(args, "seed") else None,
             ids_per_feature=1,
             num_dense=len(DEFAULT_INT_NAMES),
         ),
         batch_size=None,
         batch_sampler=None,
-        pin_memory=pin_memory,
-        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+        num_workers=args.num_workers if hasattr(args, "num_workers") else 0,
     )
 
 
 def _get_in_memory_dataloader(
     args: argparse.Namespace,
     stage: str,
-    pin_memory: bool,
 ) -> DataLoader:
     files = os.listdir(args.in_memory_binary_criteo_path)
 
@@ -91,7 +91,7 @@ def _get_in_memory_dataloader(
             else ([args.num_embeddings] * CAT_FEATURE_COUNT),
         ),
         batch_size=None,
-        pin_memory=pin_memory,
+        pin_memory=args.pin_memory,
         collate_fn=lambda x: x,
     )
     return dataloader
@@ -117,9 +117,14 @@ def get_dataloader(args: argparse.Namespace, backend: str, stage: str) -> DataLo
     if stage not in STAGES:
         raise ValueError(f"Supplied stage was {stage}. Must be one of {STAGES}.")
 
-    pin_memory = (backend == "nccl") if args.pin_memory is None else args.pin_memory
+    args.pin_memory = (
+        (backend == "nccl") if not hasattr(args, "pin_memory") else args.pin_memory
+    )
 
-    if args.in_memory_binary_criteo_path is None:
-        return _get_random_dataloader(args, pin_memory)
+    if (
+        not hasattr(args, "in_memory_binary_criteo_path")
+        or args.in_memory_binary_criteo_path is None
+    ):
+        return _get_random_dataloader(args)
     else:
-        return _get_in_memory_dataloader(args, stage, pin_memory)
+        return _get_in_memory_dataloader(args, stage)
