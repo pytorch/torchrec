@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, Optional, Any
+from typing import List, Type, Dict, Optional, Any
 
 import torch
 import torch.nn as nn
@@ -16,20 +16,31 @@ import torchrec.quant as trec_quant
 
 
 def quantize_embeddings(
-    module: nn.Module, dtype: torch.dtype, inplace: bool
+    module: nn.Module,
+    dtype: torch.dtype,
+    inplace: bool,
+    additional_qconfig_spec_keys: Optional[List[Type[nn.Module]]] = None,
+    additional_mapping: Optional[Dict[Type[nn.Module], Type[nn.Module]]] = None,
 ) -> nn.Module:
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver,
         weight=quant.PlaceholderObserver.with_args(dtype=dtype),
     )
+    qconfig_spec: Dict[Type[nn.Module], quant.QConfig] = {
+        trec.EmbeddingBagCollection: qconfig,
+    }
+    mapping: Dict[Type[nn.Module], Type[nn.Module]] = {
+        trec.EmbeddingBagCollection: trec_quant.EmbeddingBagCollection,
+    }
+    if additional_qconfig_spec_keys is not None:
+        for t in additional_qconfig_spec_keys:
+            qconfig_spec[t] = qconfig
+    if additional_mapping is not None:
+        mapping.update(additional_mapping)
     return quant.quantize_dynamic(
         module,
-        qconfig_spec={
-            trec.EmbeddingBagCollection: qconfig,
-        },
-        mapping={
-            trec.EmbeddingBagCollection: trec_quant.EmbeddingBagCollection,
-        },
+        qconfig_spec=qconfig_spec,
+        mapping=mapping,
         inplace=inplace,
     )
 
