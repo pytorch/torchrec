@@ -52,7 +52,7 @@ TRAIN_PIPELINE_STAGES = 3  # Number of stages in TrainPipelineSparseDist.
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="torchrec + lightning app")
+    parser = argparse.ArgumentParser(description="torchrec dlrm example trainer")
     parser.add_argument(
         "--epochs", type=int, default=1, help="number of epochs to train"
     )
