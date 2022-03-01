@@ -42,7 +42,7 @@ class CriteoDataFramesTest(CriteoTest):
 
         for df in dataset:
             self.assertFalse(last_batch)
-            self.assertTrue(isinstance(df, ta.IDataFrame))
+            self.assertTrue(isinstance(df, ta.DataFrame))
             self.assertLessEqual(len(df), self.BATCH_SIZE)
 
             total_length += len(df)
@@ -52,7 +52,7 @@ class CriteoDataFramesTest(CriteoTest):
             self._validate_dataframe(df)
         self.assertEqual(total_length, expected_total_length)
 
-    def _validate_dataframe(self, df: ta.IDataFrame, train: bool = True) -> None:
+    def _validate_dataframe(self, df: ta.DataFrame, train: bool = True) -> None:
         if train:
             self.assertEqual(len(df.columns), 3)
             labels = df["labels"]
