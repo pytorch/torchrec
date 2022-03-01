@@ -764,7 +764,7 @@ The output dimension of the <cite>InteractionArch</cite> should not be manually 
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionArch">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sparse_feature_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionArch" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
 <p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
 (dense_features). Returns the pairwise dot product of each sparse feature pair,
@@ -778,7 +778,7 @@ computed.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>sparse_feature_names</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – size F</p>
+<dd class="field-odd"><p><strong>num_sparse_features</strong> – int = F</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -786,15 +786,10 @@ computed.</p>
 <span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
 <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
 <span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
-<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionArch</span><span class="p">(</span><span class="n">sparse_feature_names</span><span class="o">=</span><span class="n">keys</span><span class="p">)</span>
+<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionArch</span><span class="p">(</span><span class="n">num_sparse_features</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
 
 <span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
-
-<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="p">(</span>
-   <span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span>
-   <span class="n">length_per_key</span><span class="o">=</span><span class="p">[</span><span class="n">D</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
-   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span><span class="p">)),</span>
-<span class="p">)</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
 
 <span class="c1">#  B X (D + F + F choose 2)</span>
 <span class="n">concat_dense</span> <span class="o">=</span> <span class="n">inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
@@ -802,12 +797,12 @@ computed.</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionArch.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.InteractionArch.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.InteractionArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X D.</p></li>
-<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – an input tensor of size F * D X B.</p></li>
+<li><p><strong>sparse_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X F X D</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -902,24 +897,26 @@ collection of pooled embeddings</p>
    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
 <span class="p">)</span>
 
-<span class="n">sparse_embedded</span> <span class="o">=</span> <span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="n">sparse_embeddings</span> <span class="o">=</span> <span class="n">sparse_arch</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.SparseArch.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.models.dlrm.SparseArch.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.SparseArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – an input tensor of sparse features.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output tensor of size F * D X B.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor">KeyedTensor</a></p>
+<dd class="field-even"><p>torch.Tensor of shape B X F X D</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.SparseArch.sparse_feature_names">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sparse_feature_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.models.dlrm.SparseArch.sparse_feature_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.SparseArch.training">
