@@ -206,9 +206,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         )
         if init_data_parallel:
             self.init_data_parallel()
-        self._optim: Optional[KeyedOptimizer] = None
-        if len(fused_optims) > 0:
-            self._optim = CombinedOptimizer(fused_optims)
+        self._optim = CombinedOptimizer(fused_optims)
 
     @property
     def dmp_module(self) -> nn.Module:
@@ -487,7 +485,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         yield from self._named_buffers(self.dmp_module, prefix, recurse)
 
     @property
-    def fused_optimizer(self) -> Optional[KeyedOptimizer]:
+    def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
 
     @property
