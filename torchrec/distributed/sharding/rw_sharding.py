@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
+    ShardingEnv,
     ShardedTensorMetadata,
     ShardMetadata,
     Awaitable,
@@ -51,13 +52,15 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
-        self._pg = pg
+        self._env = env
+        # pyre-ignore[11]
+        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._world_size: int = self._env.world_size
+        self._rank: int = self._env.rank
         if device is None:
             device = torch.device("cpu")
         self._device = device
@@ -74,10 +77,10 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         ) = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[
             GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+        ] = self._grouped_embedding_configs_per_rank[self._rank]
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
-        ] = self._score_grouped_embedding_configs_per_rank[dist.get_rank(pg)]
+        ] = self._score_grouped_embedding_configs_per_rank[self._rank]
 
         self._has_feature_processor: bool = False
         for group_config in self._grouped_embedding_configs:
@@ -90,9 +93,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
     ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._pg.size()
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for i in range(self._world_size)
         ]
         for config in embedding_configs:
             # pyre-fixme [16]
@@ -104,7 +106,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
                 size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
             )
 
-            for rank in range(world_size):
+            for rank in range(self._world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=config[0].num_embeddings,

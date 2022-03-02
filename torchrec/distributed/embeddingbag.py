@@ -101,35 +101,26 @@ def create_embedding_bag_sharding(
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
-    pg = env.process_group
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(embedding_configs)
-    if pg is not None:
-        if sharding_type == ShardingType.TABLE_WISE.value:
-            return TwPooledEmbeddingSharding(embedding_configs, env, device)
-        elif sharding_type == ShardingType.ROW_WISE.value:
-            return RwPooledEmbeddingSharding(embedding_configs, pg, device)
-        elif sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpPooledEmbeddingSharding(embedding_configs, env, device)
-        elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-            return TwRwPooledEmbeddingSharding(embedding_configs, pg, device)
-        elif sharding_type == ShardingType.COLUMN_WISE.value:
-            return CwPooledEmbeddingSharding(
-                embedding_configs, env, device, permute_embeddings=permute_embeddings
-            )
-        elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
-            return TwCwPooledEmbeddingSharding(
-                embedding_configs, env, device, permute_embeddings=permute_embeddings
-            )
-        else:
-            raise ValueError(f"Sharding type not supported {sharding_type}")
+    if sharding_type == ShardingType.TABLE_WISE.value:
+        return TwPooledEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.ROW_WISE.value:
+        return RwPooledEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.DATA_PARALLEL.value:
+        return DpPooledEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+        return TwRwPooledEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.COLUMN_WISE.value:
+        return CwPooledEmbeddingSharding(
+            embedding_configs, env, device, permute_embeddings=permute_embeddings
+        )
+    elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+        return TwCwPooledEmbeddingSharding(
+            embedding_configs, env, device, permute_embeddings=permute_embeddings
+        )
     else:
-        if sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpPooledEmbeddingSharding(embedding_configs, env, device)
-        elif sharding_type == ShardingType.TABLE_WISE.value:
-            return TwPooledEmbeddingSharding(embedding_configs, env, device)
-        else:
-            raise ValueError(f"Sharding type not supported {sharding_type}")
+        raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
 def filter_state_dict(

@@ -8,11 +8,8 @@
 from typing import List, Optional, Tuple
 
 import torch
-import torch.distributed as dist
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
-from torchrec.distributed.types import (
-    ParameterSharding,
-)
+from torchrec.distributed.types import ParameterSharding, ShardingEnv
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 
 
@@ -28,11 +25,10 @@ class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
     ) -> None:
         super().__init__(
-            embedding_configs, pg, device, permute_embeddings=permute_embeddings
+            embedding_configs, env, device, permute_embeddings=permute_embeddings
         )

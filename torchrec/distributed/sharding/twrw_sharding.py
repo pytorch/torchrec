@@ -37,6 +37,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.types import (
+    ShardingEnv,
     ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
@@ -59,14 +60,15 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         embedding_configs: List[
             Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
         ],
-        # pyre-ignore[11]
-        pg: dist.ProcessGroup,
+        env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self._pg: dist.ProcessGroup = pg
-        self._world_size: int = self._pg.size()
-        self._my_rank: int = self._pg.rank()
+        self._env = env
+        # pyre-ignore[11]
+        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._world_size: int = self._env.world_size
+        self._rank: int = self._env.rank
         self._device = device
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
@@ -104,7 +106,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         ]
         self._has_feature_processor: bool = False
         for group_config in self._score_grouped_embedding_configs_per_node[
-            self._my_rank // self._local_size
+            self._rank // self._local_size
         ]:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
@@ -518,9 +520,9 @@ class TwRwPooledEmbeddingSharding(
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
-            grouped_configs=self._grouped_embedding_configs_per_rank[self._my_rank],
+            grouped_configs=self._grouped_embedding_configs_per_rank[self._rank],
             grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
-                self._my_rank
+                self._rank
             ],
             fused_params=fused_params,
             pg=self._pg,

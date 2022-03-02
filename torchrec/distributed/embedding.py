@@ -81,21 +81,14 @@ def create_embedding_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
-    pg = env.process_group
-    if pg is not None:
-        if sharding_type == ShardingType.TABLE_WISE.value:
-            return TwSequenceEmbeddingSharding(embedding_configs, env, device)
-        elif sharding_type == ShardingType.ROW_WISE.value:
-            return RwSequenceEmbeddingSharding(embedding_configs, pg, device)
-        elif sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpSequenceEmbeddingSharding(embedding_configs, env, device)
-        else:
-            raise ValueError(f"Sharding not supported {sharding_type}")
+    if sharding_type == ShardingType.TABLE_WISE.value:
+        return TwSequenceEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.ROW_WISE.value:
+        return RwSequenceEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.DATA_PARALLEL.value:
+        return DpSequenceEmbeddingSharding(embedding_configs, env, device)
     else:
-        if sharding_type == ShardingType.DATA_PARALLEL.value:
-            return DpSequenceEmbeddingSharding(embedding_configs, env, device)
-        else:
-            raise ValueError(f"Sharding not supported {sharding_type}")
+        raise ValueError(f"Sharding not supported {sharding_type}")
 
 
 def _create_embedding_configs_by_sharding(
