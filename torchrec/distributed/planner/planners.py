@@ -196,6 +196,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         sharders: List[ModuleSharder[nn.Module]],
     ) -> ShardingPlan:
 
+        self._num_proposals = 0
+        self._num_plans = 0
         best_plan = None
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE

@@ -34,10 +34,24 @@ class TWvsRWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
+class TWSharder(
+    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
+):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.TABLE_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
 class TestEmbeddingShardingPlanner(unittest.TestCase):
     def setUp(self) -> None:
         compute_device = "cuda"
-        self.topology = Topology(world_size=2, compute_device=compute_device)
+        self.topology = Topology(
+            world_size=2, hbm_cap=1024 * 1024, compute_device=compute_device
+        )
         self.planner = EmbeddingShardingPlanner(topology=self.topology)
 
     def test_tw_solution(self) -> None:
@@ -88,11 +102,35 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
-            for i in range(10)
+            for i in range(2)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
 
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
 
-        self.assertEqual(self.planner._num_proposals, 20)
+        self.assertEqual(self.planner._num_proposals, 4)
+
+    def test_fail_then_rerun(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=1024,
+                embedding_dim=96,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+
+        with self.assertRaises(PlannerError):
+            self.planner.plan(module=model, sharders=[TWSharder()])
+
+        sharding_plan = self.planner.plan(module=model, sharders=[TWvsRWSharder()])
+        expected_ranks = [[0, 1]]
+        ranks = [
+            cast(List[int], param_shard.ranks)
+            for param_shard in sharding_plan.plan["sparse.ebc"].values()
+        ]
+
+        self.assertEqual(sorted(expected_ranks), sorted(ranks))

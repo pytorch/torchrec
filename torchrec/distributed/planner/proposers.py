@@ -21,6 +21,7 @@ class GreedyProposer(Proposer):
         self._current_proposal: Dict[str, int] = {}
 
     def load(self, search_space: List[ShardingOption]) -> None:
+        self._reset()
         for sharding_option in search_space:
             fqn = sharding_option.fqn
             if fqn not in self._sharding_options_by_fqn:
@@ -35,6 +36,10 @@ class GreedyProposer(Proposer):
         self._current_proposal = {
             fqn: 0 for fqn in self._sharding_options_by_fqn.keys()
         }
+
+    def _reset(self) -> None:
+        self._sharding_options_by_fqn = {}
+        self._current_proposal = {}
 
     def propose(self) -> Optional[List[ShardingOption]]:
         if self._current_proposal:
@@ -85,6 +90,7 @@ class UniformProposer(Proposer):
         self._proposal_index: int = 0
 
     def load(self, search_space: List[ShardingOption]) -> None:
+        self._reset()
         all_fqns = set()
         sharding_options_by_type_and_fqn: Dict[
             str, Dict[str, List[ShardingOption]]
@@ -116,6 +122,10 @@ class UniformProposer(Proposer):
                         for sorted_sharding_options in sharding_options_by_fqn.values()
                     ]
                 )
+
+    def _reset(self) -> None:
+        self._grouped_sharding_options = []
+        self._proposal_index = 0
 
     def propose(self) -> Optional[List[ShardingOption]]:
         if self._proposal_index < len(self._grouped_sharding_options):
