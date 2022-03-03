@@ -343,6 +343,51 @@ slices may be of different lengths. See KeyedJaggedTensor for full example.</p>
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.from_dense">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs <cite>JaggedTensor</cite> from dense values/weights of shape (B, N,).</p>
+<p>Note that <cite>lengths/offsets</cite> is still of shape (B,).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>values</strong> (<em>List</em><em>[</em><em>torch.Tensor</em><em>]</em>) – a list of tensors for dense representation</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>torch.Tensor</em><em>]</em><em>]</em>) – if values have weights. Tensor with same shape as values.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>JaggedTensor created from 2d dense tensor</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor">JaggedTensor</a></p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl class="simple">
+<dt>values = [</dt><dd><p>torch.Tensor([1.0]),
+torch.Tensor(),
+torch.Tensor([7.0, 8.0]),
+torch.Tensor([10.0, 11.0, 12.0]),</p>
+</dd>
+</dl>
+<p>]
+weights = [</p>
+<blockquote>
+<div><p>torch.Tensor([1.0]),
+torch.Tensor(),
+torch.Tensor([7.0, 8.0]),
+torch.Tensor([10.0, 11.0, 12.0]),</p>
+</div></blockquote>
+<p>]
+j1 = JaggedTensor.from_dense(</p>
+<blockquote>
+<div><p>values=values,
+weights=weights,</p>
+</div></blockquote>
+<p>)
+# j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dense_lengths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructs <cite>JaggedTensor</cite> from dense values/weights of shape (B, N,).</p>
@@ -371,6 +416,87 @@ slices may be of different lengths. See KeyedJaggedTensor for full example.</p>
 <dd><p>Please be aware that accoarding to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
 to might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
 for example, <cite>in = in.to(new_device)</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_dense">
+<span class="sig-name descname"><span class="pre">to_dense</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_dense" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs dense-reprensentation Tensor from JT .</p>
+<p>Args:</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>list of tensors</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>List[torch.Tensor]</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+jt = JaggedTensor(</p>
+<blockquote>
+<div><p>values=values,
+offsets=offsets,</p>
+</div></blockquote>
+<p>)
+torch_list = jt.to_dense()
+# torch_list = [
+#     torch.tensor([1.0, 2.0]),
+#     torch.tensor([]),
+#     torch.tensor([3.0]),
+#     torch.tensor([4.0]),
+#     torch.tensor([5.0]),
+#     torch.tensor([6.0, 7.0, 8.0]),
+# ]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense">
+<span class="sig-name descname"><span class="pre">to_padded_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">desired_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_from_beginning</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chop_from_beginning</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs 2d dense Tensor from JT to shape (B, N,).</p>
+<p>Note that B is the lengths of length
+N is the longest feature length or the assigned value
+if desired_length &gt; length, we will use 0 or the padding_value to fill it up else,
+we will select the last desired_length values</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>desired_length</strong> (<em>int</em>) – the length of the tensor</p></li>
+<li><p><strong>padding_value</strong> (<em>float</em>) – padding value if we need to pad</p></li>
+<li><p><strong>pad_from_beginning</strong> (<em>bool</em>) – if we need to pad from beginning</p></li>
+<li><p><strong>chop_from_beginning</strong> (<em>bool</em>) – if we need chop from beginning</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>2d dense tensor</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+jt = JaggedTensor(</p>
+<blockquote>
+<div><p>values=values,
+offsets=offsets,</p>
+</div></blockquote>
+<p>)
+t = jt.to_padded_dense(</p>
+<blockquote>
+<div><p>desired_length=2, padding_value=10.0, pad_from_beginning=False</p>
+</div></blockquote>
+<p>)
+# t = [
+# [1.0, 2.0],
+# [10.0, 10.0],
+# [3.0, 10.0],
+# [4.0, 10.0],
+# [5.0, 10.0],
+# [7.0, 8.0],
+# ]</p>
 </dd></dl>
 
 <dl class="py method">
