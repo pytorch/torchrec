@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include "ATen/core/ivalue.h"
 
 #include <folly/io/IOBuf.h>
 
@@ -35,7 +36,8 @@ struct FloatFeatures {
 };
 
 // TODO: Change the input format to torch::IValue.
-using Feature = std::variant<SparseFeatures, FloatFeatures>;
+// Currently only dense batching function support IValue.
+using Feature = std::variant<SparseFeatures, FloatFeatures, c10::IValue>;
 
 struct PredictionRequest {
   uint32_t batch_size;
