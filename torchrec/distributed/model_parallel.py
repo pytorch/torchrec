@@ -74,27 +74,34 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         env: ShardingEnv,
         device: torch.device,
     ) -> None:
+        if isinstance(dmp._dmp_wrapped_module, DistributedDataParallel) or isinstance(
+            dmp._dmp_wrapped_module, FullyShardedDataParallel
+        ):
+            return
         pg = env.process_group
         if pg is None:
             raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
         sharded_parameter_names = {
-            key for key in DistributedModelParallel._sharded_parameter_names(dmp.module)
+            key
+            for key in DistributedModelParallel._sharded_parameter_names(
+                dmp._dmp_wrapped_module
+            )
         }
         all_paramemeter_names = {key for key, _ in dmp.named_parameters()}
         if sharded_parameter_names == all_paramemeter_names:
             return
 
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
-            module=dmp.module,
+            module=dmp._dmp_wrapped_module,
             params_and_buffers_to_ignore=[
                 key for key in all_paramemeter_names if key in sharded_parameter_names
             ],
         )
         # initailize DDP
-        dmp.module = cast(
+        dmp._dmp_wrapped_module = cast(
             nn.Module,
             DistributedDataParallel(
-                module=dmp.module.to(device),
+                module=dmp._dmp_wrapped_module.to(device),
                 device_ids=None if device.type == "cpu" else [device],
                 process_group=pg,
                 gradient_as_bucket_view=True,
@@ -104,11 +111,16 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         )
 
 
-def _strip_DDP(module: nn.Module) -> nn.Module:
-    if isinstance(module, FullyShardedDataParallel) or isinstance(
-        module, DistributedDataParallel
+def dmp_get_module(module: nn.Module) -> nn.Module:
+    while (
+        isinstance(module, DistributedModelParallel)
+        or isinstance(module, DistributedDataParallel)
+        or isinstance(module, FullyShardedDataParallel)
     ):
-        module = module.module
+        if isinstance(module, DistributedModelParallel):
+            module = module._dmp_wrapped_module
+        else:
+            module = module.module
     return module
 
 
@@ -161,7 +173,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
-        self.module = module
+        self._dmp_wrapped_module = module
         self.init_parameters = init_parameters
 
         if env is None:
@@ -209,32 +221,27 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._optim = CombinedOptimizer(fused_optims)
 
     @property
-    def dmp_module(self) -> nn.Module:
+    def module(self) -> nn.Module:
         """
         Property to directly access sharded module, which
         may or may not yet be wrapped in DDP
         """
-        return (
-            self.module.module
-            if isinstance(self.module, DistributedDataParallel)
-            or isinstance(self.module, FullyShardedDataParallel)
-            else self.module
-        )
+        return dmp_get_module(self)
 
-    @dmp_module.setter
-    def dmp_module(self, value: nn.Module) -> None:
+    @module.setter
+    def module(self, value: nn.Module) -> None:
         if isinstance(self.module, DistributedDataParallel) or isinstance(
             self.module, FullyShardedDataParallel
         ):
             raise RuntimeError(
-                "dmp_module can't be set after calling init_data_parallel(...)"
+                "module can't be set after calling init_data_parallel(...)"
             )
         else:
-            self.module = value
+            self._dmp_wrapped_module = value
 
     # pyre-ignore [2, 3]
     def forward(self, *args, **kwargs) -> Any:
-        return self.module(*args, **kwargs)
+        return self._dmp_wrapped_module(*args, **kwargs)
 
     def init_data_parallel(self) -> None:
         """
@@ -246,7 +253,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         ):
             # Allocate any 'meta' tensors
             if self.init_parameters:
-                self._init_parameters(self.module)
+                self._init_parameters(self._dmp_wrapped_module)
             self._data_parallel_wrapper.wrap(self, self._env, self.device)
 
     def _copy(self, module: nn.Module, device: torch.device) -> nn.Module:
@@ -279,8 +286,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         """
         with sharded_model_copy(device=None):
             copy_dmp = copy.deepcopy(self)
-        copy_module = copy_dmp._copy(copy_dmp.dmp_module, device)
-        copy_dmp.dmp_module = copy_module
+        copy_module = copy_dmp._copy(copy_dmp.module, device)
+        copy_dmp.module = copy_module
         return copy_dmp
 
     def _init_dmp(
@@ -288,7 +295,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         fused_optims: List[Tuple[str, KeyedOptimizer]],
     ) -> None:
         self._shard_modules_impl(
-            self.module,
+            self._dmp_wrapped_module,
             "",
             fused_optims,
         )
@@ -349,12 +356,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self, destination: Optional[List[str]] = None, prefix: str = ""
     ) -> List[str]:
         destination = [] if destination is None else destination
-        return self._sparse_grad_parameter_names(self.dmp_module, destination, prefix)
+        return self._sparse_grad_parameter_names(self.module, destination, prefix)
 
     def _sparse_grad_parameter_names(
         self, module: nn.Module, destination: List[str], prefix: str = ""
     ) -> List[str]:
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             module.sparse_grad_parameter_names(destination, prefix)
         elif isinstance(module, nn.Embedding):
@@ -382,7 +389,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
 
-        return self._state_dict(self.dmp_module, destination, prefix, keep_vars)
+        return self._state_dict(self.module, destination, prefix, keep_vars)
 
     def _state_dict(
         self,
@@ -391,7 +398,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str,
         keep_vars: bool,
     ) -> Dict[str, Any]:
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             module.state_dict(destination, prefix, keep_vars)
         else:
@@ -406,7 +413,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        return self._load_state_dict(self.dmp_module, state_dict, prefix, strict)
+        return self._load_state_dict(self.module, state_dict, prefix, strict)
 
     def _load_state_dict(
         self,
@@ -417,7 +424,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> _IncompatibleKeys:
         missing_keys = []
         unexpected_keys = []
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             return module.load_state_dict(state_dict, strict=strict)
         else:
@@ -440,7 +447,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _named_parameters(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
         else:
@@ -453,11 +460,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.dmp_module, prefix, recurse)
+        yield from self._named_parameters(self.module, prefix, recurse)
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             yield from module.sharded_parameter_names(prefix)
         else:
@@ -469,7 +476,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _named_buffers(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        module = _strip_DDP(module)
+        module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             yield from module.named_buffers(prefix, recurse)
         else:
@@ -482,7 +489,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from self._named_buffers(self.dmp_module, prefix, recurse)
+        yield from self._named_buffers(self.module, prefix, recurse)
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

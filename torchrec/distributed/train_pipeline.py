@@ -365,11 +365,7 @@ def _rewrite_model(  # noqa C901
 ) -> List[ShardedModule]:
 
     # Get underlying nn.Module
-    while (
-        isinstance(model, DistributedModelParallel)
-        or isinstance(model, DistributedDataParallel)
-        or isinstance(model, FullyShardedDataParallel)
-    ):
+    if isinstance(model, DistributedModelParallel):
         model = model.module
 
     # Collect a list of sharded modules.

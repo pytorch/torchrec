@@ -74,7 +74,7 @@ class UtilsTest(unittest.TestCase):
 
         np.testing.assert_array_equal(
             sorted(get_unsharded_module_names(dmp)),
-            sorted(["module.over", "module.dense"]),
+            sorted(["_dmp_wrapped_module.over", "_dmp_wrapped_module.dense"]),
         )
         dist.destroy_process_group()
 
