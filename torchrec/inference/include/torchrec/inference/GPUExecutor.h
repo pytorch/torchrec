@@ -13,6 +13,7 @@
 
 #include <folly/MPMCQueue.h>
 #include <folly/Synchronized.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 #include <gflags/gflags.h>
@@ -49,6 +50,7 @@ class GPUExecutor {
 
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> batches_;
   std::vector<std::thread> processThreads_;
+  std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
   std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
 };
 
