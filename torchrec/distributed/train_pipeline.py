@@ -23,9 +23,7 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
-from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.fx.node import Node
-from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
 from torchrec.streamable import Pipelineable, Multistreamable

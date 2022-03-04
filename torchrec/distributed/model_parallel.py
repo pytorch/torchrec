@@ -175,6 +175,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         self._dmp_wrapped_module = module
         self.init_parameters = init_parameters
+        self._ddp_wrapped: bool = False
 
         if env is None:
             pg = dist.GroupMember.WORLD
@@ -248,13 +249,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         See init_data_parallel c-tor argument for usage.
         It's safe to call this method multiple times.
         """
-        if not isinstance(self.module, DistributedDataParallel) and not isinstance(
-            self.module, FullyShardedDataParallel
-        ):
+        if not self._ddp_wrapped:
             # Allocate any 'meta' tensors
             if self.init_parameters:
                 self._init_parameters(self._dmp_wrapped_module)
             self._data_parallel_wrapper.wrap(self, self._env, self.device)
+            self._ddp_wrapped = True
 
     def _copy(self, module: nn.Module, device: torch.device) -> nn.Module:
         # if this is a sharded module, customize the copy
@@ -445,22 +445,32 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         )
 
     def _named_parameters(
-        self, module: nn.Module, prefix: str = "", recurse: bool = True
+        self,
+        module: nn.Module,
+        prefix: str = "",
+        recurse: bool = True,
+        strip_ddp: bool = True,
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        module = dmp_get_module(module)
+        if strip_ddp:
+            module = dmp_get_module(module)
         if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
         else:
             yield from module.named_parameters(prefix, recurse=False)
             for name, child in module.named_children():
                 yield from self._named_parameters(
-                    child, append_prefix(prefix, name), recurse
+                    child, append_prefix(prefix, name), recurse, strip_ddp
                 )
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         yield from self._named_parameters(self.module, prefix, recurse)
+
+    def bare_named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        yield from self._named_parameters(self.module, prefix, recurse, False)
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
