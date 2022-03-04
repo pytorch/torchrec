@@ -112,10 +112,7 @@ void GPUExecutor::process(int idx) {
   folly::setThreadName(
       fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
 
-  // set device guard again to the correct device again because set_device is
-  // thread-local
-  at::cuda::CUDAGuard deviceGuard(rank_);
-  auto stream = at::cuda::getStreamFromPool(true, rank_);
+  auto stream = at::cuda::getStreamFromPool(/* isHighPriority */ true, rank_);
   at::cuda::CUDAStreamGuard streamGuard(stream);
 
   while (true) {
@@ -135,7 +132,7 @@ void GPUExecutor::process(int idx) {
       continue;
     }
 
-    if (batch->batch_size == 0) {
+    if (batch->batchSize == 0) {
       continue;
     }
 
@@ -151,7 +148,7 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    auto remainingBatchSize = batch->batch_size;
+    auto remainingBatchSize = batch->batchSize;
     for (auto& context : batch->contexts) {
       if (context.isTimedOut) {
         PredictionException ex("Batching queue timeout");
@@ -171,7 +168,7 @@ void GPUExecutor::process(int idx) {
               folly::IOBuf(
                   folly::IOBuf::COPY_BUFFER,
                   (float*)tensor.data_ptr() +
-                      (batch->batch_size - remainingBatchSize),
+                      (batch->batchSize - remainingBatchSize),
                   context.batchSize * sizeof(float)));
         }
         context.promise.setValue(std::move(response));
