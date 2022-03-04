@@ -403,8 +403,8 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
         expected_ranks = {
             "table_0": [8, 9, 10, 11, 12, 13, 14, 15],
-            "table_1": [1, 0, 7, 6, 5, 4, 3, 2, 1, 0],
-            "table_2": [15, 14, 13, 12, 11, 10, 9, 8],
+            "table_1": [9, 8, 15, 14, 13, 12, 11, 10, 9, 8],
+            "table_2": [7, 6, 5, 4, 3, 2, 1, 0],
             "table_3": [0, 1, 2, 3, 4, 5, 6, 7],
         }
 
