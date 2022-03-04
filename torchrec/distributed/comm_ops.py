@@ -613,34 +613,17 @@ class All2All_Seq_Req(Function):
         local_T = lengths_after_sparse_data_all2all.shape[0]
         if local_T > 0:
             with record_function("## alltoall_seq_embedding_fwd_permute ##"):
-                try:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = torch.ops.fbgemm.permute_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(
-                            local_T * world_size, -1
-                        ),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
-                except RuntimeError:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(
-                            local_T * world_size, -1
-                        ),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(local_T * world_size, -1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
 
         else:
             permuted_lengths_after_sparse_data_all2all = None
@@ -692,22 +675,13 @@ class All2All_Seq_Req(Function):
 
         if permuted_lengths_after_sparse_data_all2all is not None:
             with record_function("## alltoall_seq_embedding_bwd_permute ##"):
-                try:
-                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_sparse_data(
-                        backward_recat_tensor,
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_grad_input,
-                        None,
-                        sharded_grad_input.numel(),
-                    )
-                except RuntimeError:
-                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
-                        backward_recat_tensor,
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_grad_input,
-                        None,
-                        sharded_grad_input.numel(),
-                    )
+                _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
+                    backward_recat_tensor,
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_grad_input,
+                    None,
+                    sharded_grad_input.numel(),
+                )
         return (None, None, None, sharded_grad_input.view(-1, D))
 
 
