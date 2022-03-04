@@ -7,10 +7,13 @@
  */
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "ATen/core/Dict.h"
+#include "c10/cuda/CUDAFunctions.h"
 
 #include <chrono>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <thread>
 
 #include <ATen/Functions.h> // @manual
@@ -27,18 +30,18 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/io/Cursor.h>
 #include <glog/logging.h>
+#include <unordered_map>
 
 using namespace std::chrono_literals;
 
 namespace torchrec {
 
 void PredictionBatch::cuda() {
-  c10::Dict<std::string, at::Tensor> forwardArgsCuda;
   for (auto& iter : forwardArgs) {
-    forwardArgsCuda.insert(
-        iter.key(), iter.value().to(at::kCUDA, /* non_blocking */ true));
+    if (iter.value().is_cpu()) {
+      iter.setValue(iter.value().to(at::kCUDA, /* non_blocking */ true));
+    }
   }
-  forwardArgs = std::move(forwardArgsCuda);
 }
 
 size_t PredictionBatch::size() const {
@@ -77,11 +80,13 @@ BatchingQueue::BatchingQueue(
   for (int i = 0; i < worldSize_; ++i) {
     for (int j = 0; j < config_.numMemPinnerThreads; ++j) {
       memPinnerThreads_.emplace_back([&, i, j] {
+        c10::InferenceMode guard;
         folly::setThreadName(fmt::format("MemoryPinner-{}-GPU-{}", j, i));
         pinMemory(i);
       });
     }
     callbackThreads_.emplace_back([&, i] {
+      c10::InferenceMode guard;
       folly::setThreadName(fmt::format("CallBack-GPU-{}", i));
       processCallback(i);
     });
@@ -191,8 +196,14 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         RECORD_USER_SCOPE("PinMemory");
         // Combine data.
         size_t combinedBatchSize = 0;
-        for (const auto& request : requests) {
-          combinedBatchSize += request->batch_size;
+        auto batchOffsets = at::empty(
+            {static_cast<long>(requests.size() + 1)},
+            at::TensorOptions().dtype(at::kInt).pinned_memory(true));
+        auto batchOffsetsAcc = batchOffsets.accessor<int32_t, 1>();
+        batchOffsetsAcc[0] = 0;
+        for (auto i : c10::irange(requests.size())) {
+          combinedBatchSize += requests[i]->batch_size;
+          batchOffsetsAcc[i + 1] = combinedBatchSize;
         }
 
         BatchQueueEntry batchedEntry;
@@ -207,8 +218,12 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             };
 
         for (auto& [featureName, batchingFuncName] : config_.batchingMetadata) {
-          combineForwardArgs(
-              batchingFuncs_[batchingFuncName]->batch(featureName, requests));
+          combineForwardArgs(batchingFuncs_[batchingFuncName]->batch(
+              featureName,
+              requests,
+              combinedBatchSize,
+              batchOffsets,
+              c10::Device(c10::kCUDA, gpuIdx)));
         }
 
         batchedEntry.batch = std::make_shared<PredictionBatch>(PredictionBatch{
