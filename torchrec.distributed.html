@@ -4300,13 +4300,6 @@ parallel modules.</p></li>
 since some modules needs to use the original references (like ShardedModule for inference).</p>
 </dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.dmp_module">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">dmp_module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span></em><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.dmp_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Property to directly access sharded module, which
-may or may not yet be wrapped in DDP</p>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.forward" title="Permalink to this definition">¶</a></dt>
@@ -4367,6 +4360,13 @@ in <a class="reference internal" href="#torchrec.distributed.model_parallel.Dist
 exists in <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a>, <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a> will raise a
 <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
 </div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.module">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span></em><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Property to directly access sharded module, which
+may or may not yet be wrapped in DDP</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4490,6 +4490,11 @@ set to <code class="docutils literal notranslate"><span class="pre">True</span><
 <dd></dd></dl>
 
 </dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.dmp_get_module">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">dmp_get_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.dmp_get_module" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_default_sharders">
