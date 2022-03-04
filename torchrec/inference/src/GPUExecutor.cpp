@@ -114,9 +114,12 @@ void GPUExecutor::process(int idx) {
 
   // set device guard again to the correct device again because set_device is
   // thread-local
+  std::vector<c10::cuda::CUDAStream> streams;
+  for (size_t i = 0; i < worldSize_; ++i) {
+    streams.push_back(at::cuda::getStreamFromPool(/* isHighPriority */ true, i));
+  }
+  at::cuda::CUDAMultiStreamGuard streamGuard(streams);
   at::cuda::CUDAGuard deviceGuard(rank_);
-  auto stream = at::cuda::getStreamFromPool(true, rank_);
-  at::cuda::CUDAStreamGuard streamGuard(stream);
 
   while (true) {
     std::shared_ptr<PredictionBatch> batch;

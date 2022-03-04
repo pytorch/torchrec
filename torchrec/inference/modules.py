@@ -124,29 +124,3 @@ class PredictModule(nn.Module):
         keep_vars: bool = False,
     ) -> Dict[str, Any]:
         return self._module.state_dict(destination, prefix, keep_vars)
-
-
-class MultistreamPredictModule(PredictModule):
-    """
-    Interface derived from PredictModule that supports using different CUDA streams in forward calls.
-    """
-
-    def __init__(self, module: nn.Module) -> None:
-        super().__init__(module)
-        self._stream: Optional[torch.cuda.streams.Stream] = None
-
-    @abc.abstractmethod
-    def predict_forward(
-        self, batch: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
-        pass
-
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        if self._stream is None:
-            # Lazily initialize stream to make sure it's created in the correct device.
-            self._stream = (
-                torch.cuda.Stream()
-            )  # default semantics using currrent device.
-
-        with torch.cuda.stream(self._stream):
-            return super().forward(batch)
