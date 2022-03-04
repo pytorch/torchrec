@@ -138,7 +138,6 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
             '"Example:" section. Please fix the docstring',
         )
 
-    # TODO: also check for "Returns" and "Args" in forward
     # Check correctness of the Args for a class definition:
     required_keywords = ["Args:"]
     missing_keywords = []
@@ -159,10 +158,12 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
     # Check actual args from the functions
     # pyre-ignore[33]: Explicit annotation for `functions` cannot contain `Any`.
     functions: Dict[str, Tuple[List[Any], List[Any]]] = {}
+    function_sub_nodes = {}
     for sub_node in node.body:
         if type(sub_node) == ast.FunctionDef:
             assert isinstance(sub_node, ast.FunctionDef)
             functions[sub_node.name] = get_function_args(sub_node)
+            function_sub_nodes[sub_node.name] = sub_node
 
     def check_function(function_name: str) -> None:
         if function_name not in functions:
@@ -206,12 +207,75 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
                         "Missing descriptions for {} function arguments. "
                         "Missing required args: {}, missing optional args: {}"
                     ).format(
-                        function_name, missing_required_args, missing_optional_args
+                        function_name,
+                        missing_required_args,
+                        missing_optional_args,
                     ),
                 )
 
+    # pyre-ignore[53]
+    def check_function_docstring(function_name: str) -> None:
+        if function_name not in functions:
+            return
+
+        function_docstring: Optional[str] = None
+        function_docstring = ast.get_docstring(function_sub_nodes[function_name])
+        if function_docstring is None:
+            print_error_message(
+                python_path,
+                node,
+                "Missing docstring for {} function".format(function_name),
+                "Missing docstring for {} function".format(function_name),
+            )
+            return
+
+        missing_required_args = []
+        missing_optional_args = []
+        for arg in functions[function_name][0]:
+            # Ignore checks for required self and net args
+            if arg == "self" or arg == "net":
+                continue
+            assert function_docstring is not None
+            if arg not in function_docstring:
+                missing_required_args.append(arg)
+        for arg in functions[function_name][1]:
+            assert function_docstring is not None
+            if arg not in function_docstring:
+                missing_optional_args.append(arg)
+        if len(missing_required_args) > 0 or len(missing_optional_args) > 0:
+            print_error_message(
+                python_path,
+                node,
+                "Missing docstring descriptions for {} function arguments.".format(
+                    function_name
+                ),
+                (
+                    "Missing descriptions for {} function arguments. "
+                    "Missing required args: {}, missing optional args: {}"
+                ).format(
+                    function_name,
+                    missing_required_args,
+                    missing_optional_args,
+                ),
+            )
+        assert function_docstring is not None
+        if "Returns:" not in function_docstring:
+            print_error_message(
+                python_path,
+                node,
+                "Missing docstring descriptions for {} function arguments.".format(
+                    function_name
+                ),
+                (
+                    "Missing descriptions for {} function arguments. "
+                    "Missing Returns section"
+                ).format(
+                    function_name,
+                ),
+            )
+
     check_function("__init__")
-    check_function("forward")
+    check_function_docstring("forward")
 
 
 def read_file(path: str) -> str:  # pragma: nocover
