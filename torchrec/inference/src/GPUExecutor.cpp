@@ -9,6 +9,7 @@
 #include "torchrec/inference/GPUExecutor.h"
 
 #include <chrono>
+#include <memory>
 #include <stdexcept>
 
 #include <c10/cuda/CUDAGuard.h>
@@ -24,6 +25,7 @@
 #include <glog/logging.h>
 #include <torch/csrc/deploy/deploy.h> // @manual
 
+#include "ATen/cuda/CUDAEvent.h"
 #include "torchrec/inference/BatchingQueue.h"
 
 DEFINE_int32(copy_timeout, 500, "");
@@ -86,6 +88,9 @@ GPUExecutor::GPUExecutor(
       process(rank * num_threads_per_gpu + i);
     });
   }
+
+  completionExecutor_ =
+      std::make_unique<folly::CPUThreadPoolExecutor>(2 * num_threads_per_gpu);
 }
 
 GPUExecutor::~GPUExecutor() {
@@ -150,25 +155,41 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    size_t offset = 0;
-    for (auto& context : batch->contexts) {
-      if (context.isTimedOut) {
-        PredictionException ex("Batching queue timeout");
-        context.promise.setException(std::move(ex));
-      } else if (predictions.isNone()) {
-        PredictionException ex("Predict exception");
-        context.promise.setException(std::move(ex));
-      } else {
-        CHECK_LT(offset, batch->batchSize);
+    // TODO: Open source event pool and use it here.
+    auto event = std::make_unique<at::cuda::CUDAEvent>(
+        cudaEventBlockingSync | cudaEventDisableTiming);
+    event->record();
 
-        auto response = std::make_unique<PredictionResponse>();
-        response->predictions = resultSplitFunc_->splitResult(
-            predictions, offset, context.batchSize);
-        context.promise.setValue(std::move(response));
-      }
-      offset += context.batchSize;
-    }
-    CHECK_EQ(offset, batch->batchSize);
+    completionExecutor_->add(
+        // Can not bind the method directly because of the unique_ptr of item.
+        [batch = std::move(batch),
+         predictions = std::move(predictions),
+         resultSplitFunc = resultSplitFunc_,
+         event = std::move(event)]() mutable {
+          RECORD_USER_SCOPE("CompletionStage")
+          // Wait for D2H to finish.
+          event->synchronize();
+
+          size_t offset = 0;
+          for (auto& context : batch->contexts) {
+            if (context.isTimedOut) {
+              PredictionException ex("Batching queue timeout");
+              context.promise.setException(std::move(ex));
+            } else if (predictions.isNone()) {
+              PredictionException ex("Predict exception");
+              context.promise.setException(std::move(ex));
+            } else {
+              CHECK_LT(offset, batch->batchSize);
+
+              auto response = std::make_unique<PredictionResponse>();
+              response->predictions = resultSplitFunc->splitResult(
+                  predictions, offset, context.batchSize);
+              context.promise.setValue(std::move(response));
+            }
+            offset += context.batchSize;
+          }
+          CHECK_EQ(offset, batch->batchSize);
+        });
   }
 }
 
