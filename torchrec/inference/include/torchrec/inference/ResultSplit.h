@@ -1,0 +1,40 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#pragma once
+
+#include <ATen/ATen.h>
+#include <c10/util/Registry.h>
+
+namespace torchrec {
+
+class ResultSplitFunc {
+ public:
+  virtual ~ResultSplitFunc() = default;
+
+  virtual c10::IValue splitResult(
+      c10::IValue /* result */,
+      const size_t& /* offset */,
+      const size_t& /* length */) = 0;
+};
+
+/**
+ * TorchRecResultSplitFuncRegistry is used to register custom result split
+ * functions.
+ */
+C10_DECLARE_REGISTRY(TorchRecResultSplitFuncRegistry, ResultSplitFunc);
+
+#define REGISTER_TORCHREC_RESULTSPLIT_FUNC(name, ...) \
+  C10_REGISTER_CLASS(TorchRecResultSplitFuncRegistry, name, __VA_ARGS__);
+
+c10::IValue splitDictOfTensor(
+    c10::IValue result,
+    const size_t& offset,
+    const size_t& length);
+
+} // namespace torchrec
