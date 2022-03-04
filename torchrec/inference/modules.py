@@ -67,6 +67,12 @@ class PredictFactory(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def result_metadata(self) -> str:
+        """
+        Returns a string which represents the result type. This information is used for result split.
+        """
+        pass
 
 class PredictModule(nn.Module):
     """
@@ -105,12 +111,12 @@ class PredictModule(nn.Module):
         return self._module
 
     @abc.abstractmethod
-    def predict_forward(
-        self, batch: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+    # pyre-fixme[3]
+    def predict_forward(self, batch: Dict[str, torch.Tensor]) -> Any:
         pass
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    # pyre-fixme[3]
+    def forward(self, batch: Dict[str, torch.Tensor]) -> Any:
         if self._device is None:
             self._device = torch.device("cuda", torch.cuda.current_device())
         with torch.cuda.device(self._device), torch.inference_mode():
@@ -136,12 +142,12 @@ class MultistreamPredictModule(PredictModule):
         self._stream: Optional[torch.cuda.streams.Stream] = None
 
     @abc.abstractmethod
-    def predict_forward(
-        self, batch: Dict[str, torch.Tensor]
-    ) -> Dict[str, torch.Tensor]:
+    # pyre-fixme[3]
+    def predict_forward(self, batch: Dict[str, torch.Tensor]) -> Any:
         pass
 
-    def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    # pyre-fixme[3]
+    def forward(self, batch: Dict[str, torch.Tensor]) -> Any:
         if self._stream is None:
             # Lazily initialize stream to make sure it's created in the correct device.
             self._stream = (

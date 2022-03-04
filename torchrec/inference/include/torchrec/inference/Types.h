@@ -45,8 +45,7 @@ struct PredictionRequest {
 };
 
 struct PredictionResponse {
-  // Task name to prediction Tensor
-  std::map<std::string, folly::IOBuf> predictions;
+  c10::IValue predictions;
 };
 
 } // namespace torchrec
