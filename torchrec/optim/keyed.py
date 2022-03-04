@@ -106,13 +106,14 @@ class KeyedOptimizer(optim.Optimizer):
         This implementation is much stricter than the one in torch.Optimizer:
         it requires implementations to fully initialize their state during first optimization iteration,
         and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
+        
         Because of introduced strictness it allows us to:
             * do compatibility checks for state and param_groups, which improves usability
             * avoid state duplication by directly copying into state tensors, e.g.
-                optimizer.step()  # make sure optimizer is initialized
-                sd = optimizer.state_dict()
-                load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
-                optimizer.load_state_dict(sd)  # replace param_groups
+              optimizer.step()  # make sure optimizer is initialized
+              sd = optimizer.state_dict()
+              load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
+              optimizer.load_state_dict(sd)  # replace param_groups
         """
 
         new_state = state_dict["state"]

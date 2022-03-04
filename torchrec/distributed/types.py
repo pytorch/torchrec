@@ -161,9 +161,11 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     like __getattr__ below)
 
     Some caveats:
+
     * This works with Pytorch functions, but not any generic method, if
       you would like to do arbitary python operations, you need to
       implement the corresponding magic methods
+
     * In the case that one function have two or more arguments are LazyAwaitable,
       the lazy wait mechanism can't ensure perfect computation/communication
       overlap (i.e. quickly waited the first one but long wait on the second)
@@ -294,12 +296,13 @@ class ParameterSharding:
     ranks (Optional[List[int]]): rank of each shard.
     sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
 
-    NOTE:
-        ShardingType.TABLE_WISE - rank where this embedding is placed
-        ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as
-            individual tables
-        ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
-        ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
+NOTE:
+  ShardingType.TABLE_WISE - rank where this embedding is placed
+  ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as 
+  individual tables
+  ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
+  ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
+
     """
 
     sharding_type: str

@@ -196,17 +196,19 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     collective operation.
 
     Constructor Args:
-        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-            communication.
-        num_id_list_features (int): total number of id list features.
-        num_id_score_list_features (int): total number of id score list features
-        id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
-        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
-        device (Optional[torch.device]): device on which buffers will be allocated.
-        is_sequence (bool): if this is for a sequence embedding.
-        has_feature_processor (bool): existence of feature processor (ie. position
-            weighted features).
+
+      pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+      intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
+      communication.
+      num_id_list_features (int): total number of id list features.
+      num_id_score_list_features (int): total number of id score list features
+      id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
+      id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
+      device (Optional[torch.device]): device on which buffers will be allocated.
+      is_sequence (bool): if this is for a sequence embedding.
+      has_feature_processor (bool): existence of feature processor (ie. position
+      weighted features).
+
     """
 
     def __init__(
