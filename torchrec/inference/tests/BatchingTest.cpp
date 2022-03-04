@@ -117,8 +117,30 @@ createRequest(size_t batchSize, size_t numFeatures, at::Tensor embedding) {
   return request;
 }
 
+std::shared_ptr<PredictionRequest> createRequest(at::Tensor denseTensor) {
+  auto request = std::make_shared<PredictionRequest>();
+  request->batch_size = denseTensor.size(0);
+
+  {
+    torchrec::FloatFeatures feature;
+    feature.num_features = denseTensor.size(1);
+    feature.values = folly::IOBuf(
+        folly::IOBuf::WRAP_BUFFER,
+        denseTensor.data_ptr(),
+        denseTensor.storage().nbytes());
+    request->features["io_buf"] = std::move(feature);
+  }
+
+  {
+    c10::IValue feature(denseTensor);
+    request->features["ivalue"] = std::move(feature);
+  }
+
+  return request;
+}
+
 template <typename T>
-void checkTensor(at::Tensor& tensor, std::vector<T> expected) {
+void checkTensor(at::Tensor& tensor, const std::vector<T>& expected) {
   EXPECT_EQ(tensor.sizes(), at::ArrayRef({(long)expected.size()}));
   for (int i = 0; i < expected.size(); ++i) {
     EXPECT_EQ(tensor[i].item<T>(), expected[i]) << "pos: " << i;
@@ -155,6 +177,30 @@ TEST(BatchingTest, EmbeddingCombineTest) {
   EXPECT_EQ(batched["embedding_features"].sizes(), at::ArrayRef({2L, 3L, 1L}));
   auto flatten = batched["embedding_features"].flatten();
   checkTensor<float>(flatten, {0, 1, 4, 2, 3, 5});
+}
+
+TEST(BatchingTest, DenseCombineTest) {
+  auto tensor0 =
+      at::tensor({1.1, 2.0, 0.3, 1.2}, at::TensorOptions().dtype(c10::kFloat))
+          .reshape({2, 2});
+  auto tensor1 = at::tensor({0.9, 2.3}, at::TensorOptions().dtype(c10::kFloat))
+                     .reshape({1, 2});
+
+  auto request0 = createRequest(tensor0);
+  auto request1 = createRequest(tensor1);
+
+  auto batchedIOBuf = combineFloat("io_buf", {request0, request1});
+  auto batchedIValue = combineFloat("ivalue", {request0, request1});
+
+  // num features, num batches, feature dimension
+  std::vector<int64_t> expectShape{3L, 2L};
+  std::vector<float> expectResult{1.1, 2.0, 0.3, 1.2, 0.9, 2.3};
+  EXPECT_EQ(batchedIOBuf["io_buf"].sizes(), expectShape);
+  EXPECT_EQ(batchedIValue["ivalue"].sizes(), expectShape);
+  auto flatten = batchedIOBuf["io_buf"].flatten();
+  checkTensor<float>(flatten, expectResult);
+  flatten = batchedIValue["ivalue"].flatten();
+  checkTensor<float>(flatten, expectResult);
 }
 
 } // namespace torchrec
