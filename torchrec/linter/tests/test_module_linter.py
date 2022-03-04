@@ -93,8 +93,9 @@ class F(${parent_class_list}):
             "Missing required keywords from TorchRec module"
             in p.call_args_list[1][0][0]
         )
-        self.assertTrue("Missing docstring descriptions" in p.call_args_list[2][0][0])
-        self.assertTrue("['z']" in p.call_args_list[2][0][0])
+        self.assertTrue(
+            "Missing docstring for forward function" in p.call_args_list[2][0][0]
+        )
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
@@ -127,8 +128,9 @@ class F(${parent_class_list}):
         self.assertTrue("Missing docstring descriptions" in p.call_args_list[2][0][0])
         self.assertTrue("['x']" in p.call_args_list[2][0][0])
         self.assertTrue("['y', 'k']" in p.call_args_list[2][0][0])
-        self.assertTrue("Missing docstring descriptions" in p.call_args_list[3][0][0])
-        self.assertTrue("['z']" in p.call_args_list[3][0][0])
+        self.assertTrue(
+            "Missing docstring for forward function" in p.call_args_list[3][0][0]
+        )
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     #  `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
@@ -139,15 +141,9 @@ class F(${parent_class_list}):
     \"""
     Blah.
 
-    Constructor Args:
+    Args:
         x: Blah
         y: Blah. Default: "a"
-
-    Call Args:
-        z: Blah
-
-    Returns:
-        None
 
     Example::
 
@@ -157,6 +153,13 @@ class F(${parent_class_list}):
         pass
 
     def forward(self, z):
+        \"""
+        Call Args:
+            z: Blah
+
+        Returns:
+            None
+        \"""
         pass
         """
         src = populate_parent_class_list(src, uses_LazyModuleExtensionMixin)
@@ -177,27 +180,25 @@ class F(${parent_class_list}):
     \"""
     Blah.
 
-    Constructor Args:
-        a: Blah
-        b: Blah
-        c: Blah
-        d: Blah
-        e: Blah. Default: "e".
-
-    Call Args:
-        z: Blah
-
-    Returns:
-        None
+    Args:
+        x: Blah
+        y: Blah. Default: "a"
 
     Example::
 
         pass
     \"""
-    def __init__(self, a, b, c, d, e='e'):
+    def __init__(self, x, y='a'):
         pass
 
     def forward(self, z):
+        \"""
+        Call Args:
+            z: Blah
+
+        Returns:
+            None
+        \"""
         pass
         """
         src = populate_parent_class_list(src, uses_LazyModuleExtensionMixin)
@@ -214,19 +215,13 @@ class F(${parent_class_list}):
     \"""
     Blah.
 
-    Constructor Args:
+    Args:
         a: Blah
         b: Blah
         c: Blah
         d: Blah
         e: Blah
         f: Blah. Default: "f".
-
-    Call Args:
-        z: Blah
-
-    Returns:
-        None
 
     Example::
 
@@ -236,18 +231,25 @@ class F(${parent_class_list}):
         pass
 
     def forward(self, z):
+        \"""
+        Call Args:
+            z: Blah
+
+        Returns:
+            None
+        \"""
         pass
         """
         src = populate_parent_class_list(src, uses_LazyModuleExtensionMixin)
-        with patch("builtins.print") as p, patch(
+        with patch("builtins.print") as pa, patch(
             "torchrec.linter.module_linter.read_file", return_value=src
         ):
             module_linter.linter_one_file("a")
 
-        self.assertEqual(p.call_count, 1)
+        self.assertEqual(pa.call_count, 1)
         self.assertTrue(
             "TorchRec module has too many constructor arguments"
-            in p.call_args_list[0][0][0]
+            in pa.call_args_list[0][0][0]
         )
 
         # Case 3: not a TorchRec module -> pass
@@ -256,7 +258,7 @@ class F:
     \"""
     Blah.
 
-    Constructor Args:
+    Args:
         a: Blah
         b: Blah
         c: Blah
@@ -264,20 +266,21 @@ class F:
         e: Blah
         f: Blah. Default: "f".
 
-    Call Args:
-        z: Blah
-
-    Returns:
-        None
-
     Example::
 
         pass
     \"""
-    def __init__(self, a, b, c, d, e, f='f'):
+    def __init__(self, x, y='a'):
         pass
 
     def forward(self, z):
+        \"""
+        Call Args:
+            z: Blah
+
+        Returns:
+            None
+        \"""
         pass
         """
         with patch("builtins.print") as p, patch(
