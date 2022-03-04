@@ -67,12 +67,14 @@ GPUExecutor::GPUExecutor(
     std::shared_ptr<torch::deploy::InterpreterManager> manager,
     torch::deploy::ReplicatedObj model,
     int rank,
-    int worldSize)
+    int worldSize,
+    std::shared_ptr<torchrec::ResultSplitFunc> func)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
       worldSize_(worldSize),
-      batches_(10'000) {
+      batches_(10'000),
+      resultSplitFunc_(func) {
   at::cuda::CUDAGuard guard(rank_);
   init_cuda_runtime();
 
@@ -148,7 +150,7 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    auto remainingBatchSize = batch->batchSize;
+    size_t offset = 0;
     for (auto& context : batch->contexts) {
       if (context.isTimedOut) {
         PredictionException ex("Batching queue timeout");
@@ -157,25 +159,16 @@ void GPUExecutor::process(int idx) {
         PredictionException ex("Predict exception");
         context.promise.setException(std::move(ex));
       } else {
-        CHECK(predictions.isGenericDict());
-        CHECK_GE(remainingBatchSize, context.batchSize);
+        CHECK_LT(offset, batch->batchSize);
 
         auto response = std::make_unique<PredictionResponse>();
-        for (const auto& item : predictions.toGenericDict()) {
-          auto tensor = item.value().toTensor();
-          response->predictions.emplace(
-              item.key().toStringRef(),
-              folly::IOBuf(
-                  folly::IOBuf::COPY_BUFFER,
-                  (float*)tensor.data_ptr() +
-                      (batch->batchSize - remainingBatchSize),
-                  context.batchSize * sizeof(float)));
-        }
+        response->predictions = resultSplitFunc_->splitResult(
+            predictions, offset, context.batchSize);
         context.promise.setValue(std::move(response));
       }
-      remainingBatchSize -= context.batchSize;
+      offset += context.batchSize;
     }
-    CHECK_EQ(remainingBatchSize, 0);
+    CHECK_EQ(offset, batch->batchSize);
   }
 }
 
