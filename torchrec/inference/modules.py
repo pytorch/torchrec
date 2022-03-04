@@ -89,16 +89,13 @@ class PredictModule(nn.Module):
     """
 
     def __init__(
-        self, module: nn.Module, device: Optional[torch.device] = None
+        self,
+        module: nn.Module,
     ) -> None:
         super().__init__()
         self._module: nn.Module = module
-        self._device: torch.device = (
-            torch.device("cuda", torch.cuda.current_device())
-            if device is None
-            else device
-        )
-
+        # lazy init device from thread inited device guard
+        self._device: Optional[torch.device] = None
         self._module.eval()
 
     @property
@@ -114,6 +111,8 @@ class PredictModule(nn.Module):
         pass
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        if self._device is None:
+            self._device = torch.device("cuda", torch.cuda.current_device())
         with torch.cuda.device(self._device), torch.inference_mode():
             return self.predict_forward(batch)
 
@@ -132,10 +131,8 @@ class MultistreamPredictModule(PredictModule):
     Interface derived from PredictModule that supports using different CUDA streams in forward calls.
     """
 
-    def __init__(
-        self, module: nn.Module, device: Optional[torch.device] = None
-    ) -> None:
-        super().__init__(module, device)
+    def __init__(self, module: nn.Module) -> None:
+        super().__init__(module)
         self._stream: Optional[torch.cuda.streams.Stream] = None
 
     @abc.abstractmethod
@@ -147,7 +144,9 @@ class MultistreamPredictModule(PredictModule):
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         if self._stream is None:
             # Lazily initialize stream to make sure it's created in the correct device.
-            self._stream = torch.cuda.Stream(device=self._device)
+            self._stream = (
+                torch.cuda.Stream()
+            )  # default semantics using currrent device.
 
         with torch.cuda.stream(self._stream):
             return super().forward(batch)

@@ -7,29 +7,35 @@
 cmake_minimum_required(VERSION 3.7 FATAL_ERROR)
 project(inference)
 
+if(NOT DEFINED TORCH_DEPLOY_LIB_PATH)
+    message(
+      FATAL_ERROR
+      "You must set TORCH_DEPLOY_LIB_PATH to the path of the torch deploy \
+      library."
+    )
+endif()
+
 # dependencies
 find_package(Torch REQUIRED)
-find_package(Boost REQUIRED)
 find_package(folly REQUIRED)
-find_package(Threads REQUIRED)
 find_package(gflags REQUIRED)
-find_package(glog REQUIRED)
 
 include_directories(${Torch_INCLUDE_DIRS})
-include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${folly_INCLUDE_DIRS})
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall ${TORCH_CXX_FLAGS}")
+set(CMAKE_CXX_STANDARD 17)
+
 # for our own header files
-include_directories(.)
+include_directories(include/)
 
 # define our library target
-add_library(inference SHARED Batching.cpp BatchingQueue.cpp GPUExecutor.cpp)
+add_library(inference SHARED
+  src/Batching.cpp
+  src/BatchingQueue.cpp
+  src/GPUExecutor.cpp)
 
-# c++ 17
-target_compile_features(inference PRIVATE cxx_std_17)
-
-# link against LibTorch
-target_link_libraries(inference "${TORCH_LIBRARIES}")
-
-# link folly and boost
-target_link_libraries(inference ${Boost_LIBRARIES} ${FOLLY_LIBRARIES})
+target_link_libraries(inference
+  ${TORCH_DEPLOY_LIB_PATH}
+  "${TORCH_LIBRARIES}"
+  ${FOLLY_LIBRARIES})
