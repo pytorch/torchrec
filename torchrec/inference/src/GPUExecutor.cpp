@@ -119,8 +119,13 @@ void GPUExecutor::process(int idx) {
   folly::setThreadName(
       fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
 
-  auto stream = at::cuda::getStreamFromPool(/* isHighPriority */ true, rank_);
-  at::cuda::CUDAStreamGuard streamGuard(stream);
+  std::vector<c10::cuda::CUDAStream> streams;
+  for (size_t i = 0; i < worldSize_; ++i) {
+    streams.push_back(
+        at::cuda::getStreamFromPool(/* isHighPriority */ true, i));
+  }
+  at::cuda::CUDAMultiStreamGuard streamGuard(streams);
+  at::cuda::CUDAGuard deviceGuard(rank_);
 
   while (true) {
     std::shared_ptr<PredictionBatch> batch;
