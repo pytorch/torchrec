@@ -7,7 +7,7 @@
 
 import abc
 from dataclasses import dataclass, field
-from typing import List, TypeVar
+from typing import List, TypeVar, Optional
 
 import torch
 from torchrec.distributed.embedding_sharding import BaseEmbeddingDist
@@ -22,12 +22,15 @@ class VariableBatchShardingContext(Multistreamable):
     PooledEmbeddingsAllToAll and it can be get from SparseFeaturesAllToAll.
 
     batch_size_per_rank: stores batch size in each rank.
+    batch_size_per_rank_tensor: batch_size_per_rank stored in tensor.
     """
 
     batch_size_per_rank: List[int] = field(default_factory=list)
+    batch_size_per_rank_tensor: Optional[torch.Tensor] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        pass
+        if self.batch_size_per_rank_tensor is not None:
+            self.batch_size_per_rank_tensor.record_stream(stream)
 
 
 T = TypeVar("T")
