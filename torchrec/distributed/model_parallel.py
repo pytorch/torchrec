@@ -306,7 +306,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         path: str,
         fused_optims: List[Tuple[str, KeyedOptimizer]],
     ) -> None:
-        sharded_children = set()
         for name, child in module.named_children():
             curr_path = path + name
             sharded_params = self._plan.get_plan_for_module(curr_path)
@@ -321,7 +320,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 setattr(module, name, sharded_child)
                 if isinstance(sharded_child, FusedOptimizerModule):
                     fused_optims.append((curr_path, sharded_child.fused_optimizer))
-                sharded_children.add(name)
             else:
                 self._shard_modules_impl(
                     child,
