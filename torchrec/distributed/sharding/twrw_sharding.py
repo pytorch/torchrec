@@ -364,11 +364,11 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             ),
         )
         self._dist = SparseFeaturesAllToAll(
-            pg,
-            id_list_features_per_rank,
-            id_score_list_features_per_rank,
-            device,
-            self._num_cross_nodes,
+            pg=pg,
+            id_list_features_per_rank=id_list_features_per_rank,
+            id_score_list_features_per_rank=id_score_list_features_per_rank,
+            device=device,
+            stagger=self._num_cross_nodes,
         )
         self._has_feature_processor = has_feature_processor
 

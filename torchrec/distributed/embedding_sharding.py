@@ -197,6 +197,7 @@ class SparseFeaturesAllToAll(nn.Module):
         device (Optional[torch.device]): device on which buffers will be allocated.
         stagger (int): stagger value to apply to recat tensor, see `_recat` function for
             more detail.
+        variable_batch_size (bool): variable batch size in each rank.
 
     Example::
 
@@ -273,13 +274,22 @@ class SparseFeaturesAllToAll(nn.Module):
         id_score_list_features_per_rank: List[int],
         device: Optional[torch.device] = None,
         stagger: int = 1,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._id_list_features_all2all: KJTAllToAll = KJTAllToAll(
-            pg, id_list_features_per_rank, device, stagger
+            pg=pg,
+            splits=id_list_features_per_rank,
+            device=device,
+            stagger=stagger,
+            variable_batch_size=variable_batch_size,
         )
         self._id_score_list_features_all2all: KJTAllToAll = KJTAllToAll(
-            pg, id_score_list_features_per_rank, device, stagger
+            pg=pg,
+            splits=id_score_list_features_per_rank,
+            device=device,
+            stagger=stagger,
+            variable_batch_size=variable_batch_size,
         )
 
     def forward(

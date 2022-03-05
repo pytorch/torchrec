@@ -56,7 +56,10 @@ def _to_tensor(iterator: List[T], device_id: int, dtype: torch.dtype) -> torch.T
 
 
 def _generate_sparse_features_batch(
-    keys: List[str], splits: List[int], B: int, is_weighted: bool = False
+    keys: List[str],
+    splits: List[int],
+    batch_size_per_rank: List[int],
+    is_weighted: bool = False,
 ) -> Tuple[List[KeyedJaggedTensor], List[KeyedJaggedTensor]]:
     world_size = len(splits)
     offsets = [0] + list(itertools.accumulate(splits))
@@ -66,7 +69,8 @@ def _generate_sparse_features_batch(
 
     for key in keys:
         lengths[key] = [
-            [random.randint(0, 10) for _ in range(B)] for i in range(world_size)
+            [random.randint(0, 10) for _ in range(batch_size_per_rank[i])]
+            for i in range(world_size)
         ]
         values[key] = [
             [random.randint(0, 1000) for _ in range(sum(lengths[key][i]))]
@@ -261,6 +265,7 @@ class KJTAllToAllTest(DistDataTestCase):
         output: KeyedJaggedTensor,
         backend: str,
         splits: List[int],
+        batch_size_per_rank: List[int],
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         device = torch.device(f"cuda:{rank}")
@@ -269,7 +274,12 @@ class KJTAllToAllTest(DistDataTestCase):
         _input = _input.to(device=device)
         output = output.to(device=device)
         pg = dist.group.WORLD
-        lengths_a2a = KJTAllToAll(pg=pg, splits=splits, device=device)
+        lengths_a2a = KJTAllToAll(
+            pg=pg,
+            splits=splits,
+            device=device,
+            variable_batch_size=len(set(batch_size_per_rank)) > 1,
+        )
         cls._validate(lengths_a2a(_input), output)
         dist.destroy_process_group()
 
@@ -283,23 +293,38 @@ class KJTAllToAllTest(DistDataTestCase):
         B=st.integers(min_value=1, max_value=2),
         features=st.integers(min_value=3, max_value=4),
         is_weighted=st.booleans(),
+        variable_batch_size=st.booleans(),
     )
     @settings(max_examples=8, deadline=None)
     def test_features(
-        self, backend: str, B: int, features: int, is_weighted: bool
+        self,
+        backend: str,
+        B: int,
+        features: int,
+        is_weighted: bool,
+        variable_batch_size: bool,
     ) -> None:
         keys = [f"F{feature}" for feature in range(features)]
         rank0_split = random.randint(0, features)
         splits = [rank0_split, features - rank0_split]
-        _input, output = _generate_sparse_features_batch(
-            keys=keys, splits=splits, B=B, is_weighted=is_weighted
-        )
 
+        if variable_batch_size:
+            batch_size_per_rank = [random.randint(B, B + 4), random.randint(B, B + 4)]
+        else:
+            batch_size_per_rank = [B, B]
+
+        _input, output = _generate_sparse_features_batch(
+            keys=keys,
+            splits=splits,
+            batch_size_per_rank=batch_size_per_rank,
+            is_weighted=is_weighted,
+        )
         self._run_multi_process_test(
             _input=_input,
             output=output,
             backend=backend,
             splits=splits,
+            batch_size_per_rank=batch_size_per_rank,
         )
 
 
@@ -329,7 +354,11 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             device=device,
         )
         _input.requires_grad = True
-        res = a2a(_input, batch_size_per_rank).wait()
+        if len(set(batch_size_per_rank)) > 1:
+            # variable batch size
+            res = a2a(_input, batch_size_per_rank).wait()
+        else:
+            res = a2a(_input).wait()
         res.backward(res)
         assert_array_equal(
             res.cpu().detach(),
@@ -350,10 +379,16 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         B=st.integers(min_value=2, max_value=3),
         features=st.integers(min_value=3, max_value=4),
         is_reversed=st.booleans(),
+        variable_batch_size=st.booleans(),
     )
     @settings(max_examples=8, deadline=None)
     def test_pooled_embeddings(
-        self, backend: str, B: int, features: int, is_reversed: bool
+        self,
+        backend: str,
+        B: int,
+        features: int,
+        is_reversed: bool,
+        variable_batch_size: bool,
     ) -> None:
         keys = [f"F{feature}" for feature in range(features)]
         dims = random.sample([8, 16, 32] * features, features)
@@ -362,7 +397,11 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         if is_reversed:
             splits.reverse()
         dim_sum_per_rank = [sum(dims[: splits[0]]), sum(dims[splits[0] :])]
-        batch_size_per_rank = [random.randint(B, B + 2), random.randint(B, B + 2)]
+
+        if variable_batch_size:
+            batch_size_per_rank = [random.randint(B, B + 4), random.randint(B, B + 4)]
+        else:
+            batch_size_per_rank = [B, B]
 
         _input, output = _generate_pooled_embedding_batch(
             keys=keys,
@@ -370,7 +409,6 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             splits=splits,
             batch_size_per_rank=batch_size_per_rank,
         )
-
         self._run_multi_process_test(
             _input=_input,
             output=output,
