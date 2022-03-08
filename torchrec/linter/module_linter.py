@@ -179,7 +179,7 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
                     "TorchRec module has too many constructor arguments",
                     "TorchRec module can have at most {} constructor arguments, but this module has {}.".format(
                         MAX_NUM_ARGS_IN_MODULE_CTOR,
-                        len(functions[function_name][1]),
+                        num_args,
                     ),
                 )
         if function_name in functions:
