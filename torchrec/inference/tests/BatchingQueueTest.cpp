@@ -58,7 +58,7 @@ TEST(BatchingQueueTest, Basic) {
   BatchingQueue queue(
       batchQueueCbs,
       BatchingQueue::Config{.batchingMetadata = {{"float_features", "dense"}}},
-      1);
+      /* worldSize */ 1);
 
   queue.add(
       createRequest(2, 2),
