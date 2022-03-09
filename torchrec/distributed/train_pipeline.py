@@ -150,6 +150,12 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 
 class Tracer(torch.fx.Tracer):
+    # Disable proxying buffers during tracing. Ideally, proxying buffers would
+    # be disabled, but some models are currently mutating buffer values, which
+    # causes errors during tracing. If those models can be rewritten to not do
+    # that, we can likely remove this line
+    proxy_buffer_attributes = False
+
     def __init__(self, unsharded_module_names: List[str]) -> None:
         super().__init__()
         self._unsharded_module_names = unsharded_module_names
