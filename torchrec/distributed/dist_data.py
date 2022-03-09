@@ -13,6 +13,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.autograd.profiler import record_function
 from torchrec.distributed.comm_ops import (
+    alltoall_dense,
     alltoall_pooled,
     alltoall_sequence,
     reduce_scatter_pooled,
@@ -917,3 +918,86 @@ class SequenceEmbeddingAllToAll(nn.Module):
             unbucketize_permute_tensor=unbucketize_permute_tensor,
             embedding_dim=local_embs.shape[1],
         )
+
+
+class DenseOutputAwaitable(Awaitable[torch.Tensor]):
+    """
+    Awaitable for dense output after collective operation.
+
+    Constructor Args:
+        tensor_awaitable (Awaitable[torch.Tensor]): awaitable of concatenated tensors
+            from all the processes in the group after collective.
+    """
+
+    def __init__(
+        self,
+        tensor_awaitable: Awaitable[torch.Tensor],
+    ) -> None:
+        super().__init__()
+        self._tensor_awaitable = tensor_awaitable
+
+    def _wait_impl(self) -> torch.Tensor:
+        """
+        Syncs dense output after collective operation.
+
+        Returns:
+            torch.Tensor: synced dense output.
+        """
+
+        ret = self._tensor_awaitable.wait()
+        return ret
+
+
+class DenseOutputAllToAll(nn.Module):
+    """
+    Redistributes dense output to a ProcessGroup according to splits.
+
+    Constructor Args:
+        pg (dist.ProcessGroup): the process group that the AlltoAll communication
+            happens within.
+        output_splits (List[int]):
+        batch_size: int
+
+    Call Args:
+        input (torch.Tensor): input tensor (2-D, B * D).
+
+    Returns:
+        DenseOutputAwaitable
+
+    Example:
+        >>> init_distributed(rank=rank, size=2, backend="nccl")
+        >>> pg = dist.new_group(backend="nccl")
+        >>> output_splits = [4, 4]
+        >>> batch_size = 4
+        >>> m = DenseOutputAllToAll(pg, features_per_rank)
+        >>> dense_input = torch.rand((8, 3))
+        >>> output = m(dense_input)
+        >>> tensor = output.wait()
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        output_splits: List[int],
+        batch_size: int,
+    ) -> None:
+        super().__init__()
+        self._pg: dist.ProcessGroup = pg
+        self._output_splits: List[int] = output_splits
+        self._batch_size: int = batch_size
+
+    def forward(
+        self,
+        input: torch.Tensor,
+    ) -> DenseOutputAwaitable:
+        """
+        Performs AlltoAll operation on dense output tensor.
+        """
+
+        tensor_awaitable = alltoall_dense(
+            input=input,
+            group=self._pg,
+            output_splits=self._output_splits,
+            batch_size=self._batch_size,
+        )
+        return DenseOutputAwaitable(tensor_awaitable=tensor_awaitable)

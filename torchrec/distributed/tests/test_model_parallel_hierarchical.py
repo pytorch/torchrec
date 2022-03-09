@@ -11,11 +11,13 @@ import torch
 from hypothesis import Verbosity, settings, given, strategies as st
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.test_utils.test_model import TestTowerSparseNN
 from torchrec.distributed.test_utils.test_model_parallel import (
     ModelParallelTestShared,
     SharderType,
     create_test_sharder,
 )
+from torchrec.distributed.tower_sharding import EmbeddingTowerSharder
 from torchrec.distributed.types import ShardingType
 from torchrec.test_utils import skip_if_asan_class
 
@@ -116,4 +118,21 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+        )
+
+    # pyre-fixme[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_embedding_tower_nccl_twrw(
+        self,
+    ) -> None:
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[EmbeddingTowerSharder()],
+            backend="nccl",
+            world_size=4,
+            local_size=2,
+            model_class=TestTowerSparseNN,
         )

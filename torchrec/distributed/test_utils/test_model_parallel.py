@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Dict, List, Optional, cast, Union
+from typing import Dict, List, Optional, Union, Type
 
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
@@ -79,13 +79,15 @@ class ModelParallelTestShared(ModelParallelTestBase):
         world_size: int = 2,
         local_size: Optional[int] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        model_class: Type[TestSparseNNBase] = TestSparseNN,
     ) -> None:
         self._run_multi_process_test(
             # pyre-ignore [6]
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
-            model_class=cast(TestSparseNNBase, TestSparseNN),
+            # pyre-ignore [6]
+            model_class=model_class,
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             embedding_groups=self.embedding_groups,

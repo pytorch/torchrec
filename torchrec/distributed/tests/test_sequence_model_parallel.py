@@ -7,7 +7,7 @@
 
 
 import unittest
-from typing import cast, List, Optional
+from typing import List, Optional, Type
 
 import hypothesis.strategies as st
 import torch
@@ -19,8 +19,8 @@ from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
 )
 from torchrec.distributed.tests.test_sequence_model import (
-    TestSequenceSparseNN,
     TestEmbeddingCollectionSharder,
+    TestSequenceSparseNN,
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
@@ -146,13 +146,15 @@ class SequenceModelParallelTest(ModelParallelTestBase):
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
+        model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
     ) -> None:
         self._run_multi_process_test(
             # pyre-ignore [6]
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
-            model_class=cast(TestSparseNNBase, TestSequenceSparseNN),
+            # pyre-ignore [6]
+            model_class=model_class,
             tables=self.tables,
             embedding_groups=self.embedding_groups,
             # pyre-fixme[6]
