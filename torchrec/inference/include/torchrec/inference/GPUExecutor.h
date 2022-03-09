@@ -13,6 +13,7 @@
 
 #include <folly/MPMCQueue.h>
 #include <folly/Synchronized.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 #include <gflags/gflags.h>
@@ -20,6 +21,7 @@
 #include <torch/csrc/deploy/deploy.h> // @manual
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/ResultSplit.h"
 
 namespace torchrec {
 
@@ -29,7 +31,8 @@ class GPUExecutor {
       std::shared_ptr<torch::deploy::InterpreterManager> manager,
       torch::deploy::ReplicatedObj model,
       int rank,
-      int worldSize);
+      int worldSize,
+      std::shared_ptr<torchrec::ResultSplitFunc> func);
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
   ~GPUExecutor();
@@ -47,6 +50,8 @@ class GPUExecutor {
 
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> batches_;
   std::vector<std::thread> processThreads_;
+  std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
+  std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
 };
 
 } // namespace torchrec

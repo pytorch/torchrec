@@ -251,10 +251,11 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             ),
         )
         self._dist = SparseFeaturesAllToAll(
-            pg,
-            self._world_size * [self._num_id_list_features],
-            self._world_size * [self._num_id_score_list_features],
-            device,
+            pg=pg,
+            id_list_features_per_rank=self._world_size * [self._num_id_list_features],
+            id_score_list_features_per_rank=self._world_size
+            * [self._num_id_score_list_features],
+            device=device,
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor

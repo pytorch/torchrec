@@ -219,4 +219,4 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             init_data_parallel=False,
         )
         dmp_1 = dmp.copy(device_1)
-        self._recursive_device_check(dmp.dmp_module, dmp_1.dmp_module, device, device_1)
+        self._recursive_device_check(dmp.module, dmp_1.module, device, device_1)

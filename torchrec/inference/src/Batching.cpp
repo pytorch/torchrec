@@ -13,6 +13,7 @@
 #include <folly/container/Enumerate.h>
 #include <folly/io/Cursor.h>
 
+#include "ATen/Functions.h"
 #include "torchrec/inference/Types.h"
 
 namespace torchrec {
@@ -22,52 +23,74 @@ C10_DEFINE_REGISTRY(TorchRecBatchingFuncRegistry, BatchingFunc);
 std::unordered_map<std::string, at::Tensor> combineFloat(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests) {
-  c10::InferenceMode guard;
   // Compute combined batch size.
   long combinedBatchSize = 0;
   long numFeatures = 0;
+  auto* maybeIValuePtr =
+      std::get_if<c10::IValue>(&requests.front()->features[featureName]);
+  at::Tensor combined;
+  std::vector<at::Tensor> tensors;
+
+  if (maybeIValuePtr != nullptr) {
+    numFeatures = maybeIValuePtr->toTensor().size(1);
+    tensors.reserve(requests.size());
+  }
+
   for (const auto& request : requests) {
-    const auto& feature =
-        std::get<torchrec::FloatFeatures>(request->features[featureName]);
-    const auto nf = feature.num_features;
-    const auto dataSize = feature.values.computeChainDataLength();
-    if (nf * request->batch_size * sizeof(float) != dataSize) {
-      throw std::invalid_argument("Invalid float features");
-    }
-    if (nf > 0) {
-      combinedBatchSize += request->batch_size;
-      if (numFeatures > 0) {
-        if (numFeatures != nf) {
-          throw std::invalid_argument("Different number of float features");
-        }
+    if (maybeIValuePtr != nullptr) {
+      tensors.push_back(
+          std::get<c10::IValue>(request->features[featureName]).toTensor());
+      combinedBatchSize += tensors.back().size(0);
+    } else {
+      const auto& feature =
+          std::get<torchrec::FloatFeatures>(request->features[featureName]);
+      const auto nf = feature.num_features;
+      const auto dataSize = feature.values.computeChainDataLength();
+      if (nf * request->batch_size * sizeof(float) != dataSize) {
+        throw std::invalid_argument("Invalid float features");
       }
-      numFeatures = nf;
+      if (nf > 0) {
+        combinedBatchSize += request->batch_size;
+        if (numFeatures > 0) {
+          if (numFeatures != nf) {
+            throw std::invalid_argument("Different number of float features");
+          }
+        }
+        numFeatures = nf;
+      }
     }
   }
 
   if (numFeatures == 0) {
-    return {{featureName, at::empty(0)}};
+    return {{featureName, at::empty({combinedBatchSize, 0})}};
   }
 
-  // Create output tensor.
-  const auto options =
-      at::TensorOptions(at::kCPU).dtype(at::kFloat).pinned_memory(true);
-  auto combined = at::empty({combinedBatchSize, numFeatures}, options);
+  if (maybeIValuePtr != nullptr) {
+    combined = at::empty(
+        {combinedBatchSize, numFeatures},
+        maybeIValuePtr->toTensor().options().pinned_memory(true));
+    at::cat_out(combined, tensors);
+  } else {
+    // Create output tensor.
+    const auto options =
+        at::TensorOptions(at::kCPU).dtype(at::kFloat).pinned_memory(true);
+    combined = at::empty({combinedBatchSize, numFeatures}, options);
 
-  // Copy tensor data.
-  auto combinedRange = folly::MutableByteRange(
-      reinterpret_cast<uint8_t*>(combined.data_ptr()),
-      combinedBatchSize * numFeatures * options.dtype().itemsize());
-  for (const auto& request : requests) {
-    const auto* start =
-        &std::get<torchrec::FloatFeatures>(request->features[featureName])
-             .values;
-    const auto* curr = start;
-    do {
-      std::memcpy(combinedRange.data(), curr->data(), curr->length());
-      combinedRange.advance(curr->length());
-      curr = curr->next();
-    } while (curr != start);
+    // Copy tensor data.
+    auto combinedRange = folly::MutableByteRange(
+        reinterpret_cast<uint8_t*>(combined.data_ptr()),
+        combinedBatchSize * numFeatures * options.dtype().itemsize());
+    for (const auto& request : requests) {
+      const auto* start =
+          &std::get<torchrec::FloatFeatures>(request->features[featureName])
+               .values;
+      const auto* curr = start;
+      do {
+        std::memcpy(combinedRange.data(), curr->data(), curr->length());
+        combinedRange.advance(curr->length());
+        curr = curr->next();
+      } while (curr != start);
+    }
   }
 
   return {{featureName, std::move(combined)}};
@@ -77,7 +100,6 @@ std::unordered_map<std::string, at::Tensor> combineSparse(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests,
     bool isWeighted) {
-  c10::InferenceMode guard;
   // Compute combined batch size.
   long combinedBatchSize = 0;
   long numFeatures = 0;
@@ -181,7 +203,6 @@ std::unordered_map<std::string, at::Tensor> combineSparse(
 std::unordered_map<std::string, at::Tensor> combineEmbedding(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests) {
-  c10::InferenceMode guard;
   // Compute combined batch size.
   long combinedBatchSize = 0;
   long numFeatures = 0;
@@ -242,8 +263,10 @@ class FloatBatchingFunc : public BatchingFunc {
  public:
   std::unordered_map<std::string, at::Tensor> batch(
       const std::string& featureName,
-      const std::vector<std::shared_ptr<PredictionRequest>>& requests)
-      override {
+      const std::vector<std::shared_ptr<PredictionRequest>>& requests,
+      const int64_t& /* totalNumBatch */,
+      at::Tensor /* batchOffsets */,
+      const c10::Device& /* device */) override {
     return combineFloat(featureName, requests);
   }
 };
@@ -252,8 +275,10 @@ class SparseBatchingFunc : public BatchingFunc {
  public:
   std::unordered_map<std::string, at::Tensor> batch(
       const std::string& featureName,
-      const std::vector<std::shared_ptr<PredictionRequest>>& requests)
-      override {
+      const std::vector<std::shared_ptr<PredictionRequest>>& requests,
+      const int64_t& /* totalNumBatch */,
+      at::Tensor /* batchOffsets */,
+      const c10::Device& /* device */) override {
     return combineSparse(featureName, requests, /* isWeighted */ false);
   }
 };
@@ -262,8 +287,10 @@ class WeightedSparseBatchingFunc : public BatchingFunc {
  public:
   std::unordered_map<std::string, at::Tensor> batch(
       const std::string& featureName,
-      const std::vector<std::shared_ptr<PredictionRequest>>& requests)
-      override {
+      const std::vector<std::shared_ptr<PredictionRequest>>& requests,
+      const int64_t& /* totalNumBatch */,
+      at::Tensor /* batchOffsets */,
+      const c10::Device& /* device */) override {
     return combineSparse(featureName, requests, /* isWeighted */ true);
   }
 };
@@ -272,8 +299,10 @@ class EmbeddingBatchingFunc : public BatchingFunc {
  public:
   std::unordered_map<std::string, at::Tensor> batch(
       const std::string& featureName,
-      const std::vector<std::shared_ptr<PredictionRequest>>& requests)
-      override {
+      const std::vector<std::shared_ptr<PredictionRequest>>& requests,
+      const int64_t& /* totalNumBatch */,
+      at::Tensor /* batchOffsets */,
+      const c10::Device& /* device */) override {
     return combineEmbedding(featureName, requests);
   }
 };

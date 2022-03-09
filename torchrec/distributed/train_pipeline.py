@@ -23,9 +23,7 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
-from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.fx.node import Node
-from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
 from torchrec.streamable import Pipelineable, Multistreamable
@@ -152,6 +150,12 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 
 class Tracer(torch.fx.Tracer):
+    # Disable proxying buffers during tracing. Ideally, proxying buffers would
+    # be disabled, but some models are currently mutating buffer values, which
+    # causes errors during tracing. If those models can be rewritten to not do
+    # that, we can likely remove this line
+    proxy_buffer_attributes = False
+
     def __init__(self, unsharded_module_names: List[str]) -> None:
         super().__init__()
         self._unsharded_module_names = unsharded_module_names
@@ -365,11 +369,7 @@ def _rewrite_model(  # noqa C901
 ) -> List[ShardedModule]:
 
     # Get underlying nn.Module
-    while (
-        isinstance(model, DistributedModelParallel)
-        or isinstance(model, DistributedDataParallel)
-        or isinstance(model, FullyShardedDataParallel)
-    ):
+    if isinstance(model, DistributedModelParallel):
         model = model.module
 
     # Collect a list of sharded modules.

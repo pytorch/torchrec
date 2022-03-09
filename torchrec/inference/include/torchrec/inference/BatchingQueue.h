@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <queue>
+#include <string>
 #include <unordered_map>
 
 #include <ATen/ATen.h>
@@ -37,7 +38,7 @@ struct RequestContext {
 };
 
 struct PredictionBatch {
-  size_t batch_size;
+  size_t batchSize;
 
   c10::Dict<std::string, at::Tensor> forwardArgs;
 
@@ -61,7 +62,7 @@ class BatchingQueue {
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
-    std::unordered_map<std::string, std::string> batchingMetadata;
+    const std::unordered_map<std::string, std::string> batchingMetadata;
   };
 
   BatchingQueue(const BatchingQueue&) = delete;

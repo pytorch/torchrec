@@ -9,6 +9,7 @@
 #include "torchrec/inference/GPUExecutor.h"
 
 #include <chrono>
+#include <memory>
 #include <stdexcept>
 
 #include <c10/cuda/CUDAGuard.h>
@@ -24,6 +25,7 @@
 #include <glog/logging.h>
 #include <torch/csrc/deploy/deploy.h> // @manual
 
+#include "ATen/cuda/CUDAEvent.h"
 #include "torchrec/inference/BatchingQueue.h"
 
 DEFINE_int32(copy_timeout, 500, "");
@@ -67,12 +69,14 @@ GPUExecutor::GPUExecutor(
     std::shared_ptr<torch::deploy::InterpreterManager> manager,
     torch::deploy::ReplicatedObj model,
     int rank,
-    int worldSize)
+    int worldSize,
+    std::shared_ptr<torchrec::ResultSplitFunc> func)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
       worldSize_(worldSize),
-      batches_(10'000) {
+      batches_(10'000),
+      resultSplitFunc_(func) {
   at::cuda::CUDAGuard guard(rank_);
   init_cuda_runtime();
 
@@ -84,6 +88,9 @@ GPUExecutor::GPUExecutor(
       process(rank * num_threads_per_gpu + i);
     });
   }
+
+  completionExecutor_ =
+      std::make_unique<folly::CPUThreadPoolExecutor>(2 * num_threads_per_gpu);
 }
 
 GPUExecutor::~GPUExecutor() {
@@ -112,11 +119,13 @@ void GPUExecutor::process(int idx) {
   folly::setThreadName(
       fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
 
-  // set device guard again to the correct device again because set_device is
-  // thread-local
+  std::vector<c10::cuda::CUDAStream> streams;
+  for (size_t i = 0; i < worldSize_; ++i) {
+    streams.push_back(
+        at::cuda::getStreamFromPool(/* isHighPriority */ true, i));
+  }
+  at::cuda::CUDAMultiStreamGuard streamGuard(streams);
   at::cuda::CUDAGuard deviceGuard(rank_);
-  auto stream = at::cuda::getStreamFromPool(true, rank_);
-  at::cuda::CUDAStreamGuard streamGuard(stream);
 
   while (true) {
     std::shared_ptr<PredictionBatch> batch;
@@ -135,7 +144,7 @@ void GPUExecutor::process(int idx) {
       continue;
     }
 
-    if (batch->batch_size == 0) {
+    if (batch->batchSize == 0) {
       continue;
     }
 
@@ -151,34 +160,41 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    auto remainingBatchSize = batch->batch_size;
-    for (auto& context : batch->contexts) {
-      if (context.isTimedOut) {
-        PredictionException ex("Batching queue timeout");
-        context.promise.setException(std::move(ex));
-      } else if (predictions.isNone()) {
-        PredictionException ex("Predict exception");
-        context.promise.setException(std::move(ex));
-      } else {
-        CHECK(predictions.isGenericDict());
-        CHECK_GE(remainingBatchSize, context.batchSize);
+    // TODO: Open source event pool and use it here.
+    auto event = std::make_unique<at::cuda::CUDAEvent>(
+        cudaEventBlockingSync | cudaEventDisableTiming);
+    event->record();
 
-        auto response = std::make_unique<PredictionResponse>();
-        for (const auto& item : predictions.toGenericDict()) {
-          auto tensor = item.value().toTensor();
-          response->predictions.emplace(
-              item.key().toStringRef(),
-              folly::IOBuf(
-                  folly::IOBuf::COPY_BUFFER,
-                  (float*)tensor.data_ptr() +
-                      (batch->batch_size - remainingBatchSize),
-                  context.batchSize * sizeof(float)));
-        }
-        context.promise.setValue(std::move(response));
-      }
-      remainingBatchSize -= context.batchSize;
-    }
-    CHECK_EQ(remainingBatchSize, 0);
+    completionExecutor_->add(
+        // Can not bind the method directly because of the unique_ptr of item.
+        [batch = std::move(batch),
+         predictions = std::move(predictions),
+         resultSplitFunc = resultSplitFunc_,
+         event = std::move(event)]() mutable {
+          RECORD_USER_SCOPE("CompletionStage")
+          // Wait for D2H to finish.
+          event->synchronize();
+
+          size_t offset = 0;
+          for (auto& context : batch->contexts) {
+            if (context.isTimedOut) {
+              PredictionException ex("Batching queue timeout");
+              context.promise.setException(std::move(ex));
+            } else if (predictions.isNone()) {
+              PredictionException ex("Predict exception");
+              context.promise.setException(std::move(ex));
+            } else {
+              CHECK_LT(offset, batch->batchSize);
+
+              auto response = std::make_unique<PredictionResponse>();
+              response->predictions = resultSplitFunc->splitResult(
+                  predictions, offset, context.batchSize);
+              context.promise.setValue(std::move(response));
+            }
+            offset += context.batchSize;
+          }
+          CHECK_EQ(offset, batch->batchSize);
+        });
   }
 }
 

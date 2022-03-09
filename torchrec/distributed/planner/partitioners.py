@@ -64,6 +64,9 @@ def greedy_partition(
             cast(Storage, sharding_option.shards[order_shard_idx[1]].storage),
         )
 
+    # A correct implementation of the greedy algorithm processes items in descending
+    # value order. Here, we sort in ascending order, but we'll pop items in descending
+    # order below.
     sorted_shard_idxes = sorted(
         shard_idxes, key=lambda order_shard_idx: _to_comparable(order_shard_idx)
     )
@@ -85,6 +88,7 @@ def greedy_partition(
     Successively add remaining pairs to the partition with the minimum sum.
     """
     while sorted_shard_idxes:
+        # Remove values from largest to smallest so the algorithm is correct.
         option_idx, shard_idx = sorted_shard_idxes.pop()
         storage_size = cast(
             Storage, sharding_options[option_idx].shards[shard_idx].storage
@@ -286,13 +290,6 @@ class GreedyPerfPartitioner(Partitioner):
     def _partition_by_host(self, sharding_options: List[ShardingOption]) -> None:
         # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
         num_hosts: int = self._topology.world_size // self._topology.local_world_size
-        mem_cap: List[Storage] = []
-        partition_sums = []
-
-        shard_idxes = []
-        for option_idx, _ in enumerate(sharding_options):
-            # only take the first shard from each sharding option. We can infer the rest
-            shard_idxes.append((option_idx, 0))
 
         host_level_devices: Dict[int, List[DeviceHardware]] = {}
         for i in range(num_hosts):
@@ -303,46 +300,104 @@ class GreedyPerfPartitioner(Partitioner):
             ]
             host_level_devices[i] = devices_in_host
 
-            # mem_cap of a host is the min of the storage of all devies on that host
-            mem_cap.append(min([device.storage for device in devices_in_host]))
-            # perf of a host is the max across all of its devices. Typically this should be zero at entry point.
-            partition_sums.append(
-                max([float(device.perf) for device in devices_in_host])
-            )
+        self._uniform_partition_by_host(
+            sharding_options=sharding_options,
+            host_level_devices=host_level_devices,
+        )
+        self._greedy_partition_by_host(
+            sharding_options=sharding_options,
+            host_level_devices=host_level_devices,
+        )
+
+    def _uniform_partition_by_host(
+        self,
+        sharding_options: List[ShardingOption],
+        host_level_devices: Dict[int, List[DeviceHardware]],
+    ) -> None:
+        shard_idxes = []
+        for option_idx, _ in enumerate(sharding_options):
+            if (
+                _base_partition_by(sharding_options[option_idx].sharding_type)
+                == PartitionByType.UNIFORM.value
+            ):
+                # only take the first shard from each sharding option. We can infer the rest
+                shard_idxes.append((option_idx, 0))
+        if not shard_idxes:
+            return
+
+        mem_cap: List[Storage] = []
+        partition_sums = []
+
+        for _host, devices in host_level_devices.items():
+            # mem_cap of a host is the min of the storage of all devices on that host for uniform case.
+            mem_cap.append(min([device.storage for device in devices]))
+            # perf of a host is the max across all of its devices for uniform case. Typically this should be zero at entry point.
+            partition_sums.append(max([float(device.perf) for device in devices]))
 
         host_level_partitions: List[List[Tuple[int, int]]] = greedy_partition(
-            num_partitions=num_hosts,
+            num_partitions=len(host_level_devices),
             sharding_options=sharding_options,
             shard_idxes=shard_idxes,
             partition_sums=partition_sums,
             mem_cap=mem_cap,
         )
+        # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
         partitions: List[List[Tuple[int, int]]] = [[] for _ in self._topology.devices]
 
         for host_idx, host_partition in enumerate(host_level_partitions):
-
             self._uniform_device_level_partition(
                 partitions=partitions,
                 sharding_options=sharding_options,
-                option_idxes=[
-                    option_idx
-                    for option_idx, _ in host_partition
-                    if _base_partition_by(sharding_options[option_idx].sharding_type)
-                    == PartitionByType.UNIFORM.value
-                ],
+                option_idxes=[option_idx for option_idx, _ in host_partition],
                 host_level_devices=host_level_devices[host_idx],
                 host_idx=host_idx,
             )
 
+        self._update_shards(partitions, sharding_options)
+
+    def _greedy_partition_by_host(
+        self,
+        sharding_options: List[ShardingOption],
+        host_level_devices: Dict[int, List[DeviceHardware]],
+    ) -> None:
+        shard_idxes = []
+        for option_idx, _ in enumerate(sharding_options):
+            if (
+                _base_partition_by(sharding_options[option_idx].sharding_type)
+                == PartitionByType.DEVICE.value
+            ):
+                # only take the first shard from each sharding option. We can infer the rest
+                shard_idxes.append((option_idx, 0))
+        if not shard_idxes:
+            return
+
+        mem_cap: List[Storage] = []
+        partition_sums = []
+
+        for _host, devices in host_level_devices.items():
+            # mem_cap of a host is the sum of the storage of all devices on that host for greedy case.
+            storage_sum = Storage(hbm=0, ddr=0)
+            for device in devices:
+                storage_sum += device.storage
+            mem_cap.append(storage_sum)
+            # perf of a host is the min across all of its devices for greedy case. Typically this should be zero at entry point.
+            partition_sums.append(min([float(device.perf) for device in devices]))
+
+        host_level_partitions: List[List[Tuple[int, int]]] = greedy_partition(
+            num_partitions=len(host_level_devices),
+            sharding_options=sharding_options,
+            shard_idxes=shard_idxes,
+            partition_sums=partition_sums,
+            mem_cap=mem_cap,
+        )
+        # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
+        partitions: List[List[Tuple[int, int]]] = [[] for _ in self._topology.devices]
+
+        for host_idx, host_partition in enumerate(host_level_partitions):
             self._greedy_device_level_partition(
                 partitions=partitions,
                 sharding_options=sharding_options,
-                option_idxes=[
-                    option_idx
-                    for option_idx, _ in host_partition
-                    if _base_partition_by(sharding_options[option_idx].sharding_type)
-                    == PartitionByType.DEVICE.value
-                ],
+                option_idxes=[option_idx for option_idx, _ in host_partition],
                 host_level_devices=host_level_devices[host_idx],
                 host_idx=host_idx,
             )
@@ -362,20 +417,19 @@ class GreedyPerfPartitioner(Partitioner):
             for shard_idx in range(sharding_options[option_idx].num_shards):
                 shard_idxes.append((option_idx, shard_idx))
 
-        if shard_idxes:
-            device_level_partitions: List[List[Tuple[int, int]]] = uniform_partition(
-                # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
-                num_partitions=self._topology.local_world_size,
-                sharding_options=sharding_options,
-                mem_cap=[device.storage for device in host_level_devices],
-                shard_idxes=shard_idxes,
-            )
+        device_level_partitions: List[List[Tuple[int, int]]] = uniform_partition(
+            # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
+            num_partitions=self._topology.local_world_size,
+            sharding_options=sharding_options,
+            mem_cap=[device.storage for device in host_level_devices],
+            shard_idxes=shard_idxes,
+        )
 
-            for device_idx, device_partition in enumerate(device_level_partitions):
-                for option_idx, shard_idx in device_partition:
-                    partitions[
-                        self._topology.local_world_size * host_idx + device_idx
-                    ].append((option_idx, shard_idx))
+        for device_idx, device_partition in enumerate(device_level_partitions):
+            for option_idx, shard_idx in device_partition:
+                partitions[
+                    self._topology.local_world_size * host_idx + device_idx
+                ].append((option_idx, shard_idx))
 
     def _greedy_device_level_partition(
         self,
@@ -390,21 +444,20 @@ class GreedyPerfPartitioner(Partitioner):
             for shard_idx in range(sharding_options[option_idx].num_shards):
                 shard_idxes.append((option_idx, shard_idx))
 
-        if shard_idxes:
-            device_level_partitions: List[List[Tuple[int, int]]] = greedy_partition(
-                # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
-                num_partitions=self._topology.local_world_size,
-                sharding_options=sharding_options,
-                shard_idxes=shard_idxes,
-                partition_sums=[float(device.perf) for device in host_level_devices],
-                mem_cap=[device.storage for device in host_level_devices],
-            )
+        device_level_partitions: List[List[Tuple[int, int]]] = greedy_partition(
+            # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
+            num_partitions=self._topology.local_world_size,
+            sharding_options=sharding_options,
+            shard_idxes=shard_idxes,
+            partition_sums=[float(device.perf) for device in host_level_devices],
+            mem_cap=[device.storage for device in host_level_devices],
+        )
 
-            for device_idx, device_partition in enumerate(device_level_partitions):
-                for option_idx, shard_idx in device_partition:
-                    partitions[
-                        self._topology.local_world_size * host_idx + device_idx
-                    ].append((option_idx, shard_idx))
+        for device_idx, device_partition in enumerate(device_level_partitions):
+            for option_idx, shard_idx in device_partition:
+                partitions[
+                    self._topology.local_world_size * host_idx + device_idx
+                ].append((option_idx, shard_idx))
 
     def _update_shards(
         self,

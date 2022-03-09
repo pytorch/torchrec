@@ -33,7 +33,8 @@ include_directories(include/)
 add_library(inference SHARED
   src/Batching.cpp
   src/BatchingQueue.cpp
-  src/GPUExecutor.cpp)
+  src/GPUExecutor.cpp
+  src/ResultSplit.cpp)
 
 target_link_libraries(inference
   ${TORCH_DEPLOY_LIB_PATH}

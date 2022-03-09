@@ -19,7 +19,7 @@ from torchrec.datasets.criteo import (  # noqa
 from torchrec.inference.model_packager import load_pickle_config
 from torchrec.inference.modules import (
     PredictFactory,
-    MultistreamPredictModule,
+    PredictModule,
     quantize_embeddings,
 )
 from torchrec.models.dlrm import DLRM
@@ -43,7 +43,7 @@ class DLRMModelConfig:
     over_arch_layer_sizes: List[int]
 
 
-class DLRMPredictModule(MultistreamPredictModule):
+class DLRMPredictModule(PredictModule):
     """
     nn.Module to wrap DLRM model to use for inference.
 

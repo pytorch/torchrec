@@ -154,7 +154,7 @@ class F(${parent_class_list}):
 
     def forward(self, z):
         \"""
-        Call Args:
+        Args:
             z: Blah
 
         Returns:
@@ -193,7 +193,7 @@ class F(${parent_class_list}):
 
     def forward(self, z):
         \"""
-        Call Args:
+        Args:
             z: Blah
 
         Returns:
@@ -232,7 +232,7 @@ class F(${parent_class_list}):
 
     def forward(self, z):
         \"""
-        Call Args:
+        Args:
             z: Blah
 
         Returns:
@@ -275,7 +275,7 @@ class F:
 
     def forward(self, z):
         \"""
-        Call Args:
+        Args:
             z: Blah
 
         Returns:

@@ -244,10 +244,10 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     ) -> None:
         super().__init__()
         self._dist = SparseFeaturesAllToAll(
-            pg,
-            id_list_features_per_rank,
-            id_score_list_features_per_rank,
-            device,
+            pg=pg,
+            id_list_features_per_rank=id_list_features_per_rank,
+            id_score_list_features_per_rank=id_score_list_features_per_rank,
+            device=device,
         )
 
     def forward(

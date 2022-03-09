@@ -174,6 +174,19 @@ class ReduceScatterInfo(object):
     input_sizes: List[int]
 
 
+@dataclass
+class All2AllDenseInfo(object):
+    """
+    The data class that collects the attributes when calling the alltoall_dense
+    operation.
+    """
+
+    output_splits: List[int]
+    batch_size: int
+    input_shape: List[int]
+    input_splits: List[int]
+
+
 def _get_split_lengths_by_len(
     world_size: int, my_rank: int, n: int
 ) -> Tuple[int, List[int]]:
@@ -401,6 +414,56 @@ def reduce_scatter_pooled(
     return myreq
 
 
+def alltoall_dense(
+    input: Tensor,
+    group: dist.ProcessGroup,
+    output_splits: List[int],
+    batch_size: int,
+) -> Awaitable[Tensor]:
+    """
+    Performs all-to-all operation for a dense output tensor split into world
+    size number of chunks. The input tensor gets scattered to all processes in the group.
+    Then concatenates the received tensors from all processes in the group and returns
+    a single output tensor.
+
+    Args:
+        input (Tensor):
+        group (dist.ProcessGroup): The process group to work on.
+
+    Returns:
+        Async work handle (Awaitable), which can be `wait()` later to get the resulting
+        tensor.
+
+    Example:
+        >>> init_distributed(rank=rank, size=2, backend="nccl")
+        >>> pg = dist.new_group(backend="nccl")
+        >>> output_splits = [4, 4]
+        >>> batch_size = 4
+        >>> m = DenseOutputAllToAll(pg, features_per_rank)
+        >>> dense_input = torch.rand((8, 3))
+        >>> tensor_awaitable = alltoall_dense(dense_input, pg, output_splits, batch_size)
+
+    .. warning::
+        `alltoall_dense` is experimental and subject to change.
+    """
+
+    if dist.get_world_size(group) <= 1:
+        return NoWait(input)
+
+    myreq = Request(group)
+    my_size = dist.get_world_size(group)
+    in_splits = [input.numel() // my_size] * my_size
+    a2ai = All2AllDenseInfo(
+        output_splits=output_splits,
+        batch_size=batch_size,
+        input_shape=list(input.shape),
+        input_splits=in_splits,
+    )
+    # pyre-fixme[16]
+    All2All_Dense_Req.apply(group, myreq, a2ai, input)
+    return myreq
+
+
 # TODO: improve performance of _recat_pooled_embedding_grad_out, see T87591139
 def _recat_pooled_embedding_grad_out(
     grad_output: Tensor, num_features_per_rank: List[int]
@@ -613,34 +676,17 @@ class All2All_Seq_Req(Function):
         local_T = lengths_after_sparse_data_all2all.shape[0]
         if local_T > 0:
             with record_function("## alltoall_seq_embedding_fwd_permute ##"):
-                try:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = torch.ops.fbgemm.permute_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(
-                            local_T * world_size, -1
-                        ),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
-                except RuntimeError:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(
-                            local_T * world_size, -1
-                        ),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(local_T * world_size, -1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
 
         else:
             permuted_lengths_after_sparse_data_all2all = None
@@ -692,22 +738,13 @@ class All2All_Seq_Req(Function):
 
         if permuted_lengths_after_sparse_data_all2all is not None:
             with record_function("## alltoall_seq_embedding_bwd_permute ##"):
-                try:
-                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_sparse_data(
-                        backward_recat_tensor,
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_grad_input,
-                        None,
-                        sharded_grad_input.numel(),
-                    )
-                except RuntimeError:
-                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
-                        backward_recat_tensor,
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_grad_input,
-                        None,
-                        sharded_grad_input.numel(),
-                    )
+                _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
+                    backward_recat_tensor,
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_grad_input,
+                    None,
+                    sharded_grad_input.numel(),
+                )
         return (None, None, None, sharded_grad_input.view(-1, D))
 
 
@@ -940,4 +977,95 @@ class ReduceScatter_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = grad_inputs
+        return (None, None, grad_output)
+
+
+class All2All_Dense_Req(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        a2ai: All2AllDenseInfo,
+        input: Tensor,
+    ) -> Tensor:
+        output = torch.empty(
+            [a2ai.batch_size, sum(a2ai.output_splits) // a2ai.batch_size],
+            dtype=input.dtype,
+            device=input.device,
+        )
+
+        with record_function("## all2all_dense ##"):
+            req = dist.all_to_all_single(
+                output=output.view(-1),
+                input=input.view(-1),
+                output_split_sizes=a2ai.output_splits,
+                input_split_sizes=a2ai.input_splits,
+                group=pg,
+                async_op=True,
+            )
+
+        myreq.req = req
+        myreq.tensor = output
+        myreq.wait_function = All2All_Dense_Wait
+        myreq.a2ai = a2ai
+        ctx.pg = pg
+        ctx.myreq = myreq
+
+        return output
+
+    @staticmethod
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, *unused: Tensor) -> Tuple[None, None, None, Tensor]:
+        myreq = ctx.myreq
+        myreq.req.wait()
+        myreq.req = None
+        grad_input = myreq.tensor
+        # Make it equivalent to running on a single rank.
+        if GRADIENT_DIVISION:
+            grad_input.div_(dist.get_world_size(ctx.pg))
+        myreq.tensor = None
+        return (None, None, None, grad_input)
+
+
+class All2All_Dense_Wait(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        output: Tensor,
+    ) -> Tensor:
+        myreq.req.wait()
+        myreq.req = None
+        myreq.tensor = None
+        ctx.myreq = myreq
+        ctx.pg = pg
+        return output
+
+    @staticmethod
+    # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
+        myreq = ctx.myreq
+        a2ai = myreq.a2ai
+        input_shape = a2ai.input_shape
+        grad_input = torch.empty(
+            input_shape, dtype=grad_output.dtype, device=grad_output.device
+        )
+        with record_function("## alltoall_dense_bw ##"):
+            req = dist.all_to_all_single(
+                output=grad_input.view(-1),
+                input=grad_output.flatten(),
+                output_split_sizes=a2ai.input_splits,
+                input_split_sizes=a2ai.output_splits,
+                group=ctx.pg,
+                async_op=True,
+            )
+        myreq.req = req
+        myreq.tensor = grad_input
         return (None, None, grad_output)
