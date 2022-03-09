@@ -150,6 +150,8 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 
 class Tracer(torch.fx.Tracer):
+    proxy_buffer_attributes = False
+
     def __init__(self, unsharded_module_names: List[str]) -> None:
         super().__init__()
         self._unsharded_module_names = unsharded_module_names
