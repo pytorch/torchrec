@@ -181,6 +181,8 @@ class ArgInfo:
     # attributes of input batch, e.g. batch.attr1.attr2 call
     # will produce ["attr1", "attr2"]
     input_attrs: List[str]
+    # batch[attr1].attr2 will produce [True, False]
+    is_getitems: List[bool]
     # name for kwarg of pipelined forward() call or None
     # for a positional arg
     name: Optional[str]
@@ -256,8 +258,11 @@ def _start_data_dist(
         for arg_info in forward.args:
             if arg_info.input_attrs:
                 arg = batch
-                for attr in arg_info.input_attrs:
-                    arg = getattr(arg, attr)
+                for attr, is_getitem in zip(arg_info.input_attrs, arg_info.is_getitems):
+                    if is_getitem:
+                        arg = arg[attr]
+                    else:
+                        arg = getattr(arg, attr)
                 if arg_info.name:
                     kwargs[arg_info.name] = arg
                 else:
@@ -280,7 +285,7 @@ def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int
     It also counts the number of (args + kwargs) found.
     """
 
-    arg_info_list = [ArgInfo([], None) for _ in range(len(arguments))]
+    arg_info_list = [ArgInfo([], [], None) for _ in range(len(arguments))]
     for arg, arg_info in zip(arguments, arg_info_list):
         if arg is None:
             num_found += 1
@@ -296,10 +301,20 @@ def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "builtins"
-                # pyre-ignore [16]
+                # pyre-ignore[16]
                 and child_node.target.__name__ == "getattr"
             ):
                 arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, False)
+                arg = child_node.args[0]
+            elif (
+                child_node.op == "call_function"
+                and child_node.target.__module__ == "_operator"
+                # pyre-ignore[16]
+                and child_node.target.__name__ == "getitem"
+            ):
+                arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, True)
                 arg = child_node.args[0]
             else:
                 break
