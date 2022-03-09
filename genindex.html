@@ -338,6 +338,10 @@
         <li><a href="torchrec.optim.html#torchrec.optim.keyed.OptimizerWrapper.add_param_group">(torchrec.optim.keyed.OptimizerWrapper method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Req">All2All_Dense_Req (class in torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Wait">All2All_Dense_Wait (class in torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Req">All2All_Pooled_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Wait">All2All_Pooled_Wait (class in torchrec.distributed.comm_ops)</a>
@@ -346,17 +350,21 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Seq_Req_Wait">All2All_Seq_Req_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllPooledInfo">All2AllPooledInfo (class in torchrec.distributed.comm_ops)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo">All2AllDenseInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo">All2AllSequenceInfo (class in torchrec.distributed.comm_ops)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllPooledInfo">All2AllPooledInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo">All2AllSequenceInfo (class in torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2Allv_Req">All2Allv_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2Allv_Wait">All2Allv_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo">All2AllVInfo (class in torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.alltoall_dense">alltoall_dense() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.alltoall_pooled">alltoall_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
@@ -390,9 +398,13 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#id12">B_local_list (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.B_local_list">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Req.backward">backward() (torchrec.distributed.comm_ops.All2All_Pooled_Req static method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Req.backward">backward() (torchrec.distributed.comm_ops.All2All_Dense_Req static method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Wait.backward">(torchrec.distributed.comm_ops.All2All_Dense_Wait static method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Req.backward">(torchrec.distributed.comm_ops.All2All_Pooled_Req static method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Wait.backward">(torchrec.distributed.comm_ops.All2All_Pooled_Wait static method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Seq_Req.backward">(torchrec.distributed.comm_ops.All2All_Seq_Req static method)</a>
@@ -438,9 +450,11 @@
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch">Batch (class in torchrec.datasets.utils)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.ShardingOption.batch_size">batch_size (torchrec.distributed.planner.types.ShardingOption attribute)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.batch_size">batch_size (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.ShardingOption.batch_size">(torchrec.distributed.planner.types.ShardingOption attribute)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.Topology.batch_size">(torchrec.distributed.planner.types.Topology property)</a>
 </li>
       </ul></li>
@@ -668,14 +682,18 @@
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.dense_features">dense_features (torchrec.datasets.utils.Batch attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.DenseArch">DenseArch (class in torchrec.models.deepfm)</a>
 
       <ul>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.DenseArch">(class in torchrec.models.dlrm)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.DenseOutputAllToAll">DenseOutputAllToAll (class in torchrec.distributed.dist_data)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.DenseOutputAwaitable">DenseOutputAwaitable (class in torchrec.distributed.dist_data)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.PartitionByType.DEVICE">DEVICE (torchrec.distributed.planner.types.PartitionByType attribute)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device">device() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
@@ -890,9 +908,13 @@
 </li>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.FMInteractionArch">FMInteractionArch (class in torchrec.models.deepfm)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Req.forward">forward() (torchrec.distributed.comm_ops.All2All_Pooled_Req static method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Req.forward">forward() (torchrec.distributed.comm_ops.All2All_Dense_Req static method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Dense_Wait.forward">(torchrec.distributed.comm_ops.All2All_Dense_Wait static method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Req.forward">(torchrec.distributed.comm_ops.All2All_Pooled_Req static method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Pooled_Wait.forward">(torchrec.distributed.comm_ops.All2All_Pooled_Wait static method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2All_Seq_Req.forward">(torchrec.distributed.comm_ops.All2All_Seq_Req static method)</a>
@@ -906,6 +928,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req.forward">(torchrec.distributed.comm_ops.ReduceScatter_Req static method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait.forward">(torchrec.distributed.comm_ops.ReduceScatter_Wait static method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.DenseOutputAllToAll.forward">(torchrec.distributed.dist_data.DenseOutputAllToAll method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward">(torchrec.distributed.dist_data.EmbeddingsAllToOne method)</a>
 </li>
@@ -1218,12 +1242,18 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.planner.types.ShardingOption.input_lengths">input_lengths (torchrec.distributed.planner.types.ShardingOption attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_shape">input_shape (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#id16">input_sizes (torchrec.distributed.comm_ops.ReduceScatterInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo.input_sizes">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#id14">input_split_sizes (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.input_split_sizes">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id7">input_splits (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.input_splits">[1]</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_splits">input_splits (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#id7">(torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.input_splits">[1]</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.DataType.INT2">INT2 (torchrec.modules.embedding_configs.DataType attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.DataType.INT4">INT4 (torchrec.modules.embedding_configs.DataType attribute)</a>
@@ -1719,8 +1749,6 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType">OptimType (class in torchrec.distributed.embedding_types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.output_dist">output_dist() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -1733,10 +1761,16 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.output_dist">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id15">output_split_sizes (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.output_split_sizes">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id9">output_splits (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.output_splits">[1]</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.output_splits">output_splits (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#id9">(torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.output_splits">[1]</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.OverArch">OverArch (class in torchrec.models.deepfm)</a>
 
       <ul>
@@ -2722,9 +2756,11 @@
       </ul></li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.train_filter">train_filter() (in module torchrec.datasets.utils)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.training">training (torchrec.distributed.dist_data.EmbeddingsAllToOne attribute)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.DenseOutputAllToAll.training">training (torchrec.distributed.dist_data.DenseOutputAllToAll attribute)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.training">(torchrec.distributed.dist_data.EmbeddingsAllToOne attribute)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll.training">(torchrec.distributed.dist_data.KJTAllToAll attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTOneToAll.training">(torchrec.distributed.dist_data.KJTOneToAll attribute)</a>
