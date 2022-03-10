@@ -14,8 +14,8 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import intra_and_cross_node_pg
 from torchrec.distributed.dist_data import (
-    DenseOutputAllToAll,
-    DenseOutputAwaitable,
+    PooledEmbeddingsAllToAll,
+    PooledEmbeddingsAwaitable,
 )
 from torchrec.distributed.embedding import (
     ShardedEmbeddingCollection,
@@ -82,7 +82,7 @@ def _get_feature_names(
 class DenseOutputLazyAwaitable(LazyAwaitable[torch.Tensor]):
     def __init__(
         self,
-        awaitable: DenseOutputAwaitable,
+        awaitable: PooledEmbeddingsAwaitable,
     ) -> None:
         super().__init__()
         self._awaitable = awaitable
@@ -129,7 +129,9 @@ class ShardedEmbeddingTower(
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._device = device
-        self._output_dist: Optional[DenseOutputAllToAll] = None
+        self._output_dist: Optional[PooledEmbeddingsAllToAll] = None
+        self._cross_pg_global_batch_size: int = 0
+        self._cross_pg_world_size: int = dist.get_world_size(self._cross_pg)
 
         self._has_uninitialized_output_dist = True
 
@@ -203,7 +205,9 @@ class ShardedEmbeddingTower(
     def _create_input_dist(
         self,
         input_feature_names: List[str],
+        local_batch_size: int,
     ) -> None:
+        self._cross_pg_global_batch_size = local_batch_size * self._cross_pg_world_size
         if self._feature_names == input_feature_names:
             self._has_features_permute = False
         else:
@@ -232,7 +236,7 @@ class ShardedEmbeddingTower(
     ) -> Awaitable[SparseFeaturesList]:
         # return self.embedding.input_dist(ctx, features)
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(features.keys())
+            self._create_input_dist(features.keys(), features.stride())
             self._has_uninitialized_input_dist = False
         with torch.no_grad():
             if self._has_features_permute:
@@ -263,39 +267,41 @@ class ShardedEmbeddingTower(
             # pyre-ignore [29]
             output = self.interaction(embeddings)
         else:
-            output = torch.empty([0, 0], device=self._device, requires_grad=True)
+            output = torch.empty(
+                [self._cross_pg_global_batch_size, 0],
+                device=self._device,
+                requires_grad=True,
+            )
         return output
 
     def _create_output_dist(
         self, ctx: ShardedModuleContext, output: torch.Tensor
     ) -> None:
         # Determine the output_dist splits and the all_to_all output size
-        cross_pg_world_size = dist.get_world_size(self._cross_pg)
-        local_split_and_batch_size = torch.tensor(
+        assert len(output.shape) == 2
+        local_dim_sum = torch.tensor(
             [
-                output.numel() // cross_pg_world_size,
-                output.shape[0] // cross_pg_world_size,
+                output.shape[1],
             ],
             dtype=torch.int64,
             device=self._device,
         )
-        global_split_and_batch_size = [
+        dim_sum_per_rank = [
             torch.zeros(
-                2,
+                1,
                 dtype=torch.int64,
                 device=self._device,
             )
             for i in range(dist.get_world_size(self._cross_pg))
         ]
         dist.all_gather(
-            global_split_and_batch_size,
-            local_split_and_batch_size,
+            dim_sum_per_rank,
+            local_dim_sum,
             group=self._cross_pg,
         )
-        output_splits = [x.tolist()[0] for x in global_split_and_batch_size]
-        batch_size = max([x.tolist()[1] for x in global_split_and_batch_size])
-        self._output_dist = DenseOutputAllToAll(
-            self._cross_pg, output_splits, batch_size
+        dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
+        self._output_dist = PooledEmbeddingsAllToAll(
+            pg=self._cross_pg, dim_sum_per_rank=dim_sum_per_rank, device=self._device
         )
 
     def output_dist(
