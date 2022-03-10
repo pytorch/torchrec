@@ -11,7 +11,13 @@ from typing import List, Optional, Type
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from hypothesis import Verbosity, settings, given, strategies as st
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
+from torchrec.distributed.test_utils.test_model_parallel import (
+    create_test_sharder,
+    SharderType,
+)
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
 )
@@ -21,6 +27,7 @@ from torchrec.distributed.tests.test_sequence_model import (
     TestSequenceTowerSparseNN,
 )
 from torchrec.distributed.tower_sharding import EmbeddingTowerSharder
+from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.test_utils import (
     skip_if_asan_class,
@@ -37,15 +44,35 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
         Requires at least 4 GPUs to test.
     """
 
-    # pyre-ignore [56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs, this test requires at least four GPUs",
     )
-    def test_seq_emb_tower_nccl(self) -> None:
+    # pyre-ignore [56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_ROW_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_seq_emb_tower_nccl(self, sharding_type: str, kernel_type: str) -> None:
         self._test_sharding(
             # pyre-ignore [6]
-            sharders=[EmbeddingTowerSharder()],
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_TOWER.value, sharding_type, kernel_type
+                )
+            ],
             backend="nccl",
             world_size=4,
             local_size=2,

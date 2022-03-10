@@ -16,6 +16,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestSparseNNBase,
     TestEBCSharder,
     TestEBSharder,
+    TestETSharder,
 )
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
@@ -28,15 +29,18 @@ from torchrec.test_utils import seed_and_log
 class SharderType(Enum):
     EMBEDDING_BAG = "embedding_bag"
     EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
+    EMBEDDING_TOWER = "embedding_tower"
 
 
 def create_test_sharder(
     sharder_type: str, sharding_type: str, kernel_type: str
-) -> Union[TestEBSharder, TestEBCSharder]:
+) -> Union[TestEBSharder, TestEBCSharder, TestETSharder]:
     if sharder_type == SharderType.EMBEDDING_BAG.value:
         return TestEBSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
         return TestEBCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+    elif sharder_type == SharderType.EMBEDDING_TOWER.value:
+        return TestETSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
     else:
         raise ValueError(f"Sharder not supported {sharder_type}")
 

@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import Dict, TypeVar, Optional, Any, Type, List, Union
+from typing import Dict, TypeVar, Optional, Any, Type, List, Union, Iterator, Tuple, Set
 
 import torch
 import torch.distributed as dist
@@ -43,6 +43,7 @@ from torchrec.distributed.types import (
     ShardingType,
     LazyAwaitable,
 )
+from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
@@ -97,6 +98,8 @@ def _replace_sharding_with_intra_node(
     for _, value in table_name_to_parameter_sharding.items():
         if value.sharding_type == ShardingType.TABLE_ROW_WISE.value:
             value.sharding_type = ShardingType.ROW_WISE.value
+        elif value.sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
+            value.sharding_type = ShardingType.COLUMN_WISE.value
         else:
             raise ValueError(f"Sharding type not supported {value.sharding_type}")
         if value.ranks:
@@ -340,6 +343,70 @@ class ShardedEmbeddingTower(
         else:
             return CombinedOptimizer([])
 
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        if self._active_device:
+            # pyre-ignore[16]
+            yield from self.embedding.named_parameters(
+                append_prefix(prefix, "embedding"), recurse
+            )
+            # pyre-ignore[16]
+            yield from self.interaction.module.named_parameters(
+                append_prefix(prefix, "interaction"), recurse
+            )
+        else:
+            yield from ()
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        if self._active_device:
+            # pyre-ignore[16]
+            yield from self.embedding.named_buffers(
+                append_prefix(prefix, "embedding"), recurse
+            )
+            # pyre-ignore[16]
+            yield from self.interaction.module.named_buffers(
+                append_prefix(prefix, "interaction"), recurse
+            )
+        yield from ()
+
+    def sparse_grad_parameter_names(
+        self,
+        destination: Optional[List[str]] = None,
+        prefix: str = "",
+    ) -> List[str]:
+        destination = [] if destination is None else destination
+        if self._active_device:
+            # pyre-ignore[16]
+            self.embedding.sparse_grad_parameter_names(
+                destination, append_prefix(prefix, "embedding")
+            )
+        return destination
+
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        if self._active_device:
+            # pyre-ignore[16]
+            yield from self.embedding.sharded_parameter_names(
+                append_prefix(prefix, "embedding")
+            )
+            # pyre-ignore[16]
+            for name, _ in self.interaction.module.named_parameters(
+                append_prefix(prefix, "interaction")
+            ):
+                yield name
+        else:
+            yield from ()
+
+    def named_modules(
+        self,
+        memo: Optional[Set[nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, nn.Module]]:
+        yield from [(prefix, self)]
+
 
 class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
     def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
@@ -360,6 +427,8 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         """
         return [
             ShardingType.TABLE_ROW_WISE.value,
+            # TABLE_COLUNN_WISE only works for pooled embedding, not sequence embedding
+            ShardingType.TABLE_COLUMN_WISE.value,
         ]
 
     def shardable_parameters(self, module: EmbeddingTower) -> Dict[str, nn.Parameter]:
