@@ -94,7 +94,10 @@ class VariableBatchTwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
     def forward(
         self, local_embs: torch.Tensor, sharding_ctx: VariableBatchShardingContext
     ) -> Awaitable[torch.Tensor]:
-        return self._dist(local_embs, sharding_ctx.batch_size_per_rank)
+        # do not remove the keyword for quantized communication hook injection.
+        return self._dist(
+            local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
+        )
 
 
 class VariableBatchTwPooledEmbeddingSharding(
