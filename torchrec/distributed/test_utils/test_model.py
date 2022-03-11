@@ -15,6 +15,7 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagSharder,
     EmbeddingBagCollectionSharder,
 )
+from torchrec.distributed.tower_sharding import EmbeddingTowerSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.tower import EmbeddingTower
@@ -587,6 +588,35 @@ class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
+    def __init__(
+        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+    ) -> None:
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+        self._fused_params = fused_params
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return self._fused_params
+
+
+class TestETSharder(EmbeddingTowerSharder):
     def __init__(
         self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
     ) -> None:

@@ -120,17 +120,40 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             },
         )
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs, this test requires at least four GPUs",
     )
-    def test_embedding_tower_nccl_twrw(
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_embedding_tower_nccl(
         self,
+        sharding_type: str,
+        kernel_type: str,
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
-            sharders=[EmbeddingTowerSharder()],
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_TOWER.value, sharding_type, kernel_type
+                )
+            ],
             backend="nccl",
             world_size=4,
             local_size=2,
