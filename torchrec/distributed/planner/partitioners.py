@@ -64,6 +64,9 @@ def greedy_partition(
             cast(Storage, sharding_option.shards[order_shard_idx[1]].storage),
         )
 
+    # A correct implementation of the greedy algorithm processes items in descending
+    # value order. Here, we sort in ascending order, but we'll pop items in descending
+    # order below.
     sorted_shard_idxes = sorted(
         shard_idxes, key=lambda order_shard_idx: _to_comparable(order_shard_idx)
     )
@@ -85,6 +88,7 @@ def greedy_partition(
     Successively add remaining pairs to the partition with the minimum sum.
     """
     while sorted_shard_idxes:
+        # Remove values from largest to smallest so the algorithm is correct.
         option_idx, shard_idx = sorted_shard_idxes.pop()
         storage_size = cast(
             Storage, sharding_options[option_idx].shards[shard_idx].storage

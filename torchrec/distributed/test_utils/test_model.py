@@ -15,8 +15,10 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagSharder,
     EmbeddingBagCollectionSharder,
 )
+from torchrec.distributed.tower_sharding import EmbeddingTowerSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.tower import EmbeddingTower
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
@@ -423,6 +425,134 @@ class TestSparseNN(TestSparseNNBase):
             return pred
 
 
+class TestTowerInteraction(nn.Module):
+    """
+    Basic nn.Module for testing
+
+    Constructor Args:
+        tables: List[EmbeddingBagConfig],
+        device: Optional[torch.device],
+
+    Call Args:
+        sparse: KeyedTensor,
+
+    Returns:
+        torch.Tensor
+
+    Example:
+        >>> TestOverArch()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self._features: List[str] = [
+            feature for table in tables for feature in table.feature_names
+        ]
+        in_features = sum(
+            [table.embedding_dim * len(table.feature_names) for table in tables]
+        )
+        self.linear: nn.modules.Linear = nn.Linear(
+            in_features=in_features,
+            out_features=in_features,
+            device=device,
+        )
+
+    def forward(
+        self,
+        sparse: KeyedTensor,
+    ) -> torch.Tensor:
+        ret_list = []
+        for feature_name in self._features:
+            ret_list.append(sparse[feature_name])
+        return self.linear(torch.cat(ret_list, dim=1))
+
+
+class TestTowerSparseNN(TestSparseNNBase):
+    """
+    Simple version of a SparseNN model.
+
+    Constructor Args:
+        tables: List[EmbeddingBagConfig],
+        embedding_groups: Optional[Dict[str, List[str]]],
+        dense_device: Optional[torch.device],
+        sparse_device: Optional[torch.device],
+
+    Call Args:
+        input: ModelInput,
+
+    Returns:
+        torch.Tensor
+
+    Example:
+        >>> TestSparseNN()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        num_float_features: int = 10,
+        weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(Optional[List[BaseEmbeddingConfig]], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+
+        self.dense = TestDenseArch(num_float_features, dense_device)
+        # current planner put table_0 and table_3 on the same node
+        # while table_1 and table_2 are on the other node
+        # TODO: after adding planner support for tower_module, we can random assign
+        # tables to towers
+        self.tower_0 = EmbeddingTower(
+            embedding_module=EmbeddingBagCollection(tables=[tables[0], tables[3]]),
+            interaction_module=TestTowerInteraction(tables=[tables[0], tables[3]]),
+        )
+        self.tower_1 = EmbeddingTower(
+            embedding_module=EmbeddingBagCollection(tables=[tables[1], tables[2]]),
+            interaction_module=TestTowerInteraction(tables=[tables[1], tables[2]]),
+        )
+        self.over = nn.Linear(
+            in_features=8
+            # pyre-ignore [16]
+            + self.tower_0.interaction.linear.out_features
+            # pyre-ignore [16]
+            + self.tower_1.interaction.linear.out_features,
+            out_features=16,
+            device=dense_device,
+        )
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        dense_r = self.dense(input.float_features)
+        tower_0_r = self.tower_0(input.idlist_features)
+        tower_1_r = self.tower_1(input.idlist_features)
+
+        sparse_r = torch.cat([tower_0_r, tower_1_r], dim=1)
+        over_r = self.over(torch.cat([dense_r, sparse_r], dim=1))
+        pred = torch.sigmoid(torch.mean(over_r, dim=1))
+        if self.training:
+            return (
+                torch.nn.functional.binary_cross_entropy_with_logits(pred, input.label),
+                pred,
+            )
+        else:
+            return pred
+
+
 class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
     def __init__(
         self,
@@ -458,6 +588,35 @@ class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
 
 
 class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
+    def __init__(
+        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+    ) -> None:
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+        self._fused_params = fused_params
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return self._fused_params
+
+
+class TestETSharder(EmbeddingTowerSharder):
     def __init__(
         self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
     ) -> None:

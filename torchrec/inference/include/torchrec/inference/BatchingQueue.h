@@ -62,7 +62,7 @@ class BatchingQueue {
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
-    const std::unordered_map<std::string, std::string>& batchingMetadata;
+    const std::unordered_map<std::string, std::string> batchingMetadata;
   };
 
   BatchingQueue(const BatchingQueue&) = delete;

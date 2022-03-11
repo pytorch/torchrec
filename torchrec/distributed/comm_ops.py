@@ -174,6 +174,19 @@ class ReduceScatterInfo(object):
     input_sizes: List[int]
 
 
+@dataclass
+class All2AllDenseInfo(object):
+    """
+    The data class that collects the attributes when calling the alltoall_dense
+    operation.
+    """
+
+    output_splits: List[int]
+    batch_size: int
+    input_shape: List[int]
+    input_splits: List[int]
+
+
 def _get_split_lengths_by_len(
     world_size: int, my_rank: int, n: int
 ) -> Tuple[int, List[int]]:

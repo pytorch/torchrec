@@ -17,7 +17,8 @@ from torchrec.distributed.test_utils.test_model import (
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.modules.tower import EmbeddingTower
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, JaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -60,6 +61,142 @@ class TestSequenceSparseArch(nn.Module):
             padded_embeddings,
             dim=1,
         )
+
+
+class TestSequenceTowerInteraction(nn.Module):
+    def __init__(
+        self,
+        embedding_names: List[str],
+        embedding_dim: int,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self.embedding_names = embedding_names
+        self.embedding_dim: int = embedding_dim
+        self.max_sequence_length = 20
+        self.linear = nn.Linear(
+            in_features=self.max_sequence_length
+            * self.embedding_dim
+            * len(embedding_names),
+            out_features=8,
+            device=device,
+        )
+
+    def forward(
+        self,
+        sequence_emb: Dict[str, JaggedTensor],
+    ) -> torch.Tensor:
+        padded_embeddings = [
+            torch.ops.fbgemm.jagged_2d_to_dense(
+                values=sequence_emb[e].values(),
+                offsets=sequence_emb[e].offsets(),
+                max_sequence_length=self.max_sequence_length,
+            ).view(-1, self.max_sequence_length * self.embedding_dim)
+            for e in self.embedding_names
+        ]
+        cat_embeddings = torch.cat(padded_embeddings, dim=1)
+        return self.linear(cat_embeddings)
+
+
+class TestSequenceTowerSparseNN(TestSparseNNBase):
+    """
+    Simple version of a sequence tower embedding model.
+
+    Constructor Args:
+        tables: List[EmbeddingBagConfig],
+        num_float_features: int,
+        weighted_tables: Optional[List[EmbeddingConfig]],
+        embedding_groups: Optional[Dict[str, List[str]]],
+        dense_device: Optional[torch.device],
+        sparse_device: Optional[torch.device],
+
+    Call Args:
+        input: ModelInput,
+
+    Returns:
+        torch.Tensor
+
+    Example:
+        >>> TestSequenceTowerInteraction()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingConfig],
+        num_float_features: int = 10,
+        weighted_tables: Optional[List[EmbeddingConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(Optional[List[BaseEmbeddingConfig]], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+
+        self.dense = TestDenseArch(num_float_features, dense_device)
+        # current planner put table_0 and table_3 on the same node
+        # while table_1 and table_2 are on the other node
+        # TODO: after adding planner support for tower_module, we can random assign
+        # tables to towers
+        t0_tables = [tables[0], tables[2]]
+        t0_emb_names = []
+        for table in t0_tables:
+            t0_emb_names += table.feature_names
+        embedding_dim = tables[0].embedding_dim
+
+        t1_tables = [tables[1], tables[3]]
+        t1_emb_names = []
+        for table in t1_tables:
+            t1_emb_names += table.feature_names
+
+        self.tower_0 = EmbeddingTower(
+            embedding_module=EmbeddingCollection(tables=t0_tables),
+            interaction_module=TestSequenceTowerInteraction(
+                embedding_names=t0_emb_names,
+                embedding_dim=embedding_dim,
+            ),
+        )
+        self.tower_1 = EmbeddingTower(
+            embedding_module=EmbeddingCollection(tables=t1_tables),
+            interaction_module=TestSequenceTowerInteraction(
+                embedding_names=t1_emb_names,
+                embedding_dim=embedding_dim,
+            ),
+        )
+        self.over = nn.Linear(
+            in_features=8
+            # pyre-ignore [16]
+            + self.tower_0.interaction.linear.out_features
+            # pyre-ignore [16]
+            + self.tower_1.interaction.linear.out_features,
+            out_features=16,
+            device=dense_device,
+        )
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        dense_r = self.dense(input.float_features)
+        tower_0_r = self.tower_0(input.idlist_features)
+        tower_1_r = self.tower_1(input.idlist_features)
+
+        sparse_r = torch.cat([tower_0_r, tower_1_r], dim=1)
+        over_r = self.over(torch.cat([dense_r, sparse_r], dim=1))
+        pred = torch.sigmoid(torch.mean(over_r, dim=1))
+        if self.training:
+            return (
+                torch.nn.functional.binary_cross_entropy_with_logits(pred, input.label),
+                pred,
+            )
+        else:
+            return pred
 
 
 class TestSequenceOverArch(nn.Module):
