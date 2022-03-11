@@ -306,24 +306,30 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         path: str,
         fused_optims: List[Tuple[str, KeyedOptimizer]],
     ) -> None:
-        for name, child in module.named_children():
-            curr_path = path + name
-            sharded_params = self._plan.get_plan_for_module(curr_path)
-            sharder_key = sharder_name(type(child))
-            if sharded_params:
-                sharded_child = self._sharder_map[sharder_key].shard(
-                    child,
-                    sharded_params,
-                    self._env,
-                    self.device,
-                )
-                setattr(module, name, sharded_child)
-                if isinstance(sharded_child, FusedOptimizerModule):
-                    fused_optims.append((curr_path, sharded_child.fused_optimizer))
+        sharded_params = self._plan.get_plan_for_module(path)
+        if sharded_params:
+            sharder_key = sharder_name(type(module))
+            sharded_module = self._sharder_map[sharder_key].shard(
+                module,
+                sharded_params,
+                self._env,
+                self.device,
+            )
+            if path:
+                leaf_module = self._dmp_wrapped_module
+                split_path = path.split(".")
+                for name in split_path[:-1]:
+                    leaf_module = getattr(leaf_module, name)
+                setattr(leaf_module, split_path[-1], sharded_module)
             else:
+                self._dmp_wrapped_module = sharded_module
+            if isinstance(sharded_module, FusedOptimizerModule):
+                fused_optims.append((path, sharded_module.fused_optimizer))
+        else:
+            for name, child in module.named_children():
                 self._shard_modules_impl(
                     child,
-                    curr_path + ".",
+                    path + "." + name if path else name,
                     fused_optims,
                 )
 
