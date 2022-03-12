@@ -16,6 +16,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
+from torchrec.distributed.comm import _INTRA_PG, _CROSS_PG
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
@@ -48,7 +49,11 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.test_utils import get_free_port, skip_if_asan_class
+from torchrec.test_utils import (
+    get_free_port,
+    init_distributed_single_host,
+    skip_if_asan_class,
+)
 
 
 @skip_if_asan_class
@@ -350,7 +355,10 @@ class ModelParallelTest(ModelParallelTestShared):
         else:
             curr_device = torch.device("cpu")
             backend = "gloo"
-        dist.init_process_group(backend=backend)
+
+        pg = init_distributed_single_host(
+            rank=0, world_size=1, backend=backend, local_size=1
+        )
 
         embedding_dim = 128
         num_embeddings = 256
@@ -370,6 +378,12 @@ class ModelParallelTest(ModelParallelTestShared):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
+
+        if _INTRA_PG is not None:
+            dist.destroy_process_group(_INTRA_PG)
+        if _CROSS_PG is not None:
+            dist.destroy_process_group(_CROSS_PG)
+        dist.destroy_process_group(pg)
 
 
 class ModelParallelStateDictTest(unittest.TestCase):
