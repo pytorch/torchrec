@@ -36,7 +36,7 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     operation.
     Support variable batch size in each rank.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         id_list_features_per_rank (List[int]): number of id list features to send to
             each rank.

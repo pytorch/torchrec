@@ -79,7 +79,7 @@ class WarmupOptimizer(OptimizerWrapper):
     """
     Adjusts learning rate according to the schedule.
 
-    Constructor Args:
+    Args:
         optimizer (KeyedOptimizer): optimizer to wrap
         stages (List[WarmupStage]): stages to go through
         lr (float): initial learning rate

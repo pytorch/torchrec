@@ -44,7 +44,7 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
     Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
     operation.
 
-    Constructor Args:
+    Args:
         device (torch.device): device on which the tensors will be communicated to.
         world_size (int): how many devices we are communicating with.
     """
@@ -81,7 +81,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     Redistributes sequence embedding tensor in TW fashion with an AlltoAll
     operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         features_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding for each host.

@@ -23,7 +23,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
     """
     Clips gradients before doing optimization step.
 
-    Constructor Args:
+    Args:
         optimizer (KeyedOptimizer): optimizer to wrap
         clipping (GradientClipping): how to clip gradients
         max_gradient (float): max value for clipping
