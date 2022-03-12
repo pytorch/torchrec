@@ -340,19 +340,16 @@ class ModelParallelTest(ModelParallelTestShared):
             backend="gloo",
         )
 
-    def test_sharding_ebc_as_top_level(self) -> None:
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_sharding_nccl_module_as_top_level(self) -> None:
         rank = 0
         world_size = 1
         local_size = 1
-
-        if torch.cuda.is_available():
-            curr_device = torch.device("cuda:0")
-            torch.cuda.set_device(curr_device)
-            backend = "nccl"
-        else:
-            curr_device = torch.device("cpu")
-            backend = "gloo"
-
+        backend = "nccl"
+        device = torch.device(f"cuda:{rank}")
         pg = init_distributed_single_host(
             rank=rank,
             world_size=world_size,
@@ -375,7 +372,45 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
         )
 
-        model = DistributedModelParallel(ebc, device=curr_device)
+        model = DistributedModelParallel(ebc, device=device)
+
+        self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
+
+        if _INTRA_PG is not None:
+            dist.destroy_process_group(_INTRA_PG)
+        if _CROSS_PG is not None:
+            dist.destroy_process_group(_CROSS_PG)
+        dist.destroy_process_group(pg)
+
+    def test_sharding_gloo_module_as_top_level(self) -> None:
+        rank = 0
+        world_size = 1
+        local_size = 1
+        backend = "gloo"
+        device = torch.device("cpu")
+        pg = init_distributed_single_host(
+            rank=rank,
+            world_size=world_size,
+            backend=backend,
+            local_size=local_size
+        )
+
+        embedding_dim = 128
+        num_embeddings = 256
+        ebc = EmbeddingBagCollection(
+            device=torch.device("meta"),
+            tables=[
+                EmbeddingBagConfig(
+                    name="large_table",
+                    embedding_dim=embedding_dim,
+                    num_embeddings=num_embeddings,
+                    feature_names=["my_feature"],
+                    pooling=PoolingType.SUM,
+                ),
+            ],
+        )
+
+        model = DistributedModelParallel(ebc, device=device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
 
