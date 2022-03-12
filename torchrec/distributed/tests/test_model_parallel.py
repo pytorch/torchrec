@@ -344,7 +344,7 @@ class ModelParallelTest(ModelParallelTestShared):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_sharding_nccl_module_as_top_level(self) -> None:
+    def test_top_lovel_shardable_module_is_sharded_nccl(self) -> None:
         backend = "nccl"
         device = torch.device("cuda:0")
         pg = init_distributed_single_host(
@@ -379,7 +379,7 @@ class ModelParallelTest(ModelParallelTestShared):
             dist.destroy_process_group(_CROSS_PG)
         dist.destroy_process_group(pg)
 
-    def test_sharding_gloo_module_as_top_level(self) -> None:
+    def test_top_lovel_shardable_module_is_sharded_gloo(self) -> None:
         backend = "gloo"
         device = torch.device("cpu")
         pg = init_distributed_single_host(
