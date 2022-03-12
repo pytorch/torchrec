@@ -341,12 +341,9 @@ class ModelParallelTest(ModelParallelTestShared):
         )
 
     def test_sharding_ebc_as_top_level(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+        rank = 0
+        world_size = 1
+        local_size = 1
 
         if torch.cuda.is_available():
             curr_device = torch.device("cuda:0")
@@ -357,7 +354,10 @@ class ModelParallelTest(ModelParallelTestShared):
             backend = "gloo"
 
         pg = init_distributed_single_host(
-            rank=0, world_size=1, backend=backend, local_size=1
+            rank=rank,
+            world_size=world_size,
+            backend=backend,
+            local_size=local_size
         )
 
         embedding_dim = 128
