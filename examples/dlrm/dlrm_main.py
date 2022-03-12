@@ -9,20 +9,22 @@ import argparse
 import itertools
 import os
 import sys
-from typing import Iterator, List
+from typing import cast, Iterator, List
 
 import torch
 import torchmetrics as metrics
 from pyre_extensions import none_throws
-from torch import distributed as dist
+from torch import nn, distributed as dist
 from torch.utils.data import DataLoader
 from torchrec import EmbeddingBagCollection
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.utils import Batch
 from torchrec.distributed import TrainPipelineSparseDist
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from tqdm import tqdm
 
 
@@ -396,22 +398,29 @@ def main(argv: List[str]) -> None:
         over_arch_layer_sizes=list(map(int, args.over_arch_layer_sizes.split(","))),
         dense_device=device,
     )
+    fused_params = {
+        "learning_rate": args.learning_rate,
+    }
+    sharders = [
+        EmbeddingBagCollectionSharder(fused_params=fused_params),
+    ]
 
     model = DistributedModelParallel(
         module=train_model,
         device=device,
+        sharders=cast(List[ModuleSharder[nn.Module]], sharders),
     )
-    optimizer = KeyedOptimizerWrapper(
+    dense_optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
         lambda params: torch.optim.SGD(params, lr=args.learning_rate),
     )
+    optimizer = CombinedOptimizer([model.fused_optimizer, dense_optimizer])
 
     train_pipeline = TrainPipelineSparseDist(
         model,
         optimizer,
         device,
     )
-
     train_val_test(
         args, train_pipeline, train_dataloader, val_dataloader, test_dataloader
     )
