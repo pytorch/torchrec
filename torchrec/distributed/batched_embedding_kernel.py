@@ -339,11 +339,22 @@ class BaseBatchedEmbedding(BaseEmbedding):
     ]:
         ...
 
+    @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
 
     def flush(self) -> None:
         pass
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, param in zip(
+            self._config.embedding_tables,
+            self.emb_module.split_embedding_weights(),
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, param
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
@@ -555,11 +566,22 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
     ]:
         ...
 
+    @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
 
     def flush(self) -> None:
         pass
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, param in zip(
+            self._config.embedding_tables,
+            self.emb_module.split_embedding_weights(),
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, param
 
 
 class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
@@ -629,16 +651,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, param in zip(
-            self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
-        ):
-            key = append_prefix(prefix, f"{config.name}.weight")
-            yield key, param
 
     def flush(self) -> None:
         self._emb_module.flush()
