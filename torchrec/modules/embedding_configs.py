@@ -48,9 +48,9 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:
     if dtype == torch.quint8 or dtype == torch.qint8:
         return DataType.INT8
-    elif dtype == torch.quint4 or dtype == torch.qint4:
+    elif dtype == torch.quint4x2:
         return DataType.INT4
-    elif dtype == torch.quint2 or dtype == torch.qint2:
+    elif dtype == torch.quint2x4:
         return DataType.INT2
     else:
         raise Exception(f"Invalid data type {dtype}")

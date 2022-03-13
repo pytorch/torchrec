@@ -204,8 +204,18 @@ class GroupedEmbedding(BaseEmbedding):
                 destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
+    @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, emb_module in zip(
+            self._config.embedding_tables,
+            self._emb_modules,
+        ):
+            yield append_prefix(prefix, f"{config.name}.weight"), emb_module.weight
 
 
 class GroupedEmbeddingBag(BaseEmbedding):
@@ -226,7 +236,6 @@ class GroupedEmbeddingBag(BaseEmbedding):
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
 
-        shared_feature: Dict[str, bool] = {}
         for embedding_config in self._config.embedding_tables:
             self._emb_modules.append(
                 nn.EmbeddingBag(
@@ -294,6 +303,18 @@ class GroupedEmbeddingBag(BaseEmbedding):
             assert config.local_cols == param.size(1)
             yield append_prefix(prefix, f"{config.name}.weight"), param
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for config, emb_module in zip(
+            self._config.embedding_tables,
+            self._emb_modules,
+        ):
+            param = emb_module.weight
+            assert config.local_rows == param.size(0)
+            assert config.local_cols == param.size(1)
+            yield append_prefix(prefix, f"{config.name}.weight"), param
+
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
     ) -> List[str]:
@@ -303,5 +324,6 @@ class GroupedEmbeddingBag(BaseEmbedding):
                 destination.append(append_prefix(prefix, f"{config.name}.weight"))
         return destination
 
+    @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
