@@ -45,6 +45,7 @@ def _copy_config(
     config = copy.deepcopy(original)
     config.data_type = data_type
     for table in config.embedding_tables:
+        # pyre-fixme[20]: Argument `row_alignment` expected.
         table.local_cols = rounded_row_size_in_bytes(table.local_cols, sparse_type)
         if table.local_metadata is not None:
             table.local_metadata.shard_sizes = [
@@ -58,6 +59,7 @@ def _copy_config(
                 if shard_meta != table.local_metadata:
                     shard_meta.shard_sizes = [
                         shard_meta.shard_sizes[0],
+                        # pyre-fixme[20]: Argument `row_alignment` expected.
                         rounded_row_size_in_bytes(
                             shard_meta.shard_sizes[1], sparse_type
                         ),
