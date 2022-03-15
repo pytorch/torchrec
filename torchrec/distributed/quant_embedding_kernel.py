@@ -38,15 +38,20 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _copy_config(
-    original: GroupedEmbeddingConfig, data_type: DataType, sparse_type: SparseType
+    original: GroupedEmbeddingConfig,
+    data_type: DataType,
+    sparse_type: SparseType,
+    device: torch.device,
 ) -> GroupedEmbeddingConfig:
     # Adjust config to quantized version.
     # This obviously doesn't work for column-wise sharding.
     config = copy.deepcopy(original)
     config.data_type = data_type
     for table in config.embedding_tables:
-        # pyre-fixme[20]: Argument `row_alignment` expected.
-        table.local_cols = rounded_row_size_in_bytes(table.local_cols, sparse_type)
+        row_alignment = 16 if device.type == "cuda" else 1
+        table.local_cols = rounded_row_size_in_bytes(
+            table.local_cols, sparse_type, row_alignment
+        )
         if table.local_metadata is not None:
             table.local_metadata.shard_sizes = [
                 table.local_rows,
@@ -59,9 +64,8 @@ def _copy_config(
                 if shard_meta != table.local_metadata:
                     shard_meta.shard_sizes = [
                         shard_meta.shard_sizes[0],
-                        # pyre-fixme[20]: Argument `row_alignment` expected.
                         rounded_row_size_in_bytes(
-                            shard_meta.shard_sizes[1], sparse_type
+                            shard_meta.shard_sizes[1], sparse_type, row_alignment
                         ),
                     ]
             global_metadata.size = torch.Size(
@@ -173,7 +177,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         state_dict = dict(module.named_buffers())
         device = next(iter(state_dict.values())).device
 
-        config = _copy_config(module.config, data_type, sparse_type)
+        config = _copy_config(module.config, data_type, sparse_type, device)
         ret = QuantBatchedEmbeddingBag(config=config, device=device)
 
         quant_weight_list = _quantize_weight(state_dict, data_type)
@@ -258,7 +262,7 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
         state_dict = dict(module.named_buffers())
         device = next(iter(state_dict.values())).device
 
-        config = _copy_config(module.config, data_type, sparse_type)
+        config = _copy_config(module.config, data_type, sparse_type, device)
         ret = QuantBatchedEmbedding(config=config, device=device)
 
         quant_weight_list = _quantize_weight(state_dict, data_type)
