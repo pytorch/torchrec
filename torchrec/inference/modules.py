@@ -86,7 +86,7 @@ class PredictModule(nn.Module):
     Returns:
         output: a dict of output tensors
 
-    Constructor Args:
+    Args:
         module: the actual predict module
         device: the primary device for this module that will be used in forward calls.
 

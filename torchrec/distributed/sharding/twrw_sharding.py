@@ -255,19 +255,19 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     Bucketizes sparse features in TWRW fashion and then redistributes with an AlltoAll
     collective operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-            communication.
+        communication.
         id_list_features_per_rank (List[int]): number of id list features to send to
-            each rank.
+        each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features to
-            send to each rank
+        send to each rank
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
         id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
         device (Optional[torch.device]): device on which buffers will be allocated.
         has_feature_processor (bool): existence of feature processor (ie. position
-            weighted features).
+        weighted features).
 
     Example::
 
@@ -444,7 +444,7 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     operation row wise on the host level and then an AlltoAll operation table wise on
     the global level.
 
-    Constructor Args:
+    Args:
         cross_pg (dist.ProcessGroup): global level ProcessGroup for AlltoAll
             communication.
         intra_pg (dist.ProcessGroup): host level ProcessGroup for reduce-scatter

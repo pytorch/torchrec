@@ -6,10 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-.. fb:display_title::
-    Deep Factorization-Machine Modules
-
-=====
+Deep Factorization-Machine Modules
 
 The following modules are based off the `Deep Factorization-Machine (DeepFM) paper
 <https://arxiv.org/pdf/1703.04247.pdf>`_

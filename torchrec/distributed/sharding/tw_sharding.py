@@ -226,12 +226,12 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     Redistributes sparse features in TW fashion with an AlltoAll collective
     operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         id_list_features_per_rank (List[int]): number of id list features to send to
-            each rank.
+        each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features to
-            send to each rank
+        send to each rank
         device (Optional[torch.device]): device on which buffers will be allocated.
     """
 
@@ -263,6 +263,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         Returns:
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
                 SparseFeatures.
+
         """
 
         return self._dist(sparse_features)
@@ -273,11 +274,12 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     Redistributes pooled embedding tensor in TW fashion with an AlltoAll
     collective operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
-            embedding in each rank.
+        embedding in each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
+
     """
 
     def __init__(
@@ -354,12 +356,13 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
     """
     Redistributes sparse features to all devices for inference.
 
-    Constructor Args:
-        id_list_features_per_rank (List[int]): number of id list features to send to
-            each rank.
-        id_score_list_features_per_rank (List[int]): number of id score list features to
-            send to each rank
+    Args:
+        id_list_features_per_rank (List[int]): number of id list features to send
+        to each rank.
+        id_score_list_features_per_rank (List[int]): number of id score list features
+        to send to each rank.
         world_size (int): number of devices in the topology.
+
     """
 
     def __init__(
@@ -387,7 +390,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
 
         Returns:
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
-                SparseFeatures.
+            SparseFeatures.
         """
 
         return NoWait(self._dist.forward(sparse_features))
@@ -397,7 +400,7 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
     """
     Merges pooled embedding tensor from each device for inference.
 
-    Constructor Args:
+    Args:
         device (Optional[torch.device]): device on which buffer will be allocated.
         world_size (int): number of devices in the topology.
     """
@@ -419,7 +422,7 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
 
         Call Args:
             local_embs (List[torch.Tensor]): pooled embedding tensors with
-                len(local_embs) == world_size.
+            len(local_embs) == world_size.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of merged pooled embedding tensor.

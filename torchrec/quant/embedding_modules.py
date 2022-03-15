@@ -104,7 +104,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     D: each feature's (key's) embedding dimension
     B: batch size
 
-    Constructor Args:
+    Args:
         table_name_to_quantized_weights (Dict[str, Tuple[Tensor, Tensor]]): map of tables to quantized weights
         embedding_configs (List[EmbeddingBagConfig]): list of embedding tables
         is_weighted: (bool): whether input KeyedJaggedTensor is weighted

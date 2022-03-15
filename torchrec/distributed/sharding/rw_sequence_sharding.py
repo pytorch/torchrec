@@ -35,7 +35,7 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
     Redistributes sequence embedding tensor in RW fashion with an AlltoAll operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         num_features (int): total number of features.
         device (Optional[torch.device]): device on which buffers will be allocated.

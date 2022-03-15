@@ -8,11 +8,7 @@
 # Sphinx Documentation Text (for user-facing classes only)
 
 """
-.. fb:display_title::
-    CrossNet API
-
-=====
-
+CrossNet API
 """
 
 from typing import Optional, Callable, Union
