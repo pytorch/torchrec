@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.distributed" href="torchrec.distributed.html" />
+    <link rel="next" title="torchrec.datasets.scripts" href="torchrec.datasets.scripts.html" />
     <link rel="prev" title="Welcome to the TorchRec documentation!" href="index.html" />
   <!-- Google Analytics -->
   
@@ -221,7 +221,10 @@
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
@@ -850,52 +853,6 @@ and train_perc. Use the same value across calls to generate consistent splits.</
 <dd></dd></dl>
 
 </section>
-<section id="torchrec-datasets-scripts-contiguous-preproc-criteo">
-<h2>torchrec.datasets.scripts.contiguous_preproc_criteo<a class="headerlink" href="#torchrec-datasets-scripts-contiguous-preproc-criteo" title="Permalink to this headline">¶</a></h2>
-<span class="target" id="module-torchrec.datasets.scripts.contiguous_preproc_criteo"></span><dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.main">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function processes the sparse features (.npy) to be contiguous
-and saves the result in a separate (.npy) file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">argparse.Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</section>
-<section id="torchrec-datasets-scripts-npy-preproc-criteo">
-<h2>torchrec.datasets.scripts.npy_preproc_criteo<a class="headerlink" href="#torchrec-datasets-scripts-npy-preproc-criteo" title="Permalink to this headline">¶</a></h2>
-<span class="target" id="module-torchrec.datasets.scripts.npy_preproc_criteo"></span><dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.main">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function preprocesses the raw Criteo tsvs into the format (npy binary)
-expected by InMemoryBinaryCriteoIterDataPipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.parse_args">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">argparse.Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</section>
 </section>
 
 
@@ -906,7 +863,7 @@ expected by InMemoryBinaryCriteoIterDataPipe.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.distributed.html" class="btn btn-neutral float-right" title="torchrec.distributed" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrec.datasets.scripts.html" class="btn btn-neutral float-right" title="torchrec.datasets.scripts" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="index.html" class="btn btn-neutral" title="Welcome to the TorchRec documentation!" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -946,8 +903,6 @@ expected by InMemoryBinaryCriteoIterDataPipe.</p>
 <li><a class="reference internal" href="#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a></li>
 <li><a class="reference internal" href="#module-torchrec.datasets.random">torchrec.datasets.random</a></li>
 <li><a class="reference internal" href="#module-torchrec.datasets.utils">torchrec.datasets.utils</a></li>
-<li><a class="reference internal" href="#torchrec-datasets-scripts-contiguous-preproc-criteo">torchrec.datasets.scripts.contiguous_preproc_criteo</a></li>
-<li><a class="reference internal" href="#torchrec-datasets-scripts-npy-preproc-criteo">torchrec.datasets.scripts.npy_preproc_criteo</a></li>
 </ul>
 </li>
 </ul>

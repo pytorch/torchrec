@@ -221,7 +221,10 @@
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
@@ -335,10 +338,13 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.clipping.</span></span><span class="sig-name descname"><span class="pre">GradientClippingOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">clipping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping" title="torchrec.optim.clipping.GradientClipping"><span class="pre">torchrec.optim.clipping.GradientClipping</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">GradientClipping.NONE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_gradient</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.clipping.GradientClippingOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.OptimizerWrapper</span></code></a></p>
 <p>Clips gradients before doing optimization step.</p>
-<dl class="simple">
-<dt>Constructor Args:</dt><dd><p>optimizer (KeyedOptimizer): optimizer to wrap
-clipping (GradientClipping): how to clip gradients
-max_gradient (float): max value for clipping</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> (<a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><em>KeyedOptimizer</em></a>) – optimizer to wrap</p></li>
+<li><p><strong>clipping</strong> (<a class="reference internal" href="#torchrec.optim.clipping.GradientClipping" title="torchrec.optim.clipping.GradientClipping"><em>GradientClipping</em></a>) – how to clip gradients</p></li>
+<li><p><strong>max_gradient</strong> (<em>float</em>) – max value for clipping</p></li>
+</ul>
 </dd>
 </dl>
 <dl class="py method">
@@ -539,21 +545,18 @@ This allows us to do in-place loading of optimizer state from a checkpoint.</p>
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizer.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>This implementation is much stricter than the one in torch.Optimizer:
 it requires implementations to fully initialize their state during first optimization iteration,
-and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
-Because of introduced strictness it allows us to:</p>
-<blockquote>
-<div><ul class="simple">
+and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
+<dl class="simple">
+<dt>Because of introduced strictness it allows us to:</dt><dd><ul class="simple">
 <li><p>do compatibility checks for state and param_groups, which improves usability</p></li>
-<li><dl class="simple">
-<dt>avoid state duplication by directly copying into state tensors, e.g.</dt><dd><p>optimizer.step()  # make sure optimizer is initialized
+<li><p>avoid state duplication by directly copying into state tensors, e.g.
+optimizer.step()  # make sure optimizer is initialized
 sd = optimizer.state_dict()
 load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
-optimizer.load_state_dict(sd)  # replace param_groups</p>
+optimizer.load_state_dict(sd)  # replace param_groups</p></li>
+</ul>
 </dd>
 </dl>
-</li>
-</ul>
-</div></blockquote>
 </dd></dl>
 
 <dl class="py method">
@@ -646,21 +649,18 @@ specific optimization options.</p>
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>This implementation is much stricter than the one in torch.Optimizer:
 it requires implementations to fully initialize their state during first optimization iteration,
-and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
-Because of introduced strictness it allows us to:</p>
-<blockquote>
-<div><ul class="simple">
+and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
+<dl class="simple">
+<dt>Because of introduced strictness it allows us to:</dt><dd><ul class="simple">
 <li><p>do compatibility checks for state and param_groups, which improves usability</p></li>
-<li><dl class="simple">
-<dt>avoid state duplication by directly copying into state tensors, e.g.</dt><dd><p>optimizer.step()  # make sure optimizer is initialized
+<li><p>avoid state duplication by directly copying into state tensors, e.g.
+optimizer.step()  # make sure optimizer is initialized
 sd = optimizer.state_dict()
 load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
-optimizer.load_state_dict(sd)  # replace param_groups</p>
+optimizer.load_state_dict(sd)  # replace param_groups</p></li>
+</ul>
 </dd>
 </dl>
-</li>
-</ul>
-</div></blockquote>
 </dd></dl>
 
 <dl class="py method">
@@ -728,12 +728,15 @@ the step altogether).</p>
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">stages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage" title="torchrec.optim.warmup.WarmupStage"><span class="pre">torchrec.optim.warmup.WarmupStage</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_param</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'lr'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'__warmup'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.OptimizerWrapper</span></code></a></p>
 <p>Adjusts learning rate according to the schedule.</p>
-<dl class="simple">
-<dt>Constructor Args:</dt><dd><p>optimizer (KeyedOptimizer): optimizer to wrap
-stages (List[WarmupStage]): stages to go through
-lr (float): initial learning rate
-lr_param (str): learning rate parameter in parameter group.
-param_name: Name of fake parameter to hold warmup state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer</strong> (<a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><em>KeyedOptimizer</em></a>) – optimizer to wrap</p></li>
+<li><p><strong>stages</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage" title="torchrec.optim.warmup.WarmupStage"><em>WarmupStage</em></a><em>]</em>) – stages to go through</p></li>
+<li><p><strong>lr</strong> (<em>float</em>) – initial learning rate</p></li>
+<li><p><strong>lr_param</strong> (<em>str</em>) – learning rate parameter in parameter group.</p></li>
+<li><p><strong>param_name</strong> – Name of fake parameter to hold warmup state.</p></li>
+</ul>
 </dd>
 </dl>
 <dl class="py method">
