@@ -335,6 +335,8 @@ class ModelParallelTest(ModelParallelTestShared):
             backend="gloo",
         )
 
+
+class ModelParallelSparseOnlyTest(unittest.TestCase):
     def test_sharding_ebc_as_top_level(self) -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
@@ -370,6 +372,7 @@ class ModelParallelTest(ModelParallelTestShared):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
+        dist.destroy_process_group()
 
 
 class ModelParallelStateDictTest(unittest.TestCase):
