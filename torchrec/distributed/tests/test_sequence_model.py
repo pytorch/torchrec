@@ -104,7 +104,7 @@ class TestSequenceTowerSparseNN(TestSparseNNBase):
     """
     Simple version of a sequence tower embedding model.
 
-    Constructor Args:
+    Args:
         tables: List[EmbeddingBagConfig],
         num_float_features: int,
         weighted_tables: Optional[List[EmbeddingConfig]],

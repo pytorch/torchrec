@@ -17,8 +17,11 @@ import torch.distributed as dist
 import torch.nn as nn
 from hypothesis import Verbosity, given, settings
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.embeddingbag import EmbeddingBagSharder
+from torchrec.distributed.embeddingbag import (
+    EmbeddingBagCollectionSharder,
+    EmbeddingBagSharder,
+    ShardedEmbeddingBagCollection,
+)
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
     get_default_sharders,
@@ -43,7 +46,8 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardingEnv,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.test_utils import get_free_port, skip_if_asan_class
 
 
@@ -330,6 +334,45 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             backend="gloo",
         )
+
+
+class ModelParallelSparseOnlyTest(unittest.TestCase):
+    def test_sharding_ebc_as_top_level(self) -> None:
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["LOCAL_WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+
+        if torch.cuda.is_available():
+            curr_device = torch.device("cuda:0")
+            torch.cuda.set_device(curr_device)
+            backend = "nccl"
+        else:
+            curr_device = torch.device("cpu")
+            backend = "gloo"
+        dist.init_process_group(backend=backend)
+
+        embedding_dim = 128
+        num_embeddings = 256
+        ebc = EmbeddingBagCollection(
+            device=torch.device("meta"),
+            tables=[
+                EmbeddingBagConfig(
+                    name="large_table",
+                    embedding_dim=embedding_dim,
+                    num_embeddings=num_embeddings,
+                    feature_names=["my_feature"],
+                    pooling=PoolingType.SUM,
+                ),
+            ],
+        )
+
+        model = DistributedModelParallel(ebc, device=curr_device)
+
+        self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
+        dist.destroy_process_group()
 
 
 class ModelParallelStateDictTest(unittest.TestCase):

@@ -198,7 +198,7 @@ class TestDenseArch(nn.Module):
     """
     Basic nn.Module for testing
 
-    Constructor Args:
+    Args:
         device
 
     Call Args:
@@ -232,7 +232,7 @@ class TestOverArch(nn.Module):
     """
     Basic nn.Module for testing
 
-    Constructor Args:
+    Args:
         device
 
     Call Args:
@@ -294,7 +294,7 @@ class TestSparseArch(nn.Module):
     """
     Basic nn.Module for testing
 
-    Constructor Args:
+    Args:
         tables
         device
 
@@ -340,7 +340,7 @@ class TestSparseNNBase(nn.Module):
     """
     Base class for a SparseNN model.
 
-    Constructor Args:
+    Args:
         tables: List[BaseEmbeddingConfig],
         weighted_tables: Optional[List[BaseEmbeddingConfig]],
         embedding_groups: Optional[Dict[str, List[str]]],
@@ -367,7 +367,7 @@ class TestSparseNN(TestSparseNNBase):
     """
     Simple version of a SparseNN model.
 
-    Constructor Args:
+    Args:
         tables: List[EmbeddingBagConfig],
         weighted_tables: Optional[List[EmbeddingBagConfig]],
         embedding_groups: Optional[Dict[str, List[str]]],
@@ -429,7 +429,7 @@ class TestTowerInteraction(nn.Module):
     """
     Basic nn.Module for testing
 
-    Constructor Args:
+    Args:
         tables: List[EmbeddingBagConfig],
         device: Optional[torch.device],
 
@@ -477,7 +477,7 @@ class TestTowerSparseNN(TestSparseNNBase):
     """
     Simple version of a SparseNN model.
 
-    Constructor Args:
+    Args:
         tables: List[EmbeddingBagConfig],
         embedding_groups: Optional[Dict[str, List[str]]],
         dense_device: Optional[torch.device],

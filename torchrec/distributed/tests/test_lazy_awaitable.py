@@ -49,7 +49,7 @@ class AsyncModule(torch.nn.Module):
     """
     Dummy async module
 
-    Constructor Args:
+    Args:
 
 
     Call Args:

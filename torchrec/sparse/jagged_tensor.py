@@ -191,6 +191,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         Constructs `JaggedTensor` from dense values/weights of shape (B, N,).
 
         Note that `lengths` is still of shape (B,).
+
         """
         mask2d = torch.arange(values.size(1), device=values.device).expand(
             values.size(0), -1
@@ -213,11 +214,10 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         Args:
             values (List[torch.Tensor]): a list of tensors for dense representation
-            weights (Optional[List[torch.Tensor]]): if values have weights. Tensor with same shape as values.
+            weights (Optional[List[torch.Tensor]]): if values have weights, tensor with same shape as values.
 
         Returns:
             JaggedTensor: JaggedTensor created from 2d dense tensor
-
 
         Example:
             values = [
@@ -225,19 +225,19 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 torch.Tensor(),
                 torch.Tensor([7.0, 8.0]),
                 torch.Tensor([10.0, 11.0, 12.0]),
-            ]
+                ]
             weights = [
                 torch.Tensor([1.0]),
                 torch.Tensor(),
                 torch.Tensor([7.0, 8.0]),
                 torch.Tensor([10.0, 11.0, 12.0]),
-            ]
+                ]
             j1 = JaggedTensor.from_dense(
                 values=values,
                 weights=weights,
-            )
-            # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
+                )
 
+            # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
 
         """
         lengths = torch.IntTensor([value.size(0) for value in values])
@@ -264,11 +264,10 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         Example:
             values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
             offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
-            jt = JaggedTensor(
-                values=values,
-                offsets=offsets,
-            )
+            jt = JaggedTensor(values=values, offsets=offsets)
+
             torch_list = jt.to_dense()
+
             # torch_list = [
             #     torch.tensor([1.0, 2.0]),
             #     torch.tensor([]),
@@ -276,7 +275,8 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             #     torch.tensor([4.0]),
             #     torch.tensor([5.0]),
             #     torch.tensor([6.0, 7.0, 8.0]),
-            # ]
+            #     ]
+
         """
 
         tensor_list = []
@@ -293,42 +293,38 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         pad_from_beginning: bool = True,
         chop_from_beginning: bool = True,
     ) -> torch.Tensor:
-        """
-        Constructs 2d dense Tensor from JT to shape (B, N,).
-
+        """Constructs 2d dense Tensor from JT to shape (B, N,).
         Note that B is the lengths of length
         N is the longest feature length or the assigned value
         if desired_length > length, we will use 0 or the padding_value to fill it up else,
         we will select the last desired_length values
-
         Args:
             desired_length (int): the length of the tensor
             padding_value (float): padding value if we need to pad
             pad_from_beginning (bool): if we need to pad from beginning
             chop_from_beginning (bool): if we need chop from beginning
-
         Returns:
             torch.Tensor: 2d dense tensor
-
-
         Example:
             values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
             offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
-            jt = JaggedTensor(
-                values=values,
-                offsets=offsets,
-            )
+            jt = JaggedTensor(values=values, offsets=offsets)
+
             t = jt.to_padded_dense(
-                desired_length=2, padding_value=10.0, pad_from_beginning=False
-            )
+                desired_length=2,
+                padding_value=10.0,
+                pad_from_beginning=False,
+                )
+
             # t = [
-            # [1.0, 2.0],
-            # [10.0, 10.0],
-            # [3.0, 10.0],
-            # [4.0, 10.0],
-            # [5.0, 10.0],
-            # [7.0, 8.0],
-            # ]
+            #     [1.0, 2.0],
+            #     [10.0, 10.0],
+            #     [3.0, 10.0],
+            #     [4.0, 10.0],
+            #     [5.0, 10.0],
+            #     [7.0, 8.0],
+            #     ]
+            #
 
         """
         lengths_list: List[int] = self.lengths().tolist()

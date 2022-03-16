@@ -6,11 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-.. fb:display_title::
-    Activation Modules
-
-=====
-
+Activation Modules
 """
 
 from typing import Optional, Union, List

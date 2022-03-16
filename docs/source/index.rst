@@ -33,7 +33,10 @@ TorchRec API
    :caption: Contents:
 
    torchrec.datasets.rst
+   torchrec.datasets.scripts.rst
    torchrec.distributed.rst
+   torchrec.distributed.planner.rst
+   torchrec.distributed.sharding.rst
    torchrec.fx.rst
    torchrec.models.rst
    torchrec.modules.rst

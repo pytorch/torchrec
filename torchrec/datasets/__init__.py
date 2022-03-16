@@ -12,7 +12,7 @@ and the `MovieLens 20M <https://grouplens.org/datasets/movielens/20m/>`_ Dataset
 
 Additionally, it contains a RandomDataset, which is useful to generate random data in the same format as the above.
 
-Lastly, it contains scripts and utilities for pr-eprocessing, loading, etc.
+Lastly, it contains scripts and utilities for pre-processing, loading, etc.
 
 Example::
 

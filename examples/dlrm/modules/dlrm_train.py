@@ -28,7 +28,7 @@ class DLRMTrain(nn.Module):
     The module assumes all sparse features have the same embedding dimension
     (i.e, each EmbeddingBagConfig uses the same embedding_dim)
 
-    Constructor Args:
+    Args:
         embedding_bag_collection (EmbeddingBagCollection): collection of embedding bags
             used to define SparseArch.
         dense_in_features (int): the dimensionality of the dense input features.

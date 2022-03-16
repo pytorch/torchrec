@@ -195,10 +195,11 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     Bucketizes sparse features in RW fashion and then redistributes with an AlltoAll
     collective operation.
 
-    Constructor Args:
+    Args:
+
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-            communication.
+        communication.
         num_id_list_features (int): total number of id list features.
         num_id_score_list_features (int): total number of id score list features
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
@@ -206,7 +207,8 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         device (Optional[torch.device]): device on which buffers will be allocated.
         is_sequence (bool): if this is for a sequence embedding.
         has_feature_processor (bool): existence of feature processor (ie. position
-            weighted features).
+        weighted features).
+
     """
 
     def __init__(
@@ -267,7 +269,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         Bucketizes sparse feature values into  world size number of buckets, and then
         performs AlltoAll operation.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to bucketize and
                 redistribute.
 
@@ -314,7 +316,7 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     Redistributes pooled embedding tensor in RW fashion by performing a reduce-scatter
     operation.
 
-    Constructor Args:
+    Args:
         pg (dist.ProcessGroup): ProcessGroup for reduce-scatter communication.
     """
 
@@ -329,7 +331,7 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         """
         Performs reduce-scatter pooled operation on pooled embeddings tensor.
 
-        Call Args:
+        Args:
             local_embs (torch.Tensor): pooled embeddings tensor to distribute.
 
         Returns:
