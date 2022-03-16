@@ -34,6 +34,10 @@ def _apply_functions_after_first_forward(
 ) -> None:
     _functions_to_lazy_apply = getattr(module, "_functions_to_lazy_apply", None)
     if _functions_to_lazy_apply is not None:
+        # pyre-fixme[29]:
+        #  `Union[BoundMethod[typing.Callable(torch.Tensor.__iter__)[[Named(self,
+        #  torch.Tensor)], typing.Iterator[typing.Any]], torch.Tensor], torch.Tensor,
+        #  torch.nn.modules.module.Module]` is not a function.
         for fn in _functions_to_lazy_apply:
             module.apply(fn)
         delattr(module, "_functions_to_lazy_apply")
