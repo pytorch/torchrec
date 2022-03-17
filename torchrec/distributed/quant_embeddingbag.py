@@ -23,7 +23,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import (
     create_embedding_configs_by_sharding,
-    EmbeddingCollectionAwaitable,
+    EmbeddingBagCollectionAwaitable,
     filter_state_dict,
 )
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
@@ -196,7 +196,7 @@ class ShardedQuantEmbeddingBagCollection(
         ctx: ShardedModuleContext,
         output: List[List[torch.Tensor]],
     ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingCollectionAwaitable(
+        return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
             ],
@@ -207,7 +207,7 @@ class ShardedQuantEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingCollectionAwaitable(
+        return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
                 for lookup, dist, features in zip(

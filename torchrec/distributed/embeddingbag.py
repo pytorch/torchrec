@@ -198,7 +198,7 @@ def create_embedding_configs_by_sharding(
     return sharding_type_to_embedding_configs
 
 
-class EmbeddingCollectionAwaitable(LazyAwaitable[KeyedTensor]):
+class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
         awaitables: List[Awaitable[torch.Tensor]],
@@ -375,7 +375,7 @@ class ShardedEmbeddingBagCollection(
         if self._has_uninitialized_output_dist:
             self._create_output_dist()
             self._has_uninitialized_output_dist = False
-        return EmbeddingCollectionAwaitable(
+        return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
             ],
@@ -389,7 +389,7 @@ class ShardedEmbeddingBagCollection(
         if self._has_uninitialized_output_dist:
             self._create_output_dist()
             self._has_uninitialized_output_dist = False
-        return EmbeddingCollectionAwaitable(
+        return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
                 for lookup, dist, features in zip(
