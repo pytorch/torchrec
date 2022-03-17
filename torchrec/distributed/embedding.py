@@ -530,6 +530,14 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
             for name, param in module.embeddings.named_parameters()
         }
 
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        types = [
+            ShardingType.DATA_PARALLEL.value,
+            ShardingType.TABLE_WISE.value,
+            ShardingType.ROW_WISE.value,
+        ]
+        return types
+
     @property
     def module_type(self) -> Type[EmbeddingCollection]:
         return EmbeddingCollection
