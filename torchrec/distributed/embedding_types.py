@@ -11,6 +11,7 @@ from enum import Enum, unique
 from typing import Generic, List, Optional, Dict, Any, TypeVar, Iterator
 
 import torch
+from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torch import nn
 from torchrec.distributed.types import (
     ModuleSharder,
@@ -49,6 +50,30 @@ class EmbeddingComputeKernel(Enum):
     BATCHED_FUSED_UVM = "batched_fused_uvm"
     BATCHED_FUSED_UVM_CACHING = "batched_fused_uvm_caching"
     BATCHED_QUANT = "batched_quant"
+    BATCHED_QUANT_UVM = "batched_quant_uvm"
+    BATCHED_QUANT_UVM_CACHING = "batched_quant_uvm_caching"
+
+
+def compute_kernel_to_embedding_location(
+    compute_kernel: EmbeddingComputeKernel,
+) -> EmbeddingLocation:
+    if compute_kernel in [
+        EmbeddingComputeKernel.BATCHED_FUSED,
+        EmbeddingComputeKernel.BATCHED_QUANT,
+    ]:
+        return EmbeddingLocation.DEVICE
+    elif compute_kernel in [
+        EmbeddingComputeKernel.BATCHED_FUSED_UVM,
+        EmbeddingComputeKernel.BATCHED_QUANT_UVM,
+    ]:
+        return EmbeddingLocation.MANAGED
+    elif compute_kernel in [
+        EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
+        EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+    ]:
+        return EmbeddingLocation.MANAGED_CACHING
+    else:
+        raise ValueError(f"Invalid EmbeddingComputeKernel {compute_kernel}")
 
 
 @dataclass
@@ -293,3 +318,52 @@ class BaseGroupedFeatureProcessor(nn.Module):
     ) -> List[str]:
         destination = [] if destination is None else destination
         return destination
+
+
+class BaseQuantEmbeddingSharder(ModuleSharder[M]):
+    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__()
+        self._fused_params = fused_params
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        types = [
+            ShardingType.TABLE_WISE.value,
+        ]
+
+        return types
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        ret = [
+            EmbeddingComputeKernel.BATCHED_QUANT.value,
+        ]
+        if compute_device_type in {"cuda"}:
+            ret += [
+                EmbeddingComputeKernel.BATCHED_QUANT_UVM.value,
+                EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value,
+            ]
+        return ret
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return self._fused_params
+
+    def storage_usage(
+        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
+    ) -> Dict[str, int]:
+        """
+        List of system resources and corresponding usage given a compute device and
+        compute kernel
+        """
+        tensor_bytes = tensor.element_size() * tensor.nelement() + tensor.shape[0] * 4
+        if compute_kernel in {
+            EmbeddingComputeKernel.BATCHED_QUANT_UVM.value,
+            EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value,
+        }:
+            assert compute_device_type in {"cuda"}
+            return {ParameterStorage.DDR.value: tensor_bytes}
+        else:
+            assert compute_device_type in {"cuda", "cpu"}
+            storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
+            return {storage_map[compute_device_type].value: tensor_bytes}

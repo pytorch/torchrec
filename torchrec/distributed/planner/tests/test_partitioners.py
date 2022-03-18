@@ -28,9 +28,7 @@ from torchrec.modules.embedding_modules import (
 )
 
 
-class RWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class RWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.ROW_WISE.value]
 
@@ -40,9 +38,7 @@ class RWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_WISE.value]
 
@@ -52,9 +48,7 @@ class TWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TWRWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class TWRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_ROW_WISE.value]
 
@@ -64,9 +58,7 @@ class TWRWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TWCWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class TWCWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_COLUMN_WISE.value]
 
@@ -76,9 +68,7 @@ class TWCWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class HostLevelSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class HostLevelSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_ROW_WISE.value, ShardingType.TABLE_COLUMN_WISE.value]
 

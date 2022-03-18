@@ -165,7 +165,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         env: Optional[ShardingEnv] = None,
         device: Optional[torch.device] = None,
         plan: Optional[ShardingPlan] = None,
-        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
         init_data_parallel: bool = True,
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,

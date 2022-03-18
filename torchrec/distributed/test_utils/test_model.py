@@ -553,7 +553,7 @@ class TestTowerSparseNN(TestSparseNNBase):
             return pred
 
 
-class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class TestEBCSharder(EmbeddingBagCollectionSharder):
     def __init__(
         self,
         sharding_type: str,
@@ -587,7 +587,7 @@ class TestEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return self._fused_params
 
 
-class TestEBSharder(EmbeddingBagSharder[nn.EmbeddingBag]):
+class TestEBSharder(EmbeddingBagSharder):
     def __init__(
         self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
     ) -> None:

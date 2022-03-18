@@ -6,8 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List
+from typing import List, cast
 
+import torch
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
 )
@@ -27,9 +28,8 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.planner.utils import prod
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ShardingType
+from torchrec.distributed.types import ShardingType, ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 
 EXPECTED_RW_SHARD_SIZES = [
@@ -224,7 +224,7 @@ EXPECTED_TWCW_SHARD_STORAGE = [
 ]
 
 
-class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class TWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_WISE.value]
 
@@ -234,7 +234,7 @@ class TWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
 
 
-class RWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class RWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.ROW_WISE.value]
 
@@ -244,7 +244,7 @@ class RWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class UVMCachingRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class UVMCachingRWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.ROW_WISE.value]
 
@@ -254,7 +254,7 @@ class UVMCachingRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection])
         return [EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value]
 
 
-class TWRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class TWRWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_ROW_WISE.value]
 
@@ -264,7 +264,7 @@ class TWRWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class CWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.COLUMN_WISE.value]
 
@@ -274,7 +274,7 @@ class CWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TWCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class TWCWSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_COLUMN_WISE.value]
 
@@ -284,7 +284,7 @@ class TWCWSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class DPSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class DPSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.DATA_PARALLEL.value]
 
@@ -294,7 +294,7 @@ class DPSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
         return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
 
 
-class AllTypesSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class AllTypesSharder(EmbeddingBagCollectionSharder):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
             ShardingType.DATA_PARALLEL.value,
@@ -357,8 +357,9 @@ class TestEnumerators(unittest.TestCase):
         )
 
     def test_dp_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [DPSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], DPSharder())]
+        )
 
         for sharding_option in sharding_options:
             self.assertEqual(
@@ -411,8 +412,9 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_tw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [TWSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], TWSharder())]
+        )
 
         for sharding_option in sharding_options:
             self.assertEqual(
@@ -450,8 +452,9 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_rw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [RWSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], RWSharder())]
+        )
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(sharding_option.sharding_type, ShardingType.ROW_WISE.value)
@@ -471,8 +474,7 @@ class TestEnumerators(unittest.TestCase):
     def test_uvm_caching_rw_sharding(self) -> None:
         sharding_options = self.enumerator.enumerate(
             self.model,
-            # pyre-ignore[6]
-            [UVMCachingRWSharder()],
+            [cast(ModuleSharder[torch.nn.Module], UVMCachingRWSharder())],
         )
 
         for i, sharding_option in enumerate(sharding_options):
@@ -491,8 +493,9 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_twrw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [TWRWSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], TWRWSharder())]
+        )
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(
@@ -512,8 +515,9 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_cw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [CWSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], CWSharder())]
+        )
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(
@@ -533,8 +537,9 @@ class TestEnumerators(unittest.TestCase):
             )
 
     def test_twcw_sharding(self) -> None:
-        # pyre-ignore[6]
-        sharding_options = self.enumerator.enumerate(self.model, [TWCWSharder()])
+        sharding_options = self.enumerator.enumerate(
+            self.model, [cast(ModuleSharder[torch.nn.Module], TWCWSharder())]
+        )
 
         for i, sharding_option in enumerate(sharding_options):
             self.assertEqual(
@@ -581,8 +586,8 @@ class TestEnumerators(unittest.TestCase):
             ),
             constraints=constraints,
         )
-        sharder = AllTypesSharder()
-        # pyre-ignore[6]
+        sharder = cast(ModuleSharder[torch.nn.Module], AllTypesSharder())
+
         sharding_options = enumerator.enumerate(self.model, [sharder])
 
         expected_sharding_types = {

@@ -457,6 +457,7 @@ class InferTwEmbeddingSharding(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             grouped_score_configs_per_rank=self._score_grouped_embedding_configs_per_rank,
             world_size=self._world_size,
+            fused_params=fused_params,
         )
 
     def create_output_dist(

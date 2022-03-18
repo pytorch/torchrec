@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import (
     List,
     Dict,
-    TypeVar,
     Optional,
     Type,
     Any,
@@ -503,10 +502,7 @@ class ShardedEmbeddingCollection(
         return EmbeddingCollectionContext(sharding_contexts=[])
 
 
-M = TypeVar("M", bound=nn.Module)
-
-
-class EmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
+class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
     """
     This implementation uses non-fused EmbeddingCollection
     """

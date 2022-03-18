@@ -8,7 +8,7 @@
 import os
 import unittest
 from dataclasses import dataclass
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Optional, Dict, cast
 
 import torch
 import torch.distributed as dist
@@ -36,6 +36,7 @@ from torchrec.distributed.types import (
     ParameterSharding,
     ShardedModuleContext,
     ShardingEnv,
+    ModuleSharder,
 )
 from torchrec.distributed.types import (
     ShardingType,
@@ -57,7 +58,7 @@ class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
         return super().input_dist(ctx, features)
 
 
-class TestCustomEBCSharder(EmbeddingBagCollectionSharder[EmbeddingBagCollection]):
+class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
     def shard(
         self,
         module: EmbeddingBagCollection,
@@ -241,11 +242,13 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             env=ShardingEnv.from_process_group(self.pg),
             init_data_parallel=False,
             device=self.device,
-            # pyre-ignore [6]
             sharders=[
-                TestEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
-                    kernel_type=EmbeddingComputeKernel.DENSE.value,
+                cast(
+                    ModuleSharder[nn.Module],
+                    TestEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.DENSE.value,
+                    ),
                 )
             ],
         )
@@ -268,7 +271,6 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             env=ShardingEnv.from_process_group(self.pg),
             init_data_parallel=False,
             device=self.device,
-            # pyre-fixme [6]
-            sharders=[TestCustomEBCSharder()],
+            sharders=[cast(ModuleSharder[nn.Module], TestCustomEBCSharder())],
         )
         self._test_move_cpu_gpu_helper(distributed_model)

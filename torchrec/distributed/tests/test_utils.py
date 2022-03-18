@@ -10,7 +10,7 @@ import math
 import os
 import random
 import unittest
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 import numpy as np
 import torch
@@ -22,6 +22,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.types import ModuleSharder
 from torchrec.distributed.utils import get_unsharded_module_names
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -68,7 +69,7 @@ class UtilsTest(unittest.TestCase):
             init_data_parallel=False,
             device=device,
             sharders=[
-                EmbeddingBagCollectionSharder(),
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder()),
             ],
         )
 

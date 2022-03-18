@@ -65,7 +65,9 @@ class EmbeddingEnumerator(Enumerator):
             ]
 
     def enumerate(
-        self, module: nn.Module, sharders: List[ModuleSharder[nn.Module]]
+        self,
+        module: nn.Module,
+        sharders: List[ModuleSharder[nn.Module]],
     ) -> List[ShardingOption]:
         """
         Generates relevant sharding options given module and sharders.

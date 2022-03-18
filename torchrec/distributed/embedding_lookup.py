@@ -404,20 +404,23 @@ class MetaInferGroupedEmbeddingsLookup(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
+            fused_params: Optional[Dict[str, Any]] = None,
         ) -> BaseBatchedEmbedding:
             return QuantBatchedEmbedding(
                 config=config,
                 device=device,
+                fused_params=fused_params,
             )
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device))
+            self._emb_modules.append(_create_lookup(config, device, fused_params))
 
         self._id_list_feature_splits: List[int] = [
             config.num_features() for config in grouped_configs
@@ -508,20 +511,23 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
+            fused_params: Optional[Dict[str, Any]] = None,
         ) -> BaseBatchedEmbeddingBag:
             return QuantBatchedEmbeddingBag(
                 config=config,
                 device=device,
+                fused_params=fused_params,
             )
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device))
+            self._emb_modules.append(_create_lookup(config, device, fused_params))
 
         self._score_emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_score_configs:
@@ -721,6 +727,7 @@ class InferGroupedPooledEmbeddingsLookup(
         grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         grouped_score_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         world_size: int,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[
@@ -733,6 +740,7 @@ class InferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     grouped_score_configs=grouped_score_configs_per_rank[rank],
                     device=torch.device("cuda", rank),
+                    fused_params=fused_params,
                 )
             )
 
@@ -745,6 +753,7 @@ class InferGroupedEmbeddingsLookup(
         self,
         grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         world_size: int,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
@@ -753,5 +762,6 @@ class InferGroupedEmbeddingsLookup(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     device=torch.device("cuda", rank),
+                    fused_params=fused_params,
                 )
             )
