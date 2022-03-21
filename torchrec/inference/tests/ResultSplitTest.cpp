@@ -10,8 +10,6 @@
 
 #include <gtest/gtest.h>
 
-using namespace ::testing;
-
 template <typename T>
 void checkTensor(const at::Tensor& tensor, const std::vector<T>& expected) {
   EXPECT_EQ(tensor.sizes(), at::ArrayRef({(long)expected.size()}));
