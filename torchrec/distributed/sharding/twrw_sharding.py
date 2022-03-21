@@ -307,6 +307,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         id_score_list_feature_hash_sizes: List[int],
         device: Optional[torch.device] = None,
         has_feature_processor: bool = False,
+        cross_node_stagger: bool = True,
     ) -> None:
         super().__init__()
         assert (
@@ -368,7 +369,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
-            stagger=self._num_cross_nodes,
+            stagger=self._num_cross_nodes if cross_node_stagger else 1,
         )
         self._has_feature_processor = has_feature_processor
 

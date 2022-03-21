@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import torch
 import torch.distributed as dist
@@ -45,11 +45,11 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         self,
         # pyre-fixme[11]
         pg: dist.ProcessGroup,
-        num_features: int,
+        features_per_rank: List[int],
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, [num_features] * pg.size(), device)
+        self._dist = SequenceEmbeddingAllToAll(pg, features_per_rank, device)
 
     def forward(
         self,
@@ -123,6 +123,6 @@ class RwSequenceEmbeddingSharding(
     ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return RwSequenceEmbeddingDist(
             self._pg,
-            self._get_id_list_features_num(),
+            [self._get_id_list_features_num()] * self._world_size,
             device if device is not None else self._device,
         )

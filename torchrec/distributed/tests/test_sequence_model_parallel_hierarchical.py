@@ -79,6 +79,40 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
             model_class=TestSequenceTowerSparseNN,
         )
 
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_ROW_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_sharding_nccl_twrw(self, sharding_type: str, kernel_type: str) -> None:
+        self._test_sharding(
+            sharders=[
+                TestEmbeddingCollectionSharder(
+                    sharding_type=sharding_type,
+                    kernel_type=kernel_type,
+                )
+            ],
+            backend="nccl",
+            world_size=4,
+            local_size=2,
+        )
+
     # TODO: consolidate the following methods with https://fburl.com/code/62zg0kel
     @seed_and_log
     def setUp(self) -> None:

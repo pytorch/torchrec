@@ -48,6 +48,12 @@ from torchrec.distributed.sharding.sequence_sharding import SequenceShardingCont
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     TwSequenceEmbeddingSharding,
 )
+from torchrec.distributed.sharding.twrw_sequence_sharding import (
+    TwRwSequenceEmbeddingSharding,
+)
+from torchrec.distributed.sharding.twrw_sequence_sharding import (
+    TwRwSequenceSparseFeaturesDist,
+)
 from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
@@ -86,6 +92,8 @@ def create_embedding_sharding(
         return RwSequenceEmbeddingSharding(embedding_configs, env, device)
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpSequenceEmbeddingSharding(embedding_configs, env, device)
+    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+        return TwRwSequenceEmbeddingSharding(embedding_configs, env, device)
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
 
@@ -342,6 +350,7 @@ class ShardedEmbeddingCollection(
                         output_splits=output_splits,
                         unbucketize_permute_tensor=module.unbucketize_permute_tensor
                         if isinstance(module, RwSparseFeaturesDist)
+                        or isinstance(module, TwRwSequenceSparseFeaturesDist)
                         else None,
                     )
                 )
@@ -531,6 +540,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
             ShardingType.ROW_WISE.value,
+            ShardingType.TABLE_ROW_WISE.value,
         ]
         return types
 
