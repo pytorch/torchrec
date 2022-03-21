@@ -132,7 +132,9 @@ class sharded_model_copy:
 
         # pyre-ignore [2, 3, 53]
         def _param_copy(param, memo):
-            return torch.nn.Parameter(_copy_or_not(param, memo))
+            return torch.nn.Parameter(
+                _copy_or_not(param, memo), requires_grad=param.requires_grad
+            )
 
         # pyre-ignore [16]
         torch.Tensor.__deepcopy__ = _copy_or_not
