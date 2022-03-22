@@ -253,4 +253,5 @@ jobs:
           python -m twine upload \
             --username __token__ \
             --password "$PYPI_TOKEN" \
+            --skip-existing \
             torchrec_nightly-*.whl
