@@ -22,8 +22,9 @@ C10_DEFINE_REGISTRY(TorchRecResultSplitFuncRegistry, ResultSplitFunc);
 
 c10::IValue splitDictOfTensor(
     c10::IValue result,
-    const size_t& offset,
-    const size_t& length) {
+    size_t nOffset,
+    size_t nLength,
+    size_t nTotalLength) {
   const auto& dict = result.toGenericDict();
   c10::impl::GenericDict pred(c10::StringType::get(), c10::TensorType::get());
   pred.reserve(dict.size());
@@ -33,7 +34,43 @@ c10::IValue splitDictOfTensor(
     const auto& value = entry.value();
     TORCH_CHECK(value.isTensor());
     const auto& tensor = value.toTensor();
-    pred.insert(key, tensor.slice(0, offset, offset + length));
+    TORCH_CHECK(tensor.dim() == 1);
+    TORCH_CHECK(tensor.size(0) % nTotalLength == 0);
+    const auto elemSize = tensor.size(0) / nTotalLength;
+    pred.insert(
+        key,
+        tensor.slice(
+            0, nOffset * elemSize, nOffset * elemSize + nLength * elemSize));
+  }
+  return pred;
+}
+
+c10::IValue splitDictOfTensors(
+    c10::IValue result,
+    size_t nOffset,
+    size_t nLength,
+    size_t nTotalLength) {
+  const auto& dict = result.toGenericDict();
+  c10::impl::GenericDict pred(
+      c10::StringType::get(), c10::TupleType::create({c10::TensorType::get()}));
+  pred.reserve(dict.size());
+
+  for (auto& entry : dict) {
+    const auto& key = entry.key();
+    const auto& value = entry.value();
+    TORCH_CHECK(value.isTuple());
+    const auto tuple = value.toTuple();
+    std::vector<c10::IValue> values;
+    values.reserve(tuple->size());
+    for (int i = 0; i < tuple->size(); ++i) {
+      const auto& tensor = tuple->elements()[i].toTensor();
+      TORCH_CHECK(tensor.dim() == 1);
+      TORCH_CHECK(tensor.size(0) % nTotalLength == 0);
+      const auto elemSize = tensor.size(0) / nTotalLength;
+      values.push_back(tensor.slice(
+          0, nOffset * elemSize, nOffset * elemSize + nLength * elemSize));
+    }
+    pred.insert(key, c10::ivalue::Tuple::create(std::move(values)));
   }
   return pred;
 }
@@ -44,13 +81,29 @@ class DictOfTensorResultSplitFunc : public ResultSplitFunc {
  public:
   c10::IValue splitResult(
       c10::IValue result,
-      const size_t& offset,
-      const size_t& length) override {
-    return splitDictOfTensor(result, offset, length);
+      size_t nOffset,
+      size_t nLength,
+      size_t nTotalLength) override {
+    return splitDictOfTensor(result, nOffset, nLength, nTotalLength);
+  }
+};
+
+class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
+ public:
+  c10::IValue splitResult(
+      c10::IValue result,
+      size_t nOffset,
+      size_t nLength,
+      size_t nTotalLength) override {
+    return splitDictOfTensors(result, nOffset, nLength, nTotalLength);
   }
 };
 
 REGISTER_TORCHREC_RESULTSPLIT_FUNC(dict_of_tensor, DictOfTensorResultSplitFunc);
+
+REGISTER_TORCHREC_RESULTSPLIT_FUNC(
+    dict_of_tensors,
+    DictOfTensorsResultSplitFunc);
 
 } // namespace
 } // namespace torchrec
