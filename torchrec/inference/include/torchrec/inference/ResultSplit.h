@@ -19,8 +19,9 @@ class ResultSplitFunc {
 
   virtual c10::IValue splitResult(
       c10::IValue /* result */,
-      const size_t& /* offset */,
-      const size_t& /* length */) = 0;
+      size_t /* nOffset */,
+      size_t /* nLength */,
+      size_t /* nTotalLength */) = 0;
 };
 
 /**
@@ -34,7 +35,14 @@ C10_DECLARE_REGISTRY(TorchRecResultSplitFuncRegistry, ResultSplitFunc);
 
 c10::IValue splitDictOfTensor(
     c10::IValue result,
-    const size_t& offset,
-    const size_t& length);
+    size_t nOffset,
+    size_t nLength,
+    size_t nTotalLength);
+
+c10::IValue splitDictOfTensors(
+    c10::IValue result,
+    size_t nOffset,
+    size_t nLength,
+    size_t nTotalLength);
 
 } // namespace torchrec

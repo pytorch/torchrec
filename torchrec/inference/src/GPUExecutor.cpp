@@ -208,7 +208,7 @@ void GPUExecutor::process(int idx) {
 
               auto response = std::make_unique<PredictionResponse>();
               response->predictions = resultSplitFunc->splitResult(
-                  predictions, offset, context.batchSize);
+                  predictions, offset, context.batchSize, batch->batchSize);
               context.promise.setValue(std::move(response));
             }
             offset += context.batchSize;
