@@ -13,7 +13,6 @@ from typing import (
     Optional,
     Type,
     Any,
-    TypeVar,
     Mapping,
     Union,
     Tuple,
@@ -487,10 +486,7 @@ class ShardedEmbeddingBagCollection(
         return self._optim
 
 
-M = TypeVar("M", bound=nn.Module)
-
-
-class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[M]):
+class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]):
     """
     This implementation uses non-fused `EmbeddingBagCollection`
     """
@@ -741,7 +737,7 @@ class ShardedEmbeddingBag(
         return self._optim
 
 
-class EmbeddingBagSharder(BaseEmbeddingSharder[M]):
+class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
     """
     This implementation uses non-fused `nn.EmbeddingBag`
     """

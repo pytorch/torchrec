@@ -22,9 +22,7 @@ from torchrec.modules.embedding_modules import (
 )
 
 
-class TWvsRWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class TWvsRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.ROW_WISE.value, ShardingType.TABLE_WISE.value]
 
@@ -34,9 +32,7 @@ class TWvsRWSharder(
         return [EmbeddingComputeKernel.DENSE.value]
 
 
-class TWSharder(
-    EmbeddingBagCollectionSharder[EmbeddingBagCollection], ModuleSharder[nn.Module]
-):
+class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [ShardingType.TABLE_WISE.value]
 

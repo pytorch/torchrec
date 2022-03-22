@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     ComputeDevice,
@@ -29,7 +30,7 @@ from torchrec.distributed.embedding_kernel import (
 )
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
-    EmbeddingComputeKernel,
+    compute_kernel_to_embedding_location,
 )
 from torchrec.distributed.types import (
     Shard,
@@ -44,10 +45,7 @@ from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
 )
 from torchrec.optim.fused import FusedOptimizerModule, FusedOptimizer
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-    KeyedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -259,6 +257,33 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
+def configure_fused_params(
+    fused_params: Optional[Dict[str, Any]], weights_precision: SparseType
+) -> Dict[str, Any]:
+
+    """
+    Configure the fused_params including cache_precision if the value is not preset
+
+    Args:
+        fused_params (Optional[Dict[str, Any]]): the original fused_params
+        weights_precision (SparseType): the weights_precision to be used for
+        the embedding lookup kernel
+
+    Returns:
+        [Dict[str, Any]]: a non-null configured fused_params dictionary to be
+        used to configure the embedding lookup kernel
+    """
+
+    if fused_params is None:
+        fused_params = {}
+    if "cache_precision" not in fused_params:
+        # Set cache_precision to be the same as weights_precision
+        # if it is not preset
+        fused_params["cache_precision"] = weights_precision
+
+    return fused_params
+
+
 class BaseBatchedEmbedding(BaseEmbedding):
     def __init__(
         self,
@@ -367,29 +392,21 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     ) -> None:
         super().__init__(config, pg, device)
 
-        def to_embedding_location(
-            compute_kernel: EmbeddingComputeKernel,
-        ) -> EmbeddingLocation:
-            if compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
-                return EmbeddingLocation.DEVICE
-            elif compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM:
-                return EmbeddingLocation.MANAGED
-            elif compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING:
-                return EmbeddingLocation.MANAGED_CACHING
-            else:
-                raise ValueError(f"Invalid EmbeddingComputeKernel {compute_kernel}")
-
         managed: List[EmbeddingLocation] = []
         compute_devices: List[ComputeDevice] = []
         for table in config.embedding_tables:
             if device is not None and device.type == "cuda":
                 compute_devices.append(ComputeDevice.CUDA)
-                managed.append(to_embedding_location(table.compute_kernel))
+                managed.append(
+                    compute_kernel_to_embedding_location(table.compute_kernel)
+                )
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
-        if fused_params is None:
-            fused_params = {}
+        weights_precision = data_type_to_sparse_type(config.data_type)
+        fused_params = configure_fused_params(
+            fused_params=fused_params, weights_precision=weights_precision
+        )
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -397,9 +414,9 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=PoolingMode.NONE,
-                weights_precision=data_type_to_sparse_type(config.data_type),
+                weights_precision=weights_precision,
                 device=device,
-                **fused_params,
+                **(fused_params or {}),
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -594,29 +611,21 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     ) -> None:
         super().__init__(config, pg, device)
 
-        def to_embedding_location(
-            compute_kernel: EmbeddingComputeKernel,
-        ) -> EmbeddingLocation:
-            if compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
-                return EmbeddingLocation.DEVICE
-            elif compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM:
-                return EmbeddingLocation.MANAGED
-            elif compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING:
-                return EmbeddingLocation.MANAGED_CACHING
-            else:
-                raise ValueError(f"Invalid EmbeddingComputeKernel {compute_kernel}")
-
         managed: List[EmbeddingLocation] = []
         compute_devices: List[ComputeDevice] = []
         for table in config.embedding_tables:
             if device is not None and device.type == "cuda":
                 compute_devices.append(ComputeDevice.CUDA)
-                managed.append(to_embedding_location(table.compute_kernel))
+                managed.append(
+                    compute_kernel_to_embedding_location(table.compute_kernel)
+                )
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
-        if fused_params is None:
-            fused_params = {}
+        weights_precision = data_type_to_sparse_type(config.data_type)
+        fused_params = configure_fused_params(
+            fused_params=fused_params, weights_precision=weights_precision
+        )
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -624,9 +633,9 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 ),
                 feature_table_map=self._feature_table_map,
                 pooling_mode=self._pooling,
-                weights_precision=data_type_to_sparse_type(config.data_type),
+                weights_precision=weights_precision,
                 device=device,
-                **fused_params,
+                **(fused_params or {}),
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(

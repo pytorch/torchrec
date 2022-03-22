@@ -12,7 +12,6 @@
 #include <thread>
 
 #include <cuda_runtime_api.h> // @manual
-#include <folly/ScopeGuard.h>
 #include <folly/Synchronized.h>
 #include <folly/io/IOBuf.h>
 #include <folly/logging/xlog.h>

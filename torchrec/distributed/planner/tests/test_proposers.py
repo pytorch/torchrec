@@ -17,7 +17,7 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
 from torchrec.distributed.planner.types import Topology, ShardingOption
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ShardingType
+from torchrec.distributed.types import ShardingType, ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -46,7 +46,10 @@ class TestProposers(unittest.TestCase):
 
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         search_space = self.enumerator.enumerate(
-            module=model, sharders=[EmbeddingBagCollectionSharder()]
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
         )
         self.greedy_proposer.load(search_space)
 
@@ -149,7 +152,9 @@ class TestProposers(unittest.TestCase):
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
 
-        mock_ebc_sharder = EmbeddingBagCollectionSharder()
+        mock_ebc_sharder = cast(
+            ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder()
+        )
         # TODO update this test for CW and TWCW sharding
         mock_ebc_sharder.sharding_types = MagicMock(
             return_value=[

@@ -58,9 +58,14 @@ def kernel_bw_lookup(
         ("cuda", EmbeddingComputeKernel.SPARSE.value): 0.35 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_DENSE.value): 0.5 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED.value): 1 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT.value): 1 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM.value): DDR_MEM_BW / 100,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value): (
+            caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
+        )
+        / 100,
+        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT.value): 1 * HBM_MEM_BW,
+        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT_UVM.value): DDR_MEM_BW / 100,
+        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value): (
             caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
         )
         / 100,

@@ -10,8 +10,6 @@
 
 #include <gtest/gtest.h>
 
-using namespace ::testing;
-
 template <typename T>
 void checkTensor(const at::Tensor& tensor, const std::vector<T>& expected) {
   EXPECT_EQ(tensor.sizes(), at::ArrayRef({(long)expected.size()}));
@@ -25,9 +23,54 @@ TEST(ResultSplitTest, SplitDictOfTensor) {
   pred.insert("par", at::tensor({0, 1, 2}));
   pred.insert("foo", at::tensor({3, 4, 5}));
 
-  auto splitResult = torchrec::splitDictOfTensor(pred, 0, 2);
+  auto splitResult = torchrec::splitDictOfTensor(pred, 0, 2, 3);
   checkTensor<float>(
       splitResult.toGenericDict().at("par").toTensor(), {0., 1.});
   checkTensor<float>(
       splitResult.toGenericDict().at("foo").toTensor(), {3., 4.});
+}
+
+TEST(ResultSplitTest, SplitDictOfTensorVariableLength) {
+  c10::impl::GenericDict pred(c10::StringType::get(), c10::TensorType::get());
+  pred.insert("par", at::tensor({0, 1, 2}));
+  pred.insert("foo", at::tensor({3, 4, 5, 6, 7, 8}));
+
+  auto splitResult = torchrec::splitDictOfTensor(pred, 0, 2, 3);
+  checkTensor<float>(
+      splitResult.toGenericDict().at("par").toTensor(), {0., 1.});
+  checkTensor<float>(
+      splitResult.toGenericDict().at("foo").toTensor(), {3., 4., 5., 6.});
+}
+
+TEST(ResultSplitTest, SplitDictOfTensors) {
+  c10::impl::GenericDict pred(
+      c10::StringType::get(),
+      c10::TupleType::create(
+          {c10::TensorType::get(),
+           c10::TensorType::get(),
+           c10::TensorType::get()}));
+  pred.insert(
+      "par",
+      c10::ivalue::Tuple::create(
+          {at::tensor({0, 1, 2, 3}), at::tensor({4, 5}), at::tensor({6, 7})}));
+  pred.insert(
+      "foo",
+      c10::ivalue::Tuple::create(
+          {at::tensor({8, 9}),
+           at::tensor({10, 11}),
+           at::tensor({12, 13, 14, 15})}));
+
+  auto splitResult = torchrec::splitDictOfTensors(pred, 1, 1, 2);
+  {
+    auto tuple = splitResult.toGenericDict().at("par").toTuple();
+    checkTensor<float>(tuple->elements()[0].toTensor(), {2., 3.});
+    checkTensor<float>(tuple->elements()[1].toTensor(), {5.});
+    checkTensor<float>(tuple->elements()[2].toTensor(), {7.});
+  }
+  {
+    auto tuple = splitResult.toGenericDict().at("foo").toTuple();
+    checkTensor<float>(tuple->elements()[0].toTensor(), {9.});
+    checkTensor<float>(tuple->elements()[1].toTensor(), {11.});
+    checkTensor<float>(tuple->elements()[2].toTensor(), {14., 15.});
+  }
 }

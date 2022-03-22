@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import (
     List,
     Dict,
-    TypeVar,
     Optional,
     Type,
     Any,
@@ -503,10 +502,7 @@ class ShardedEmbeddingCollection(
         return EmbeddingCollectionContext(sharding_contexts=[])
 
 
-M = TypeVar("M", bound=nn.Module)
-
-
-class EmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
+class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
     """
     This implementation uses non-fused EmbeddingCollection
     """
@@ -529,6 +525,14 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
             name.split(".")[0]: param
             for name, param in module.embeddings.named_parameters()
         }
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        types = [
+            ShardingType.DATA_PARALLEL.value,
+            ShardingType.TABLE_WISE.value,
+            ShardingType.ROW_WISE.value,
+        ]
+        return types
 
     @property
     def module_type(self) -> Type[EmbeddingCollection]:

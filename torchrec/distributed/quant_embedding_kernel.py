@@ -7,7 +7,7 @@
 
 import copy
 import logging
-from typing import List, Optional, Tuple, Iterator, Dict
+from typing import List, Optional, Tuple, Iterator, Dict, Any
 
 import torch
 import torch.distributed as dist
@@ -23,7 +23,10 @@ from torchrec.distributed.batched_embedding_kernel import (
     BaseBatchedEmbedding,
 )
 from torchrec.distributed.embedding_kernel import BaseEmbedding
-from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
+from torchrec.distributed.embedding_types import (
+    GroupedEmbeddingConfig,
+    compute_kernel_to_embedding_location,
+)
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -103,9 +106,18 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         # pyre-fixme[11]
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
+        managed: List[EmbeddingLocation] = []
+        for table in config.embedding_tables:
+            if device is not None and device.type == "cuda":
+                managed.append(
+                    compute_kernel_to_embedding_location(table.compute_kernel)
+                )
+            else:
+                managed.append(EmbeddingLocation.HOST)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
@@ -114,18 +126,17 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                         local_rows,
                         table.embedding_dim,
                         data_type_to_sparse_type(config.data_type),
-                        EmbeddingLocation.DEVICE
-                        if (device is not None and device.type == "cuda")
-                        else EmbeddingLocation.HOST,
+                        location,
                     )
-                    for local_rows, table in zip(
-                        self._local_rows, config.embedding_tables
+                    for local_rows, table, location in zip(
+                        self._local_rows, config.embedding_tables, managed
                     )
                 ],
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
                 output_dtype=SparseType.FP32,
+                **(fused_params or {}),
             )
         )
         if device is not None and device.type != "meta":
@@ -192,9 +203,18 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
+        managed: List[EmbeddingLocation] = []
+        for table in config.embedding_tables:
+            if device is not None and device.type == "cuda":
+                managed.append(
+                    compute_kernel_to_embedding_location(table.compute_kernel)
+                )
+            else:
+                managed.append(EmbeddingLocation.HOST)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
@@ -203,18 +223,17 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
                         local_rows,
                         table.embedding_dim,
                         data_type_to_sparse_type(config.data_type),
-                        EmbeddingLocation.DEVICE
-                        if (device is not None and device.type == "cuda")
-                        else EmbeddingLocation.HOST,
+                        location,
                     )
-                    for local_rows, table in zip(
-                        self._local_rows, config.embedding_tables
+                    for local_rows, table, location in zip(
+                        self._local_rows, config.embedding_tables, managed
                     )
                 ],
                 device=device,
                 pooling_mode=PoolingMode.NONE,
                 feature_table_map=self._feature_table_map,
                 output_dtype=SparseType.FP32,
+                **(fused_params or {}),
             )
         )
         if device is not None and device.type != "meta":

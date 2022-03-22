@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List
+from typing import List, Optional, Any, Dict, cast
 
 import torch
 from torch import nn
@@ -17,9 +17,7 @@ from torchrec.distributed.embedding_lookup import (
     BatchedDenseEmbeddingBag,
     QuantBatchedEmbeddingBag,
 )
-from torchrec.distributed.embedding_types import (
-    EmbeddingComputeKernel,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollectionSharder,
@@ -35,6 +33,7 @@ from torchrec.quant.embedding_modules import (
 
 class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
     def __init__(self, sharding_type: str, kernel_type: str) -> None:
+        super().__init__()
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
@@ -45,6 +44,10 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         return [self._kernel_type]
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return None
 
 
 def _quantize_sharded(module: nn.Module, inplace: bool) -> nn.Module:
@@ -207,11 +210,13 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         quant_model = _quantize(model, inplace=True)
         dmp = DistributedModelParallel(
             quant_model,
-            # pyre-ignore [6]
             sharders=[
-                TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
-                    kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                    ),
                 )
             ],
             device=device,

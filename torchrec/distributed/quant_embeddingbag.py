@@ -17,9 +17,9 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     SparseFeatures,
-    EmbeddingComputeKernel,
     ListOfSparseFeaturesList,
     SparseFeaturesList,
+    BaseQuantEmbeddingSharder,
 )
 from torchrec.distributed.embeddingbag import (
     create_embedding_configs_by_sharding,
@@ -30,10 +30,8 @@ from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
     ParameterSharding,
-    ParameterStorage,
     ShardingType,
     ShardedModuleContext,
-    ModuleSharder,
     ShardingEnv,
     ShardedModule,
     LazyAwaitable,
@@ -75,6 +73,7 @@ class ShardedQuantEmbeddingBagCollection(
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
         sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
@@ -92,7 +91,7 @@ class ShardedQuantEmbeddingBagCollection(
         self._is_weighted: bool = module.is_weighted
         self._input_dists: nn.ModuleList = nn.ModuleList()
         self._lookups: nn.ModuleList = nn.ModuleList()
-        self._create_lookups()
+        self._create_lookups(fused_params)
         self._output_dists: nn.ModuleList = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
@@ -137,9 +136,10 @@ class ShardedQuantEmbeddingBagCollection(
 
     def _create_lookups(
         self,
+        fused_params: Optional[Dict[str, Any]],
     ) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup())
+            self._lookups.append(sharding.create_lookup(fused_params=fused_params))
 
     def _create_output_dist(self, device: Optional[torch.device] = None) -> None:
         for sharding in self._sharding_type_to_sharding.values():
@@ -257,7 +257,9 @@ class ShardedQuantEmbeddingBagCollection(
         return self
 
 
-class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollection]):
+class QuantEmbeddingBagCollectionSharder(
+    BaseQuantEmbeddingSharder[QuantEmbeddingBagCollection]
+):
     def shard(
         self,
         module: QuantEmbeddingBagCollection,
@@ -265,25 +267,9 @@ class QuantEmbeddingBagCollectionSharder(ModuleSharder[QuantEmbeddingBagCollecti
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
-        return ShardedQuantEmbeddingBagCollection(module, params, env)
-
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [ShardingType.DATA_PARALLEL.value, ShardingType.TABLE_WISE.value]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [
-            EmbeddingComputeKernel.BATCHED_QUANT.value,
-        ]
-
-    def storage_usage(
-        self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
-    ) -> Dict[str, int]:
-        tensor_bytes = tensor.numel() * tensor.element_size() + tensor.shape[0] * 4
-        assert compute_device_type in {"cuda", "cpu"}
-        storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
-        return {storage_map[compute_device_type].value: tensor_bytes}
+        return ShardedQuantEmbeddingBagCollection(
+            module, params, env, self.fused_params
+        )
 
     def shardable_parameters(
         self, module: QuantEmbeddingBagCollection

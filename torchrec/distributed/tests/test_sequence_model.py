@@ -270,7 +270,7 @@ class TestSequenceSparseNN(TestSparseNNBase):
             return pred
 
 
-class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder[EmbeddingCollection]):
+class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
     def __init__(self, sharding_type: str, kernel_type: str) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type

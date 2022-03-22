@@ -6,7 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
+from typing import cast
 
+import torch
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
@@ -14,6 +16,7 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -37,7 +40,9 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         model = TestSparseNN(tables=tables, weighted_tables=[])
         sharding_options = self.enumerator.enumerate(
             module=model,
-            sharders=[EmbeddingBagCollectionSharder()],
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
         )
 
         expected_perfs = {

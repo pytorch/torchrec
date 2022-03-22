@@ -430,6 +430,13 @@ def group_tables(
                                     compute_kernel_type = (
                                         EmbeddingComputeKernel.BATCHED_FUSED
                                     )
+                                elif table.compute_kernel in [
+                                    EmbeddingComputeKernel.BATCHED_QUANT_UVM,
+                                    EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+                                ]:
+                                    compute_kernel_type = (
+                                        EmbeddingComputeKernel.BATCHED_QUANT
+                                    )
                                 else:
                                     compute_kernel_type = table.compute_kernel
                                 if (
