@@ -9,7 +9,8 @@ import argparse
 import itertools
 import os
 import sys
-from typing import cast, Iterator, List
+from dataclasses import dataclass, field
+from typing import cast, Iterator, List, Optional, Tuple
 
 import torch
 import torchmetrics as metrics
@@ -171,7 +172,7 @@ def _evaluate(
     iterator: Iterator[Batch],
     next_iterator: Iterator[Batch],
     stage: str,
-) -> None:
+) -> Tuple[float, float]:
     """
     Evaluate model. Computes and prints metrics including AUROC and Accuracy. Helper
     function for train_val_test.
@@ -227,6 +228,7 @@ def _evaluate(
     if dist.get_rank() == 0:
         print(f"AUROC over {stage} set: {auroc_result}.")
         print(f"Accuracy over {stage} set: {accuracy_result}.")
+    return auroc_result, accuracy_result
 
 
 def _train(
@@ -282,13 +284,21 @@ def _train(
             break
 
 
+@dataclass
+class TrainValTestResults:
+    val_accuracies: List[float] = field(default_factory=list)
+    val_aurocs: List[float] = field(default_factory=list)
+    test_accuracy: Optional[float] = None
+    test_auroc: Optional[float] = None
+
+
 def train_val_test(
     args: argparse.Namespace,
     train_pipeline: TrainPipelineSparseDist,
     train_dataloader: DataLoader,
     val_dataloader: DataLoader,
     test_dataloader: DataLoader,
-) -> None:
+) -> TrainValTestResults:
     """
     Train/validation/test loop. Contains customized logic to ensure each dataloader's
     batches are used for the correct designated purpose (train, val, test). This logic
@@ -304,8 +314,11 @@ def train_val_test(
         test_dataloader (DataLoader): DataLoader used for testing.
 
     Returns:
-        None.
+        TrainValTestResults.
     """
+
+    train_val_test_results = TrainValTestResults()
+
     train_iterator = iter(train_dataloader)
     test_iterator = iter(test_dataloader)
     for epoch in range(args.epochs):
@@ -315,9 +328,20 @@ def train_val_test(
         val_next_iterator = (
             test_iterator if epoch == args.epochs - 1 else train_iterator
         )
-        _evaluate(args, train_pipeline, val_iterator, val_next_iterator, "val")
+        val_accuracy, val_auroc = _evaluate(
+            args, train_pipeline, val_iterator, val_next_iterator, "val"
+        )
 
-    _evaluate(args, train_pipeline, test_iterator, iter(test_dataloader), "test")
+        train_val_test_results.val_accuracies.append(val_accuracy)
+        train_val_test_results.val_aurocs.append(val_auroc)
+
+    test_accuracy, test_auroc = _evaluate(
+        args, train_pipeline, test_iterator, iter(test_dataloader), "test"
+    )
+    train_val_test_results.test_accuracy = test_accuracy
+    train_val_test_results.test_auroc = test_auroc
+
+    return train_val_test_results
 
 
 def main(argv: List[str]) -> None:
