@@ -357,16 +357,12 @@ def main(argv: List[str]) -> None:
         args.num_embeddings = None
 
     # TODO add CriteoIterDataPipe support and add random_dataloader arg
-    # pyre-ignore[16]
     train_dataloader = get_dataloader(args, backend, "train")
-    # pyre-ignore[16]
     val_dataloader = get_dataloader(args, backend, "val")
-    # pyre-ignore[16]
     test_dataloader = get_dataloader(args, backend, "test")
 
     # Sets default limits for random dataloader iterations when left unspecified.
     if args.in_memory_binary_criteo_path is None:
-        # pyre-ignore[16]
         for stage in STAGES:
             attr = f"limit_{stage}_batches"
             if getattr(args, attr) is None:
