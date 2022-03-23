@@ -80,4 +80,8 @@ class DLRMTrain(nn.Module):
         logits = logits.squeeze()
         loss = self.loss_fn(logits, batch.labels.float())
 
-        return loss, (loss.detach(), logits.detach(), batch.labels.detach())
+        return loss, (
+            loss.detach(),
+            logits.detach(),
+            batch.labels.detach(),
+        )

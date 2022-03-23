@@ -218,8 +218,9 @@ def _evaluate(
     for _ in tqdm(iter(int, 1), desc=f"Evaluating {stage} set"):
         try:
             _loss, logits, labels = train_pipeline.progress(combined_iterator)
-            auroc(logits, labels)
-            accuracy(logits, labels)
+            predictions = logits.sigmoid()
+            auroc(predictions, labels)
+            accuracy(predictions, labels)
         except StopIteration:
             break
     auroc_result = auroc.compute().item()
