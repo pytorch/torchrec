@@ -134,7 +134,7 @@ class EmbeddingStats(Stats):
 
             rank_hbm = f"{used_hbm_gb:.1f} ({used_hbm_ratio:.0%})"
             rank_ddr = f"{used_ddr_gb:.1f} ({used_ddr_ratio:.0%})"
-            rank_perf = f"{perf[rank] / 1000:,.0f}"
+            rank_perf = f"{perf[rank]:.2f}"
             rank_pooling = f"{int(stats[rank]['pooling_factor']):,}"
             rank_dims = f"{stats[rank]['embedding_dims']:,}"
             rank_shards = " ".join(
@@ -176,8 +176,7 @@ class EmbeddingStats(Stats):
                         so.fqn,
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
-                        # pyre-ignore[58]
-                        f"{sum([shard.perf for shard in so.shards])/ 1000:,.0f}",
+                        f"{sum([shard.perf for shard in so.shards]):.2f}",
                         ",".join([str(rank) for rank in ranks]),
                     ]
                 )
