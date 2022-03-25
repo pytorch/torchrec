@@ -78,7 +78,7 @@ class EmbeddingStats(Stats):
                 continue
             shard: ParameterSharding = shard_by_fqn[fqn]
 
-            ranks, pooling_factor, emb_dims = self._get_shard_stats(
+            ranks, pooling_factor, output_dims = self._get_shard_stats(
                 shard=shard,
                 sharding_option=sharding_option,
                 world_size=topology.world_size,
@@ -93,7 +93,7 @@ class EmbeddingStats(Stats):
                 count = stats[rank]["type"].get(sharding_type_abbr, 0)
                 stats[rank]["type"][sharding_type_abbr] = count + 1
                 stats[rank]["pooling_factor"] += pooling_factor[i]
-                stats[rank]["embedding_dims"] += emb_dims[i]
+                stats[rank]["embedding_dims"] += output_dims[i]
 
         used_hbm = [0] * topology.world_size
         used_ddr = [0] * topology.world_size
@@ -201,7 +201,7 @@ class EmbeddingStats(Stats):
             logger.info(f"# {row: <{width-3}}#")
 
         logger.info(f"#{'' : ^{width-2}}#")
-        legend = "Input: pooling factor, Output: embedding dimension, Shards: number of tables"
+        legend = "Input: pooling factor, Output: output dim per sample, Shards: number of tables"
         logger.info(f"# {legend: <{width-3}}#")
         logger.info(f"#{'' : ^{width-2}}#")
 
@@ -236,7 +236,7 @@ class EmbeddingStats(Stats):
         Returns:
             ranks: list of ranks.
             pooling_factor: list of pooling factors across ranks.
-            emb_dims: list of embedding dimensions across ranks.
+            output_dims: list of output dimensions across ranks.
         """
 
         ranks = list(range(world_size))
@@ -245,10 +245,12 @@ class EmbeddingStats(Stats):
             if constraints and constraints.get(sharding_option.name)
             else 0.0
         ]
-        emb_dims = [sharding_option.tensor.shape[1]]
+        output_dims = [
+            sharding_option.tensor.shape[1] * len(sharding_option.input_lengths)
+        ]
 
         if shard.sharding_type == ShardingType.DATA_PARALLEL.value:
-            emb_dims = emb_dims * len(ranks)
+            output_dims = output_dims * len(ranks)
             pooling_factor = pooling_factor * len(ranks)
 
         elif shard.sharding_type == ShardingType.TABLE_WISE.value:
@@ -258,7 +260,7 @@ class EmbeddingStats(Stats):
         elif shard.sharding_type == ShardingType.COLUMN_WISE.value:
             assert shard.ranks
             ranks = shard.ranks
-            emb_dims = [
+            output_dims = [
                 int(shard.shard_sizes[1])
                 # pyre-ignore [16]
                 for shard in shard.sharding_spec.shards
@@ -267,21 +269,22 @@ class EmbeddingStats(Stats):
 
         elif shard.sharding_type == ShardingType.ROW_WISE.value:
             pooling_factor = [pooling_factor[0] / world_size] * len(ranks)
-            emb_dims = emb_dims * len(ranks)
+            output_dims = output_dims * len(ranks)
 
         elif shard.sharding_type == ShardingType.TABLE_ROW_WISE.value:
             assert shard.ranks
             host_id = shard.ranks[0] // local_size
             ranks = list(range(host_id * local_size, (host_id + 1) * local_size))
             pooling_factor = [pooling_factor[0] / local_size] * len(ranks)
-            emb_dims = emb_dims * len(ranks)
+            output_dims = output_dims * len(ranks)
 
         elif shard.sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
             assert shard.ranks
             ranks = shard.ranks
             pooling_factor = pooling_factor * len(ranks)
-            emb_dims = [
-                int(shard.shard_sizes[1]) for shard in shard.sharding_spec.shards
+            output_dims = [
+                int(shard.shard_sizes[1] * len(sharding_option.input_lengths))
+                for shard in shard.sharding_spec.shards
             ]
 
         else:
@@ -289,7 +292,7 @@ class EmbeddingStats(Stats):
                 f"Unrecognized or unsupported sharding type provided: {shard.sharding_type}"
             )
 
-        return ranks, pooling_factor, emb_dims
+        return ranks, pooling_factor, output_dims
 
 
 def _get_sharding_type_abbr(sharding_type: str) -> str:
