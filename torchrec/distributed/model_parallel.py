@@ -257,6 +257,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             self._ddp_wrapped = True
 
     def _copy(self, module: nn.Module, device: torch.device) -> nn.Module:
+        # Copy only weights with matching device.
+        def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
+            if tensor.device == self.device:
+                return tensor.to(device)
+            else:
+                return tensor
+
         # if this is a sharded module, customize the copy
         if isinstance(module, ShardedModule):
             return module.copy(device)
@@ -269,7 +276,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             ):
                 # if not containing ShardedModule down this submodule (this is a dense module)
                 # copy it.
-                child_copy = child.to(device)
+                child._apply(_copy_if_device_match)
+                child_copy = child
             else:
                 # else this module contains a ShardedModule somewhere, recursively process it.
                 child_copy = self._copy(child, device)
