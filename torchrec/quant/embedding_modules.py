@@ -180,6 +180,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 pooling_mode=pooling_type_to_pooling_mode(emb_config.pooling),
                 weight_lists=[table_name_to_quantized_weights[emb_config.name]],
                 device=device,
+                row_alignment=16,
             )
             self.embedding_bags.append(emb_module)
             if not emb_config.feature_names:
