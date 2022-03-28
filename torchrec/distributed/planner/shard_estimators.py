@@ -484,7 +484,6 @@ def calculate_shard_storages(
 
     if compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value:
         hbm_storage = round(ddr_storage * caching_ratio)
-        ddr_storage = ddr_storage - hbm_storage
 
     hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=hbm_storage,
