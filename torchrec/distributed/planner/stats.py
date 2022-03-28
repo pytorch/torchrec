@@ -132,9 +132,9 @@ class EmbeddingStats(Stats):
                 if sharding_type not in stats[rank]["type"]:
                     stats[rank]["type"][sharding_type] = 0
 
-            rank_hbm = f"{used_hbm_gb:.1f} ({used_hbm_ratio:.0%})"
-            rank_ddr = f"{used_ddr_gb:.1f} ({used_ddr_ratio:.0%})"
-            rank_perf = f"{perf[rank] / 1000:,.0f}"
+            rank_hbm = f"{round(used_hbm_gb, 1)} ({used_hbm_ratio:.0%})"
+            rank_ddr = f"{round(used_ddr_gb, 1)} ({used_ddr_ratio:.0%})"
+            rank_perf = f"{round(perf[rank], 2)}"
             rank_pooling = f"{int(stats[rank]['pooling_factor']):,}"
             rank_dims = f"{stats[rank]['embedding_dims']:,}"
             rank_shards = " ".join(
@@ -171,13 +171,15 @@ class EmbeddingStats(Stats):
                 ranks = sorted([shard.rank for shard in so.shards])
                 if len(ranks) > 1 and ranks == list(range(min(ranks), max(ranks) + 1)):
                     ranks = [f"{min(ranks)}-{max(ranks)}"]
+                shard_perfs = str(
+                    round(sum([cast(float, shard.perf) for shard in so.shards]), 2)
+                )
                 param_table.append(
                     [
                         so.fqn,
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
-                        # pyre-ignore[58]
-                        f"{sum([shard.perf for shard in so.shards])/ 1000:,.0f}",
+                        shard_perfs,
                         ",".join([str(rank) for rank in ranks]),
                     ]
                 )

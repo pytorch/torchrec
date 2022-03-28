@@ -93,8 +93,8 @@ def perf_func_emb_wall_time(
     input_lengths: List[float],
     input_data_type_size: float,
     output_data_type_size: float,
-    bw_intra_host: int,
-    bw_inter_host: int,
+    bw_intra_host: float,
+    bw_inter_host: float,
     has_input_dist: bool = True,
     has_output_dist: bool = True,
     caching_ratio: Optional[float] = None,
@@ -120,8 +120,8 @@ def perf_func_emb_wall_time(
             data_parallel input.
         output_data_type_size (float): the data type size of the distributed
             data_parallel output.
-        bw_intra_host (int): the bandwidth within the single host like multiple threads.
-        bw_inter_host (int): the bandwidth between two hosts like multiple machines.
+        bw_intra_host (float): the bandwidth within a single host like multiple threads.
+        bw_inter_host (float): the bandwidth between two hosts like multiple machines.
         has_input_dist (bool = True): if we need input distributed.
         has_output_dist (bool = True): if we need output distributed.
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
@@ -226,7 +226,7 @@ def _get_tw_sharding_perf(
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
-    bw_inter_host: int,
+    bw_inter_host: float,
 ) -> Tuple[float, float, float]:
     input_perf = (
         global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
@@ -255,7 +255,7 @@ def _get_cw_sharding_perf(
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
-    bw_inter_host: int,
+    bw_inter_host: float,
 ) -> Tuple[float, float, float]:
     input_perf = (
         global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
@@ -285,7 +285,7 @@ def _get_rw_sharding_perf(
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
-    bw_inter_host: int,
+    bw_inter_host: float,
 ) -> Tuple[float, float, float]:
     input_perf = (
         global_batch_size
@@ -321,8 +321,8 @@ def _get_twrw_sharding_perf(
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
-    bw_inter_host: int,
-    bw_intra_host: int,
+    bw_inter_host: float,
+    bw_intra_host: float,
 ) -> Tuple[float, float, float]:
     input_perf = (
         global_batch_size
@@ -359,7 +359,7 @@ def _get_dp_sharding_perf(
     batch_size: float,
     input_lengths: List[float],
     grad_num_elem: int,
-    bw_inter_host: int,
+    bw_inter_host: float,
     emb_dim: int,
     output_data_type_size: float,
     device_bw: float,
