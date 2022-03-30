@@ -11,8 +11,8 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 
 MAX_SIZE: int = (1 << 63) - 1
 
-INTRA_NODE_BANDWIDTH: int = 600
-CROSS_NODE_BANDWIDTH: int = 12
+INTRA_NODE_BANDWIDTH: float = 600 * 1024 * 1024 * 1024 / 1000  # bytes/ms
+CROSS_NODE_BANDWIDTH: float = 12 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 
 MIN_CW_DIM: int = 32
 POOLING_FACTOR: float = 1.0
@@ -21,8 +21,8 @@ BIGINT_DTYPE: int = 8
 
 HBM_CAP: int = 32 * 1024 * 1024 * 1024  # 32 GB
 DDR_CAP: int = 128 * 1024 * 1024 * 1024  # 128 GB
-DDR_MEM_BW: int = 51
-HBM_MEM_BW: int = 897
+DDR_MEM_BW: float = 51 * 1024 * 1024 * 1024 / 1000  # bytes/ms
+HBM_MEM_BW: float = 897 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 CACHING_RATIO: float = 0.2
 BATCH_SIZE: int = 512
 

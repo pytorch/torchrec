@@ -266,7 +266,8 @@ class FloatBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       at::Tensor /* batchOffsets */,
-      const c10::Device& /* device */) override {
+      const c10::Device& /* device */,
+      at::Tensor /* batchItems */) override {
     return combineFloat(featureName, requests);
   }
 };
@@ -278,7 +279,8 @@ class SparseBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       at::Tensor /* batchOffsets */,
-      const c10::Device& /* device */) override {
+      const c10::Device& /* device */,
+      at::Tensor /* batchItems */) override {
     return combineSparse(featureName, requests, /* isWeighted */ false);
   }
 };
@@ -290,7 +292,8 @@ class WeightedSparseBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       at::Tensor /* batchOffsets */,
-      const c10::Device& /* device */) override {
+      const c10::Device& /* device */,
+      at::Tensor /* batchItems */) override {
     return combineSparse(featureName, requests, /* isWeighted */ true);
   }
 };
@@ -302,7 +305,8 @@ class EmbeddingBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       at::Tensor /* batchOffsets */,
-      const c10::Device& /* device */) override {
+      const c10::Device& /* device */,
+      at::Tensor /* batchItems */) override {
     return combineEmbedding(featureName, requests);
   }
 };

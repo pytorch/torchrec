@@ -135,4 +135,5 @@ jobs:
           python -m twine upload \
             --username __token__ \
             --password "$PYPI_TOKEN" \
+            --skip-existing \
             dist/torchrec_nightly_cpu-*.whl

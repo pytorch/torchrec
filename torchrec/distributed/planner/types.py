@@ -70,8 +70,8 @@ class Topology:
         hbm_cap: Optional[int] = None,
         ddr_cap: int = DDR_CAP,
         local_world_size: Optional[int] = None,
-        intra_host_bw: int = INTRA_NODE_BANDWIDTH,
-        inter_host_bw: int = CROSS_NODE_BANDWIDTH,
+        intra_host_bw: float = INTRA_NODE_BANDWIDTH,
+        inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         batch_size: int = BATCH_SIZE,
     ) -> None:
         """
@@ -127,11 +127,11 @@ class Topology:
         return self._local_world_size
 
     @property
-    def intra_host_bw(self) -> int:
+    def intra_host_bw(self) -> float:
         return self._intra_host_bw
 
     @property
-    def inter_host_bw(self) -> int:
+    def inter_host_bw(self) -> float:
         return self._inter_host_bw
 
     def __repr__(self) -> str:

@@ -18,6 +18,44 @@ from torchrec.sparse.jagged_tensor import (
 
 
 class TestJaggedTensor(unittest.TestCase):
+    def test_str(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        j_1d = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 3]),
+        )
+        jt_str = str(j_1d)
+        expected_str = (
+            "JaggedTensor({\n    [[1.0], [], [2.0, 3.0], [4.0, 5.0, 6.0]]\n})\n"
+        )
+        self.assertEqual(expected_str, jt_str)
+
+        values = torch.Tensor(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]
+        )
+        j_2d = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 0]),
+        )
+        jt_str = str(j_2d)
+        expected_str = "JaggedTensor({\n    [[[1.0, 2.0, 3.0]], [], [[4.0, 5.0, 6.0], [7.0, 8.0, 9.0]], []]\n})\n"
+        self.assertEqual(expected_str, jt_str)
+
+        values = torch.Tensor(
+            [
+                [[1.0, 2.0, 3.0]],
+                [[4.0, 5.0, 6.0]],
+                [[7.0, 8.0, 9.0]],
+                [[10.0, 11.0, 12.0]],
+            ]
+        )
+        j_3d = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 0]),
+        )
+        with self.assertRaises(ValueError):
+            jt_str = str(j_3d)
+
     def test_from_dense_lengths(self) -> None:
         values = torch.Tensor(
             [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]

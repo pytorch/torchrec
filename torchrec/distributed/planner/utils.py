@@ -7,7 +7,7 @@
 
 import operator
 from functools import reduce
-from typing import Iterable, Any, Type
+from typing import Union, Iterable, Any, Type
 
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
@@ -16,6 +16,10 @@ def sharder_name(t: Type[Any]) -> str:
 
 def bytes_to_gb(num_bytes: int) -> float:
     return float(num_bytes / (1024 * 1024 * 1024))
+
+
+def bytes_to_mb(num_bytes: Union[float, int]) -> float:
+    return float(num_bytes / (1024 * 1024))
 
 
 def gb_to_bytes(gb: float) -> int:

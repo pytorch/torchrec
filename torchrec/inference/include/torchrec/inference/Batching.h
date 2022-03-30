@@ -30,7 +30,8 @@ class BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& /* requests */,
       const int64_t& /* totalNumBatch */,
       at::Tensor /* batchOffsets */,
-      const c10::Device& /* device */) = 0;
+      const c10::Device& /* device */,
+      at::Tensor /* batchItems */) = 0;
 };
 
 /**

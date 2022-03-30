@@ -7,6 +7,7 @@
  */
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "ATen/Functions.h"
 #include "ATen/core/Dict.h"
 #include "c10/cuda/CUDAFunctions.h"
 
@@ -205,6 +206,17 @@ void BatchingQueue::pinMemory(int gpuIdx) {
           combinedBatchSize += requests[i]->batch_size;
           batchOffsetsAcc[i + 1] = combinedBatchSize;
         }
+        auto batchItems = at::empty(
+            {static_cast<int64_t>(combinedBatchSize)},
+            at::TensorOptions().dtype(at::kInt).pinned_memory(true));
+        auto batchItemsAcc = batchItems.accessor<int32_t, 1>();
+        for (auto i = 0; i < requests.size(); ++i) {
+          auto start = batchOffsetsAcc[i];
+          auto end = batchOffsetsAcc[i + 1];
+          for (auto j = start; j < end; ++j) {
+            batchItemsAcc[j] = i;
+          }
+        }
 
         BatchQueueEntry batchedEntry;
 
@@ -223,7 +235,8 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               requests,
               combinedBatchSize,
               batchOffsets,
-              c10::Device(c10::kCUDA, gpuIdx)));
+              c10::Device(c10::kCUDA, gpuIdx),
+              batchItems));
         }
 
         batchedEntry.batch = std::make_shared<PredictionBatch>(PredictionBatch{

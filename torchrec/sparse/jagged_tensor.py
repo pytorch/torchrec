@@ -114,7 +114,18 @@ torch.fx.wrap("_regroup_keyed_tensors")
 
 
 def _values_string(values: torch.Tensor, start: int, end: int) -> str:
-    return "[" + ", ".join([str(value.item()) for value in values[start:end]]) + "]"
+    size = values.size()
+    if len(size) == 1:
+        return "[" + ", ".join([str(value.item()) for value in values[start:end]]) + "]"
+    elif len(size) == 2:
+        values_list: List[str] = []
+        for value in values[start:end]:
+            values_list.append("[" + ", ".join([str(s.item()) for s in value]) + "]")
+        return "[" + ", ".join(values_list) + "]"
+    else:
+        raise ValueError(
+            "the values dimension is larger than 2, we don't support printing"
+        )
 
 
 def _jagged_values_string(
@@ -146,6 +157,9 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. See KeyedJaggedTensor for full example.
 
     Implementation is torch.jit.script-able
+
+    Note that we will NOT do the input validation as it's expensive, you should always
+    pass in the valid lengths, offsets, etc.
 
     Args:
         values (torch.Tensor): values tensor in dense representation
