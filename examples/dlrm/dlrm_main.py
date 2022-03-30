@@ -52,6 +52,7 @@ except ImportError:
     pass
 
 TRAIN_PIPELINE_STAGES = 3  # Number of stages in TrainPipelineSparseDist.
+TOTAL_TRAINING_SAMPLES = 4195197692  # Number of rows across days 0-22 (day 23 is used for validation and testing)
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -167,6 +168,31 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         type=int,
         default=None,
         help="Frequency at which validation will be run within an epoch.",
+    )
+    parser.add_argument(
+        "--change_lr_in_first_epoch",
+        type=bool,
+        default=False,
+        help="Flag to determine whether learning rate should be changed part way through the first epoch.",
+    )
+    parser.add_argument(
+        "--lr_change_point",
+        type=float,
+        default=0.80,
+        help="The point through the first epoch at which the learning rate will change. The default is 80% through"
+        " the first epoch.",
+    )
+    parser.add_argument(
+        "--lr_after_change_point",
+        type=float,
+        default=0.2,
+        help="Learning rate after change point in first epoch.",
+    )
+    parser.add_argument(
+        "--num_trainers",
+        type=float,
+        default=8,
+        help="The number of gpus used for training. Used to determine number of samples seen by a single trainer.",
     )
     parser.set_defaults(pin_memory=None)
     return parser.parse_args(argv)
@@ -287,11 +313,25 @@ def _train(
         else itertools.islice(iterator, limit_batches),
         itertools.islice(next_iterator, TRAIN_PIPELINE_STAGES - 1),
     )
+    samples_per_trainer = TOTAL_TRAINING_SAMPLES / args.num_trainers
 
     # Infinite iterator instead of while-loop to leverage tqdm progress bar.
     for it in tqdm(itertools.count(), desc=f"Epoch {epoch}"):
         try:
             train_pipeline.progress(combined_iterator)
+            if (
+                args.change_lr_in_first_epoch
+                and epoch == 0
+                and (
+                    (it / samples_per_trainer) > args.lr_change_point
+                )  # progress made through the epoch
+            ):
+                print(f"Changing learning rate to: {args.lr_after_change_point}")
+                optimizer = train_pipeline._optimizer
+                lr = args.lr_after_change_point
+                for g in optimizer.param_groups:
+                    g["lr"] = lr
+
             if (
                 args.validation_freq_within_epoch
                 and it % args.validation_freq_within_epoch == 0
