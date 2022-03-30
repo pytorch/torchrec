@@ -5,11 +5,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from testslide import TestCase
+import unittest
+
 from torchrec.datasets.random import RandomRecDataset
 
 
-class RandomDataLoader(TestCase):
+class RandomDataLoader(unittest.TestCase):
     def test_hash_per_feature_ids_per_feature(self) -> None:
         dataset = RandomRecDataset(
             keys=["feat1", "feat2"],
