@@ -339,6 +339,7 @@ class BinaryCriteoUtils:
         start_row: int,
         num_rows: int,
         path_manager_key: str = PATH_MANAGER_KEY,
+        mmap_mode: bool = False,
     ) -> np.ndarray:
         """
         Load part of an npy file.
@@ -375,11 +376,14 @@ class BinaryCriteoUtils:
                     f"num_rows ({num_rows}) exceeds number of available rows "
                     f"({total_rows}) for the given start_row ({start_row})."
                 )
-
-            offset = start_row * row_size * dtype.itemsize
-            fin.seek(offset, os.SEEK_CUR)
-            num_entries = num_rows * row_size
-            data = np.fromfile(fin, dtype=dtype, count=num_entries)
+            if mmap_mode:
+                data = np.load(fname, mmap_mode="r")
+                data = data[start_row : start_row + num_rows]
+            else:
+                offset = start_row * row_size * dtype.itemsize
+                fin.seek(offset, os.SEEK_CUR)
+                num_entries = num_rows * row_size
+                data = np.fromfile(fin, dtype=dtype, count=num_entries)
             return data.reshape((num_rows, row_size))
 
     @staticmethod
@@ -675,6 +679,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         rank: int,
         world_size: int,
         shuffle_batches: bool = False,
+        mmap_mode: bool = False,
         hashes: Optional[List[int]] = None,
         path_manager_key: str = PATH_MANAGER_KEY,
     ) -> None:
@@ -685,6 +690,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.rank = rank
         self.world_size = world_size
         self.shuffle_batches = shuffle_batches
+        self.mmap_mode = mmap_mode
         self.hashes = hashes
         self.path_manager_key = path_manager_key
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
@@ -737,10 +743,15 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                         range_left,
                         range_right - range_left + 1,
                         path_manager_key=self.path_manager_key,
+                        mmap_mode=self.mmap_mode,
                     )
                 )
 
-        if self.hashes is not None:
+        # When mmap_mode is enabled, the hash is applied in def __iter__, which is
+        # where samples are batched during training.
+        # Otherwise, the ML dataset is preloaded, and the hash is applied here in
+        # the preload stage, as shown:
+        if not self.mmap_mode and self.hashes is not None:
             hashes_np = np.array(self.hashes).reshape((1, CAT_FEATURE_COUNT))
             for sparse_arr in self.sparse_arrs:
                 sparse_arr %= hashes_np
@@ -803,10 +814,20 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                     self.num_rows_per_file[file_idx] - row_idx,
                 )
                 slice_ = slice(row_idx, row_idx + rows_to_get)
+
+                dense_inputs = self.dense_arrs[file_idx][slice_, :]
+                sparse_inputs = self.sparse_arrs[file_idx][slice_, :]
+                target_labels = self.labels_arrs[file_idx][slice_, :]
+
+                if self.mmap_mode and self.hashes is not None:
+                    sparse_inputs = sparse_inputs % np.array(self.hashes).reshape(
+                        (1, CAT_FEATURE_COUNT)
+                    )
+
                 append_to_buffer(
-                    self.dense_arrs[file_idx][slice_, :],
-                    self.sparse_arrs[file_idx][slice_, :],
-                    self.labels_arrs[file_idx][slice_, :],
+                    dense_inputs,
+                    sparse_inputs,
+                    target_labels,
                 )
                 row_idx += rows_to_get
 

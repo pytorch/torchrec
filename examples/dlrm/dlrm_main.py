@@ -144,6 +144,16 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Use pinned memory when loading data.",
     )
     parser.add_argument(
+        "--mmap_mode",
+        dest="mmap_mode",
+        action="store_true",
+        help="--mmap_mode mmaps the dataset."
+        " That is, the dataset is kept on disk but is accessed as if it were in memory."
+        " --mmap_mode is intended mostly for faster debugging. Use --mmap_mode to bypass"
+        " preloading the dataset when preloading takes too long or when there is "
+        " insufficient memory available to load the full dataset.",
+    )
+    parser.add_argument(
         "--in_memory_binary_criteo_path",
         type=str,
         default=None,
@@ -162,7 +172,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=False,
         help="Shuffle each batch during training.",
     )
-    parser.set_defaults(pin_memory=None)
+    parser.set_defaults(pin_memory=None, mmap_mode=None)
     return parser.parse_args(argv)
 
 
