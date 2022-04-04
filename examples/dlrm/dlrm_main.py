@@ -177,7 +177,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 
 def _evaluate(
-    args: argparse.Namespace,
+    limit_batches: Optional[int],
     train_pipeline: TrainPipelineSparseDist,
     iterator: Iterator[Batch],
     next_iterator: Iterator[Batch],
@@ -188,7 +188,7 @@ def _evaluate(
     function for train_val_test.
 
     Args:
-        args (argparse.Namespace): parsed command line args.
+        limit_batches (Optional[int]): number of batches
         train_pipeline (TrainPipelineSparseDist): pipelined model.
         iterator (Iterator[Batch]): Iterator used for val/test batches.
         next_iterator (Iterator[Batch]): Iterator used for the next phase (either train
@@ -205,9 +205,6 @@ def _evaluate(
     model = train_pipeline._model
     model.eval()
     device = train_pipeline._device
-    limit_batches = (
-        args.limit_val_batches if stage == "val" else args.limit_test_batches
-    )
     if limit_batches is not None:
         limit_batches -= TRAIN_PIPELINE_STAGES - 1
 
@@ -339,14 +336,22 @@ def train_val_test(
             test_iterator if epoch == args.epochs - 1 else train_iterator
         )
         val_accuracy, val_auroc = _evaluate(
-            args, train_pipeline, val_iterator, val_next_iterator, "val"
+            args.limit_val_batches,
+            train_pipeline,
+            val_iterator,
+            val_next_iterator,
+            "val",
         )
 
         train_val_test_results.val_accuracies.append(val_accuracy)
         train_val_test_results.val_aurocs.append(val_auroc)
 
     test_accuracy, test_auroc = _evaluate(
-        args, train_pipeline, test_iterator, iter(test_dataloader), "test"
+        args.limit_test_batches,
+        train_pipeline,
+        test_iterator,
+        iter(test_dataloader),
+        "test",
     )
     train_val_test_results.test_accuracy = test_accuracy
     train_val_test_results.test_auroc = test_auroc
