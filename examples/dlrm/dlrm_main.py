@@ -424,6 +424,7 @@ def main(argv: List[str]) -> None:
             map(int, args.over_arch_layer_sizes.split(","))
         )
 
+    # pyre-fixme[16]: Module `modules` has no attribute `dlrm_train`.
     train_model = DLRMTrain(
         embedding_bag_collection=EmbeddingBagCollection(
             tables=eb_configs, device=torch.device("meta")
