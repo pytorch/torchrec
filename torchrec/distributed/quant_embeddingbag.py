@@ -52,7 +52,6 @@ def create_infer_embedding_bag_sharding(
         Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
     ],
     env: ShardingEnv,
-    permute_embeddings: bool = False,
 ) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(embedding_configs, env, device=None)
@@ -83,7 +82,7 @@ class ShardedQuantEmbeddingBagCollection(
             str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
         ] = {
             sharding_type: create_infer_embedding_bag_sharding(
-                sharding_type, embedding_confings, env, permute_embeddings=True
+                sharding_type, embedding_confings, env
             )
             for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
         }
