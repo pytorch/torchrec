@@ -17,7 +17,7 @@ from torchrec.distributed.test_utils.test_model import (
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
-from torchrec.modules.tower import EmbeddingTower
+from torchrec.modules.embedding_tower import EmbeddingTower
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, JaggedTensor
 
 try:

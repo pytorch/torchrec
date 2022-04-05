@@ -17,6 +17,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
     TestEBSharder,
     TestETSharder,
+    TestETCSharder,
 )
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
@@ -30,17 +31,20 @@ class SharderType(Enum):
     EMBEDDING_BAG = "embedding_bag"
     EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
     EMBEDDING_TOWER = "embedding_tower"
+    EMBEDDING_TOWER_COLLECTION = "embedding_tower_collection"
 
 
 def create_test_sharder(
     sharder_type: str, sharding_type: str, kernel_type: str
-) -> Union[TestEBSharder, TestEBCSharder, TestETSharder]:
+) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if sharder_type == SharderType.EMBEDDING_BAG.value:
         return TestEBSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
         return TestEBCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+    elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
+        return TestETCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
     else:
         raise ValueError(f"Sharder not supported {sharder_type}")
 
@@ -90,7 +94,6 @@ class ModelParallelTestShared(ModelParallelTestBase):
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
-            # pyre-ignore [6]
             model_class=model_class,
             tables=self.tables,
             weighted_tables=self.weighted_tables,

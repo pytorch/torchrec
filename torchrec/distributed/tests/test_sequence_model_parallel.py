@@ -153,7 +153,6 @@ class SequenceModelParallelTest(ModelParallelTestBase):
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
-            # pyre-ignore [6]
             model_class=model_class,
             tables=self.tables,
             embedding_groups=self.embedding_groups,

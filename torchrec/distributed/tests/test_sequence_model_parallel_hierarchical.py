@@ -26,7 +26,6 @@ from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
     TestSequenceTowerSparseNN,
 )
-from torchrec.distributed.tower_sharding import EmbeddingTowerSharder
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.test_utils import (
@@ -112,7 +111,6 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
             callable=self._test_sharding_single_rank,
             world_size=world_size,
             local_size=local_size,
-            # pyre-ignore [6]
             model_class=model_class,
             tables=self.tables,
             embedding_groups=self.embedding_groups,

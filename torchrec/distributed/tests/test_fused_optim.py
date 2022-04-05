@@ -187,7 +187,7 @@ class ModelParallelTest(ModelParallelTestBase):
             callable=self._test_optim_single_rank,
             world_size=world_size,
             local_size=local_size,
-            model_class=cast(TestSparseNNBase, TestSparseNN),
+            model_class=TestSparseNN,
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             embedding_groups=self.embedding_groups,
