@@ -87,12 +87,6 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="dataset for experiment, current support criteo_1tb, criteo_kaggle",
     )
     parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=2,
-        help="number of dataloader workers",
-    )
-    parser.add_argument(
         "--num_embeddings",
         type=int,
         default=100_000,
@@ -184,11 +178,11 @@ def _evaluate(
     stage: str,
 ) -> Tuple[float, float]:
     """
-    Evaluate model. Computes and prints metrics including AUROC and Accuracy. Helper
+    Evaluates model. Computes and prints metrics including AUROC and Accuracy. Helper
     function for train_val_test.
 
     Args:
-        limit_batches (Optional[int]): number of batches
+        limit_batches (Optional[int]): number of batches.
         train_pipeline (TrainPipelineSparseDist): pipelined model.
         iterator (Iterator[Batch]): Iterator used for val/test batches.
         next_iterator (Iterator[Batch]): Iterator used for the next phase (either train
@@ -246,7 +240,7 @@ def _train(
     epoch: int,
 ) -> None:
     """
-    Train model for 1 epoch. Helper function for train_val_test.
+    Trains model for 1 epoch. Helper function for train_val_test.
 
     Args:
         args (argparse.Namespace): parsed command line args.

@@ -41,7 +41,7 @@ def _get_random_dataloader(
         batch_size=None,
         batch_sampler=None,
         pin_memory=args.pin_memory,
-        num_workers=args.num_workers if hasattr(args, "num_workers") else 0,
+        num_workers=0,
     )
 
 
