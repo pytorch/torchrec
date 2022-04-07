@@ -18,7 +18,11 @@ from pyre_extensions import none_throws
 from torch import nn, distributed as dist
 from torch.utils.data import DataLoader
 from torchrec import EmbeddingBagCollection
-from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
+from torchrec.datasets.criteo import (
+    DEFAULT_CAT_NAMES,
+    DEFAULT_INT_NAMES,
+    TOTAL_TRAINING_SAMPLES,
+)
 from torchrec.datasets.utils import Batch
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -162,8 +166,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--shuffle_batches",
-        type=bool,
-        default=False,
+        dest="shuffle_batches",
+        action="store_true",
         help="Shuffle each batch during training.",
     )
     parser.add_argument(
@@ -172,7 +176,32 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=None,
         help="Frequency at which validation will be run within an epoch.",
     )
-    parser.set_defaults(pin_memory=None, mmap_mode=None)
+    parser.add_argument(
+        "--change_lr",
+        dest="change_lr",
+        action="store_true",
+        help="Flag to determine whether learning rate should be changed part way through training.",
+    )
+    parser.add_argument(
+        "--lr_change_point",
+        type=float,
+        default=0.80,
+        help="The point through training at which learning rate should change to the value set by"
+        " lr_after_change_point. The default value is 0.80 which means that 80% through the total iterations (totaled"
+        " across all epochs), the learning rate will change.",
+    )
+    parser.add_argument(
+        "--lr_after_change_point",
+        type=float,
+        default=0.20,
+        help="Learning rate after change point in first epoch.",
+    )
+    parser.set_defaults(
+        pin_memory=None,
+        mmap_mode=None,
+        shuffle_batches=None,
+        change_lr=None,
+    )
     return parser.parse_args(argv)
 
 
@@ -288,11 +317,21 @@ def _train(
         else itertools.islice(iterator, limit_batches),
         itertools.islice(next_iterator, TRAIN_PIPELINE_STAGES - 1),
     )
+    samples_per_trainer = TOTAL_TRAINING_SAMPLES / dist.get_world_size() * args.epochs
 
     # Infinite iterator instead of while-loop to leverage tqdm progress bar.
     for it in tqdm(itertools.count(), desc=f"Epoch {epoch}"):
         try:
             train_pipeline.progress(combined_iterator)
+            if args.change_lr and (
+                (it * (epoch + 1) / samples_per_trainer) > args.lr_change_point
+            ):  # progress made through the epoch
+                print(f"Changing learning rate to: {args.lr_after_change_point}")
+                optimizer = train_pipeline._optimizer
+                lr = args.lr_after_change_point
+                for g in optimizer.param_groups:
+                    g["lr"] = lr
+
             if (
                 args.validation_freq_within_epoch
                 and it % args.validation_freq_within_epoch == 0

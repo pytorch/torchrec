@@ -46,6 +46,7 @@ DEFAULT_COLUMN_NAMES: List[str] = [
     *DEFAULT_INT_NAMES,
     *DEFAULT_CAT_NAMES,
 ]
+TOTAL_TRAINING_SAMPLES = 4195197692  # Number of rows across days 0-22 (day 23 is used for validation and testing)
 
 COLUMN_TYPE_CASTERS: List[Callable[[Union[int, str]], Union[int, str]]] = [
     lambda val: safe_cast(val, int, 0),
