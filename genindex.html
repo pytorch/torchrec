@@ -427,13 +427,15 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup">BaseEmbeddingLookup (class in torchrec.distributed.embedding_types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder">BaseEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor">BaseFeatureProcessor (class in torchrec.modules.feature_processor)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.distributed.embedding_types)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder">BaseQuantEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding">BaseRwEmbeddingSharding (class in torchrec.distributed.sharding.rw_sharding)</a>
 </li>
@@ -465,11 +467,17 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.BATCHED_QUANT">BATCHED_QUANT (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.BATCHED_QUANT_UVM">BATCHED_QUANT_UVM (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING">BATCHED_QUANT_UVM_CACHING (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
+</li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils">BinaryCriteoUtils (class in torchrec.datasets.criteo)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.bucketize_kjt_before_all2all">bucketize_kjt_before_all2all() (in module torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.bytes_to_gb">bytes_to_gb() (in module torchrec.distributed.planner.utils)</a>
+</li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.bytes_to_mb">bytes_to_mb() (in module torchrec.distributed.planner.utils)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -539,12 +547,14 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ParameterSharding.compute_kernel">(torchrec.distributed.types.ParameterSharding attribute)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.compute_kernel_to_embedding_location">compute_kernel_to_embedding_location() (in module torchrec.distributed.embedding_types)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels">compute_kernels (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.compute_kernels">compute_kernels() (torchrec.distributed.embedding_types.BaseEmbeddingSharder method)</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder.compute_kernels">(torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.compute_kernels">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.compute_kernels">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
@@ -559,6 +569,8 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.convert_list_of_modules_to_modulelist">convert_list_of_modules_to_modulelist() (in module torchrec.modules.utils)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.copy">copy() (torchrec.distributed.model_parallel.DistributedModelParallel method)</a>
 
       <ul>
@@ -567,8 +579,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.copy">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.Tracer.create_arg">create_arg() (torchrec.fx.tracer.Tracer method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.create_context">create_context() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
@@ -813,6 +823,8 @@
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingBagCollection">(class in torchrec.quant.embedding_modules)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionAwaitable">EmbeddingBagCollectionAwaitable (class in torchrec.distributed.embeddingbag)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface">EmbeddingBagCollectionInterface (class in torchrec.modules.embedding_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionSharder">EmbeddingBagCollectionSharder (class in torchrec.distributed.embeddingbag)</a>
@@ -824,11 +836,7 @@
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingCollection">EmbeddingCollection (class in torchrec.modules.embedding_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionAwaitable">EmbeddingCollectionAwaitable (class in torchrec.distributed.embedding)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingCollectionAwaitable">(class in torchrec.distributed.embeddingbag)</a>
 </li>
-      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionContext">EmbeddingCollectionContext (class in torchrec.distributed.embedding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionSharder">EmbeddingCollectionSharder (class in torchrec.distributed.embedding)</a>
@@ -1084,7 +1092,11 @@
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.fused_params">fused_params (torchrec.distributed.embedding_types.BaseEmbeddingSharder property)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.fused_params">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder property)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.optim.html#torchrec.optim.fused.FusedOptimizer">FusedOptimizer (class in torchrec.optim.fused)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.fused.FusedOptimizerModule">FusedOptimizerModule (class in torchrec.optim.fused)</a>
@@ -2132,10 +2144,12 @@
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.sharding_types">sharding_types (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.sharding_types">sharding_types() (torchrec.distributed.embedding_types.BaseEmbeddingSharder method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionSharder.sharding_types">sharding_types() (torchrec.distributed.embedding.EmbeddingCollectionSharder method)</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder.sharding_types">(torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.sharding_types">(torchrec.distributed.embedding_types.BaseEmbeddingSharder method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.sharding_types">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.sharding_types">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
@@ -2275,7 +2289,7 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.storage_usage">storage_usage() (torchrec.distributed.embedding_types.BaseEmbeddingSharder method)</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder.storage_usage">(torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.storage_usage">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.storage_usage">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
@@ -3177,37 +3191,6 @@
         <div class="footer-links-col follow-us-col">
           <ul>
             <li class="list-title">Stay Connected</li>
-            <li>
-              <div id="mc_embed_signup">
-                <form
-                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
-                  method="post"
-                  id="mc-embedded-subscribe-form"
-                  name="mc-embedded-subscribe-form"
-                  class="email-subscribe-form validate"
-                  target="_blank"
-                  novalidate>
-                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
-                    <div class="mc-field-group">
-                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
-                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
-                    </div>
-
-                    <div id="mce-responses" class="clear">
-                      <div class="response" id="mce-error-response" style="display:none"></div>
-                      <div class="response" id="mce-success-response" style="display:none"></div>
-                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
-
-                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
-
-                    <div class="clear">
-                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-            </li>
           </ul>
 
           <div class="footer-social-icons">

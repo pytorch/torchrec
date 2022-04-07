@@ -331,7 +331,7 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_features</strong> (<em>int</em>) – dimensionality of the dense input features.</p></li>
 <li><p><strong>hidden_layer_size</strong> (<em>int</em>) – sizes of the hidden layers in the DenseArch.</p></li>
-<li><p><strong>embedding_dim</strong> (<em>int</em>) – the same size of the embedding_dimension of sparseArch</p></li>
+<li><p><strong>embedding_dim</strong> (<em>int</em>) – the same size of the embedding_dimension of sparseArch.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – default compute device.</p></li>
 </ul>
 </dd>
@@ -349,10 +349,10 @@ the embedding_dimension of the EmbeddingBagCollection embeddings.</p>
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.deepfm.DenseArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – size B X <cite>num_features</cite></p>
+<dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – size B X <cite>num_features</cite>.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output tensor of size B X D</p>
+<dd class="field-even"><p>an output tensor of size B X D.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>torch.Tensor</p>
@@ -407,12 +407,12 @@ the <cite>fm_in_features</cite> should be: 2 * 3 + 4 * 5.</p></li>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – size B X D</p></li>
-<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – size F * D X B</p></li>
+<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – tensor of size B X D.</p></li>
+<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of size F * D X B.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output tensor of size B X (D + DI + 1)</p>
+<dd class="field-even"><p>an output tensor of size B X (D + DI + 1).</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>torch.Tensor</p>
@@ -451,7 +451,7 @@ the <cite>fm_in_features</cite> should be: 2 * 3 + 4 * 5.</p></li>
 <dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – </p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output tensor of size B X 1</p>
+<dd class="field-even"><p>an output tensor of size B X 1.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>torch.Tensor</p>
@@ -509,9 +509,8 @@ interaction module.</p></li>
     <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
     <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 
-<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 <span class="n">sparse_nn</span> <span class="o">=</span> <span class="n">SimpleDeepFMNN</span><span class="p">(</span>
     <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span> <span class="n">hidden_layer_size</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">over_embedding_dim</span><span class="o">=</span><span class="mi">5</span>
 <span class="p">)</span>
@@ -541,12 +540,12 @@ interaction module.</p></li>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – </p></li>
-<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p></li>
+<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – the dense features.</p></li>
+<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – the sparse features.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>logits with size B X 1</p>
+<dd class="field-even"><p>logits with size B X 1.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>torch.Tensor</p>
@@ -569,8 +568,8 @@ interaction module.</p></li>
 EmbeddingBag and embedding features of each collection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a
-collection of pooled embeddings</p>
+<dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a collection of
+pooled embeddings.</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -580,9 +579,8 @@ collection of pooled embeddings</p>
 <span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
 <span class="p">)</span>
-<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 
-<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 
 <span class="c1">#     0       1        2  &lt;-- batch</span>
 <span class="c1"># 0   [0,1] None    [2]</span>
@@ -606,7 +604,7 @@ collection of pooled embeddings</p>
 <dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output KJT of size F * D X B</p>
+<dd class="field-even"><p>an output KJT of size F * D X B.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
@@ -651,7 +649,8 @@ used to define <cite>SparseArch</cite>.</p></li>
 <li><p><strong>dense_in_features</strong> (<em>int</em>) – the dimensionality of the dense input features.</p></li>
 <li><p><strong>dense_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>DenseArch</cite>.</p></li>
 <li><p><strong>over_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>OverArch</cite>.
-The output dimension of the <cite>InteractionArch</cite> should not be manually specified here.</p></li>
+The output dimension of the <cite>InteractionArch</cite> should not be manually
+specified here.</p></li>
 <li><p><strong>dense_device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
 </ul>
 </dd>
@@ -669,9 +668,8 @@ The output dimension of the <cite>InteractionArch</cite> should not be manually 
    <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
    <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
 <span class="p">)</span>
-<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 
-<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">DLRM</span><span class="p">(</span>
    <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
    <span class="n">dense_in_features</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
@@ -704,12 +702,15 @@ The output dimension of the <cite>InteractionArch</cite> should not be manually 
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – </p></li>
-<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p></li>
+<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – the dense features.</p></li>
+<li><p><strong>sparse_features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – the sparse features.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>torch.Tensor</p>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>logits.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -750,7 +751,7 @@ The output dimension of the <cite>InteractionArch</cite> should not be manually 
 <dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – an input tensor of dense features.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>an output tensor of size B X D</p>
+<dd class="field-even"><p>an output tensor of size B X D.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>torch.Tensor</p>
@@ -776,12 +777,15 @@ and the dense layer itself (all concatenated).</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The dimensionality of the <cite>dense_features</cite> (D) is expected to match the
-dimensionality of the <cite>sparse_features</cite> so that the dot products between them can be
-computed.</p>
+dimensionality of the <cite>sparse_features</cite> so that the dot products between them
+can be computed.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>num_sparse_features</strong> – int = F</p>
+<dd class="field-odd"><p><strong>num_sparse_features</strong> (<em>int</em>) – <ol class="upperalpha simple" start="6">
+<li></li>
+</ol>
+</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -805,7 +809,7 @@ computed.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X D.</p></li>
-<li><p><strong>sparse_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X F X D</p></li>
+<li><p><strong>sparse_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X F X D.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -850,10 +854,13 @@ computed.</p>
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.OverArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>features</strong> – torch.Tensor</p>
+<dd class="field-odd"><p><strong>features</strong> (<em>torch.Tensor</em>) – </p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor  - size B X layer_sizes[-1]</p>
+<dd class="field-even"><p>size B X layer_sizes[-1]</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -873,8 +880,8 @@ computed.</p>
 and embedding features of each collection.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a
-collection of pooled embeddings</p>
+<dd class="field-odd"><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – represents a collection of
+pooled embeddings.</p>
 </dd>
 </dl>
 <p>Example:</p>
@@ -884,9 +891,8 @@ collection of pooled embeddings</p>
 <span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
 <span class="p">)</span>
-<span class="n">ebc_config</span> <span class="o">=</span> <span class="n">EmbeddingBagCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 
-<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ebc_config</span><span class="p">)</span>
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
 <span class="n">sparse_arch</span> <span class="o">=</span> <span class="n">SparseArch</span><span class="p">(</span><span class="n">embedding_bag_collection</span><span class="p">)</span>
 
 <span class="c1">#     0       1        2  &lt;-- batch</span>
@@ -911,7 +917,10 @@ collection of pooled embeddings</p>
 <dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – an input tensor of sparse features.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>torch.Tensor of shape B X F X D</p>
+<dd class="field-even"><p>tensor of shape B X F X D.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
 </dd>
 </dl>
 </dd></dl>
@@ -931,7 +940,7 @@ collection of pooled embeddings</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.models.dlrm.choose">
 <span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">choose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.choose" title="Permalink to this definition">¶</a></dt>
-<dd><p>Simple implementation of math.comb for python 3.7 compatibility.</p>
+<dd><p>Simple implementation of math.comb for Python 3.7 compatibility.</p>
 </dd></dl>
 
 </section>
@@ -1094,37 +1103,6 @@ provided (e.g. <cite>SparseArch</cite>, <cite>DenseArch</cite>, <cite>Interactio
         <div class="footer-links-col follow-us-col">
           <ul>
             <li class="list-title">Stay Connected</li>
-            <li>
-              <div id="mc_embed_signup">
-                <form
-                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
-                  method="post"
-                  id="mc-embedded-subscribe-form"
-                  name="mc-embedded-subscribe-form"
-                  class="email-subscribe-form validate"
-                  target="_blank"
-                  novalidate>
-                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
-                    <div class="mc-field-group">
-                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
-                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
-                    </div>
-
-                    <div id="mce-responses" class="clear">
-                      <div class="response" id="mce-error-response" style="display:none"></div>
-                      <div class="response" id="mce-success-response" style="display:none"></div>
-                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
-
-                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
-
-                    <div class="clear">
-                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-            </li>
           </ul>
 
           <div class="footer-social-icons">
