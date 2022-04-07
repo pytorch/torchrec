@@ -166,6 +166,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=False,
         help="Shuffle each batch during training.",
     )
+    parser.add_argument(
+        "--validation_freq_within_epoch",
+        type=int,
+        default=None,
+        help="Frequency at which validation will be run within an epoch.",
+    )
     parser.set_defaults(pin_memory=None, mmap_mode=None)
     return parser.parse_args(argv)
 
@@ -194,7 +200,7 @@ def _evaluate(
         stage (str): "val" or "test".
 
     Returns:
-        None.
+        Tuple[float, float]: auroc and accuracy result
     """
     model = train_pipeline._model
     model.eval()
@@ -220,8 +226,9 @@ def _evaluate(
     for _ in tqdm(iter(int, 1), desc=f"Evaluating {stage} set"):
         try:
             _loss, logits, labels = train_pipeline.progress(combined_iterator)
-            auroc(logits, labels)
-            accuracy(logits, labels)
+            preds = torch.sigmoid(logits)
+            auroc(preds, labels)
+            accuracy(preds, labels)
         except StopIteration:
             break
     auroc_result = auroc.compute().item()
@@ -237,6 +244,7 @@ def _train(
     train_pipeline: TrainPipelineSparseDist,
     iterator: Iterator[Batch],
     next_iterator: Iterator[Batch],
+    within_epoch_val_dataloader: DataLoader,
     epoch: int,
 ) -> None:
     """
@@ -246,11 +254,15 @@ def _train(
         args (argparse.Namespace): parsed command line args.
         train_pipeline (TrainPipelineSparseDist): pipelined model.
         iterator (Iterator[Batch]): Iterator used for training batches.
-        next_iterator (Iterator[Batch]): Iterator used for validation batches. Used to
-            queue up the next TRAIN_PIPELINE_STAGES - 1 batches before train_val_test
-            switches to validation mode. This is done so that when validation starts,
-            the first output train_pipeline generates an output for is the 1st
-            validation batch (as opposed to a buffered train batch).
+        next_iterator (Iterator[Batch]): Iterator used for validation batches
+            in between epochs. Used to queue up the next TRAIN_PIPELINE_STAGES - 1
+            batches before train_val_test switches to validation mode. This is done
+            so that when validation starts, the first output train_pipeline generates
+            an output for is the 1st validation batch (as opposed to a buffered train
+            batch).
+        within_epoch_val_dataloader (DataLoader): Dataloader to create iterators for
+            validation within an epoch. This is only used if
+            args.validation_freq_within_epoch is specified.
         epoch (int): Which epoch the model is being trained on.
 
     Returns:
@@ -278,9 +290,20 @@ def _train(
     )
 
     # Infinite iterator instead of while-loop to leverage tqdm progress bar.
-    for _ in tqdm(iter(int, 1), desc=f"Epoch {epoch}"):
+    for it in tqdm(itertools.count(), desc=f"Epoch {epoch}"):
         try:
             train_pipeline.progress(combined_iterator)
+            if (
+                args.validation_freq_within_epoch
+                and it % args.validation_freq_within_epoch == 0
+            ):
+                _evaluate(
+                    args.limit_val_batches,
+                    train_pipeline,
+                    iter(within_epoch_val_dataloader),
+                    iterator,
+                    "val",
+                )
         except StopIteration:
             break
 
@@ -324,7 +347,9 @@ def train_val_test(
     test_iterator = iter(test_dataloader)
     for epoch in range(args.epochs):
         val_iterator = iter(val_dataloader)
-        _train(args, train_pipeline, train_iterator, val_iterator, epoch)
+        _train(
+            args, train_pipeline, train_iterator, val_iterator, val_dataloader, epoch
+        )
         train_iterator = iter(train_dataloader)
         val_next_iterator = (
             test_iterator if epoch == args.epochs - 1 else train_iterator
