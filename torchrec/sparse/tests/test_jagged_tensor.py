@@ -7,14 +7,18 @@
 
 
 import unittest
-from typing import List
+from typing import Tuple, List
 
 import torch
+from torch.testing import FileCheck
+from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
     JaggedTensor,
     KeyedTensor,
     KeyedJaggedTensor,
 )
+
+torch.fx.wrap("len")
 
 
 class TestJaggedTensor(unittest.TestCase):
@@ -402,6 +406,116 @@ JaggedTensor({
 })
 """,
         )
+
+
+class TestJaggedTensorTracing(unittest.TestCase):
+    def test_jagged_tensor(self) -> None:
+        class ModuleCreateAndAccessJaggedTensor(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: int) -> int:
+                features = JaggedTensor(
+                    values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                    weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+                    offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+                )
+                return (
+                    features.values().numel()
+                    + features.weights().numel()
+                    + features.lengths().numel()
+                    + features.offsets().numel()
+                )
+
+        class ModuleUseJaggedTensorAsInputAndOutput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: JaggedTensor) -> JaggedTensor:
+                return JaggedTensor(
+                    input.values(),
+                    input.weights(),
+                    lengths=input.lengths(),
+                    offsets=input.offsets(),
+                )
+
+        class ModuleUseJaggedTensorAsInput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: JaggedTensor) -> int:
+                return (
+                    input.values().numel()
+                    + input.weights().numel()
+                    + input.lengths().numel()
+                    + input.offsets().numel()
+                )
+
+        class ModuleUseJaggedTensorAsOutput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(
+                self,
+                values: torch.Tensor,
+                weights: torch.Tensor,
+                lengths: torch.Tensor,
+            ) -> JaggedTensor:
+                return JaggedTensor(values, weights, lengths)
+
+        # Case 1: JaggedTensor is only used as an output of the root module.
+        m = ModuleUseJaggedTensorAsOutput()
+        gm = symbolic_trace(m)
+        FileCheck().check("JaggedTensor").check("return jagged_tensor").run(gm.code)
+
+        values = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7])
+        weights = torch.tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        lengths = torch.tensor([0, 2, 2, 3, 4, 5, 8])
+
+        ref_jt = m(values, weights, lengths)
+        traced_jt = gm(values, weights, lengths)
+
+        self.assertTrue(torch.equal(traced_jt.values(), ref_jt.values()))
+        self.assertTrue(torch.equal(traced_jt.weights(), ref_jt.weights()))
+        self.assertTrue(torch.equal(traced_jt.lengths(), ref_jt.lengths()))
+
+        # Case 2: JaggedTensor is only used as an input of the root module.
+        m = ModuleUseJaggedTensorAsInput()
+        gm = symbolic_trace(m)
+        FileCheck().check("values()").check("numel()").check("weights").check(
+            "lengths"
+        ).check("offsets").run(gm.code)
+
+        input = JaggedTensor(
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+        ref_out = m(input)
+        traced_out = gm(input)
+        self.assertEqual(ref_out, traced_out)
+
+        # Case 3: JaggedTensor is used as both an input and an output of the root module.
+        m = ModuleUseJaggedTensorAsInputAndOutput()
+        gm = symbolic_trace(m)
+        FileCheck().check("values()").check("weights").check("lengths").check(
+            "offsets"
+        ).check("JaggedTensor").run(gm.code)
+
+        ref_out = m(input)
+        traced_out = gm(input)
+        self.assertTrue(torch.equal(traced_out.values(), ref_out.values()))
+        self.assertTrue(torch.equal(traced_out.weights(), ref_out.weights()))
+        self.assertTrue(torch.equal(traced_out.lengths(), ref_out.lengths()))
+
+        # Case 4: JaggedTensor is only used within the root module and not as part of
+        # the root module's input/output interface.
+        m = ModuleCreateAndAccessJaggedTensor()
+        gm = symbolic_trace(m)
+        FileCheck().check("return 29").check_not("JaggedTensor").run(gm.code)
+        ref_out = m(8)
+        traced_out = gm(8)
+        self.assertEqual(ref_out, traced_out)
 
 
 class TestKeyedJaggedTensor(unittest.TestCase):
@@ -893,6 +1007,138 @@ KeyedJaggedTensor({
             keys=["index_0", "index_1"],
         ).to(torch.device("cuda"))
         j.record_stream(torch.cuda.current_stream())
+
+
+class TestKeyedJaggedTensorTracing(unittest.TestCase):
+    def test_create_and_access_keyed_jagged_tensor(self) -> None:
+        class ModuleCreateAndAccessKeyedJaggedTensor(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: int) -> int:
+                features = KeyedJaggedTensor.from_offsets_sync(
+                    values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+                    weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+                    keys=["index_0", "index_1"],
+                    offsets=torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8]),
+                )
+                return (
+                    len(features.keys())
+                    + features.values().numel()
+                    + features.weights().numel()
+                    + features.lengths().numel()
+                    + features.offsets().numel()
+                )
+
+        # Case 4: KeyedJaggedTensor is only used within the root module and not as part of
+        # the root module's input/output interface.
+        m = ModuleCreateAndAccessKeyedJaggedTensor()
+        gm = symbolic_trace(m)
+        FileCheck().check("return 35").check_not("KeyedJaggedTensor").run(gm.code)
+        ref_out = m(8)
+        traced_out = gm(8)
+        self.assertEqual(ref_out, traced_out)
+        torch.jit.script(gm)
+
+    def test_use_keyed_jagged_tensor_as_input_and_output(self) -> None:
+        class ModuleUseKeyedJaggedTensorAsInputAndOutput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(
+                self, input: KeyedJaggedTensor
+            ) -> Tuple[KeyedJaggedTensor, int]:
+                output = KeyedJaggedTensor(
+                    input.keys(),
+                    input.values(),
+                    input.weights(),
+                    lengths=input.lengths(),
+                    offsets=input.offsets(),
+                )
+                return output, output._stride
+
+        # Case 3: KeyedJaggedTensor is used as both an input and an output of the root module.
+        m = ModuleUseKeyedJaggedTensorAsInputAndOutput()
+        gm = symbolic_trace(m)
+        FileCheck().check("KeyedJaggedTensor").check("keys()").check("values()").check(
+            "._stride"
+        ).run(gm.code)
+        input = KeyedJaggedTensor.from_offsets_sync(
+            values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+            weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+            keys=["index_0", "index_1"],
+            offsets=torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8]),
+        )
+        ref_out = m(input)
+        traced_out = gm(input)
+        self.assertEqual(ref_out[1], traced_out[1])
+        torch.jit.script(gm)
+
+    def test_use_keyed_jagged_tensor_as_input(self) -> None:
+        class ModuleUseKeyedJaggedTensorAsInput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: KeyedJaggedTensor) -> int:
+                return (
+                    len(input.keys())
+                    + input.values().numel()
+                    + input.weights().numel()
+                    + input.lengths().numel()
+                    + input.offsets().numel()
+                )
+
+        # Case 2: KeyedJaggedTensor is only used as an input of the root module.
+        m = ModuleUseKeyedJaggedTensorAsInput()
+        gm = symbolic_trace(m)
+        FileCheck().check("KeyedJaggedTensor").check("keys()").check("len").check(
+            "values()"
+        ).check("numel()").run(gm.code)
+
+        input = KeyedJaggedTensor.from_offsets_sync(
+            values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+            weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+            keys=["index_0", "index_1"],
+            offsets=torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8]),
+        )
+        ref_out = m(input)
+        traced_out = gm(input)
+        self.assertEqual(ref_out, traced_out)
+        torch.jit.script(gm)
+
+    def test_use_keyed_jagged_tensor_as_output(self) -> None:
+        class ModuleUseKeyedJaggedTensorAsOutput(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(
+                self,
+                keys: List[str],
+                values: torch.Tensor,
+                weights: torch.Tensor,
+                lengths: torch.Tensor,
+            ) -> Tuple[KeyedJaggedTensor, int]:
+                output = KeyedJaggedTensor(keys, values, weights, lengths)
+                return output, output._stride
+
+        # Case 1: KeyedJaggedTensor is only used as an output of the root module.
+        m = ModuleUseKeyedJaggedTensorAsOutput()
+        gm = symbolic_trace(m)
+        FileCheck().check("KeyedJaggedTensor").check(
+            "return (keyed_jagged_tensor,"
+        ).run(gm.code)
+
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        keys = ["index_0", "index_1"]
+        lengths = torch.IntTensor([2, 0, 1, 1, 1, 3])
+
+        ref_out = m(keys, values, weights, lengths)
+        traced_out = gm(keys, values, weights, lengths)
+
+        self.assertEqual(ref_out[1], traced_out[1])
+        self.assertTrue(torch.equal(traced_out[0].offsets(), ref_out[0].offsets()))
+        torch.jit.script(gm)
 
 
 class TestKeyedTensor(unittest.TestCase):
