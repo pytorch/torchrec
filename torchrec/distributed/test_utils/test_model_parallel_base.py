@@ -224,6 +224,7 @@ class ModelParallelTestBase(unittest.TestCase):
         TODO: may need to add some checks that only does this if we're running on a
         single GPU (which should be most cases).
         """
+
         for group in plan.plan:
             for _, parameter_sharding in plan.plan[group].items():
                 if (

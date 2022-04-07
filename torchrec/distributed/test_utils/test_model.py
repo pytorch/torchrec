@@ -518,29 +518,31 @@ class TestTowerSparseNN(TestSparseNNBase):
         # TODO: after adding planner support for tower_module, we can random assign
         # tables to towers, but for now the match planner default layout
         self.tower_0 = EmbeddingTower(
-            embedding_module=EmbeddingBagCollection(tables=[tables[0], tables[2]]),
-            interaction_module=TestTowerInteraction(tables=[tables[0], tables[2]]),
+            embedding_module=EmbeddingBagCollection(tables=[tables[2], tables[3]]),
+            interaction_module=TestTowerInteraction(tables=[tables[2], tables[3]]),
         )
         self.tower_1 = EmbeddingTower(
-            embedding_module=EmbeddingBagCollection(tables=[tables[1]]),
-            interaction_module=TestTowerInteraction(tables=[tables[1]]),
+            embedding_module=EmbeddingBagCollection(tables=[tables[0]]),
+            interaction_module=TestTowerInteraction(tables=[tables[0]]),
         )
-        self.tower_2 = EmbeddingTower(
-            embedding_module=EmbeddingBagCollection(
-                # pyre-ignore [16]
-                tables=[weighted_tables[0]],
-                is_weighted=True,
-            ),
-            interaction_module=TestTowerInteraction(tables=[weighted_tables[0]]),
+        self.sparse_arch = TestSparseArch(
+            [tables[1]],
+            # pyre-ignore [16]
+            [weighted_tables[0]],
+            sparse_device,
         )
+        self.sparse_arch_feature_names: List[str] = (
+            tables[1].feature_names + weighted_tables[0].feature_names
+        )
+
         self.over = nn.Linear(
             in_features=8
             # pyre-ignore [16]
             + self.tower_0.interaction.linear.out_features
             # pyre-ignore [16]
             + self.tower_1.interaction.linear.out_features
-            # pyre-ignore [16]
-            + self.tower_2.interaction.linear.out_features,
+            + tables[1].embedding_dim * len(tables[1].feature_names)
+            + weighted_tables[0].embedding_dim * len(weighted_tables[0].feature_names),
             out_features=16,
             device=dense_device,
         )
@@ -552,9 +554,12 @@ class TestTowerSparseNN(TestSparseNNBase):
         dense_r = self.dense(input.float_features)
         tower_0_r = self.tower_0(input.idlist_features)
         tower_1_r = self.tower_1(input.idlist_features)
-        tower_2_r = self.tower_2(input.idscore_features)
+        sparse_arch_r = self.sparse_arch(input.idlist_features, input.idscore_features)
+        sparse_arch_r = torch.cat(
+            [sparse_arch_r[f] for f in self.sparse_arch_feature_names], dim=1
+        )
 
-        sparse_r = torch.cat([tower_0_r, tower_1_r, tower_2_r], dim=1)
+        sparse_r = torch.cat([tower_0_r, tower_1_r, sparse_arch_r], dim=1)
         over_r = self.over(torch.cat([dense_r, sparse_r], dim=1))
         pred = torch.sigmoid(torch.mean(over_r, dim=1))
         if self.training:
