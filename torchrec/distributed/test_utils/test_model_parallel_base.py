@@ -8,7 +8,7 @@
 import multiprocessing
 import os
 import unittest
-from typing import cast, Callable, Dict, List, Optional, Tuple, Union
+from typing import cast, Callable, Dict, List, Optional, Tuple, Union, Type
 
 import torch
 import torch.distributed as dist
@@ -224,6 +224,7 @@ class ModelParallelTestBase(unittest.TestCase):
         TODO: may need to add some checks that only does this if we're running on a
         single GPU (which should be most cases).
         """
+
         for group in plan.plan:
             for _, parameter_sharding in plan.plan[group].items():
                 if (
@@ -302,7 +303,7 @@ class ModelParallelTestBase(unittest.TestCase):
         tables: List[EmbeddingTableConfig],
         backend: str,
         optim: EmbOptimType,
-        model_class: TestSparseNNBase,
+        model_class: Type[TestSparseNNBase],
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,

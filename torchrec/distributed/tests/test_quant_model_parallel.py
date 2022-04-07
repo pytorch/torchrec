@@ -50,27 +50,6 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         return None
 
 
-def _quantize_sharded(module: nn.Module, inplace: bool) -> nn.Module:
-    qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver,
-        weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
-    )
-    return quant.quantize_dynamic(
-        module,
-        qconfig_spec={
-            GroupedEmbeddingBag: qconfig,
-            BatchedFusedEmbeddingBag: qconfig,
-            BatchedDenseEmbeddingBag: qconfig,
-        },
-        mapping={
-            GroupedEmbeddingBag: QuantBatchedEmbeddingBag,
-            BatchedFusedEmbeddingBag: QuantBatchedEmbeddingBag,
-            BatchedDenseEmbeddingBag: QuantBatchedEmbeddingBag,
-        },
-        inplace=inplace,
-    )
-
-
 def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver,
@@ -86,31 +65,6 @@ def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
         },
         inplace=inplace,
     )
-
-
-class QuantModelParallelTest(unittest.TestCase):
-    def setUp(self) -> None:
-        num_features = 4
-        num_weighted_features = 2
-
-        self.tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 1) * 4,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(num_features)
-        ]
-        self.weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 1) * 4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(num_weighted_features)
-        ]
 
 
 class QuantModelParallelModelCopyTest(unittest.TestCase):

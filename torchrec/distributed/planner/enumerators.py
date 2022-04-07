@@ -29,6 +29,7 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.modules.embedding_tower import EmbeddingTowerCollection, EmbeddingTower
 
 
 class EmbeddingEnumerator(Enumerator):
@@ -85,10 +86,17 @@ class EmbeddingEnumerator(Enumerator):
         }
         sharding_options: List[ShardingOption] = []
 
-        for child_path, child_module in module.named_modules():
+        named_modules_queue = [("", module)]
+        while named_modules_queue:
+            child_path, child_module = named_modules_queue.pop()
             sharder_key = sharder_name(type(child_module))
             sharder = sharder_map.get(sharder_key, None)
             if not sharder:
+                for n, m in child_module.named_children():
+                    if child_path != "":
+                        named_modules_queue.append((child_path + "." + n, m))
+                    else:
+                        named_modules_queue.append((n, m))
                 continue
 
             for name, param in sharder.shardable_parameters(child_module).items():
@@ -119,6 +127,12 @@ class EmbeddingEnumerator(Enumerator):
                             sharding_type=sharding_type,
                             col_wise_shard_dim=col_wise_shard_dim,
                         )
+                        dependency = None
+                        if isinstance(child_module, EmbeddingTower):
+                            dependency = child_path
+                        elif isinstance(child_module, EmbeddingTowerCollection):
+                            tower_index = _get_tower_index(name, child_module)
+                            dependency = child_path + ".tower_" + str(tower_index)
                         sharding_options.append(
                             ShardingOption(
                                 name=name,
@@ -135,6 +149,7 @@ class EmbeddingEnumerator(Enumerator):
                                     Shard(size=size, offset=offset)
                                     for size, offset in zip(shard_sizes, shard_offsets)
                                 ],
+                                dependency=dependency,
                             )
                         )
 
@@ -313,3 +328,15 @@ def _calculate_cw_shard_sizes_and_offsets(
         [0, block_size * rank] for rank in range(num_col_wise_shards)
     ]
     return shard_sizes, shard_offsets
+
+
+def _get_tower_index(name: str, child_module: EmbeddingTowerCollection) -> int:
+    for i, tower in enumerate(child_module.towers):
+        for n, m in tower.named_modules():
+            if isinstance(m, nn.Embedding) or isinstance(m, nn.EmbeddingBag):
+                table_name = n.split(".")[-1]
+                if name == table_name:
+                    return i
+    raise RuntimeError(
+        f"couldn't get the tower index for table {name}, tower collection: {child_module}"
+    )

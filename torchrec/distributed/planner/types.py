@@ -8,7 +8,7 @@
 import abc
 from dataclasses import field, dataclass
 from enum import Enum
-from typing import Optional, List, Dict, Tuple, Union
+from typing import Optional, List, Dict, Tuple, Union, cast
 
 import torch
 from torch import nn
@@ -194,6 +194,7 @@ class ShardingOption:
     # relevant to planner output, must be populated if sharding option
     # part of final solution
     shards: List[Shard] = field(default_factory=list)
+    dependency: Optional[str] = None
 
     @property
     def fqn(self) -> str:
@@ -210,6 +211,13 @@ class ShardingOption:
     @property
     def num_inputs(self) -> int:
         return len(self.input_lengths)
+
+    @property
+    def total_storage(self) -> Storage:
+        storage: Storage = Storage(hbm=0, ddr=0)
+        for shard in self.shards:
+            storage += cast(Storage, shard.storage)
+        return storage
 
     def __hash__(self) -> int:
         return hash(
