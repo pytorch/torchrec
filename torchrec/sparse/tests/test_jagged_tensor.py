@@ -748,6 +748,42 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         m = MyModule()
         torch.jit.script(m)
 
+    def test_tracable(self) -> None:
+        # This module will simply go through the constructor of the
+        # KeyedJaggedTensor to construct it with multiple different batch sizes
+        class MyModule(torch.nn.Module):
+            def forward(
+                self, offsets: torch.Tensor, values: torch.Tensor, weights: torch.Tensor
+            ) -> torch.Tensor:
+                j = KeyedJaggedTensor.from_offsets_sync(
+                    offsets=offsets,
+                    values=values,
+                    weights=weights,
+                    keys=["index_0", "index_1"],
+                )
+                return j["index_0"].offsets()
+
+        sample_2 = (
+            torch.tensor([0, 2, 2]),
+            torch.arange(2),
+            torch.arange(2 * 10),
+        )
+        sample_6 = (
+            torch.tensor([0, 2, 2, 3, 4, 6, 8]),
+            torch.arange(8),
+            torch.arange(8 * 10),
+        )
+        m = MyModule()
+        model_eager_traced: torch.jit.ScriptModule = torch.jit.trace(
+            m, sample_2, strict=False
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_2), torch.tensor([0, 2]))
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_6), torch.tensor([0, 2, 2, 3]))
+        )
+
     def test_to(self) -> None:
         j = KeyedJaggedTensor.from_offsets_sync(
             offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),

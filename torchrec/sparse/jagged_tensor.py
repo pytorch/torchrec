@@ -474,6 +474,21 @@ def _maybe_compute_stride_kjt(
     return stride
 
 
+# Specialization of _maybe_compute_stride_kjt that is scripted, so it will produce
+# correct results in case of usage with jit.tracing.
+# This module is returning torch.Tensor instead of int, because ji.trace doesn't
+# support int type at the current moment.
+# pyre-ignore[56]: Pyre was not able to infer the type of the decorator
+@torch.jit.script
+def _maybe_compute_stride_kjt_scripted(
+    keys: List[str],
+    stride: Optional[int],
+    lengths: Optional[torch.Tensor],
+    offsets: Optional[torch.Tensor],
+) -> torch.Tensor:
+    return torch.tensor([_maybe_compute_stride_kjt(keys, stride, lengths, offsets)])
+
+
 def _maybe_compute_length_per_key(
     keys: List[str],
     stride: int,
@@ -664,7 +679,13 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             _assert_tensor_has_no_elements_or_has_integers(lengths, "lengths")
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
-        stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
+        if torch.jit.is_tracing():
+            stride = _maybe_compute_stride_kjt_scripted(keys, stride, lengths, offsets)[
+                0
+            ]
+        else:
+            stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
+
         self._stride: int = stride
 
         # lazy fields
