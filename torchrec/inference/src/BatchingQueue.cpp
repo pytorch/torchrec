@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -123,20 +124,23 @@ void BatchingQueue::stop() {
 }
 
 void BatchingQueue::createBatch() {
-  auto startTime = std::chrono::steady_clock::now();
+  std::optional<std::chrono::time_point<std::chrono::steady_clock>> startTime;
   size_t batchSize = 0;
   std::vector<std::shared_ptr<PredictionRequest>> requests;
   std::vector<RequestContext> contexts;
-  int roundRobinIdx_ = 0;
+  int roundRobinIdx = 0;
 
   while (!stopping_) {
-    const auto now = std::chrono::steady_clock::now();
-    size_t numTimedOutRequests = 0;
     bool full = false;
 
     requestQueue_.withWLock([&](auto& queue) {
       while (!queue.empty()) {
         auto& front = queue.front();
+
+        if (!startTime) {
+          startTime = front.addedTime;
+        }
+
         if (batchSize + front.request->batch_size > config_.maxBatchSize) {
           full = true;
           break;
@@ -157,23 +161,22 @@ void BatchingQueue::createBatch() {
     });
 
     if (full ||
-        (std::chrono::steady_clock::now() - startTime >
-         config_.batchingInterval)) {
-      batchingQueues_[roundRobinIdx_++]->blockingWrite(BatchingQueueEntry{
-          .requests = std::move(requests),
-          .contexts = std::move(contexts),
-          .numTimedOutRequests = numTimedOutRequests});
+        (startTime &&
+         (std::chrono::steady_clock::now() - *startTime >=
+          config_.batchingInterval))) {
+      batchingQueues_[roundRobinIdx++]->blockingWrite(BatchingQueueEntry{
+          .requests = std::move(requests), .contexts = std::move(contexts)});
 
-      startTime = std::chrono::steady_clock::now();
+      startTime.reset();
       batchSize = 0;
-      roundRobinIdx_ %= worldSize_;
+      roundRobinIdx %= worldSize_;
       requests.clear();
       contexts.clear();
     }
 
     if (!full) {
       /* sleep override */
-      std::this_thread::sleep_until(now + config_.batchingInterval);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
 }

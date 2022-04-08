@@ -90,7 +90,6 @@ class BatchingQueue {
   struct BatchingQueueEntry {
     std::vector<std::shared_ptr<PredictionRequest>> requests;
     std::vector<RequestContext> contexts;
-    size_t numTimedOutRequests = 0;
   };
 
   struct BatchQueueEntry {
