@@ -59,7 +59,6 @@ BatchingQueue::BatchingQueue(
     int worldSize)
     : config_(config),
       cbs_(std::move(cbs)),
-      batchQueues_(worldSize),
       stopping_(false),
       worldSize_(worldSize) {
   for (const auto& [_, batchingFuncName] : config_.batchingMetadata) {
@@ -86,11 +85,6 @@ BatchingQueue::BatchingQueue(
         pinMemory(i);
       });
     }
-    callbackThreads_.emplace_back([&, i] {
-      c10::InferenceMode guard;
-      folly::setThreadName(fmt::format("CallBack-GPU-{}", i));
-      processCallback(i);
-    });
   }
 }
 
@@ -115,9 +109,6 @@ void BatchingQueue::stop() {
   // TODO: properly drain the queue before stopping the threads.
   batchingThread_.join();
   for (auto& thread : memPinnerThreads_) {
-    thread.join();
-  }
-  for (auto& thread : callbackThreads_) {
     thread.join();
   }
 }
@@ -218,8 +209,6 @@ void BatchingQueue::pinMemory(int gpuIdx) {
           }
         }
 
-        BatchQueueEntry batchedEntry;
-
         c10::Dict<std::string, at::Tensor> forwardArgs;
         auto combineForwardArgs =
             [&](std::unordered_map<std::string, at::Tensor> map) {
@@ -239,47 +228,15 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               batchItems));
         }
 
-        batchedEntry.batch = std::make_shared<PredictionBatch>(PredictionBatch{
+        auto batch = std::make_shared<PredictionBatch>(PredictionBatch{
             combinedBatchSize, std::move(forwardArgs), std::move(contexts)});
-        batchedEntry.batch->cuda();
-        batchedEntry.event.record();
-        batchedEntry.addedTime = std::chrono::steady_clock::now();
-        batchQueues_[gpuIdx].withWLock(
-            [batchedEntry = std::move(batchedEntry)](auto& queue) mutable {
-              queue.push(std::move(batchedEntry));
-            });
+        batch->cuda();
+        batch->event->record();
+        cbs_[gpuIdx](batch);
       }
     } catch (const std::exception& ex) {
       LOG(FATAL) << "Error batching requests, ex: " << folly::exceptionStr(ex);
     }
-  }
-}
-
-void BatchingQueue::processCallback(int gpuIdx) {
-  while (!stopping_) {
-    std::shared_ptr<PredictionBatch> batch;
-    size_t tensorSize = 0;
-    std::chrono::time_point<std::chrono::steady_clock> batchAddedTime;
-
-    batchQueues_[gpuIdx].withWLock([&](auto& queue) mutable {
-      if (queue.empty()) {
-        return;
-      }
-      if (auto& front = queue.front(); front.event.query()) {
-        batch = std::move(front.batch);
-        batchAddedTime = front.addedTime;
-        tensorSize = batch->size();
-        queue.pop();
-      }
-    });
-
-    if (!batch) {
-      /* sleep override */
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-      continue;
-    }
-
-    cbs_[gpuIdx](std::move(batch));
   }
 }
 

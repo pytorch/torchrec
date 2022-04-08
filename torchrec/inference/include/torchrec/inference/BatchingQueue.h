@@ -47,6 +47,10 @@ struct PredictionBatch {
   std::chrono::time_point<std::chrono::steady_clock> enqueueTime =
       std::chrono::steady_clock::now();
 
+  std::unique_ptr<at::cuda::CUDAEvent> event =
+      std::make_unique<at::cuda::CUDAEvent>(
+          cudaEventBlockingSync | cudaEventDisableTiming);
+
   void cuda();
 
   size_t size() const;
@@ -93,18 +97,9 @@ class BatchingQueue {
     size_t numTimedOutRequests = 0;
   };
 
-  struct BatchQueueEntry {
-    std::shared_ptr<PredictionBatch> batch;
-    at::cuda::CUDAEvent event;
-    std::chrono::time_point<std::chrono::steady_clock> addedTime;
-    size_t tensorSize;
-  };
-
   void createBatch();
 
   void pinMemory(int gpuIdx);
-
-  void processCallback(int gpuIdx);
 
   const Config config_;
 
@@ -114,9 +109,7 @@ class BatchingQueue {
   std::vector<BatchQueueCb> cbs_;
   std::thread batchingThread_;
   std::vector<std::thread> memPinnerThreads_;
-  std::vector<std::thread> callbackThreads_;
   folly::Synchronized<std::queue<QueryQueueEntry>> requestQueue_;
-  std::vector<folly::Synchronized<std::queue<BatchQueueEntry>>> batchQueues_;
   std::vector<std::shared_ptr<folly::MPMCQueue<BatchingQueueEntry>>>
       batchingQueues_;
   std::atomic<bool> stopping_;

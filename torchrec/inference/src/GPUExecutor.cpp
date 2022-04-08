@@ -155,15 +155,6 @@ void GPUExecutor::process(int idx) {
       break;
     }
 
-    if (std::chrono::steady_clock::now() - batch->enqueueTime >
-        std::chrono::milliseconds(FLAGS_copy_timeout)) {
-      for (auto& context : batch->contexts) {
-        PredictionException ex("GPU Copy timeout");
-        context.promise.setException(std::move(ex));
-      }
-      continue;
-    }
-
     if (batch->batchSize == 0) {
       continue;
     }
@@ -174,26 +165,24 @@ void GPUExecutor::process(int idx) {
 
     try {
       RECORD_USER_SCOPE("Forward");
+      // Block current stream until H2D finishes.
+      batch->event->block(streams[rank_]);
       predictions = model.self.attr("__call__")({std::move(batch->forwardArgs)})
                         .toIValue();
     } catch (const std::exception& ex) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    // TODO: Open source event pool and use it here.
-    auto event = std::make_unique<at::cuda::CUDAEvent>(
-        cudaEventBlockingSync | cudaEventDisableTiming);
-    event->record();
+    batch->event->record();
 
     completionExecutor_->add(
         // Can not bind the method directly because of the unique_ptr of item.
         [batch = std::move(batch),
          predictions = std::move(predictions),
-         resultSplitFunc = resultSplitFunc_,
-         event = std::move(event)]() mutable {
+         resultSplitFunc = resultSplitFunc_]() mutable {
           RECORD_USER_SCOPE("CompletionStage")
           // Wait for D2H to finish.
-          event->synchronize();
+          batch->event->synchronize();
 
           size_t offset = 0;
           for (auto& context : batch->contexts) {
