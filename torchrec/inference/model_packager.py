@@ -60,12 +60,18 @@ class PredictFactoryPackager:
         predict_factory: Type[PredictFactory],
         configs: Dict[str, Any],
         output: Union[str, Path, BinaryIO],
+        extra_files: Dict[str, str],
+        loader_code: str = LOADER_CODE,
     ) -> None:
         with PackageExporter(output) as pe:
             cls.set_extern_modules(pe)
             cls.set_mocked_modules(pe)
             pe.intern("**")
-            cls._save_predict_factory(pe, predict_factory, configs)
+            for k, v in extra_files.items():
+                pe.save_text("extra_files", k, v)
+            cls._save_predict_factory(
+                pe, predict_factory, configs, loader_code=loader_code
+            )
 
     @classmethod
     def _save_predict_factory(
@@ -73,9 +79,10 @@ class PredictFactoryPackager:
         pe: PackageExporter,
         predict_factory: Type[PredictFactory],
         configs: Dict[str, Any],
+        loader_code: str = LOADER_CODE,
     ) -> None:
         # Save loader entry point.
-        code = LOADER_CODE.replace("%PACKAGE%", predict_factory.__module__).replace(
+        code = loader_code.replace("%PACKAGE%", predict_factory.__module__).replace(
             "%CLASS%", predict_factory.__name__
         )
         pe.save_source_string(module_name=LOADER_MODULE, src=code)

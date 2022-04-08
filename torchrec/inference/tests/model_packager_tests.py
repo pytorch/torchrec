@@ -34,5 +34,8 @@ class ModelPackagerTest(unittest.TestCase):
         with tempfile.NamedTemporaryFile() as file:
             output = file.name
             TestPredictFactoryPackager.save_predict_factory(
-                TestPredictFactory, {"model_name": "sparsenn"}, output
+                TestPredictFactory,
+                {"model_name": "sparsenn"},
+                output,
+                extra_files={"metadata": "test"},
             )
