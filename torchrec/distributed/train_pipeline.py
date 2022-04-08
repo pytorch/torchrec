@@ -538,7 +538,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if self._model.training:
             if dist.get_rank() == 0:
                 print("Writing LOSS to log!")
-                self.losseslog = open("/home/ubuntu/repos/torchrec-fork/examples/dlrm/losses2.txt", "a")
+                self.losseslog = open("/home/ubuntu/repos/torchrec-fork/examples/dlrm/losses_main_branch_test.txt", "a")
                 line = str(losses.detach().cpu().numpy().tolist()) + "\n"
                 self.losseslog.write(line)
                 self.losseslog.close()            
