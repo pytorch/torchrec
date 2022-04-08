@@ -28,6 +28,8 @@ from torchrec.distributed.model_parallel import DistributedModelParallel, Sharde
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
 from torchrec.streamable import Pipelineable, Multistreamable
 
+from torch import distributed as dist
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -534,6 +536,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
 
         if self._model.training:
+            if dist.get_rank() == 0:
+                print("Writing LOSS to log!")
+                self.losseslog = open("/home/ubuntu/repos/torchrec-fork/examples/dlrm/losses2.txt", "a")
+                line = str(losses.detach().cpu().numpy().tolist()) + "\n"
+                self.losseslog.write(line)
+                self.losseslog.close()            
             # Backward
             with record_function("## backward ##"):
                 torch.sum(losses, dim=0).backward()
@@ -542,6 +550,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function("## optimizer ##"):
                 # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
+                #list(self._model.modules())[5]._optim._optims[0][1]._emb_module.flush()
 
         self._batch_i = batch_ip1
         self._batch_ip1 = batch_ip2
