@@ -132,7 +132,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--seed",
-        type=float,
+        type=int,
         help="Random seed for reproducibility.",
     )
     parser.add_argument(
