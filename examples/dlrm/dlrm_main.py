@@ -32,6 +32,14 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from tqdm import tqdm
 
+from torchrec.distributed.types import ShardingEnv
+
+from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
+
+from torchrec.distributed.planner.types import Topology
+
+from torchrec.modules.embedding_configs import DataType
+
 
 # OSS import
 try:
@@ -436,6 +444,7 @@ def main(argv: List[str]) -> None:
     args = parse_args(argv)
 
     rank = int(os.environ["LOCAL_RANK"])
+    local_size = int(os.getenv("LOCAL_SIZE", 8))
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
@@ -469,6 +478,7 @@ def main(argv: List[str]) -> None:
         EmbeddingBagConfig(
             name=f"t_{feature_name}",
             embedding_dim=args.embedding_dim,
+            data_type=DataType.FP16,
             num_embeddings=none_throws(args.num_embeddings_per_feature)[feature_idx]
             if args.num_embeddings is None
             else args.num_embeddings,
@@ -498,10 +508,25 @@ def main(argv: List[str]) -> None:
         EmbeddingBagCollectionSharder(fused_params=fused_params),
     ]
 
+    pg = dist.group.WORLD
+    assert pg is not None, "Process group is not initialized"
+    env = ShardingEnv.from_process_group(pg)
+
+    planner = EmbeddingShardingPlanner(
+        topology=Topology(
+            world_size=env.world_size, compute_device=device.type, local_world_size=local_size
+        )
+    )
+
+    sharders = cast(List[ModuleSharder[nn.Module]], sharders)
+
+    if pg is not None:
+        plan = planner.collective_plan(train_model, sharders, pg)
+    else:
+        plan = planner.plan(train_model, sharders)
+
     model = DistributedModelParallel(
-        module=train_model,
-        device=device,
-        sharders=cast(List[ModuleSharder[nn.Module]], sharders),
+        module=train_model, device=device, plan=plan, sharders=sharders
     )
     dense_optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
