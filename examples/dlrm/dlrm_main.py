@@ -31,14 +31,9 @@ from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from tqdm import tqdm
-
 from torchrec.distributed.types import ShardingEnv
-
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
-
 from torchrec.distributed.planner.types import Topology
-
-from torchrec.modules.embedding_configs import DataType
 
 
 # OSS import
@@ -67,7 +62,8 @@ TRAIN_PIPELINE_STAGES = 3  # Number of stages in TrainPipelineSparseDist.
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="torchrec dlrm example trainer")
+    parser = argparse.ArgumentParser(
+        description="torchrec dlrm example trainer")
     parser.add_argument(
         "--epochs", type=int, default=1, help="number of epochs to train"
     )
@@ -325,7 +321,8 @@ def _train(
         else itertools.islice(iterator, limit_batches),
         itertools.islice(next_iterator, TRAIN_PIPELINE_STAGES - 1),
     )
-    samples_per_trainer = TOTAL_TRAINING_SAMPLES / dist.get_world_size() * args.epochs
+    samples_per_trainer = TOTAL_TRAINING_SAMPLES / dist.get_world_size() * \
+        args.epochs
 
     # Infinite iterator instead of while-loop to leverage tqdm progress bar.
     for it in tqdm(itertools.count(), desc=f"Epoch {epoch}"):
@@ -334,7 +331,8 @@ def _train(
             if args.change_lr and (
                 (it * (epoch + 1) / samples_per_trainer) > args.lr_change_point
             ):  # progress made through the epoch
-                print(f"Changing learning rate to: {args.lr_after_change_point}")
+                print(
+                    f"Changing learning rate to: {args.lr_after_change_point}")
                 optimizer = train_pipeline._optimizer
                 lr = args.lr_after_change_point
                 for g in optimizer.param_groups:
@@ -478,8 +476,8 @@ def main(argv: List[str]) -> None:
         EmbeddingBagConfig(
             name=f"t_{feature_name}",
             embedding_dim=args.embedding_dim,
-            data_type=DataType.FP16,
-            num_embeddings=none_throws(args.num_embeddings_per_feature)[feature_idx]
+            num_embeddings=none_throws(args.num_embeddings_per_feature)[
+                feature_idx]
             if args.num_embeddings is None
             else args.num_embeddings,
             feature_names=[feature_name],
@@ -497,8 +495,10 @@ def main(argv: List[str]) -> None:
             tables=eb_configs, device=torch.device("meta")
         ),
         dense_in_features=len(DEFAULT_INT_NAMES),
-        dense_arch_layer_sizes=list(map(int, args.dense_arch_layer_sizes.split(","))),
-        over_arch_layer_sizes=list(map(int, args.over_arch_layer_sizes.split(","))),
+        dense_arch_layer_sizes=list(
+            map(int, args.dense_arch_layer_sizes.split(","))),
+        over_arch_layer_sizes=list(
+            map(int, args.over_arch_layer_sizes.split(","))),
         dense_device=device,
     )
     fused_params = {
