@@ -442,7 +442,7 @@ def main(argv: List[str]) -> None:
     args = parse_args(argv)
 
     rank = int(os.environ["LOCAL_RANK"])
-    local_size = int(os.getenv("LOCAL_SIZE", 8))
+    local_size = int(os.getenv("LOCAL_WORLD_SIZE", 8))
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
