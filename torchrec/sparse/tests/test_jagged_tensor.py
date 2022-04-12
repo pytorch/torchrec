@@ -862,42 +862,6 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         m = MyModule()
         torch.jit.script(m)
 
-    def test_tracable(self) -> None:
-        # This module will simply go through the constructor of the
-        # KeyedJaggedTensor to construct it with multiple different batch sizes
-        class MyModule(torch.nn.Module):
-            def forward(
-                self, offsets: torch.Tensor, values: torch.Tensor, weights: torch.Tensor
-            ) -> torch.Tensor:
-                j = KeyedJaggedTensor.from_offsets_sync(
-                    offsets=offsets,
-                    values=values,
-                    weights=weights,
-                    keys=["index_0", "index_1"],
-                )
-                return j["index_0"].offsets()
-
-        sample_2 = (
-            torch.tensor([0, 2, 2]),
-            torch.arange(2),
-            torch.arange(2 * 10),
-        )
-        sample_6 = (
-            torch.tensor([0, 2, 2, 3, 4, 6, 8]),
-            torch.arange(8),
-            torch.arange(8 * 10),
-        )
-        m = MyModule()
-        model_eager_traced: torch.jit.ScriptModule = torch.jit.trace(
-            m, sample_2, strict=False
-        )
-        self.assertTrue(
-            torch.equal(model_eager_traced(*sample_2), torch.tensor([0, 2]))
-        )
-        self.assertTrue(
-            torch.equal(model_eager_traced(*sample_6), torch.tensor([0, 2, 2, 3]))
-        )
-
     def test_to(self) -> None:
         j = KeyedJaggedTensor.from_offsets_sync(
             offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
@@ -1009,7 +973,66 @@ KeyedJaggedTensor({
         j.record_stream(torch.cuda.current_stream())
 
 
-class TestKeyedJaggedTensorTracing(unittest.TestCase):
+class TestKeyedJaggedTensorScripting(unittest.TestCase):
+    def test_scriptable_forward(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(self, input: KeyedJaggedTensor) -> torch.Tensor:
+                values = input["any"].values()
+                return values
+
+        m = MyModule()
+        torch.jit.script(m)
+
+    def test_scriptable_init(self) -> None:
+        def create_kjt() -> KeyedJaggedTensor:
+            return KeyedJaggedTensor.from_offsets_sync(
+                values=torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+                weights=torch.tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+                keys=["index_0", "index_1"],
+                offsets=torch.tensor([0, 0, 2, 2, 3, 4, 5, 5, 8], dtype=torch.int32),
+            )
+
+        # assert that we can script KJT creation
+        torch.jit.script(create_kjt)
+
+
+class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
+    def test_jit_tracable(self) -> None:
+        # This module will simply go through the constructor of the
+        # KeyedJaggedTensor to construct it with multiple different batch sizes
+        class MyModule(torch.nn.Module):
+            def forward(
+                self, offsets: torch.Tensor, values: torch.Tensor, weights: torch.Tensor
+            ) -> torch.Tensor:
+                j = KeyedJaggedTensor.from_offsets_sync(
+                    offsets=offsets,
+                    values=values,
+                    weights=weights,
+                    keys=["index_0", "index_1"],
+                )
+                return j["index_0"].offsets()
+
+        sample_2 = (
+            torch.tensor([0, 2, 2]),
+            torch.arange(2),
+            torch.arange(2 * 10),
+        )
+        sample_6 = (
+            torch.tensor([0, 2, 2, 3, 4, 6, 8]),
+            torch.arange(8),
+            torch.arange(8 * 10),
+        )
+        m = MyModule()
+        model_eager_traced: torch.jit.ScriptModule = torch.jit.trace(
+            m, sample_2, strict=False
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_2), torch.tensor([0, 2]))
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_6), torch.tensor([0, 2, 2, 3]))
+        )
+
     def test_create_and_access_keyed_jagged_tensor(self) -> None:
         class ModuleCreateAndAccessKeyedJaggedTensor(torch.nn.Module):
             def __init__(self):

@@ -73,7 +73,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
     * F: features (keys)
     * B: batch size
-    * L: Length of sparse features (jagged)
+    * L: length of sparse features (jagged)
 
     and outputs a `KeyedTensor` with values of the form [B * (F * D)] where:
 
@@ -165,7 +165,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
         Args:
-            features (KeyedJaggedTensor):
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
 
         Returns:
             KeyedTensor
@@ -210,18 +210,18 @@ class EmbeddingCollection(nn.Module):
 
     * F: features (keys)
     * B: batch size
-    * L: Length of sparse features (variable)
+    * L: length of sparse features (variable)
 
     and outputs `Dict[feature (key), JaggedTensor]`.
     Each `JaggedTensor` contains values of the form (B * L) X D
     where:
 
     * B: batch size
-    * L: Length of sparse features (jagged)
+    * L: length of sparse features (jagged)
     * D: each feature's (key's) embedding dimension and lengths are of the form L
 
     Args:
-        tables (List[EmbeddingBagConfig]): list of embedding tables.
+        tables (List[EmbeddingConfig]): list of embedding tables.
         device (Optional[torch.device]): default compute device.
 
     Example::
@@ -232,9 +232,8 @@ class EmbeddingCollection(nn.Module):
         e2_config = EmbeddingConfig(
             name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
         )
-        ec_config = EmbeddingCollectionConfig(tables=[e1_config, e2_config])
 
-        ec = EmbeddingCollection(config=ec_config)
+        ec = EmbeddingCollection(tables=[e1_config, e2_config])
 
         #     0       1        2  <-- batch
         # 0   [0,1] None    [2]
@@ -312,7 +311,7 @@ class EmbeddingCollection(nn.Module):
     ) -> Dict[str, JaggedTensor]:
         """
         Args:
-            features (KeyedJaggedTensor):
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
 
         Returns:
             Dict[str, JaggedTensor]
