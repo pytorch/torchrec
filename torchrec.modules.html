@@ -1010,7 +1010,7 @@ so it makes sense to retrict in a non-fused version as well.</p>
 <ul class="simple">
 <li><p>F: features (keys)</p></li>
 <li><p>B: batch size</p></li>
-<li><p>L: Length of sparse features (jagged)</p></li>
+<li><p>L: length of sparse features (jagged)</p></li>
 </ul>
 <p>and outputs a <cite>KeyedTensor</cite> with values of the form [B * (F * D)] where:</p>
 <ul class="simple">
@@ -1074,7 +1074,7 @@ so it makes sense to retrict in a non-fused version as well.</p>
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p>
+<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of form [F X B X L].</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>KeyedTensor</p>
@@ -1140,20 +1140,20 @@ where:</p>
 <ul class="simple">
 <li><p>F: features (keys)</p></li>
 <li><p>B: batch size</p></li>
-<li><p>L: Length of sparse features (variable)</p></li>
+<li><p>L: length of sparse features (variable)</p></li>
 </ul>
 <p>and outputs <cite>Dict[feature (key), JaggedTensor]</cite>.
 Each <cite>JaggedTensor</cite> contains values of the form (B * L) X D
 where:</p>
 <ul class="simple">
 <li><p>B: batch size</p></li>
-<li><p>L: Length of sparse features (jagged)</p></li>
+<li><p>L: length of sparse features (jagged)</p></li>
 <li><p>D: each feature’s (key’s) embedding dimension and lengths are of the form L</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tables</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><em>EmbeddingBagConfig</em></a><em>]</em>) – list of embedding tables.</p></li>
+<li><p><strong>tables</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><em>EmbeddingConfig</em></a><em>]</em>) – list of embedding tables.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
 </ul>
 </dd>
@@ -1165,9 +1165,8 @@ where:</p>
 <span class="n">e2_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
     <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
 <span class="p">)</span>
-<span class="n">ec_config</span> <span class="o">=</span> <span class="n">EmbeddingCollectionConfig</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">e1_config</span><span class="p">,</span> <span class="n">e2_config</span><span class="p">])</span>
 
-<span class="n">ec</span> <span class="o">=</span> <span class="n">EmbeddingCollection</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">ec_config</span><span class="p">)</span>
+<span class="n">ec</span> <span class="o">=</span> <span class="n">EmbeddingCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">e1_config</span><span class="p">,</span> <span class="n">e2_config</span><span class="p">])</span>
 
 <span class="c1">#     0       1        2  &lt;-- batch</span>
 <span class="c1"># 0   [0,1] None    [2]</span>
@@ -1194,7 +1193,7 @@ where:</p>
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – </p>
+<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of form [F X B X L].</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>Dict[str, JaggedTensor]</p>
