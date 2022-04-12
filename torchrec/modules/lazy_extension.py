@@ -170,8 +170,8 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         return super().apply(fn)
 
     # fmt: off
-    # pyre-ignore[2, 3, 14, 47]
-    def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs):
+    # pyre-ignore[2, 14, 47]
+    def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs) -> None:
         r"""Infers the size and initializes the parameters according to the
         provided input batch.
         Given a module that contains parameters that were declared inferrable
