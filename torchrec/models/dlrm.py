@@ -5,16 +5,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import torch
 from torch import nn
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.mlp import MLP
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-    KeyedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 def choose(n: int, k: int) -> int:

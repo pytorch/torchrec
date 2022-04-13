@@ -10,19 +10,9 @@ import unittest
 import torch
 from torch.testing import FileCheck  # @manual
 from torchrec.fx import symbolic_trace
-from torchrec.models.dlrm import (
-    choose,
-    SparseArch,
-    DenseArch,
-    InteractionArch,
-    DLRM,
-)
-from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-)
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection,
-)
+from torchrec.models.dlrm import choose, DenseArch, DLRM, InteractionArch, SparseArch
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 

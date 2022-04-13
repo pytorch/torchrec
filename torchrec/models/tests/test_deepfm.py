@@ -9,18 +9,10 @@ import unittest
 
 import torch
 from torch.testing import FileCheck  # @manual
-from torchrec.fx import Tracer
-from torchrec.fx import symbolic_trace
-from torchrec.models.deepfm import (
-    FMInteractionArch,
-    SimpleDeepFMNN,
-)
-from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-)
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection,
-)
+from torchrec.fx import symbolic_trace, Tracer
+from torchrec.models.deepfm import FMInteractionArch, SimpleDeepFMNN
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
