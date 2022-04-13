@@ -40,7 +40,6 @@ class MovieLensTest(unittest.TestCase):
     # pyre-ignore[2]
     def _create_csv(self, filename: str, rows: Iterable[Any]) -> None:
         with open(filename, "w") as f:
-            # pyre-ignore[6]: Expected `_csv._Writer` for 1st positional only parameter
             cf = csv.writer(f, delimiter=",")
             cf.writerows(rows)
 

@@ -302,6 +302,8 @@ def _train_one_epoch(
             break
     dist.all_gather_object(outputs, sum(loss_logs) / len(loss_logs))
     if dist.get_rank() == 0:
+        # pyre-fixme[6]: For 1st param expected `Iterable[Variable[_SumT (bound to
+        #  _SupportsSum)]]` but got `List[None]`.
         print(f"Epoch {epoch + 1}, average loss { (sum(outputs) or 0) /len(outputs)}")
     lr_scheduler.step()
 

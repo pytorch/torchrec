@@ -65,7 +65,6 @@ class CriteoTest(unittest.TestCase):
                         ),
                     ]
                     rows.append(row)
-                # pyre-ignore[6]
                 cf = csv.writer(f, delimiter="\t")
                 cf.writerows(rows)
             yield path

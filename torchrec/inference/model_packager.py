@@ -64,7 +64,11 @@ class PredictFactoryPackager:
         loader_code: str = LOADER_CODE,
     ) -> None:
         with PackageExporter(output) as pe:
+            # pyre-fixme[29]: `BoundMethod[abc.abstractclassmethod[None],
+            #  Type[PredictFactoryPackager]]` is not a function.
             cls.set_extern_modules(pe)
+            # pyre-fixme[29]: `BoundMethod[abc.abstractclassmethod[None],
+            #  Type[PredictFactoryPackager]]` is not a function.
             cls.set_mocked_modules(pe)
             pe.intern("**")
             for k, v in extra_files.items():
