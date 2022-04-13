@@ -147,15 +147,13 @@ def _construct_jagged_tensors(
     embedding_names: List[str],
 ) -> Dict[str, JaggedTensor]:
     ret: Dict[str, JaggedTensor] = {}
-    offset_per_key = features.offset_per_key()
+    length_per_key = features.length_per_key()
     lengths = features.lengths().view(-1, features.stride())
+    values_per_key = embeddings.split(length_per_key)
     for i, key in enumerate(features.keys()):
-        start = offset_per_key[i]
-        end = offset_per_key[i + 1]
-        i_lengths = lengths[i]
         ret[key] = JaggedTensor(
-            lengths=i_lengths,
-            values=embeddings[start:end, :],
+            lengths=lengths[i],
+            values=values_per_key[i],
         )
     return ret
 
