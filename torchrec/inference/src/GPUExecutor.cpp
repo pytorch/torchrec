@@ -28,6 +28,7 @@
 #include "ATen/cuda/CUDAEvent.h"
 #include "caffe2/torch/csrc/autograd/profiler_legacy.h"
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/Types.h"
 
 DEFINE_int32(copy_timeout, 500, "");
 
@@ -37,8 +38,6 @@ DEFINE_bool(
     "emit NVTX markers/ranges to be visualized in NSight Systems");
 
 namespace torchrec {
-
-using PredictionException = std::runtime_error;
 
 namespace {
 void init_cuda_runtime() {
@@ -87,13 +86,15 @@ GPUExecutor::GPUExecutor(
     torch::deploy::ReplicatedObj model,
     int rank,
     int worldSize,
-    std::shared_ptr<torchrec::ResultSplitFunc> func)
+    std::shared_ptr<torchrec::ResultSplitFunc> func,
+    std::chrono::milliseconds queueTimeout)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
       worldSize_(worldSize),
       batches_(10'000),
-      resultSplitFunc_(func) {
+      resultSplitFunc_(func),
+      queueTimeout_(queueTimeout) {
   at::cuda::CUDAGuard guard(rank_);
   init_cuda_runtime();
 
@@ -159,6 +160,15 @@ void GPUExecutor::process(int idx) {
       continue;
     }
 
+    if (std::chrono::steady_clock::now() - batch->enqueueTime >=
+        queueTimeout_) {
+      for (auto& context : batch->contexts) {
+        PredictionException ex("GPUExecutor queue timeout");
+        context.promise.setException(std::move(ex));
+      }
+      continue;
+    }
+
     // Free session to avoid accumulating too many PyObjects.
     auto model = model_.acquireSession(&manager_->allInstances().at(idx));
     at::IValue predictions;
@@ -186,10 +196,7 @@ void GPUExecutor::process(int idx) {
 
           size_t offset = 0;
           for (auto& context : batch->contexts) {
-            if (context.isTimedOut) {
-              PredictionException ex("Batching queue timeout");
-              context.promise.setException(std::move(ex));
-            } else if (predictions.isNone()) {
+            if (predictions.isNone()) {
               PredictionException ex("Predict exception");
               context.promise.setException(std::move(ex));
             } else {

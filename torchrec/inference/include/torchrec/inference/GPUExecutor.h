@@ -32,7 +32,8 @@ class GPUExecutor {
       torch::deploy::ReplicatedObj model,
       int rank,
       int worldSize,
-      std::shared_ptr<torchrec::ResultSplitFunc> func);
+      std::shared_ptr<torchrec::ResultSplitFunc> func,
+      std::chrono::milliseconds queueTimeout);
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
   ~GPUExecutor();
@@ -52,6 +53,7 @@ class GPUExecutor {
   std::vector<std::thread> processThreads_;
   std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
   std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
+  const std::chrono::milliseconds queueTimeout_;
 };
 
 } // namespace torchrec

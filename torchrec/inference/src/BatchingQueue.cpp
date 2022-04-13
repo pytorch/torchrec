@@ -7,9 +7,6 @@
  */
 
 #include "torchrec/inference/BatchingQueue.h"
-#include "ATen/Functions.h"
-#include "ATen/core/Dict.h"
-#include "c10/cuda/CUDAFunctions.h"
 
 #include <chrono>
 #include <memory>
@@ -17,12 +14,15 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 #include <ATen/Functions.h> // @manual
+#include <ATen/core/Dict.h>
 #include <ATen/core/interned_strings.h>
 #include <ATen/record_function.h> // @manual
 #include <c10/core/Device.h>
 #include <c10/core/DeviceType.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
 #include <fmt/format.h>
@@ -32,7 +32,8 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/io/Cursor.h>
 #include <glog/logging.h>
-#include <unordered_map>
+
+#include "torchrec/inference/Types.h"
 
 using namespace std::chrono_literals;
 
@@ -128,6 +129,14 @@ void BatchingQueue::createBatch() {
       while (!queue.empty()) {
         auto& front = queue.front();
 
+        if (std::chrono::steady_clock::now() - front.addedTime >=
+            config_.queueTimeout) {
+          PredictionException ex("Batching queue timeout");
+          front.context.promise.setException(std::move(ex));
+          queue.pop();
+          continue;
+        }
+
         if (!startTime) {
           startTime = front.addedTime;
         }
@@ -138,15 +147,8 @@ void BatchingQueue::createBatch() {
         }
 
         auto& context = contexts.emplace_back(std::move(front.context));
-        context.isTimedOut =
-            std::chrono::steady_clock::now() - front.addedTime >
-            config_.queueTimeout;
-
-        if (!context.isTimedOut) {
-          requests.push_back(std::move(front.request));
-          batchSize += requests.back()->batch_size;
-        }
-
+        requests.push_back(std::move(front.request));
+        batchSize += requests.back()->batch_size;
         queue.pop();
       }
     });

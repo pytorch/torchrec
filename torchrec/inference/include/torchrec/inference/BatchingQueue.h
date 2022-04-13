@@ -34,7 +34,6 @@ namespace torchrec {
 struct RequestContext {
   uint32_t batchSize;
   folly::Promise<std::unique_ptr<PredictionResponse>> promise;
-  bool isTimedOut = false;
 };
 
 struct PredictionBatch {

@@ -48,4 +48,6 @@ struct PredictionResponse {
   c10::IValue predictions;
 };
 
+using PredictionException = std::runtime_error;
+
 } // namespace torchrec
