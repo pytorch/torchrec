@@ -21,6 +21,8 @@ from typing import (
     Iterator,
 )
 
+from torch.autograd.profiler import record_function
+
 try:
     # For python 3.6 and below, GenericMeta will be used by
     # other metaclasses (i.e. AwaitableMeta) for customized
@@ -114,9 +116,10 @@ class Awaitable(abc.ABC, Generic[W]):
         pass
 
     def wait(self) -> W:
-        ret: W = self._wait_impl()
-        for callback in self.callbacks:
-            ret = callback(ret)
+        with record_function(f"## {self.__class__.__name__} wait() ##"):
+            ret: W = self._wait_impl()
+            for callback in self.callbacks:
+                ret = callback(ret)
         return ret
 
     @property
