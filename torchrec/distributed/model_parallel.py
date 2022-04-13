@@ -16,6 +16,7 @@ from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
@@ -201,7 +202,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         if plan is None:
             planner = EmbeddingShardingPlanner(
                 topology=Topology(
-                    world_size=self._env.world_size, compute_device=self.device.type
+                    local_world_size=get_local_size(self._env.world_size),
+                    world_size=self._env.world_size,
+                    compute_device=self.device.type,
                 )
             )
             pg = self._env.process_group
