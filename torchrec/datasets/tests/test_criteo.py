@@ -9,17 +9,18 @@ import contextlib
 import os
 import random
 import tempfile
-from typing import Optional, List, Any, Dict
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from torch.utils.data import DataLoader
 from torchrec.datasets.criteo import (
     BinaryCriteoUtils,
+    CAT_FEATURE_COUNT,
+    criteo_kaggle,
+    criteo_terabyte,
     InMemoryBinaryCriteoIterDataPipe,
     INT_FEATURE_COUNT,
-    CAT_FEATURE_COUNT,
 )
-from torchrec.datasets.criteo import criteo_kaggle, criteo_terabyte
 from torchrec.datasets.test_utils.criteo_test_utils import CriteoTest
 from torchrec.datasets.utils import Batch
 

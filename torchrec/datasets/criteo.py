@@ -7,30 +7,20 @@
 
 import os
 import time
-from typing import (
-    Iterator,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Union,
-    Tuple,
-)
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.data.datapipes as dp
-from iopath.common.file_io import PathManagerFactory, PathManager
+from iopath.common.file_io import PathManager, PathManagerFactory
 from pyre_extensions import none_throws
-from torch.utils.data import IterDataPipe, IterableDataset
+from torch.utils.data import IterableDataset, IterDataPipe
 from torchrec.datasets.utils import (
+    Batch,
     LoadFiles,
+    PATH_MANAGER_KEY,
     ReadLinesFromCSV,
     safe_cast,
-    PATH_MANAGER_KEY,
-    Batch,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 

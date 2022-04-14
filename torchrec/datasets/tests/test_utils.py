@@ -13,8 +13,8 @@ from unittest.mock import Mock, patch
 from torch.utils.data import IterDataPipe
 from torchrec.datasets.utils import (
     idx_split_train_val,
-    rand_split_train_val,
     ParallelReadConcat,
+    rand_split_train_val,
 )
 
 
