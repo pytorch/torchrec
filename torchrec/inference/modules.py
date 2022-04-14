@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import List, Type, Dict, Optional, Any
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 import torch.nn as nn

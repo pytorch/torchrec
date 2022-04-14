@@ -7,7 +7,7 @@
 
 import abc
 from pathlib import Path
-from typing import Dict, Any, Union, BinaryIO, Type, TypeVar
+from typing import Any, BinaryIO, Dict, Type, TypeVar, Union
 
 from torch.package import PackageExporter
 from torchrec.inference.modules import PredictFactory
