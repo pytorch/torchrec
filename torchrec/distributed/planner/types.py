@@ -6,6 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import os
+import warnings
 from dataclasses import field, dataclass
 from enum import Enum
 from typing import Optional, List, Dict, Tuple, Union, cast
@@ -99,9 +101,15 @@ class Topology:
                 )
             )
 
-        self._local_world_size: int = (
-            local_world_size if local_world_size else world_size
-        )
+        if local_world_size is None:
+            try:
+                local_world_size = int(os.getenv("LOCAL_WORLD_SIZE"))
+            except (TypeError, ValueError):
+                warnings.warn("LOCAL_WORLD_SIZE is not set in Topology. Set it to global WORLD_SIZE. "
+                              "It is valid only when there is only ONE node in the world.")
+                local_world_size = world_size
+        self._local_world_size: int = local_world_size
+        
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
         self._batch_size = batch_size
