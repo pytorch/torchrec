@@ -59,7 +59,7 @@ class DeviceHardware:
 
     rank: int
     storage: Storage
-    perf: int = 0
+    perf: float = 0
 
 
 class Topology:

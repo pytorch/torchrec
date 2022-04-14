@@ -292,17 +292,17 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 lambda x, y: x + y,
                 [device.storage for device in self._topology.devices],
             )
-            global_storge_constraints = reduce(
+            global_storage_constraints = reduce(
                 lambda x, y: x + y,
                 [device.storage for device in storage_constraint.devices],
             )
             raise PlannerError(
-                f"Unable to find a plan for this model are evaluating {self._num_proposals} proposals."
+                f"Unable to find a plan for this model that evaluates {self._num_proposals} proposals."
                 "\nPossible solutions:"
                 f"\n  1) Increase the number of devices ({self._topology.world_size})"
                 f"\n  2) Reduce the model size ("
                 f"\n\t  Global storage: {global_storage_capacity.hbm}, "
-                f"\n\t  Available for model parallel: {global_storge_constraints},"
+                f"\n\t  Available for model parallel: {global_storage_constraints},"
                 f"\n\t  Requirement for model parallel: {lowest_storage})"
                 f"\n  3) Reduce local batch size ({self._topology.batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
