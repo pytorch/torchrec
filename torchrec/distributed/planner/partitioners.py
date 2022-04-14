@@ -7,9 +7,8 @@
 
 import copy
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict, cast
+from typing import List, cast
 
-from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.types import (
     Partitioner,
     Topology,
@@ -148,7 +147,7 @@ class GreedyPerfPartitioner(Partitioner):
         # pyre-ignore [16]
         self._host_level_devices = self._get_host_level_devices()
 
-        # we firstly partition the uniform sharding options (RW + DP)
+        # first partition the uniform sharding options (RW & DP)
         uniform_sharding_options = _get_uniform_sharding_options(plan)
         self._uniform_partition(uniform_sharding_options, self._topology.devices)
 
@@ -168,13 +167,13 @@ class GreedyPerfPartitioner(Partitioner):
             ):
                 assert (
                     len(sharding_option_group.sharding_options) == 1
-                ), f"unexpected sharding options length: {len(sharding_option_group.sharding_options)}"
+                ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
                 self._device_partition(
                     sharding_option_group.sharding_options[0], self._topology.devices
                 )
             else:
                 raise RuntimeError(
-                    f"unexpected sharding option group {sharding_option_group}"
+                    f"Unexpected sharding option group {sharding_option_group}"
                 )
         return plan
 
@@ -188,12 +187,12 @@ class GreedyPerfPartitioner(Partitioner):
                 if device.storage >= shard.storage:
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
-                    device.perf += cast(int, shard.perf)
+                    device.perf += cast(float, shard.perf)
                     success = True
                     break
             if not success:
                 raise PlannerError(
-                    f"device partition failed. can't find a rank for shard({shard}), devices: {devices}"
+                    f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}"
                 )
 
     def _cohost_partition(self, sharding_option_group: ShardingOptionGroup) -> None:
@@ -228,8 +227,8 @@ class GreedyPerfPartitioner(Partitioner):
                     success = False
                     break
             if success:
-                # successfully find a host and partitioned on that host
-                # need to update device
+                # successfully found a host and partitioned on that host
+                # need to update the devices
                 for device, device_copy in zip(devices, host_devices):
                     device.storage = device_copy.storage
                     device.perf = device_copy.perf
@@ -257,19 +256,15 @@ class GreedyPerfPartitioner(Partitioner):
         for sharding_option in sharding_options:
             if sharding_option.num_shards != len(devices):
                 raise RuntimeError(
-                    f"For uniform_partition, the num_shards({sharding_option.num_shards}) should equal to num_devices({len(devices)})"
+                    f"For a uniform partition, the number of shards ({sharding_option.num_shards}) must equal the number of devices ({len(devices)})"
                 )
             for i in range(len(devices)):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)
                 if storage_needed > devices[i].storage:
                     raise PlannerError(
-                        f"Table of size {storage_needed} GB cannot be added to any rank. mem_cap: {devices[i].storage}."
+                        f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}."
                     )
-
-        # update shards and devices after ensuring that devices
-        # have enough storage for all sharding_options
-        for sharding_option in sharding_options:
-            for shard, device in zip(sharding_option.shards, devices):
-                shard.rank = device.rank
-                device.storage -= cast(Storage, shard.storage)
-                device.perf += cast(float, shard.perf)
+                else:
+                    sharding_option.shards[i].rank = devices[i].rank
+                    devices[i].storage -= storage_needed
+                    devices[i].perf += cast(float, sharding_option.shards[i].perf)
