@@ -223,6 +223,7 @@ class EmbeddingCollection(nn.Module):
     Args:
         tables (List[EmbeddingConfig]): list of embedding tables.
         device (Optional[torch.device]): default compute device.
+        need_indices (bool): if we need to pass indices to the final lookup result dict
 
     Example::
 
@@ -259,12 +260,14 @@ class EmbeddingCollection(nn.Module):
         self,
         tables: List[EmbeddingConfig],
         device: Optional[torch.device] = None,
+        need_indices: bool = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self.embeddings: nn.ModuleDict = nn.ModuleDict()
         self.embedding_configs = tables
         self.embedding_dim: int = -1
+        self.need_indices: bool = need_indices
         table_names = set()
         shared_feature: Dict[str, bool] = {}
         for config in tables:
@@ -318,6 +321,7 @@ class EmbeddingCollection(nn.Module):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
+        jt_dict: Dict[str, JaggedTensor] = features.to_dict()
         for config, embedding_names, emb_module in zip(
             self.embedding_configs,
             self.embedding_names_by_table,
@@ -326,12 +330,13 @@ class EmbeddingCollection(nn.Module):
             for feature_name, embedding_name in zip(
                 config.feature_names, embedding_names
             ):
-                f = features[feature_name]
+                f = jt_dict[feature_name]
                 lookup = emb_module(
                     input=f.values(),
                 )
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
+                    weights=f.values() if self.need_indices else None,
                 )
         return feature_embeddings

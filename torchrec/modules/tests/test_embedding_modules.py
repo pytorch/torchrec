@@ -203,6 +203,43 @@ class EmbeddingCollectionTest(unittest.TestCase):
         self.assertEqual(sequence_embeddings["f2@t1"].values().size(), (1, 5))
         self.assertEqual(sequence_embeddings["f2@t2"].values().size(), (1, 5))
 
+    def test_indices(self) -> None:
+        tb1_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+        )
+        tb2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        ec = EmbeddingCollection(
+            tables=[tb1_config, tb2_config],
+            need_indices=True,
+        )
+
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3]),
+            offsets=torch.tensor([0, 2, 3, 3, 4]),
+        )
+
+        sequence_embeddings = ec(
+            features=id_list_features,
+        )
+        self.assertTrue(
+            torch.equal(sequence_embeddings["f1"].weights(), torch.tensor([0, 1, 2]))
+        )
+        self.assertTrue(
+            torch.equal(sequence_embeddings["f2@t1"].weights(), torch.tensor([3]))
+        )
+        self.assertTrue(
+            torch.equal(sequence_embeddings["f2@t2"].weights(), torch.tensor([3]))
+        )
+
     def test_fx(self) -> None:
         tb1_config = EmbeddingConfig(
             name="t1",
