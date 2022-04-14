@@ -27,6 +27,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
     TestEBSharder,
 )
+from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
     _copy_state_dict,
@@ -301,6 +302,6 @@ class ModelParallelTest(ModelParallelTestBase):
         )
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(
-            global_pred.cpu(), torch.cat(all_local_pred).cpu()
-        )
+        actual, expected = global_pred.cpu(), torch.cat(all_local_pred).cpu()
+        rtol, atol = _get_default_rtol_and_atol(actual, expected)
+        torch.testing.assert_close(actual, expected, rtol=rtol, atol=atol)
