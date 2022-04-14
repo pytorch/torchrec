@@ -5,12 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import (
-    Iterable,
-    List,
-    Union,
-    Tuple,
-)
+from typing import Iterable, List, Tuple, Union
 
 import numpy as np
 import torch.utils.data.datapipes as dp
@@ -18,15 +13,13 @@ import torcharrow as ta
 import torcharrow.dtypes as dt
 from torch.utils.data import IterDataPipe
 from torchrec.datasets.criteo import (
-    CriteoIterDataPipe,
-    INT_FEATURE_COUNT,
     CAT_FEATURE_COUNT,
-    DEFAULT_INT_NAMES,
+    CriteoIterDataPipe,
     DEFAULT_CAT_NAMES,
+    DEFAULT_INT_NAMES,
+    INT_FEATURE_COUNT,
 )
-from torchrec.datasets.utils import (
-    safe_cast,
-)
+from torchrec.datasets.utils import safe_cast
 
 DTYPE = dt.Struct(
     [

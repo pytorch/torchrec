@@ -8,7 +8,7 @@
 import random
 from collections import Counter
 from pathlib import Path
-from typing import Any, Optional, Dict, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd

@@ -8,7 +8,7 @@
 
 import copy
 import math
-from typing import Tuple, Callable, Optional
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.nn as nn
