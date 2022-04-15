@@ -11,18 +11,13 @@ from typing import List, Optional, Any, Dict, cast
 import torch
 from torch import nn
 from torch import quantization as quant
-from torchrec.distributed.embedding_lookup import (
-    GroupedEmbeddingBag,
-    BatchedFusedEmbeddingBag,
-    BatchedDenseEmbeddingBag,
-    QuantBatchedEmbeddingBag,
-)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
 from torchrec.distributed.types import ShardedModule, ShardingType, ShardingEnv
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -107,9 +102,9 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             list(module_copy.named_buffers()) + list(module_copy.named_parameters()),
         ):
             self.assertEquals(name, name_copy)
-            torch.testing.assert_allclose(
-                buffer.detach().cpu(), buffer_copy.detach().cpu()
-            )
+            actual, expected = buffer.detach().cpu(), buffer_copy.detach().cpu()
+            rtol, atol = _get_default_rtol_and_atol(actual, expected)
+            torch.testing.assert_close(actual, expected, rtol=rtol, atol=atol)
             self.assertEquals(buffer.detach().device, device)
             self.assertEquals(buffer_copy.detach().device, device_copy)
 

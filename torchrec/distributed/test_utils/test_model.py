@@ -776,3 +776,20 @@ class TestETCSharder(EmbeddingTowerCollectionSharder):
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
+
+
+def _get_default_rtol_and_atol(
+    actual: torch.Tensor, expected: torch.Tensor
+) -> Tuple[float, float]:
+    """
+    default tolerance values for torch.testing.assert_close,
+    consistent with the values of torch.testing.assert_allclose
+    """
+    _DTYPE_PRECISIONS = {
+        torch.float16: (1e-3, 1e-3),
+        torch.float32: (1e-4, 1e-5),
+        torch.float64: (1e-5, 1e-8),
+    }
+    actual_rtol, actual_atol = _DTYPE_PRECISIONS.get(actual.dtype, (0.0, 0.0))
+    expected_rtol, expected_atol = _DTYPE_PRECISIONS.get(expected.dtype, (0.0, 0.0))
+    return max(actual_rtol, expected_rtol), max(actual_atol, expected_atol)

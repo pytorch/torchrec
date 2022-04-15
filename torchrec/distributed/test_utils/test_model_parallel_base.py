@@ -26,6 +26,7 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestSparseNNBase,
 )
+from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
 from torchrec.distributed.types import (
     ShardingType,
     ShardingPlan,
@@ -280,7 +281,10 @@ class ModelParallelTestBase(unittest.TestCase):
         )
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        rtol, atol = _get_default_rtol_and_atol(global_pred, torch.cat(all_local_pred))
+        torch.testing.assert_close(
+            global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
+        )
 
         if _INTRA_PG is not None:
             dist.destroy_process_group(_INTRA_PG)
@@ -441,4 +445,5 @@ class InferenceModelParallelTestBase(unittest.TestCase):
             global_pred = global_model(local_input)
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(global_pred, shard_pred)
+        rtol, atol = _get_default_rtol_and_atol(global_pred, shard_pred)
+        torch.testing.assert_close(global_pred, shard_pred, rtol=rtol, atol=atol)
