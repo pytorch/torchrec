@@ -18,8 +18,8 @@ These includes:
         - `GPUExecutor` handles the forward call into the inference model inside Torch.Deploy.
 
 We implemented an example of how to use this library with the TorchRec DLRM model.
-    - `examples/dlrm/dlrm_packager.py`: this demonstrates how to export the DLRM model as a torch.package.
-    - `examples/dlrm/modules/dlrm_predict.py`: this shows how to use `PredictModule` and `PredictFactory` based on an existing model.
+    - `https://github.com/facebookresearch/dlrm/blob/main/torchrec_dlrm/dlrm_packager.py`: this demonstrates how to export the DLRM model as a torch.package.
+    - `https://github.com/facebookresearch/dlrm/blob/main/torchrec_dlrm/modules/dlrm_predict.py`: this shows how to use `PredictModule` and `PredictFactory` based on an existing model.
 """
 
 from . import model_packager, modules  # noqa  # noqa
