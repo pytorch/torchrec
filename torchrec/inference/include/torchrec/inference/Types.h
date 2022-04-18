@@ -10,11 +10,13 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <variant>
 #include <vector>
-#include "ATen/core/ivalue.h"
 
+#include <ATen/core/ivalue.h>
+#include <folly/ExceptionWrapper.h>
 #include <folly/io/IOBuf.h>
 
 namespace torchrec {
@@ -46,6 +48,8 @@ struct PredictionRequest {
 
 struct PredictionResponse {
   c10::IValue predictions;
+  // If set, the result is an exception.
+  std::optional<folly::exception_wrapper> exception;
 };
 
 using PredictionException = std::runtime_error;
