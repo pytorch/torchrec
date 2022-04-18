@@ -486,17 +486,7 @@ class ShardedEmbeddingTowerCollection(
         # create mapping of logical towers to physical towers
         tables_per_lt: List[Set[str]] = []
         for tower in module.towers:
-            lt_tables = set(tower_sharder.shardable_parameters(tower).keys())
-            tables_per_lt.append(lt_tables)
-            # check the tables in a logical tower are on same physical tower
-            found_physical_tower = False
-            for pt_tables in tables_per_pt:
-                if lt_tables.issubset(pt_tables):
-                    found_physical_tower = True
-                    break
-            assert (
-                found_physical_tower
-            ), f"tables in a logical tower must be in the same physical tower, logical tower tables: {lt_tables}, tables_per_pt: {tables_per_pt}"
+            tables_per_lt.append(set(tower_sharder.shardable_parameters(tower).keys()))
 
         logical_to_physical_order: List[List[int]] = [
             [] for _ in range(self._cross_pg_world_size)
