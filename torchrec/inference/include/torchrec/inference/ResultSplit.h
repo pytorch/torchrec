@@ -22,6 +22,8 @@ class ResultSplitFunc {
       size_t /* nOffset */,
       size_t /* nLength */,
       size_t /* nTotalLength */) = 0;
+
+  virtual c10::IValue moveToHost(c10::IValue /* result */) = 0;
 };
 
 /**

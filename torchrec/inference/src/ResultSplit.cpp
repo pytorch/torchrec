@@ -86,6 +86,23 @@ class DictOfTensorResultSplitFunc : public ResultSplitFunc {
       size_t nTotalLength) override {
     return splitDictOfTensor(result, nOffset, nLength, nTotalLength);
   }
+
+  c10::IValue moveToHost(c10::IValue result) {
+    const auto& dict = result.toGenericDict();
+    c10::impl::GenericDict moved(
+        c10::StringType::get(), c10::TensorType::get());
+    moved.reserve(dict.size());
+
+    for (auto& entry : dict) {
+      const auto& key = entry.key();
+      const auto& value = entry.value();
+      TORCH_CHECK(value.isTensor());
+      const auto& tensor = value.toTensor();
+      moved.insert(
+          key, tensor.to(at::Device(at::kCPU), /* non_blocking */ true));
+    }
+    return moved;
+  }
 };
 
 class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
@@ -96,6 +113,32 @@ class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
       size_t nLength,
       size_t nTotalLength) override {
     return splitDictOfTensors(result, nOffset, nLength, nTotalLength);
+  }
+
+  c10::IValue moveToHost(c10::IValue result) {
+    const auto& dict = result.toGenericDict();
+    c10::impl::GenericDict moved(
+        c10::StringType::get(),
+        c10::TupleType::create({c10::TensorType::get()}));
+    moved.reserve(dict.size());
+
+    for (auto& entry : dict) {
+      const auto& key = entry.key();
+      const auto& value = entry.value();
+      TORCH_CHECK(value.isTuple());
+      const auto tuple = value.toTuple();
+      std::vector<c10::IValue> values;
+      values.reserve(tuple->size());
+      for (int i = 0; i < tuple->size(); ++i) {
+        auto& elem = tuple->elements()[i];
+        TORCH_CHECK(elem.isTensor());
+        const auto& tensor = elem.toTensor();
+        values.push_back(
+            tensor.to(at::Device(at::kCPU), /* non_blocking */ true));
+      }
+      moved.insert(key, c10::ivalue::Tuple::create(std::move(values)));
+    }
+    return moved;
   }
 };
 
