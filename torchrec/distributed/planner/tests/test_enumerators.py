@@ -9,10 +9,6 @@ import unittest
 from typing import List, cast
 
 import torch
-from torchrec.distributed.embedding_tower_sharding import (
-    EmbeddingTowerSharder,
-    EmbeddingTowerCollectionSharder,
-)
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
 )
@@ -31,11 +27,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import prod
-from torchrec.distributed.test_utils.test_model import (
-    TestSparseNN,
-    TestTowerSparseNN,
-    TestTowerCollectionSparseNN,
-)
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ShardingType, ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
@@ -327,26 +319,6 @@ class AllTypesSharder(EmbeddingBagCollectionSharder):
         ]
 
 
-class TowerTWRWSharder(EmbeddingTowerSharder):
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [ShardingType.TABLE_ROW_WISE.value]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
-
-
-class TowerCollectionTWRWSharder(EmbeddingTowerCollectionSharder):
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [ShardingType.TABLE_ROW_WISE.value]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
-
-
 class TestEnumerators(unittest.TestCase):
     def setUp(self) -> None:
         self.compute_device = "cuda"
@@ -373,15 +345,6 @@ class TestEnumerators(unittest.TestCase):
             )
             for i in range(self.num_tables)
         ]
-        weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(4)
-        ]
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(
             topology=Topology(
@@ -391,12 +354,6 @@ class TestEnumerators(unittest.TestCase):
                 batch_size=self.batch_size,
             ),
             constraints=self.constraints,
-        )
-        self.tower_model = TestTowerSparseNN(
-            tables=tables, weighted_tables=weighted_tables
-        )
-        self.tower_collection_model = TestTowerCollectionSparseNN(
-            tables=tables, weighted_tables=weighted_tables
         )
 
     def test_dp_sharding(self) -> None:
@@ -661,54 +618,3 @@ class TestEnumerators(unittest.TestCase):
             self.assertNotIn(sharding_option.sharding_type, unexpected_sharding_types)
             self.assertIn(sharding_option.compute_kernel, expected_compute_kernels)
             self.assertNotIn(sharding_option.compute_kernel, unexpected_compute_kernels)
-
-    def test_tower_sharding(self) -> None:
-        # five tabels
-        # tower_0: tables[2], tables[3]
-        # tower_1: tables[0]
-        # sparse_arch:
-        #    ebc:
-        #      tables[1]
-        #      weighted_tables[0]
-        sharding_options = self.enumerator.enumerate(
-            self.tower_model,
-            [
-                cast(ModuleSharder[torch.nn.Module], TWRWSharder()),
-                cast(ModuleSharder[torch.nn.Module], TowerTWRWSharder()),
-            ],
-        )
-        self.assertEqual(len(sharding_options), 5)
-
-        self.assertEqual(sharding_options[0].dependency, None)
-        self.assertEqual(sharding_options[0].module[0], "sparse_arch.weighted_ebc")
-        self.assertEqual(sharding_options[1].dependency, None)
-        self.assertEqual(sharding_options[1].module[0], "sparse_arch.ebc")
-        self.assertEqual(sharding_options[2].dependency, "tower_1")
-        self.assertEqual(sharding_options[2].module[0], "tower_1")
-        self.assertEqual(sharding_options[3].dependency, "tower_0")
-        self.assertEqual(sharding_options[3].module[0], "tower_0")
-        self.assertEqual(sharding_options[4].dependency, "tower_0")
-        self.assertEqual(sharding_options[4].module[0], "tower_0")
-
-    def test_tower_collection_sharding(self) -> None:
-        sharding_options = self.enumerator.enumerate(
-            self.tower_collection_model,
-            [
-                cast(ModuleSharder[torch.nn.Module], TowerCollectionTWRWSharder()),
-                cast(ModuleSharder[torch.nn.Module], TowerTWRWSharder()),
-            ],
-        )
-        self.assertEqual(len(sharding_options), 4)
-
-        # table_0
-        self.assertEqual(sharding_options[0].dependency, "tower_arch.tower_0")
-        self.assertEqual(sharding_options[0].module[0], "tower_arch")
-        # table_2
-        self.assertEqual(sharding_options[1].dependency, "tower_arch.tower_0")
-        self.assertEqual(sharding_options[1].module[0], "tower_arch")
-        # table_1
-        self.assertEqual(sharding_options[2].dependency, "tower_arch.tower_1")
-        self.assertEqual(sharding_options[2].module[0], "tower_arch")
-        # weighted_table_0
-        self.assertEqual(sharding_options[3].dependency, "tower_arch.tower_2")
-        self.assertEqual(sharding_options[3].module[0], "tower_arch")
