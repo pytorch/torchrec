@@ -33,6 +33,7 @@
 #include <folly/io/Cursor.h>
 #include <glog/logging.h>
 
+#include "torchrec/inference/Exception.h"
 #include "torchrec/inference/Types.h"
 
 using namespace std::chrono_literals;
@@ -131,8 +132,7 @@ void BatchingQueue::createBatch() {
 
         if (std::chrono::steady_clock::now() - front.addedTime >=
             config_.queueTimeout) {
-          PredictionException ex("Batching queue timeout");
-          front.context.promise.setException(std::move(ex));
+          handleException(front.context.promise, "Batching queue timeout");
           queue.pop();
           continue;
         }
