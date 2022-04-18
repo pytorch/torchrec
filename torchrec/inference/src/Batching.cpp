@@ -265,9 +265,9 @@ class FloatBatchingFunc : public BatchingFunc {
       const std::string& featureName,
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
-      at::Tensor /* batchOffsets */,
+      LazyTensorRef /* batchOffsets */,
       const c10::Device& /* device */,
-      at::Tensor /* batchItems */) override {
+      LazyTensorRef /* batchItems */) override {
     return combineFloat(featureName, requests);
   }
 };
@@ -278,9 +278,9 @@ class SparseBatchingFunc : public BatchingFunc {
       const std::string& featureName,
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
-      at::Tensor /* batchOffsets */,
+      LazyTensorRef /* batchOffsets */,
       const c10::Device& /* device */,
-      at::Tensor /* batchItems */) override {
+      LazyTensorRef /* batchItems */) override {
     return combineSparse(featureName, requests, /* isWeighted */ false);
   }
 };
@@ -291,9 +291,9 @@ class WeightedSparseBatchingFunc : public BatchingFunc {
       const std::string& featureName,
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
-      at::Tensor /* batchOffsets */,
+      LazyTensorRef /* batchOffsets */,
       const c10::Device& /* device */,
-      at::Tensor /* batchItems */) override {
+      LazyTensorRef /* batchItems */) override {
     return combineSparse(featureName, requests, /* isWeighted */ true);
   }
 };
@@ -304,9 +304,9 @@ class EmbeddingBatchingFunc : public BatchingFunc {
       const std::string& featureName,
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
-      at::Tensor /* batchOffsets */,
+      LazyTensorRef /* batchOffsets */,
       const c10::Device& /* device */,
-      at::Tensor /* batchItems */) override {
+      LazyTensorRef /* batchItems */) override {
     return combineEmbedding(featureName, requests);
   }
 };

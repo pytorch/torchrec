@@ -27,6 +27,7 @@
 #include <c10/cuda/CUDAStream.h>
 #include <fmt/format.h>
 #include <folly/ExceptionString.h>
+#include <folly/Lazy.h>
 #include <folly/MPMCQueue.h>
 #include <folly/Range.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
@@ -191,28 +192,44 @@ void BatchingQueue::pinMemory(int gpuIdx) {
     try {
       if (!requests.empty() || !contexts.empty()) {
         RECORD_USER_SCOPE("PinMemory");
+
         // Combine data.
         size_t combinedBatchSize = 0;
-        auto batchOffsets = at::empty(
-            {static_cast<long>(requests.size() + 1)},
-            at::TensorOptions().dtype(at::kInt).pinned_memory(true));
-        auto batchOffsetsAcc = batchOffsets.accessor<int32_t, 1>();
-        batchOffsetsAcc[0] = 0;
         for (auto i : c10::irange(requests.size())) {
           combinedBatchSize += requests[i]->batch_size;
-          batchOffsetsAcc[i + 1] = combinedBatchSize;
         }
-        auto batchItems = at::empty(
-            {static_cast<int64_t>(combinedBatchSize)},
-            at::TensorOptions().dtype(at::kInt).pinned_memory(true));
-        auto batchItemsAcc = batchItems.accessor<int32_t, 1>();
-        for (auto i = 0; i < requests.size(); ++i) {
-          auto start = batchOffsetsAcc[i];
-          auto end = batchOffsetsAcc[i + 1];
-          for (auto j = start; j < end; ++j) {
-            batchItemsAcc[j] = i;
-          }
-        }
+
+        auto batchOffsetsLazy =
+            folly::lazy<std::function<at::Tensor()>>([&]() -> at::Tensor {
+              size_t batchSize = 0;
+              auto batchOffsets = at::empty(
+                  {static_cast<long>(requests.size() + 1)},
+                  at::TensorOptions().dtype(at::kInt).pinned_memory(true));
+              auto batchOffsetsAcc = batchOffsets.accessor<int32_t, 1>();
+              batchOffsetsAcc[0] = 0;
+              for (auto i : c10::irange(requests.size())) {
+                batchSize += requests[i]->batch_size;
+                batchOffsetsAcc[i + 1] = batchSize;
+              }
+              return batchOffsets;
+            });
+
+        auto batchItemsLazy =
+            folly::lazy<std::function<at::Tensor()>>([&]() -> at::Tensor {
+              auto batchItems = at::empty(
+                  {static_cast<int64_t>(combinedBatchSize)},
+                  at::TensorOptions().dtype(at::kInt).pinned_memory(true));
+              auto batchItemsAcc = batchItems.accessor<int32_t, 1>();
+              auto batchOffsetsAcc = batchOffsetsLazy().accessor<int32_t, 1>();
+              for (auto i = 0; i < requests.size(); ++i) {
+                auto start = batchOffsetsAcc[i];
+                auto end = batchOffsetsAcc[i + 1];
+                for (auto j = start; j < end; ++j) {
+                  batchItemsAcc[j] = i;
+                }
+              }
+              return batchItems;
+            });
 
         c10::Dict<std::string, at::Tensor> forwardArgs;
         auto combineForwardArgs =
@@ -228,9 +245,9 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               featureName,
               requests,
               combinedBatchSize,
-              batchOffsets,
+              batchOffsetsLazy,
               c10::Device(c10::kCUDA, gpuIdx),
-              batchItems));
+              batchItemsLazy));
         }
 
         auto batch = std::make_shared<PredictionBatch>(PredictionBatch{
