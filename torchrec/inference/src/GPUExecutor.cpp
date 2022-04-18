@@ -147,6 +147,8 @@ void GPUExecutor::process(int idx) {
   }
   at::cuda::CUDAMultiStreamGuard streamGuard(streams);
   at::cuda::CUDAGuard deviceGuard(rank_);
+  auto d2hStream =
+      at::cuda::getStreamFromPool(/* isHighPriority */ true, rank_);
 
   while (true) {
     std::shared_ptr<PredictionBatch> batch;
@@ -182,16 +184,24 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
-    batch->event->record();
-
     completionExecutor_->add(
         // Can not bind the method directly because of the unique_ptr of item.
         [batch = std::move(batch),
          predictions = std::move(predictions),
-         resultSplitFunc = resultSplitFunc_]() mutable {
-          RECORD_USER_SCOPE("CompletionStage")
-          // Wait for D2H to finish.
-          batch->event->synchronize();
+         resultSplitFunc = resultSplitFunc_,
+         rank = rank_,
+         d2hStream = d2hStream]() mutable {
+          RECORD_USER_SCOPE("CompletionStage");
+
+          at::cuda::CUDAStreamGuard streamGuard(d2hStream);
+          at::cuda::CUDAGuard deviceGuard(rank);
+
+          if (!predictions.isNone()) {
+            predictions = resultSplitFunc->moveToHost(predictions);
+            batch->event->record();
+            // Wait for D2H to finish.
+            batch->event->synchronize();
+          }
 
           size_t offset = 0;
           for (auto& context : batch->contexts) {
