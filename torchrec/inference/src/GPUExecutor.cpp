@@ -28,6 +28,7 @@
 #include "ATen/cuda/CUDAEvent.h"
 #include "caffe2/torch/csrc/autograd/profiler_legacy.h"
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/Exception.h"
 #include "torchrec/inference/Types.h"
 
 DEFINE_int32(copy_timeout, 500, "");
@@ -125,8 +126,7 @@ GPUExecutor::~GPUExecutor() {
   std::shared_ptr<PredictionBatch> batch;
   while (batches_.readIfNotEmpty(batch)) {
     for (auto& context : batch->contexts) {
-      PredictionException ex("Server shutdown");
-      context.promise.setException(std::move(ex));
+      handleException(context.promise, "Server shutdown");
     }
   }
 }
@@ -163,8 +163,7 @@ void GPUExecutor::process(int idx) {
     if (std::chrono::steady_clock::now() - batch->enqueueTime >=
         queueTimeout_) {
       for (auto& context : batch->contexts) {
-        PredictionException ex("GPUExecutor queue timeout");
-        context.promise.setException(std::move(ex));
+        handleException(context.promise, "GPUExecutor queue timeout");
       }
       continue;
     }
@@ -197,8 +196,7 @@ void GPUExecutor::process(int idx) {
           size_t offset = 0;
           for (auto& context : batch->contexts) {
             if (predictions.isNone()) {
-              PredictionException ex("Predict exception");
-              context.promise.setException(std::move(ex));
+              handleException(context.promise, "Predict exception");
             } else {
               CHECK_LT(offset, batch->batchSize);
 
