@@ -76,7 +76,13 @@ We are currently iterating on the setup experience. For now, we provide manual i
 
 5. Test the installation.
    ```
-   torchx run -s local_cwd --script test_installation.py
+   GPU mode
+
+   torchx run -s local_cwd dist.ddp -j 1x2 --script test_installation.py
+
+   CPU Mode
+
+   torchx run -s local_cwd dist.ddp -j 1x2 --script test_installation.py -- --cpu_only
    ```
    See [TorchX](https://pytorch.org/torchx/) for more information on launching distributed and remote jobs.
 

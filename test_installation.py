@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import argparse
 import os
 import sys
 from typing import List, Iterator
@@ -18,6 +19,11 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+
+if sys.platform not in ["linux", "linux2"]:
+    raise EnvironmentError(
+        f"Torchrec does not currently support {sys.platform}. Only linux is supported."
+    )
 
 
 class RandomIterator(Iterator):
@@ -59,8 +65,16 @@ class RandomIterator(Iterator):
         return (float_features, sparse_features, labels)
 
 
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="TorchRec test installation")
+    parser.add_argument("--cpu_only", action="store_true")
+    return parser.parse_args(argv)
+
+
 @record
 def main(argv: List[str]) -> None:
+    args = parse_args(argv)
+
     batch_size = 1024
     num_dense = 1000
     num_sparse = 20
@@ -77,7 +91,7 @@ def main(argv: List[str]) -> None:
     ]
 
     rank = int(os.environ["LOCAL_RANK"])
-    if torch.cuda.is_available():
+    if not args.cpu_only and torch.cuda.is_available():
         device = torch.device(f"cuda:{rank}")
         backend = "nccl"
         torch.cuda.set_device(device)
@@ -86,7 +100,7 @@ def main(argv: List[str]) -> None:
         backend = "gloo"
         print(
             "\033[92m"
-            + "Warning: CUDA not available! Is this meant to be a CPU installation?"
+            + f"WARNING: Running in CPU mode. {torch.cuda.is_available()=}. {args.cpu_only=}"
         )
 
     dist.init_process_group(backend=backend)
