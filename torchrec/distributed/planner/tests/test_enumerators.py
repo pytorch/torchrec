@@ -217,17 +217,17 @@ EXPECTED_TWCW_SHARD_SIZES: List[List[List[int]]] = EXPECTED_CW_SHARD_SIZES
 EXPECTED_TWCW_SHARD_OFFSETS: List[List[List[int]]] = EXPECTED_CW_SHARD_OFFSETS
 
 EXPECTED_TWCW_SHARD_STORAGE = [
-    [Storage(hbm=53152, ddr=0)],
-    [Storage(hbm=175552, ddr=0), Storage(hbm=226464, ddr=0)],
+    [Storage(hbm=102304, ddr=0)],
+    [Storage(hbm=347584, ddr=0), Storage(hbm=447648, ddr=0)],
     [
-        Storage(hbm=159968, ddr=0),
-        Storage(hbm=159968, ddr=0),
-        Storage(hbm=185984, ddr=0),
+        Storage(hbm=315616, ddr=0),
+        Storage(hbm=315616, ddr=0),
+        Storage(hbm=366208, ddr=0),
     ],
     [
-        Storage(hbm=309344, ddr=0),
-        Storage(hbm=309344, ddr=0),
-        Storage(hbm=376960, ddr=0),
+        Storage(hbm=612448, ddr=0),
+        Storage(hbm=612448, ddr=0),
+        Storage(hbm=745600, ddr=0),
     ],
 ]
 
