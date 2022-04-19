@@ -17,9 +17,6 @@ from torchrec.distributed.planner.types import Topology, PlannerError
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection,
-)
 
 
 class TWvsRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -29,7 +26,7 @@ class TWvsRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -39,7 +36,7 @@ class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class TestEmbeddingShardingPlanner(unittest.TestCase):
