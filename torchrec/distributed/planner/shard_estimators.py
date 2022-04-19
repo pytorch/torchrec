@@ -17,7 +17,15 @@ from torchrec.distributed.planner.constants import (
     CROSS_NODE_BANDWIDTH,
     kernel_bw_lookup,
     POOLING_FACTOR,
-    CACHING_RATIO,
+    UVM_CACHING_RATIO,
+    BATCHED_COPY_PERF_FACTOR,
+    FULL_BLOCK_EMB_DIM,
+    HALF_BLOCK_PENALTY,
+    QUARTER_BLOCK_PENALTY,
+    BWD_COMPUTE_MULTIPLIER,
+    WEIGHTED_KERNEL_MULTIPLIER,
+    DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
+    ALLREDUCE_MEMORY_MULTIPLIER,
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
@@ -73,8 +81,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 bw_inter_host=getattr(
                     self._topology, "inter_host_bw", CROSS_NODE_BANDWIDTH
                 ),
-                has_input_dist=True if sharding_option.upstream_modules else False,
-                has_output_dist=False if sharding_option.downstream_modules else True,
+                is_weighted=True
+                if getattr(sharding_option.module[1], "is_weighted", False)
+                else False,
+                has_feature_processor=True
+                if getattr(sharding_option.module[1], "feature_processor", None)
+                else False,
                 caching_ratio=caching_ratio,
             )
 
@@ -95,15 +107,12 @@ def perf_func_emb_wall_time(
     output_data_type_size: float,
     bw_intra_host: float,
     bw_inter_host: float,
-    has_input_dist: bool = True,
-    has_output_dist: bool = True,
+    is_weighted: bool = False,
+    has_feature_processor: bool = False,
     caching_ratio: Optional[float] = None,
 ) -> List[float]:
     """
     Attempts to model perfs as a function of relative wall times.
-    Only models forward perfs (ignores backward perfs).
-    The computation perf estimation is based on `EmbeddingBagCollectionSharder`
-    (pooledEmbedding).
 
     Args:
         shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each
@@ -122,8 +131,9 @@ def perf_func_emb_wall_time(
             data_parallel output.
         bw_intra_host (float): the bandwidth within a single host like multiple threads.
         bw_inter_host (float): the bandwidth between two hosts like multiple machines.
-        has_input_dist (bool = True): if we need input distributed.
-        has_output_dist (bool = True): if we need output distributed.
+        is_weighted (bool = False): if the module is an EBC and is weighted, typically
+            signifying an id score list feature.
+        has_feature_processor (bool = False): if the module has a feature processor.
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
             of device.
 
@@ -140,50 +150,12 @@ def perf_func_emb_wall_time(
         )
 
     for hash_size, emb_dim in shard_sizes:
-
-        if sharding_type == ShardingType.TABLE_WISE.value:
-            input_perf, compute_perf, output_perf = _get_tw_sharding_perf(
-                global_batch_size=B,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
-                device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-            )
-        elif sharding_type == ShardingType.COLUMN_WISE.value:
-            input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
-                global_batch_size=B,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
-                device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-            )
-        elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
-            input_perf, compute_perf, output_perf = _get_cw_sharding_perf(
-                global_batch_size=B,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
-                device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-            )
-        elif sharding_type == ShardingType.ROW_WISE.value:
-            input_perf, compute_perf, output_perf = _get_rw_sharding_perf(
-                global_batch_size=B,
-                world_size=world_size,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
-                device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-            )
-        elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-            input_perf, compute_perf, output_perf = _get_twrw_sharding_perf(
+        if (
+            sharding_type == ShardingType.TABLE_WISE.value
+            or sharding_type == ShardingType.COLUMN_WISE.value
+            or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+        ):
+            shard_perf = _get_tw_sharding_perf(
                 global_batch_size=B,
                 world_size=world_size,
                 local_world_size=local_world_size,
@@ -194,26 +166,58 @@ def perf_func_emb_wall_time(
                 device_bw=device_bw,
                 bw_inter_host=bw_inter_host,
                 bw_intra_host=bw_intra_host,
+                is_weighted=is_weighted,
+                has_feature_processor=has_feature_processor,
             )
-        elif sharding_type == ShardingType.DATA_PARALLEL.value:
-            input_perf, compute_perf, output_perf = _get_dp_sharding_perf(
-                batch_size=batch_size,
+        elif sharding_type == ShardingType.ROW_WISE.value:
+            shard_perf = _get_rw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                local_world_size=local_world_size,
                 input_lengths=input_lengths,
-                grad_num_elem=hash_size * emb_dim,
-                bw_inter_host=bw_inter_host,
                 emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+                bw_intra_host=bw_intra_host,
+                is_weighted=is_weighted,
+                has_feature_processor=has_feature_processor,
+            )
+        elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+            shard_perf = _get_twrw_sharding_perf(
+                global_batch_size=B,
+                world_size=world_size,
+                local_world_size=local_world_size,
+                input_lengths=input_lengths,
+                emb_dim=emb_dim,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+                bw_intra_host=bw_intra_host,
+                is_weighted=is_weighted,
+                has_feature_processor=has_feature_processor,
+            )
+        elif sharding_type == ShardingType.DATA_PARALLEL.value:
+            shard_perf = _get_dp_sharding_perf(
+                local_batch_size=batch_size,
+                world_size=world_size,
+                local_world_size=local_world_size,
+                input_lengths=input_lengths,
+                grad_num_elem=hash_size * emb_dim,
+                emb_dim=emb_dim,
+                input_data_type_size=output_data_type_size,
+                output_data_type_size=output_data_type_size,
+                device_bw=device_bw,
+                bw_inter_host=bw_inter_host,
+                is_weighted=is_weighted,
+                has_feature_processor=has_feature_processor,
             )
         else:
             raise ValueError(
                 f"Unrecognized or unsupported sharding type provided: {sharding_type}"
             )
-
-        shard_perf = 0
-        shard_perf += input_perf if has_input_dist else 0
-        shard_perf += compute_perf
-        shard_perf += output_perf if has_output_dist else 0
         shard_perfs.append(shard_perf)
 
     return shard_perfs
@@ -221,95 +225,129 @@ def perf_func_emb_wall_time(
 
 def _get_tw_sharding_perf(
     global_batch_size: float,
+    world_size: int,
+    local_world_size: int,
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
     bw_inter_host: float,
-) -> Tuple[float, float, float]:
-    input_perf = (
-        global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
+    bw_intra_host: float,
+    is_weighted: bool = False,
+    has_feature_processor: bool = False,
+) -> float:
+    input_read_size = math.ceil(
+        global_batch_size * sum(input_lengths) * input_data_type_size
     )
-    compute_perf = (
+    if is_weighted or has_feature_processor:
+        input_read_size *= 2
+    # minimum embedding dim is set to 32 due to kernel usage
+    embedding_lookup_size = (
         global_batch_size
         * sum(input_lengths)
-        * emb_dim
+        * max(emb_dim, 32)
         * output_data_type_size
+    )
+    output_write_size = (
+        global_batch_size * emb_dim * len(input_lengths) * output_data_type_size
+    )
+    # embedding dim below 128 will reduce kernel efficency
+    block_usage_penalty = 1
+    if emb_dim < FULL_BLOCK_EMB_DIM:
+        if emb_dim >= 64:
+            block_usage_penalty = HALF_BLOCK_PENALTY
+        else:  # emb_dim >= 32
+            block_usage_penalty = QUARTER_BLOCK_PENALTY
+    comms_bw = bw_inter_host if world_size > local_world_size else bw_intra_host
+
+    fwd_comms = output_write_size / comms_bw
+
+    fwd_compute = (
+        (input_read_size + embedding_lookup_size + output_write_size)
+        * block_usage_penalty
         / device_bw
     )
-    output_perf = (
-        global_batch_size
-        * emb_dim
-        * len(input_lengths)
-        * output_data_type_size
-        / bw_inter_host
-    )
-    return (input_perf, compute_perf, output_perf)
 
+    bwd_comms = fwd_comms
 
-def _get_cw_sharding_perf(
-    global_batch_size: float,
-    input_lengths: List[float],
-    emb_dim: int,
-    input_data_type_size: float,
-    output_data_type_size: float,
-    device_bw: float,
-    bw_inter_host: float,
-) -> Tuple[float, float, float]:
-    input_perf = (
-        global_batch_size * sum(input_lengths) * input_data_type_size / bw_inter_host
+    bwd_grad_indice_weights_kernel = (
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
+        if is_weighted or has_feature_processor
+        else 0
     )
-    compute_perf = (
-        global_batch_size
-        * sum(input_lengths)
-        * emb_dim
-        * output_data_type_size
-        / device_bw
+
+    # includes fused optimizers
+    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+
+    # in order of model parallel execution, starting with:
+    # BWD DP -> BWD MP ... FWD MP -> FWD DP
+    return (
+        bwd_comms
+        + bwd_grad_indice_weights_kernel
+        + bwd_compute
+        + fwd_compute
+        + fwd_comms
     )
-    output_perf = (
-        global_batch_size
-        * emb_dim
-        * len(input_lengths)
-        * output_data_type_size
-        / bw_inter_host
-    )
-    return (input_perf, compute_perf, output_perf)
 
 
 def _get_rw_sharding_perf(
     global_batch_size: float,
     world_size: int,
+    local_world_size: int,
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
     bw_inter_host: float,
-) -> Tuple[float, float, float]:
-    input_perf = (
-        global_batch_size
-        * sum(input_lengths)
-        / world_size
-        * input_data_type_size
-        / bw_inter_host
+    bw_intra_host: float,
+    is_weighted: bool = False,
+    has_feature_processor: bool = False,
+) -> float:
+    input_read_size = math.ceil(
+        global_batch_size * sum(input_lengths) / world_size * input_data_type_size
     )
-    compute_perf = (
+    if is_weighted or has_feature_processor:
+        input_read_size *= 2
+    embedding_lookup_size = (
         global_batch_size
         * sum(input_lengths)
         / world_size
         * emb_dim
         * output_data_type_size
-        / device_bw
     )
-    output_perf = (
-        global_batch_size
-        * emb_dim
-        * len(input_lengths)
-        * output_data_type_size
-        / bw_inter_host
+    output_write_size = (
+        global_batch_size * emb_dim * len(input_lengths) * output_data_type_size
     )
-    return (input_perf, compute_perf, output_perf)
+    comms_bw = bw_inter_host if world_size > local_world_size else bw_intra_host
+
+    fwd_comms = output_write_size / comms_bw
+
+    fwd_compute = (
+        input_read_size + embedding_lookup_size + output_write_size
+    ) / device_bw
+
+    bwd_comms = fwd_comms
+
+    bwd_batched_copy = output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+
+    bwd_grad_indice_weights_kernel = (
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
+        if is_weighted or has_feature_processor
+        else 0
+    )
+
+    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+
+    return (
+        bwd_comms
+        + bwd_batched_copy
+        + bwd_grad_indice_weights_kernel
+        + bwd_compute
+        + fwd_compute
+        + fwd_comms
+    )
 
 
 def _get_twrw_sharding_perf(
@@ -323,54 +361,114 @@ def _get_twrw_sharding_perf(
     device_bw: float,
     bw_inter_host: float,
     bw_intra_host: float,
-) -> Tuple[float, float, float]:
-    input_perf = (
+    is_weighted: bool = False,
+    has_feature_processor: bool = False,
+) -> float:
+    input_read_size = math.ceil(
+        global_batch_size * sum(input_lengths) / local_world_size * input_data_type_size
+    )
+    if is_weighted or has_feature_processor:
+        input_read_size *= 2
+    embedding_lookup_size = (
         global_batch_size
         * sum(input_lengths)
         / local_world_size
-        * input_data_type_size
-        / bw_inter_host
-    )
-    compute_perf = (
-        global_batch_size
-        * sum(input_lengths)
-        / local_world_size
         * emb_dim
         * output_data_type_size
-        / device_bw
     )
-    output_perf = (
-        global_batch_size
-        * emb_dim
-        * len(input_lengths)
-        * output_data_type_size
-        / bw_intra_host
-        + global_batch_size
-        * emb_dim
-        * len(input_lengths)
-        * output_data_type_size
-        * (local_world_size / world_size)
-        / bw_inter_host
+    output_write_size = (
+        global_batch_size * emb_dim * len(input_lengths) * output_data_type_size
     )
-    return (input_perf, compute_perf, output_perf)
+
+    fwd_comms = output_write_size / bw_intra_host
+
+    if world_size > local_world_size:
+        fwd_comms += output_write_size * (local_world_size / world_size) / bw_inter_host
+
+    fwd_compute = (
+        input_read_size + embedding_lookup_size + output_write_size
+    ) / device_bw
+
+    bwd_comms = fwd_comms
+
+    bwd_grad_indice_weights_kernel = (
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
+        if is_weighted or has_feature_processor
+        else 0
+    )
+
+    bwd_batched_copy = output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+
+    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+
+    return (
+        bwd_comms
+        + bwd_batched_copy
+        + bwd_grad_indice_weights_kernel
+        + bwd_compute
+        + fwd_compute
+        + fwd_comms
+    )
 
 
 def _get_dp_sharding_perf(
-    batch_size: float,
+    local_batch_size: float,
+    world_size: int,
+    local_world_size: int,
     input_lengths: List[float],
     grad_num_elem: int,
-    bw_inter_host: float,
     emb_dim: int,
+    input_data_type_size: float,
     output_data_type_size: float,
     device_bw: float,
-) -> Tuple[float, float, float]:
-    input_perf = 0
-    compute_perf = (
-        batch_size * sum(input_lengths) * emb_dim * output_data_type_size / device_bw
+    bw_inter_host: float,
+    is_weighted: bool = False,
+    has_feature_processor: bool = False,
+) -> float:
+    input_read_size = math.ceil(
+        local_batch_size * sum(input_lengths) * input_data_type_size
     )
-    # TODO: this is allreduce perf, better separated out as backward perf
-    output_perf = grad_num_elem * output_data_type_size / bw_inter_host
-    return (input_perf, compute_perf, output_perf)
+    if is_weighted or has_feature_processor:
+        input_read_size *= 2
+    embedding_lookup_size = (
+        local_batch_size * sum(input_lengths) * emb_dim * output_data_type_size
+    )
+    output_write_size = (
+        local_batch_size * emb_dim * len(input_lengths) * output_data_type_size
+    )
+    table_size = grad_num_elem * output_data_type_size
+
+    fwd_compute = (
+        input_read_size + embedding_lookup_size + output_write_size
+    ) / device_bw
+
+    all_reduce = (
+        table_size
+        * ALLREDUCE_MEMORY_MULTIPLIER
+        / (bw_inter_host * local_world_size)  # 1 NIC per GPU
+    )
+    # inter host communication constraint
+    if world_size > 2 * local_world_size:
+        all_reduce *= 2
+
+    # SGD + Fill + BUnary
+    optimizer_kernels = table_size * DP_ELEMENTWISE_KERNELS_PERF_FACTOR / device_bw
+
+    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+
+    bwd_grad_indice_weights_kernel = (
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
+        if is_weighted or has_feature_processor
+        else 0
+    )
+
+    return (
+        all_reduce
+        + optimizer_kernels
+        + bwd_grad_indice_weights_kernel
+        + bwd_compute
+        + fwd_compute
+    )
 
 
 class EmbeddingStorageEstimator(ShardEstimator):
@@ -421,7 +519,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 world_size=self._topology.world_size,
                 local_world_size=self._topology.local_world_size,
                 input_lengths=input_lengths,
-                caching_ratio=caching_ratio if caching_ratio else CACHING_RATIO,
+                caching_ratio=caching_ratio if caching_ratio else UVM_CACHING_RATIO,
             )
 
             for shard, storage in zip(sharding_option.shards, shard_storages):
@@ -596,7 +694,7 @@ def _calculate_shard_io_sizes(
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
         return _calculate_cw_shard_io_sizes(
             batch_size=batch_size,
-            world_size=local_world_size,
+            world_size=world_size,
             input_lengths=input_lengths,
             shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
