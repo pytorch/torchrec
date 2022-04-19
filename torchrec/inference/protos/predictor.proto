@@ -34,13 +34,17 @@ message PredictionRequest {
   SparseFeatures unary_features = 6;
 }
 
+message FloatVec {
+  repeated float data = 1;
+}
+
 // TODO: See whether bytes can be replaced with folly::iobuf
 message PredictionResponse {
   // Task name to prediction Tensor
-  map<string, bytes> predictions = 1;
+  map<string, FloatVec> predictions = 1;
 }
 
 // The predictor service definition. Synchronous for now.
 service Predictor {
-  rpc Predict(PredictionRequest) returns (PredictionResponse) {}
+  rpc Predict (PredictionRequest) returns (PredictionResponse) {}
 }
