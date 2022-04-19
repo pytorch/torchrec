@@ -19,19 +19,48 @@ if(NOT DEFINED TORCH_DEPLOY_LIB_PATH)
   )
 endif()
 
-set(CMAKE_C_FLAGS "-Wl,-export-dynamic")
-set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
+# abi and other flags
+
+if(DEFINED GLIBCXX_USE_CXX11_ABI)
+  if(${GLIBCXX_USE_CXX11_ABI} EQUAL 1)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
+    set(TORCH_CXX_FLAGS "-D_GLIBCXX_USE_CXX11_ABI=1")
+  endif()
+endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 # dependencies
+
 find_package(Torch REQUIRED)
 find_package(folly REQUIRED)
 find_package(gflags REQUIRED)
 
 include_directories(${Torch_INCLUDE_DIRS})
 include_directories(${folly_INCLUDE_DIRS})
+include_directories(${PYTORCH_FMT_INCLUDE_PATH})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall ${TORCH_CXX_FLAGS}")
 set(CMAKE_CXX_STANDARD 17)
+
+# torch deploy library
+
+add_library(torch_deploy_internal STATIC
+    {$DEPLOY_INTERPRETER_PATH}/libtorch_deployinterpreter.o
+    {$DEPLOY_SRC_PATH}/deploy.cpp
+    {$DEPLOY_SRC_PATH}/deploy/loader.cpp
+    {$DEPLOY_SRC_PATH}/path_environment.cpp
+    {$DEPLOY_SRC_PATH}/elf_file.cpp)
+
+# For python builtins. caffe2_interface_library properly
+# makes use of the --whole-archive option.
+target_link_libraries(torch_deploy_internal PRIVATE
+  crypt pthread dl util m z ffi lzma readline nsl ncursesw panelw
+)
+target_link_libraries(torch_deploy_internal
+  PUBLIC shm torch ${PYTORCH_LIB_FMT}
+)
+caffe2_interface_library(torch_deploy_internal torch_deploy)
 
 # inference library
 
@@ -46,13 +75,9 @@ add_library(inference SHARED
   src/ResultSplit.cpp
 )
 
-# whole archive is needed to link against the static library
-target_link_libraries(inference "-Wl,--whole-archive" ${TORCH_DEPLOY_LIB_PATH})
-target_link_libraries(
-  inference
-  "-Wl,--no-whole-archive"
-  "${TORCH_LIBRARIES}"
-  ${FOLLY_LIBRARIES}
+# -rdynamic is needed to link against the static library
+target_link_libraries(inference "-Wl,--no-as-needed -rdynamic"
+  dl torch_deploy "${TORCH_LIBRARIES}" ${FOLLY_LIBRARIES}
 )
 
 # for generated protobuf
@@ -79,8 +104,7 @@ target_link_libraries(pred_grpc_proto
 # server
 
 add_executable(server server.cpp)
-target_link_libraries(inference "-Wl,--whole-archive" ${TORCH_DEPLOY_LIB_PATH})
-target_link_libraries(server "-Wl,--no-whole-archive"
+target_link_libraries(server
   inference
   pred_grpc_proto
   "${TORCH_LIBRARIES}"
