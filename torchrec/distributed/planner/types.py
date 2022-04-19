@@ -21,6 +21,7 @@ from torchrec.distributed.planner.constants import (
     BATCH_SIZE,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingPlan
+from torchrec.modules.embedding_modules import EmbeddingCollection
 
 # ---- TOPOLOGY ---- #
 
@@ -219,6 +220,16 @@ class ShardingOption:
             storage += cast(Storage, shard.storage)
         return storage
 
+    @property
+    def is_pooled(self) -> bool:
+        if isinstance(self.module[1], EmbeddingCollection):
+            return False
+        for name, module in self.module[1].named_modules():
+            if self.name in name:
+                if isinstance(module, EmbeddingCollection):
+                    return False
+        return True
+
     def __hash__(self) -> int:
         return hash(
             (
@@ -394,7 +405,6 @@ class Stats(abc.ABC):
         num_proposals: int,
         num_plans: int,
         best_plan: List[ShardingOption],
-        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = False,
     ) -> None:
         """

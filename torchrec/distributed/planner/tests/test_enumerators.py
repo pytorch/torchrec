@@ -427,6 +427,7 @@ class TestEnumerators(unittest.TestCase):
                 num_shards=self.world_size,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
+                is_pooled=sharding_option.is_pooled,
             )
 
             tensor_sizes = [
@@ -478,6 +479,7 @@ class TestEnumerators(unittest.TestCase):
                 emb_dim=sharding_option.tensor.shape[1],
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
+                is_pooled=sharding_option.is_pooled,
             )
 
             tensor_size = (

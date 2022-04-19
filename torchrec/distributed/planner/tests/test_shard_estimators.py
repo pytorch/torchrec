@@ -9,6 +9,7 @@ import unittest
 from typing import cast
 
 import torch
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
 )
@@ -16,8 +17,9 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
 from torchrec.distributed.types import ModuleSharder
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 
 
 class TestEmbeddingPerfEstimator(unittest.TestCase):
@@ -104,6 +106,68 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("batched_fused_uvm_caching", "table_row_wise"): [
                 0.12581121044522733,
                 0.12581121044522733,
+            ],
+        }
+
+        perfs = {
+            (
+                sharding_option.compute_kernel,
+                sharding_option.sharding_type,
+            ): [shard.perf for shard in sharding_option.shards]
+            for sharding_option in sharding_options
+        }
+
+        self.assertEqual(expected_perfs, perfs)
+
+    def test_sequence_2_table_perf(self) -> None:
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=128,
+                embedding_dim=32,
+                name="table_0",
+                feature_names=["feature_0"],
+            ),
+            EmbeddingConfig(
+                num_embeddings=256,
+                embedding_dim=32,
+                name="table_1",
+                feature_names=["feature_1"],
+            ),
+        ]
+        model = TestSequenceSparseNN(tables=tables)
+        sharding_options = self.enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingCollectionSharder())
+            ],
+        )
+
+        expected_perfs = {
+            ("dense", "data_parallel"): [0.004369739059202799, 0.004369739059202799],
+            ("batched_dense", "data_parallel"): [
+                0.003745462849254459,
+                0.003745462849254459,
+            ],
+            ("dense", "table_wise"): [0.004617102037172519],
+            ("batched_dense", "table_wise"): [0.003354041738520764],
+            ("batched_fused", "table_wise"): [0.001880471390093715],
+            ("sparse", "table_wise"): [0.004617102037172519],
+            ("batched_fused_uvm", "table_wise"): [2.5921571020986525],
+            ("batched_fused_uvm_caching", "table_wise"): [0.6006760211774808],
+            ("dense", "row_wise"): [0.0018836427103240962, 0.0018836427103240962],
+            ("batched_dense", "row_wise"): [
+                0.0013795850534768677,
+                0.0013795850534768677,
+            ],
+            ("batched_fused", "row_wise"): [
+                0.0007915177871551004,
+                0.0007915177871551004,
+            ],
+            ("sparse", "row_wise"): [0.0018836427103240962, 0.0018836427103240962],
+            ("batched_fused_uvm", "row_wise"): [1.0345099954044121, 1.0345099954044121],
+            ("batched_fused_uvm_caching", "row_wise"): [
+                0.23975673748297002,
+                0.23975673748297002,
             ],
         }
 

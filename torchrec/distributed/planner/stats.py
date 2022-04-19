@@ -39,7 +39,6 @@ class EmbeddingStats(Stats):
         num_proposals: int,
         num_plans: int,
         best_plan: List[ShardingOption],
-        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = False,
     ) -> None:
         """
@@ -49,13 +48,12 @@ class EmbeddingStats(Stats):
         storage usage (HBM and DDR), perf, input, output, and number/type of shards.
 
         Args:
-            sharding_plan (ShardingPlan): sharding plan chosen by the ShardingPlanner.
+            sharding_plan (ShardingPlan): sharding plan chosen by the planner.
             topology (Topology): device topology.
-            num_proposals (int): number of proposals evaluated
-            num_plans (int): number of proposals successfully partitioned
-            best_plan (List[ShardingOption]): plan with expected performance
-            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter
-                names to provided ParameterConstraints.
+            num_proposals (int): number of proposals evaluated.
+            num_plans (int): number of proposals successfully partitioned.
+            best_plan (List[ShardingOption]): plan with expected performance.
+            debug (bool): whether to enable debug mode.
         """
 
         shard_by_fqn = {
@@ -83,7 +81,6 @@ class EmbeddingStats(Stats):
                 sharding_option=sharding_option,
                 world_size=topology.world_size,
                 local_size=topology.local_world_size,
-                constraints=constraints,
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
@@ -240,7 +237,6 @@ class EmbeddingStats(Stats):
         sharding_option: ShardingOption,
         world_size: int,
         local_size: int,
-        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Tuple[List[int], List[float], List[float]]:
         """
         Gets ranks, input sizes, and output sizes per shard.
@@ -257,21 +253,24 @@ class EmbeddingStats(Stats):
 
         batch_size = world_size * sharding_option.batch_size
         input_data_type_size = BIGINT_DTYPE
-        pooling_factor = (
-            float(sum(constraints[sharding_option.name].pooling_factors))
-            if constraints and constraints.get(sharding_option.name)
-            else 1.0
-        )
-        num_features = len(sharding_option.input_lengths)
+        pooling_factor = float(sum(sharding_option.input_lengths))
         output_data_type_size = sharding_option.tensor.element_size()
-        num_outputs = 1  # for pooled embeddings
+        num_outputs = float(
+            len(sharding_option.input_lengths)
+            if sharding_option.is_pooled
+            else sum(sharding_option.input_lengths)
+        )
 
         if shard.sharding_type == ShardingType.DATA_PARALLEL.value:
             batch_size = sharding_option.batch_size
         elif shard.sharding_type == ShardingType.ROW_WISE.value:
             pooling_factor /= world_size
+            if sharding_option.is_pooled:
+                num_outputs /= world_size
         elif shard.sharding_type == ShardingType.TABLE_ROW_WISE.value:
             pooling_factor /= local_size
+            if sharding_option.is_pooled:
+                num_outputs /= local_size
 
         input_sizes = [
             bytes_to_mb(batch_size * pooling_factor * input_data_type_size)
@@ -280,9 +279,8 @@ class EmbeddingStats(Stats):
             [
                 bytes_to_mb(
                     batch_size
-                    * num_outputs
                     * sharding_option.tensor.shape[1]  # embedding dim
-                    * num_features
+                    * num_outputs
                     * output_data_type_size
                 )
             ]
@@ -291,9 +289,8 @@ class EmbeddingStats(Stats):
             else [
                 bytes_to_mb(
                     batch_size
-                    * num_outputs
                     * int(shard.shard_sizes[1])  # embedding dim
-                    * num_features
+                    * num_outputs
                     * output_data_type_size
                 )
                 # pyre-ignore [16]
