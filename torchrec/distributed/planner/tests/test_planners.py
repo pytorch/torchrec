@@ -43,7 +43,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
     def setUp(self) -> None:
         compute_device = "cuda"
         self.topology = Topology(
-            world_size=2, hbm_cap=1024 * 1024, compute_device=compute_device
+            world_size=2, hbm_cap=1024 * 1024 * 2, compute_device=compute_device
         )
         self.planner = EmbeddingShardingPlanner(topology=self.topology)
 
@@ -51,7 +51,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
-                embedding_dim=10,
+                embedding_dim=64,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -71,7 +71,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
-                embedding_dim=10,
+                embedding_dim=64,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -102,13 +102,13 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
 
-        self.assertEqual(self.planner._num_proposals, 4)
+        self.assertEqual(self.planner._num_proposals, 3)
 
     def test_fail_then_rerun(self) -> None:
         tables = [
             EmbeddingBagConfig(
-                num_embeddings=1024,
-                embedding_dim=96,
+                num_embeddings=4096,
+                embedding_dim=128,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )

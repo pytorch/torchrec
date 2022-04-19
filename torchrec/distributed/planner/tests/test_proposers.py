@@ -77,24 +77,24 @@ class TestProposers(unittest.TestCase):
 
         expected_output = [
             [
+                ("table_0", "row_wise", "batched_fused"),
+                ("table_1", "row_wise", "batched_fused"),
+            ],
+            [
+                ("table_0", "table_row_wise", "batched_fused"),
+                ("table_1", "row_wise", "batched_fused"),
+            ],
+            [
+                ("table_1", "row_wise", "batched_fused"),
+                ("table_0", "data_parallel", "batched_dense"),
+            ],
+            [
+                ("table_1", "table_row_wise", "batched_fused"),
+                ("table_0", "data_parallel", "batched_dense"),
+            ],
+            [
                 ("table_0", "data_parallel", "batched_dense"),
                 ("table_1", "data_parallel", "batched_dense"),
-            ],
-            [
-                ("table_1", "data_parallel", "batched_dense"),
-                ("table_0", "data_parallel", "dense"),
-            ],
-            [
-                ("table_1", "data_parallel", "batched_dense"),
-                ("table_0", "row_wise", "batched_fused"),
-            ],
-            [
-                ("table_1", "data_parallel", "batched_dense"),
-                ("table_0", "table_wise", "batched_fused"),
-            ],
-            [
-                ("table_1", "data_parallel", "batched_dense"),
-                ("table_0", "column_wise", "batched_fused"),
             ],
         ]
 
