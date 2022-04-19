@@ -51,32 +51,6 @@ from torchrec.distributed.types import (
 )
 
 
-def _merge_shards_by_dim(shards: List[Shard], dim: int) -> List[Shard]:
-    # merges shards down to one per rank along dimension.
-    # Will recompute shard offsets
-    merged_shards = []
-    shards = sorted(shards, key=lambda x: x.rank)
-
-    current_rank = -1
-    current_shard: Optional[Shard] = None
-    current_dim_offset = 0
-    for shard in shards:
-        if shard.rank != current_rank:
-            current_shard = copy.deepcopy(shard)
-            current_shard.offset[dim] = current_dim_offset
-            merged_shards.append(current_shard)
-            current_rank = shard.rank
-        else:
-            # pyre-ignore [16]
-            current_shard.size[dim] += shard.size[dim]
-            # pyre-ignore [16]
-            current_shard.storage += shard.storage
-            # pyre-ignore [16]
-            current_shard.perf += shard.perf
-        current_dim_offset += shard.size[dim]
-    return merged_shards
-
-
 def _to_sharding_plan(
     sharding_options: List[ShardingOption],
     topology: Topology,
@@ -124,6 +98,11 @@ def _to_sharding_plan(
 
 
 class EmbeddingShardingPlanner(ShardingPlanner):
+    """
+    Provides an optimized sharding plan for a given module with shardable parameters
+    according to the provided sharders, topology, and constraints.
+    """
+
     def __init__(
         self,
         topology: Topology,

@@ -33,17 +33,17 @@ def kernel_bw_lookup(
     caching_ratio: Optional[float] = None,
 ) -> Optional[float]:
     """
-    Calculates the device bandwidth based on given compute_device, compute_kernel, and caching_ratio.
+    Calculates the device bandwidth based on given compute device, compute kernel, and
+    caching ratio.
 
     Args:
         compute_kernel (str): compute kernel.
         compute_device (str): compute device.
         caching_ratio (Optional[float]): caching ratio used to determine device bandwidth
-            if uvm caching is enabled.
+            if UVM caching is enabled.
 
     Returns:
         float: the device bandwidth.
-
     """
     caching_ratio = caching_ratio if caching_ratio else CACHING_RATIO
     lookup = {

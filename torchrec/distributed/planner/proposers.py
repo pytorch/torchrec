@@ -15,6 +15,14 @@ from torchrec.distributed.planner.types import (
 
 
 class GreedyProposer(Proposer):
+    """
+    Proposes sharding plans in greedy fashion.
+
+    Sorts sharding options for each shardable parameter by perf.
+    On each iteration, finds parameter with largest current storage usage and tries its
+    next sharding option.
+    """
+
     def __init__(self, use_depth: bool = True) -> None:
         self._use_depth: bool = use_depth
         self._sharding_options_by_fqn: Dict[str, List[ShardingOption]] = {}
@@ -84,6 +92,11 @@ class GreedyProposer(Proposer):
 
 
 class UniformProposer(Proposer):
+    """
+    Proposes uniform sharding plans, plans that have the same sharding type for all
+    sharding options.
+    """
+
     def __init__(self, use_depth: bool = True) -> None:
         self._use_depth: bool = use_depth
         self._grouped_sharding_options: List[List[ShardingOption]] = []

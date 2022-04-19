@@ -88,7 +88,7 @@ class GreedyPerfPartitioner(Partitioner):
         """
         Places sharding options on topology based on each sharding option's
         `partition_by` attribute.
-        Topology storage and perfs are updated at the end of the placement.
+        The topology, storage, and perfs are updated at the end of the placement.
 
         Args:
             proposal (List[ShardingOption]): list of populated sharding options.
@@ -98,7 +98,6 @@ class GreedyPerfPartitioner(Partitioner):
             List[ShardingOption]: list of sharding options for selected plan.
 
         Example::
-
 
             sharding_options = [
                     ShardingOption(partition_by="uniform",
