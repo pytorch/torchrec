@@ -239,7 +239,7 @@ class TWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class RWSharder(EmbeddingBagCollectionSharder):
@@ -249,7 +249,7 @@ class RWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class UVMCachingRWSharder(EmbeddingBagCollectionSharder):
@@ -269,7 +269,7 @@ class TWRWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class CWSharder(EmbeddingBagCollectionSharder):
@@ -279,7 +279,7 @@ class CWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class TWCWSharder(EmbeddingBagCollectionSharder):
@@ -289,7 +289,7 @@ class TWCWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
 
 
 class DPSharder(EmbeddingBagCollectionSharder):
@@ -299,7 +299,7 @@ class DPSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value, EmbeddingComputeKernel.SPARSE.value]
+        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
 
 
 class AllTypesSharder(EmbeddingBagCollectionSharder):
@@ -663,7 +663,7 @@ class TestEnumerators(unittest.TestCase):
             self.assertNotIn(sharding_option.compute_kernel, unexpected_compute_kernels)
 
     def test_tower_sharding(self) -> None:
-        # five tabels
+        # five tables
         # tower_0: tables[2], tables[3]
         # tower_1: tables[0]
         # sparse_arch:
