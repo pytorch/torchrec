@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import Optional, List, Set, Union
+from typing import Any, Dict, Optional, List, Set, Union
 
 import torch
 from torchrec.distributed.types import ShardedModule
@@ -44,6 +44,29 @@ def filter_state_dict(
             # + 1 to length is to remove the '.' after the key
             filtered_state_dict[key[len(name) + 1 :]] = value
     return filtered_state_dict
+
+
+def add_prefix_to_state_dict(state_dict: Dict[str, Any], prefix: str) -> None:
+    """
+    Adds prefix to all keys in state dict, in place.
+
+    Args:
+        state_dict (Dict[str, Any]): input state dict to update.
+        prefix (str): name to filter from state dict keys.
+
+    Returns:
+        None.
+    """
+    keys = sorted(state_dict.keys())
+    for key in keys:
+        state_dict[prefix + key] = state_dict.pop(key)
+
+    if "_metadata" in state_dict:
+        metadata = state_dict["_metadata"]
+        for key in list(metadata.keys()):
+            if len(key) == 0:
+                continue
+            metadata[prefix + key] = metadata.pop(key)
 
 
 def _get_unsharded_module_names_helper(
@@ -103,7 +126,7 @@ class sharded_model_copy:
 
         m = DistributedModelParallel(m)
         with sharded_model_copy("cpu"):
-                m_cpu = copy.deepcopy(m)
+            m_cpu = copy.deepcopy(m)
     """
 
     def __init__(self, device: Optional[Union[str, int, torch.device]]) -> None:

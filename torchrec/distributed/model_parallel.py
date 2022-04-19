@@ -36,9 +36,13 @@ from torchrec.distributed.utils import (
     sharded_model_copy,
     append_prefix,
     filter_state_dict,
+    add_prefix_to_state_dict,
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+
+
+_DDP_STATE_DICT_PREFIX = "module."
 
 
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
@@ -65,8 +69,7 @@ class DataParallelWrapper(abc.ABC):
 
 class DefaultDataParallelWrapper(DataParallelWrapper):
     """
-    Default data parallel wrapper, which applies data parallel for all
-    unsharded modules.
+    Default data parallel wrapper, which applies data parallel to all unsharded modules.
     """
 
     def wrap(
@@ -98,7 +101,7 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 key for key in all_paramemeter_names if key in sharded_parameter_names
             ],
         )
-        # initailize DDP
+        # initialize DDP
         dmp._dmp_wrapped_module = cast(
             nn.Module,
             DistributedDataParallel(
@@ -112,7 +115,10 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         )
 
 
-def dmp_get_module(module: nn.Module) -> nn.Module:
+def get_unwrapped_module(module: nn.Module) -> nn.Module:
+    """
+    Unwraps module wrapped by DMP, DDP, or FSDP.
+    """
     while (
         isinstance(module, DistributedModelParallel)
         or isinstance(module, DistributedDataParallel)
@@ -122,6 +128,18 @@ def dmp_get_module(module: nn.Module) -> nn.Module:
             module = module._dmp_wrapped_module
         else:
             module = module.module
+    return module
+
+
+def get_module(module: nn.Module) -> nn.Module:
+    """
+    Unwraps DMP module.
+
+    Does not unwrap data parallel wrappers (i.e. DDP/FSDP), so overriding
+    implementations by the wrappers can be used.
+    """
+    while isinstance(module, DistributedModelParallel):
+        module = module._dmp_wrapped_module
     return module
 
 
@@ -136,7 +154,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         plan (Optional[ShardingPlan]): plan to use when sharding, defaults to
             `EmbeddingShardingPlanner.collective_plan()`.
         sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
-            to shard with, defaults to `EmbeddingBagCollectionSharder()`,
+            to shard with, defaults to `EmbeddingBagCollectionSharder()`.
         init_data_parallel (bool): data-parallel modules can be lazy, i.e. they delay
             parameter initialization until the first forward pass. Pass `True` to delay
             initialization of data parallel modules. Do first forward pass and then call
@@ -227,10 +245,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     @property
     def module(self) -> nn.Module:
         """
-        Property to directly access sharded module, which
-        may or may not yet be wrapped in DDP
+        Property to directly access sharded module, which will not be wrapped in DDP,
+        FSDP, DMP, or any other parallelism wrappers.
         """
-        return dmp_get_module(self)
+        return get_unwrapped_module(self)
 
     @module.setter
     def module(self, value: nn.Module) -> None:
@@ -291,8 +309,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         device: torch.device,
     ) -> "DistributedModelParallel":
         """
-        Recursively copy submodules to new device by calling per-module customized copy process.
-        since some modules needs to use the original references (like ShardedModule for inference).
+        Recursively copy submodules to new device by calling per-module customized copy
+        process, since some modules needs to use the original references (like
+        `ShardedModule` for inference).
         """
         with sharded_model_copy(device=None):
             copy_dmp = copy.deepcopy(self)
@@ -375,7 +394,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _sparse_grad_parameter_names(
         self, module: nn.Module, destination: List[str], prefix: str = ""
     ) -> List[str]:
-        module = dmp_get_module(module)
+        module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
             module.sparse_grad_parameter_names(destination, prefix)
         elif isinstance(module, nn.Embedding):
@@ -391,35 +410,19 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
         return destination
 
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
         self,
+        *args: Any,
         destination: Optional[Dict[str, Any]] = None,
         prefix: str = "",
         keep_vars: bool = False,
     ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-
-        return self._state_dict(self.module, destination, prefix, keep_vars)
-
-    def _state_dict(
-        self,
-        module: nn.Module,
-        destination: Dict[str, Any],
-        prefix: str,
-        keep_vars: bool,
-    ) -> Dict[str, Any]:
-        module = dmp_get_module(module)
-        if isinstance(module, ShardedModule):
-            module.state_dict(destination, prefix, keep_vars)
-        else:
-            module._save_to_state_dict(destination, prefix, keep_vars)
-            for name, child in module.named_children():
-                self._state_dict(child, destination, prefix + name + ".", keep_vars)
-        return destination
+        state_dict = get_module(self).state_dict(prefix=prefix, keep_vars=keep_vars)
+        torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
+            state_dict, prefix + _DDP_STATE_DICT_PREFIX
+        )
+        add_prefix_to_state_dict(state_dict, prefix)
+        return state_dict
 
     def load_state_dict(
         self,
@@ -427,7 +430,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         prefix: str = "",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        return self._load_state_dict(self.module, state_dict, prefix, strict)
+        return self._load_state_dict(self, state_dict, prefix, strict)
 
     def _load_state_dict(
         self,
@@ -438,7 +441,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> _IncompatibleKeys:
         missing_keys = []
         unexpected_keys = []
-        module = dmp_get_module(module)
+        module = get_module(module)
+        if isinstance(module, DistributedDataParallel):
+            torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
+                state_dict, prefix
+            )
+            add_prefix_to_state_dict(state_dict, prefix + _DDP_STATE_DICT_PREFIX)
         if isinstance(module, ShardedModule):
             return module.load_state_dict(state_dict, strict=strict)
         else:
@@ -466,7 +474,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         strip_ddp: bool = True,
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         if strip_ddp:
-            module = dmp_get_module(module)
+            module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
             yield from module.named_parameters(prefix, recurse)
         else:
@@ -488,7 +496,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
-        module = dmp_get_module(module)
+        module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
             yield from module.sharded_parameter_names(prefix)
         else:
@@ -500,7 +508,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _named_buffers(
         self, module: nn.Module, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        module = dmp_get_module(module)
+        module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
             yield from module.named_buffers(prefix, recurse)
         else:
