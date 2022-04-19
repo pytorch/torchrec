@@ -4278,8 +4278,7 @@ set to <code class="docutils literal notranslate"><span class="pre">True</span><
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DefaultDataParallelWrapper">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">DefaultDataParallelWrapper</span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DefaultDataParallelWrapper" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.model_parallel.DataParallelWrapper" title="torchrec.distributed.model_parallel.DataParallelWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.distributed.model_parallel.DataParallelWrapper</span></code></a></p>
-<p>Default data parallel wrapper, which applies data parallel for all
-unsharded modules.</p>
+<p>Default data parallel wrapper, which applies data parallel to all unsharded modules.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DefaultDataParallelWrapper.wrap">
 <span class="sig-name descname"><span class="pre">wrap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dmp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel" title="torchrec.distributed.model_parallel.DistributedModelParallel"><span class="pre">torchrec.distributed.model_parallel.DistributedModelParallel</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><span class="pre">torchrec.distributed.types.ShardingEnv</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DefaultDataParallelWrapper.wrap" title="Permalink to this definition">¶</a></dt>
@@ -4301,7 +4300,7 @@ unsharded modules.</p>
 <li><p><strong>plan</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan"><em>ShardingPlan</em></a><em>]</em>) – plan to use when sharding, defaults to
 <cite>EmbeddingShardingPlanner.collective_plan()</cite>.</p></li>
 <li><p><strong>sharders</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em><em>]</em>) – <cite>ModuleSharders</cite> available
-to shard with, defaults to <cite>EmbeddingBagCollectionSharder()</cite>,</p></li>
+to shard with, defaults to <cite>EmbeddingBagCollectionSharder()</cite>.</p></li>
 <li><p><strong>init_data_parallel</strong> (<em>bool</em>) – data-parallel modules can be lazy, i.e. they delay
 parameter initialization until the first forward pass. Pass <cite>True</cite> to delay
 initialization of data parallel modules. Do first forward pass and then call
@@ -4334,8 +4333,9 @@ parallel modules.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.copy">
 <span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel" title="torchrec.distributed.model_parallel.DistributedModelParallel"><span class="pre">torchrec.distributed.model_parallel.DistributedModelParallel</span></a></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.copy" title="Permalink to this definition">¶</a></dt>
-<dd><p>Recursively copy submodules to new device by calling per-module customized copy process.
-since some modules needs to use the original references (like ShardedModule for inference).</p>
+<dd><p>Recursively copy submodules to new device by calling per-module customized copy
+process, since some modules needs to use the original references (like
+<cite>ShardedModule</cite> for inference).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4403,8 +4403,8 @@ exists in <a class="reference internal" href="#torchrec.distributed.model_parall
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.module">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.nn.modules.module.Module</span></em><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Property to directly access sharded module, which
-may or may not yet be wrapped in DDP</p>
+<dd><p>Property to directly access sharded module, which will not be wrapped in DDP,
+FSDP, DMP, or any other parallelism wrappers.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4471,7 +4471,7 @@ are direct members of this module.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict">
-<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a dictionary containing a whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
@@ -4530,14 +4530,23 @@ set to <code class="docutils literal notranslate"><span class="pre">True</span><
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.dmp_get_module">
-<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">dmp_get_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.dmp_get_module" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_default_sharders">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">get_default_sharders</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">torchrec.distributed.types.ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.get_default_sharders" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_module">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">get_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.get_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unwraps DMP module.</p>
+<p>Does not unwrap data parallel wrappers (i.e. DDP/FSDP), so overriding
+implementations by the wrappers can be used.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_unwrapped_module">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">get_unwrapped_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.get_unwrapped_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unwraps module wrapped by DMP, DDP, or FSDP.</p>
+</dd></dl>
 
 </section>
 <section id="module-torchrec.distributed.quant_embeddingbag">
@@ -5315,6 +5324,23 @@ This plan can be saved and re-used to ensure sharding stability.</p>
 <section id="module-torchrec.distributed.utils">
 <span id="torchrec-distributed-utils"></span><h2>torchrec.distributed.utils<a class="headerlink" href="#module-torchrec.distributed.utils" title="Permalink to this headline">¶</a></h2>
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.utils.add_prefix_to_state_dict">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">add_prefix_to_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.utils.add_prefix_to_state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adds prefix to all keys in state dict, in place.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state_dict</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – input state dict to update.</p></li>
+<li><p><strong>prefix</strong> (<em>str</em>) – name to filter from state dict keys.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.utils.append_prefix">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">append_prefix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.utils.append_prefix" title="Permalink to this definition">¶</a></dt>
 <dd><p>Appends provided prefix to provided name.</p>
@@ -5368,7 +5394,7 @@ Strips provided name from beginning of key in the resulting state dict.</p>
 
 <span class="n">m</span> <span class="o">=</span> <span class="n">DistributedModelParallel</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">sharded_model_copy</span><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">):</span>
-        <span class="n">m_cpu</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
+    <span class="n">m_cpu</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
 </pre></div>
 </div>
 </dd></dl>
