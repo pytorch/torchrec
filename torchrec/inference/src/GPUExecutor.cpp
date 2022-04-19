@@ -171,6 +171,11 @@ void GPUExecutor::process(int idx) {
     }
 
     // Free session to avoid accumulating too many PyObjects.
+
+    // AttributeError: 'ShardedTensor' object has no attribute
+    // '_sharded_tensor_id' AttributeError: module
+    // 'torch.distributed._shard.sharded_tensor.api' has no attribute
+    // 'ShardedTensor.ProcessGroupState'
     auto model = model_.acquireSession(&manager_->allInstances().at(idx));
     at::IValue predictions;
 

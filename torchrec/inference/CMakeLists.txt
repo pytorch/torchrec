@@ -66,6 +66,7 @@ caffe2_interface_library(torch_deploy_internal torch_deploy)
 
 # for our own header files
 include_directories(include/)
+include_directories(gen/)
 
 # define our library target
 add_library(inference SHARED
@@ -85,10 +86,10 @@ target_link_libraries(inference "-Wl,--no-as-needed -rdynamic"
 # grpc headers. e.g. ~/.local/include
 include_directories(${GRPC_HEADER_INCLUDE_PATH})
 
-set(pred_grpc_srcs "include/torchrec/inference/predictor.grpc.pb.cc")
-set(pred_grpc_hdrs "include/torchrec/inference/predictor.grpc.pb.h")
-set(pred_proto_srcs "include/torchrec/inference/predictor.pb.cc")
-set(pred_proto_hdrs "include/torchrec/inference/predictor.pb.h")
+set(pred_grpc_srcs "gen/torchrec/inference/predictor.grpc.pb.cc")
+set(pred_grpc_hdrs "gen/torchrec/inference/predictor.grpc.pb.h")
+set(pred_proto_srcs "gen/torchrec/inference/predictor.pb.cc")
+set(pred_proto_hdrs "gen/torchrec/inference/predictor.pb.h")
 
 add_library(pred_grpc_proto SHARED
   ${pred_grpc_srcs}
