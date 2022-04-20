@@ -47,4 +47,7 @@ c10::IValue splitDictOfTensors(
     size_t nLength,
     size_t nTotalLength);
 
+c10::IValue
+splitDictWithMaskTensor(c10::IValue result, size_t nOffset, size_t nLength);
+
 } // namespace torchrec

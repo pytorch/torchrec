@@ -74,3 +74,45 @@ TEST(ResultSplitTest, SplitDictOfTensors) {
     checkTensor<float>(tuple->elements()[2].toTensor(), {14., 15.});
   }
 }
+
+TEST(ResultSplitTest, SplitDictWithMaskTensor) {
+  c10::impl::GenericDict pred(
+      c10::StringType::get(),
+      c10::TupleType::create({c10::TensorType::get(), c10::TensorType::get()}));
+  pred.insert(
+      "par",
+      c10::ivalue::Tuple::create(at::tensor({0, 1, 2}), at::tensor({3, 4, 5})));
+  pred.insert(
+      "foo",
+      c10::ivalue::Tuple::create(at::tensor({2, 1, 0}), at::tensor({5, 4, 3})));
+
+  auto splitResult = torchrec::splitDictWithMaskTensor(pred, 0, 2);
+  checkTensor<float>(
+      splitResult.toGenericDict()
+          .at("par")
+          .toTupleRef()
+          .elements()[0]
+          .toTensor(),
+      {0., 1.});
+  checkTensor<float>(
+      splitResult.toGenericDict()
+          .at("par")
+          .toTupleRef()
+          .elements()[1]
+          .toTensor(),
+      {3., 4., 5.});
+  checkTensor<float>(
+      splitResult.toGenericDict()
+          .at("foo")
+          .toTupleRef()
+          .elements()[0]
+          .toTensor(),
+      {2., 1.});
+  checkTensor<float>(
+      splitResult.toGenericDict()
+          .at("foo")
+          .toTupleRef()
+          .elements()[1]
+          .toTensor(),
+      {5., 4., 3.});
+}
