@@ -410,14 +410,16 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
         return destination
 
+    # pyre-ignore [14]
     def state_dict(
         self,
-        *args: Any,
         destination: Optional[Dict[str, Any]] = None,
         prefix: str = "",
         keep_vars: bool = False,
     ) -> Dict[str, Any]:
-        state_dict = get_module(self).state_dict(prefix=prefix, keep_vars=keep_vars)
+        state_dict = get_module(self).state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars
+        )
         torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
             state_dict, prefix + _DDP_STATE_DICT_PREFIX
         )
