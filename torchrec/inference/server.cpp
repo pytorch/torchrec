@@ -13,6 +13,7 @@
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 #include <torch/csrc/deploy/deploy.h>
+#include <torch/csrc/deploy/path_environment.h>
 #include <torch/torch.h>
 
 #include <glog/logging.h>
@@ -42,6 +43,11 @@ DEFINE_int32(max_batch_size, 2048, "");
 
 DEFINE_string(server_address, "0.0.0.0", "");
 DEFINE_string(server_port, "50051", "");
+
+DEFINE_string(
+    python_packages_path,
+    "",
+    "Used to load the packages that you 'extern' with torch.package");
 
 namespace {
 
@@ -201,8 +207,12 @@ int main(int argc, char* argv[]) {
   std::vector<torchrec::BatchQueueCb> batchQueueCbs;
   std::unordered_map<std::string, std::string> batchingMetadataMap;
 
+  std::shared_ptr<torch::deploy::Environment> env =
+      std::make_shared<torch::deploy::PathEnvironment>(
+          FLAGS_python_packages_path);
+
   auto manager = std::make_shared<torch::deploy::InterpreterManager>(
-      FLAGS_n_gpu * FLAGS_n_interp_per_gpu);
+      FLAGS_n_gpu * FLAGS_n_interp_per_gpu, env);
   {
     torch::deploy::Package package = manager->loadPackage(FLAGS_package_path);
     auto I = package.acquireSession();
