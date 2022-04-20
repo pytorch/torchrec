@@ -23,17 +23,19 @@
 
 #include "torchrec/inference/GPUExecutor.h"
 #include "torchrec/inference/predictor.grpc.pb.h"
+#include "torchrec/inference/predictor.pb.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Status;
+using predictor::FloatVec;
 using predictor::PredictionRequest;
 using predictor::PredictionResponse;
 using predictor::Predictor;
 
 DEFINE_int32(n_interp_per_gpu, 1, "");
 DEFINE_int32(n_gpu, 1, "");
-DEFINE_string(package_path, "/tmp/model_package.zip", "");
+DEFINE_string(package_path, "", "");
 
 DEFINE_int32(batching_interval, 10, "");
 DEFINE_int32(queue_timeout, 500, "");
@@ -66,10 +68,10 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     auto encoded_values = feature.values();
 
     floatFeature.num_features = feature.num_features();
-    floatFeature.values = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_values.c_str(),
-        encoded_values.size());
+    floatFeature.values = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_values.data(),
+        encoded_values.size()};
 
     torchRecRequest->features["float_features"] = std::move(floatFeature);
   }
@@ -82,14 +84,14 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     auto encoded_lengths = feature.lengths();
 
     sparseFeature.num_features = feature.num_features();
-    sparseFeature.lengths = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_values.c_str(),
-        encoded_values.size());
-    sparseFeature.values = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_lengths.c_str(),
-        encoded_values.size());
+    sparseFeature.lengths = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_lengths.data(),
+        encoded_lengths.size()};
+    sparseFeature.values = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_values.data(),
+        encoded_values.size()};
 
     torchRecRequest->features["id_list_features"] = std::move(sparseFeature);
   }
@@ -103,18 +105,18 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     auto encoded_weights = feature.weights();
 
     sparseFeature.num_features = feature.num_features();
-    sparseFeature.lengths = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_values.c_str(),
-        encoded_values.size());
-    sparseFeature.values = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_lengths.c_str(),
-        encoded_lengths.size());
-    sparseFeature.weights = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_weights.c_str(),
-        encoded_weights.size());
+    sparseFeature.lengths = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_lengths.data(),
+        encoded_lengths.size())};
+    sparseFeature.values = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_values.data(),
+        encoded_values.size())};
+    sparseFeature.weights = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_weights.data(),
+        encoded_weights.size()};
 
     torchRecRequest->features["id_score_list_features"] =
         std::move(sparseFeature);
@@ -127,10 +129,10 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     auto encoded_values = feature.values();
 
     floatFeature.num_features = feature.num_features();
-    floatFeature.values = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_values.c_str(),
-        sizeof(encoded_values.c_str()));
+    floatFeature.values = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_values.data(),
+        encoded_values.size()};
 
     torchRecRequest->features["embedding_features"] = std::move(floatFeature);
   }
@@ -143,14 +145,14 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     auto encoded_values = feature.values();
 
     sparseFeature.num_features = feature.num_features();
-    sparseFeature.lengths = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_values.c_str(),
-        sizeof(encoded_values.c_str()));
-    sparseFeature.values = folly::IOBuf(
-        folly::IOBuf::WRAP_BUFFER,
-        encoded_lengths.c_str(),
-        sizeof(encoded_lengths.c_str()));
+    sparseFeature.lengths = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_lengths.data(),
+        encoded_lengths.size()};
+    sparseFeature.values = folly::IOBuf{
+        folly::IOBuf::COPY_BUFFER,
+        encoded_values.data(),
+        encoded_values.size()};
 
     torchRecRequest->features["unary_features"] = std::move(sparseFeature);
   }
@@ -158,11 +160,7 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
   return torchRecRequest;
 }
 
-// Convert ivalue to map<string, float[]>, TODO: find out if protobuf can
-// support custom types (folly::iobuf), so we can avoid this overhead.
-// Otherwise, check out fbthrift.
-
-// Logic and data behind the server's behavior.
+// Logic behind the server's behavior.
 class PredictorServiceHandler final : public Predictor::Service {
  public:
   explicit PredictorServiceHandler(torchrec::BatchingQueue& queue)
@@ -179,15 +177,14 @@ class PredictorServiceHandler final : public Predictor::Service {
         std::move(future).get(); // blocking, TODO: Write async server
     auto predictions = reply->mutable_predictions();
 
+    // Convert ivalue to map<string, FloatVec>, TODO: find out if protobuf
+    // can support custom types (folly::iobuf), so we can avoid this overhead.
     for (const auto& item : torchRecResponse->predictions.toGenericDict()) {
       auto tensor = item.value().toTensor();
-
-      // if we could use the folly::iobuf in protobuf, this wouldn't be
-      // necessary.
-      std::stringstream stream;
-      torch::save(tensor, stream);
-
-      (*predictions)[item.key().toStringRef()] = stream.str();
+      FloatVec fv;
+      fv.mutable_data()->Add(
+          tensor.data_ptr<float>(), tensor.data_ptr<float>() + tensor.numel());
+      (*predictions)[item.key().toStringRef()] = fv;
     }
 
     return Status::OK;
@@ -200,7 +197,10 @@ class PredictorServiceHandler final : public Predictor::Service {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  google::InitGoogleLogging(argv[0]);
+
   LOG(INFO) << "Creating GPU executors";
+
   // store the executors and interpreter managers
   std::vector<std::unique_ptr<torchrec::GPUExecutor>> executors;
   std::vector<torch::deploy::ReplicatedObj> models;
