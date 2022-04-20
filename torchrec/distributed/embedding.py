@@ -145,15 +145,21 @@ def _construct_jagged_tensors(
     embeddings: torch.Tensor,
     features: KeyedJaggedTensor,
     embedding_names: List[str],
+    need_indices: bool = False,
 ) -> Dict[str, JaggedTensor]:
     ret: Dict[str, JaggedTensor] = {}
-    length_per_key = features.length_per_key()
     lengths = features.lengths().view(-1, features.stride())
-    values_per_key = embeddings.split(length_per_key)
+    values = features.values()
+    length_per_key = features.length_per_key()
+    values_list = torch.split(values, length_per_key) if need_indices else None
+    embeddings_list = torch.split(embeddings, length_per_key, dim=0)
+    stride = features.stride()
+    lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
     for i, key in enumerate(features.keys()):
         ret[key] = JaggedTensor(
-            lengths=lengths[i],
-            values=values_per_key[i],
+            lengths=lengths_tuple[i],
+            values=embeddings_list[i],
+            weights=values_list[i] if need_indices else None,
         )
     return ret
 
@@ -173,11 +179,13 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
         awaitables_per_sharding: List[Awaitable[torch.Tensor]],
         features_per_sharding: List[KeyedJaggedTensor],
         embedding_names_per_sharding: List[str],
+        need_indices: bool = False,
     ) -> None:
         super().__init__()
         self._awaitables_per_sharding = awaitables_per_sharding
         self._features_per_sharding = features_per_sharding
         self._embedding_names_per_sharding = embedding_names_per_sharding
+        self._need_indices = need_indices
 
     def _wait_impl(self) -> Dict[str, JaggedTensor]:
         jt_dict: Dict[str, JaggedTensor] = {}
@@ -186,7 +194,9 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
             self._features_per_sharding,
             self._embedding_names_per_sharding,
         ):
-            jt_dict.update(_construct_jagged_tensors(w.wait(), f, e))
+            jt_dict.update(
+                _construct_jagged_tensors(w.wait(), f, e, self._need_indices)
+            )
         return jt_dict
 
 
@@ -253,6 +263,7 @@ class ShardedEmbeddingCollection(
         self._embedding_names_per_sharding: List[List[str]] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._embedding_names_per_sharding.append(sharding.embedding_names())
+        self._need_indices: bool = module.need_indices
 
     def _create_input_dist(
         self,
@@ -383,6 +394,7 @@ class ShardedEmbeddingCollection(
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
             embedding_names_per_sharding=self._embedding_names_per_sharding,
+            need_indices=self._need_indices,
         )
 
     def compute_and_output_dist(
@@ -412,6 +424,7 @@ class ShardedEmbeddingCollection(
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
             embedding_names_per_sharding=self._embedding_names_per_sharding,
+            need_indices=self._need_indices,
         )
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
