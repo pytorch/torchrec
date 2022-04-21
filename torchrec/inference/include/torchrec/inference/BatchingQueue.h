@@ -46,9 +46,7 @@ struct PredictionBatch {
   std::chrono::time_point<std::chrono::steady_clock> enqueueTime =
       std::chrono::steady_clock::now();
 
-  std::unique_ptr<at::cuda::CUDAEvent> event =
-      std::make_unique<at::cuda::CUDAEvent>(
-          cudaEventBlockingSync | cudaEventDisableTiming);
+  Event event;
 
   void cuda();
 
@@ -66,6 +64,7 @@ class BatchingQueue {
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
     const std::unordered_map<std::string, std::string> batchingMetadata;
+    std::function<Event(at::DeviceIndex)> eventCreationFn;
   };
 
   BatchingQueue(const BatchingQueue&) = delete;

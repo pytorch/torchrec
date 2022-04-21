@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <ATen/core/ivalue.h>
+#include <ATen/cuda/CUDAEvent.h>
 #include <folly/ExceptionWrapper.h>
 #include <folly/io/IOBuf.h>
 
@@ -53,5 +54,8 @@ struct PredictionResponse {
 };
 
 using PredictionException = std::runtime_error;
+
+using Event = std::
+    unique_ptr<at::cuda::CUDAEvent, std::function<void(at::cuda::CUDAEvent*)>>;
 
 } // namespace torchrec

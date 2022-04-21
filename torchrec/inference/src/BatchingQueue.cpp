@@ -253,6 +253,15 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         auto batch = std::make_shared<PredictionBatch>(PredictionBatch{
             combinedBatchSize, std::move(forwardArgs), std::move(contexts)});
         batch->cuda();
+        auto createEvent = [&]() {
+          return Event(
+              std::make_unique<at::cuda::CUDAEvent>(
+                  cudaEventBlockingSync | cudaEventDisableTiming)
+                  .release(),
+              [](at::cuda::CUDAEvent* event) { delete event; });
+        };
+        batch->event = config_.eventCreationFn ? config_.eventCreationFn(gpuIdx)
+                                               : createEvent();
         batch->event->record();
         cbs_[gpuIdx](batch);
       }
