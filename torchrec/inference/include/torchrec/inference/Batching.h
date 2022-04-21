@@ -12,14 +12,17 @@
 #include <vector>
 
 #include <ATen/ATen.h>
+#include <c10/core/Device.h>
+#include <c10/core/DeviceType.h>
 #include <c10/util/Registry.h>
+#include <folly/Lazy.h>
 
-#include "c10/core/Device.h"
-#include "c10/core/DeviceType.h"
 #include "torchrec/inference/JaggedTensor.h"
 #include "torchrec/inference/Types.h"
 
 namespace torchrec {
+
+using LazyTensorRef = folly::detail::Lazy<std::function<at::Tensor()>>&;
 
 class BatchingFunc {
  public:
@@ -29,9 +32,9 @@ class BatchingFunc {
       const std::string& /* featureName */,
       const std::vector<std::shared_ptr<PredictionRequest>>& /* requests */,
       const int64_t& /* totalNumBatch */,
-      at::Tensor /* batchOffsets */,
+      LazyTensorRef /* batchOffsets */,
       const c10::Device& /* device */,
-      at::Tensor /* batchItems */) = 0;
+      LazyTensorRef /* batchItems */) = 0;
 };
 
 /**
