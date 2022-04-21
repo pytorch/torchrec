@@ -42,6 +42,7 @@ from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
 
 
+_DMP_STATE_DICT_PREFIX = "_dmp_wrapped_module."
 _DDP_STATE_DICT_PREFIX = "module."
 
 
@@ -242,6 +243,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             self.init_data_parallel()
         self._optim = CombinedOptimizer(fused_optims)
 
+        self._register_state_dict_hook(self._post_state_dict_hook)
+
     @property
     def module(self) -> nn.Module:
         """
@@ -410,18 +413,18 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
         return destination
 
-    # pyre-ignore [14]
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        state_dict = get_module(self).state_dict(
-            destination=destination, prefix=prefix, keep_vars=keep_vars
-        )
+    @staticmethod
+    def _post_state_dict_hook(
+        module: nn.Module,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        prefix: str,
+        local_metadata: Dict[str, Any],
+    ) -> "OrderedDict[str, torch.Tensor]":
+        """
+        Strips DMP and DDP prefixes from the state dict.
+        """
         torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
-            state_dict, prefix + _DDP_STATE_DICT_PREFIX
+            state_dict, prefix + _DMP_STATE_DICT_PREFIX + _DDP_STATE_DICT_PREFIX
         )
         add_prefix_to_state_dict(state_dict, prefix)
         return state_dict

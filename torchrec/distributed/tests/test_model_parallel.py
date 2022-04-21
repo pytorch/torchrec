@@ -575,7 +575,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
         m1, m2 = models
 
         # load the second's (m2's) with the first (m1's) state_dict
-        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+        m2.load_state_dict(m1.state_dict())
 
         # validate the models are equivalent
         with torch.no_grad():
@@ -614,10 +614,7 @@ class ModelParallelStateDictTest(unittest.TestCase):
         (m1, m2), batch = self._generate_dmps_and_batch(sharders)
 
         # load the second's (m2's) with the first (m1's) state_dict
-        m2.load_state_dict(
-            cast("OrderedDict[str, torch.Tensor]", m1.state_dict(prefix="alpha")),
-            prefix="alpha",
-        )
+        m2.load_state_dict(m1.state_dict(prefix="alpha"), prefix="alpha")
 
         # validate the models are equivalent
         sd1 = m1.state_dict()
