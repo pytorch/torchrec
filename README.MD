@@ -65,7 +65,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
 
 4. Download and install TorchRec.
    ```
-   git clone --recursive https://github.com/facebookresearch/torchrec
+   git clone --recursive https://github.com/pytorch/torchrec
 
    # cd to the directory where torchrec's setup.py is located. Then run one of the below:
    cd torchrec
@@ -86,7 +86,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
    ```
    See [TorchX](https://pytorch.org/torchx/) for more information on launching distributed and remote jobs.
 
-6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](examples/dlrm/dlrm_main.py).
+6. If you want to run a more complex example, please take a look at the torchrec [DLRM example](https://github.com/facebookresearch/dlrm/blob/main/torchrec_dlrm/dlrm_main.py).
 
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
