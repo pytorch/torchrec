@@ -9,7 +9,7 @@ import argparse
 import sys
 from typing import List
 
-from modules.dlrm_predict import (
+from dlrm_predict import (
     DLRMPredictFactory,
     DLRMModelConfig,
 )

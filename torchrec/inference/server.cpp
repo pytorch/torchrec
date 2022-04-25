@@ -16,6 +16,7 @@
 #include <torch/csrc/deploy/path_environment.h>
 #include <torch/torch.h>
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <grpc++/grpc++.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
@@ -198,6 +199,7 @@ class PredictorServiceHandler final : public Predictor::Service {
 
 int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   LOG(INFO) << "Creating GPU executors";
 
