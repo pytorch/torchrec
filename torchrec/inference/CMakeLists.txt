@@ -12,12 +12,6 @@ project(inference)
 # e.g. ~/gprc/examples/cpp/cmake/common.cmake
 include(${GRPC_COMMON_CMAKE_PATH}/common.cmake)
 
-if(NOT DEFINED TORCH_DEPLOY_LIB_PATH)
-  message(
-    FATAL_ERROR
-    "TORCH_DEPLOY_LIB_PATH must be set to the path of the torch deploy library."
-  )
-endif()
 
 # abi and other flags
 
