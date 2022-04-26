@@ -65,6 +65,7 @@ class BatchingQueue {
     // For feature name to BatchingFunc name.
     const std::unordered_map<std::string, std::string> batchingMetadata;
     std::function<Event(at::DeviceIndex)> eventCreationFn;
+    std::function<void()> warmupFn;
   };
 
   BatchingQueue(const BatchingQueue&) = delete;
