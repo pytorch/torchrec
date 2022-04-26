@@ -33,7 +33,8 @@ class GPUExecutor {
       int rank,
       int worldSize,
       std::shared_ptr<torchrec::ResultSplitFunc> func,
-      std::chrono::milliseconds queueTimeout);
+      std::chrono::milliseconds queueTimeout,
+      std::function<void()> warmupFn = {});
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
   ~GPUExecutor();
@@ -54,6 +55,7 @@ class GPUExecutor {
   std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
   std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
   const std::chrono::milliseconds queueTimeout_;
+  std::function<void()> warmupFn_;
 };
 
 } // namespace torchrec

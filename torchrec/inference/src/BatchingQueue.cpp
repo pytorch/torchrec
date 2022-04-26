@@ -179,6 +179,10 @@ void BatchingQueue::pinMemory(int gpuIdx) {
   at::cuda::CUDAGuard deviceGuard(gpuIdx);
   at::cuda::CUDAStreamGuard streamGuard(
       at::cuda::getStreamFromPool(/* isHighPriority */ false));
+  if (config_.warmupFn) {
+    config_.warmupFn();
+  }
+
   while (!stopping_) {
     BatchingQueueEntry entry;
     if (!batchingQueues_[gpuIdx]->tryReadUntil(

@@ -41,35 +41,6 @@ DEFINE_bool(
 namespace torchrec {
 
 namespace {
-void init_cuda_runtime() {
-  LOG(INFO) << "Beginning CUDA runtime warmup, idx: "
-            << at::cuda::current_device();
-  folly::stop_watch<std::chrono::seconds> timer;
-
-  // Trick to trigger the CUDA runtime initialization so that we don't have
-  // slow requests for the first few seconds after service initialization
-  auto device = at::Device(at::kCUDA, at::cuda::current_device());
-
-  std::vector<at::Tensor> ts;
-  for (auto j = 0; j < 10; ++j) {
-    // allocate some matrices that we preserve so they aren't immediately
-    // free'd and reused by caching allocator. This should push some persisted
-    // blocks into caching allocator, and with variable sizes so we hit a few
-    // of the buckets/paths.
-    auto size = static_cast<int64_t>(1) << (std::min(j, 24));
-    ts.push_back(at::ones({size}, at::TensorOptions().pinned_memory(true)));
-    ts.push_back(at::ones({size}, at::TensorOptions().device(device)));
-
-    // allocate some matrices and do a matmul to initialize CuBLAS, etc.
-    auto a = at::ones({1024, 1024}, at::TensorOptions().device(device));
-    auto b = at::ones({1024, 1024}, at::TensorOptions().device(device));
-    ts.push_back(at::matmul(a, b));
-  }
-  AT_CUDA_CHECK(cudaDeviceSynchronize());
-  LOG(INFO) << "CUDA runtime warmup finished in " << timer.elapsed().count()
-            << " seconds.";
-}
-
 // Enable NVTX tracing for the caller thread if the flag is set.
 void enable_nvtx_tracing() {
   thread_local static bool emit = false;
@@ -88,16 +59,17 @@ GPUExecutor::GPUExecutor(
     int rank,
     int worldSize,
     std::shared_ptr<torchrec::ResultSplitFunc> func,
-    std::chrono::milliseconds queueTimeout)
+    std::chrono::milliseconds queueTimeout,
+    std::function<void()> warmupFn)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
       worldSize_(worldSize),
       batches_(10'000),
       resultSplitFunc_(func),
-      queueTimeout_(queueTimeout) {
+      queueTimeout_(queueTimeout),
+      warmupFn_(std::move(warmupFn)) {
   at::cuda::CUDAGuard guard(rank_);
-  init_cuda_runtime();
 
   int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
   for (int i = 0; i < num_threads_per_gpu; ++i) {
@@ -149,6 +121,10 @@ void GPUExecutor::process(int idx) {
   at::cuda::CUDAGuard deviceGuard(rank_);
   auto d2hStream =
       at::cuda::getStreamFromPool(/* isHighPriority */ true, rank_);
+
+  if (warmupFn_) {
+    warmupFn_();
+  }
 
   while (true) {
     std::shared_ptr<PredictionBatch> batch;
