@@ -77,6 +77,8 @@ BatchingQueue::BatchingQueue(
         folly::MPMCQueue<BatchingQueueEntry>(1000));
     batchingQueues_.push_back(std::move(queue));
   }
+  rejectionExecutor_ = std::make_unique<folly::CPUThreadPoolExecutor>(
+      config_.numExceptionThreads);
   batchingThread_ = std::thread([&] {
     folly::setThreadName("CreateBatch");
     createBatch();
@@ -133,7 +135,10 @@ void BatchingQueue::createBatch() {
 
         if (std::chrono::steady_clock::now() - front.addedTime >=
             config_.queueTimeout) {
-          handleException(front.context.promise, "Batching queue timeout");
+          rejectionExecutor_->add(
+              [promise = std::move(front.context.promise)]() mutable {
+                handleRequestException(promise, "Batching queue timeout");
+              });
           queue.pop();
           continue;
         }

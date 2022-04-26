@@ -18,6 +18,7 @@
 #include <ATen/core/ivalue.h>
 #include <ATen/cuda/CUDAEvent.h>
 #include <folly/ExceptionWrapper.h>
+#include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 
 namespace torchrec {
@@ -51,6 +52,11 @@ struct PredictionResponse {
   c10::IValue predictions;
   // If set, the result is an exception.
   std::optional<folly::exception_wrapper> exception;
+};
+
+struct RequestContext {
+  uint32_t batchSize;
+  folly::Promise<std::unique_ptr<PredictionResponse>> promise;
 };
 
 using PredictionException = std::runtime_error;
