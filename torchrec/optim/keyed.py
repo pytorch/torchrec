@@ -141,10 +141,7 @@ class KeyedOptimizer(optim.Optimizer):
                     )
 
                 new_state_val = new_state[param_key][state_key]
-                if isinstance(state_val, torch.Tensor):
-                    assert isinstance(new_state_val, torch.Tensor)
-                    state_val.detach().copy_(new_state_val)
-                elif isinstance(state_val, ShardedTensor):
+                if isinstance(state_val, ShardedTensor):
                     assert isinstance(new_state_val, ShardedTensor)
                     num_shards = len(state_val.local_shards())
                     num_new_shards = len(new_state_val.local_shards())
@@ -156,6 +153,9 @@ class KeyedOptimizer(optim.Optimizer):
                         state_val.local_shards(), new_state_val.local_shards()
                     ):
                         shard.tensor.detach().copy_(new_shard.tensor)
+                elif isinstance(state_val, torch.Tensor):
+                    assert isinstance(new_state_val, torch.Tensor)
+                    state_val.detach().copy_(new_state_val)
                 else:
                     state[param][state_key] = deepcopy(new_state_val)
 
