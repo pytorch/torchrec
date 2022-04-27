@@ -160,6 +160,8 @@ void GPUExecutor::process(int idx) {
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
+    batch->event->record();
+
     completionExecutor_->add(
         // Can not bind the method directly because of the unique_ptr of item.
         [batch = std::move(batch),
@@ -168,6 +170,8 @@ void GPUExecutor::process(int idx) {
          rank = rank_,
          d2hStream = d2hStream]() mutable {
           RECORD_USER_SCOPE("CompletionStage");
+
+          batch->event->block(d2hStream);
 
           at::cuda::CUDAStreamGuard streamGuard(d2hStream);
           at::cuda::CUDAGuard deviceGuard(rank);
