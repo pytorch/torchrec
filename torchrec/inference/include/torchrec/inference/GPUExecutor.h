@@ -52,6 +52,7 @@ class GPUExecutor {
 
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> batches_;
   std::vector<std::thread> processThreads_;
+  std::unique_ptr<folly::CPUThreadPoolExecutor> rejectionExecutor_;
   std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
   std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
   const std::chrono::milliseconds queueTimeout_;

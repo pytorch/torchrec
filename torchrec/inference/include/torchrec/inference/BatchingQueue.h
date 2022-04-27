@@ -21,20 +21,16 @@
 #include <c10/cuda/CUDAStream.h>
 #include <folly/MPMCQueue.h>
 #include <folly/Synchronized.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
+#include <folly/futures/Promise.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseThread.h>
 #include <folly/synchronization/Baton.h>
-
 #include "torchrec/inference/Batching.h"
 #include "torchrec/inference/Types.h"
 
 namespace torchrec {
-
-struct RequestContext {
-  uint32_t batchSize;
-  folly::Promise<std::unique_ptr<PredictionResponse>> promise;
-};
 
 struct PredictionBatch {
   size_t batchSize;
@@ -60,6 +56,7 @@ class BatchingQueue {
   struct Config {
     std::chrono::milliseconds batchingInterval = std::chrono::milliseconds(10);
     std::chrono::milliseconds queueTimeout = std::chrono::milliseconds(500);
+    int numExceptionThreads = 4;
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
@@ -107,6 +104,7 @@ class BatchingQueue {
   std::vector<BatchQueueCb> cbs_;
   std::thread batchingThread_;
   std::vector<std::thread> memPinnerThreads_;
+  std::unique_ptr<folly::CPUThreadPoolExecutor> rejectionExecutor_;
   folly::Synchronized<std::queue<QueryQueueEntry>> requestQueue_;
   std::vector<std::shared_ptr<folly::MPMCQueue<BatchingQueueEntry>>>
       batchingQueues_;

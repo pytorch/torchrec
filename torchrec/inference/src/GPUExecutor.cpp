@@ -72,6 +72,8 @@ GPUExecutor::GPUExecutor(
   at::cuda::CUDAGuard guard(rank_);
 
   int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
+  rejectionExecutor_ =
+      std::make_unique<folly::CPUThreadPoolExecutor>(2 * num_threads_per_gpu);
   for (int i = 0; i < num_threads_per_gpu; ++i) {
     LOG(INFO) << "Starting Thread " << i << " for Model Shard Rank " << rank_
               << ", as Global thread: " << rank * num_threads_per_gpu + i;
@@ -97,9 +99,9 @@ GPUExecutor::~GPUExecutor() {
 
   std::shared_ptr<PredictionBatch> batch;
   while (batches_.readIfNotEmpty(batch)) {
-    for (auto& context : batch->contexts) {
-      handleException(context.promise, "Server shutdown");
-    }
+    rejectionExecutor_->add([batch = std::move(batch)]() {
+      handleBatchException(batch->contexts, "Server shutdown");
+    });
   }
 }
 
@@ -140,9 +142,10 @@ void GPUExecutor::process(int idx) {
 
     if (std::chrono::steady_clock::now() - batch->enqueueTime >=
         queueTimeout_) {
-      for (auto& context : batch->contexts) {
-        handleException(context.promise, "GPUExecutor queue timeout");
-      }
+      rejectionExecutor_->add([batch = std::move(batch)]() {
+        handleBatchException(batch->contexts, "GPUExecutor queue timeout");
+      });
+
       continue;
     }
 
@@ -164,7 +167,8 @@ void GPUExecutor::process(int idx) {
 
     completionExecutor_->add(
         // Can not bind the method directly because of the unique_ptr of item.
-        [batch = std::move(batch),
+        [this,
+         batch = std::move(batch),
          predictions = std::move(predictions),
          resultSplitFunc = resultSplitFunc_,
          rank = rank_,
@@ -183,21 +187,24 @@ void GPUExecutor::process(int idx) {
             batch->event->synchronize();
           }
 
-          size_t offset = 0;
-          for (auto& context : batch->contexts) {
-            if (predictions.isNone()) {
-              handleException(context.promise, "Predict exception");
-            } else {
+          if (predictions.isNone()) {
+            rejectionExecutor_->add([batch = std::move(batch)]() {
+              handleBatchException(
+                  batch->contexts, "GPUExecutor prediction exception");
+            });
+          } else {
+            size_t offset = 0;
+            for (auto& context : batch->contexts) {
+              CHECK(!predictions.isNone());
               CHECK_LT(offset, batch->batchSize);
-
               auto response = std::make_unique<PredictionResponse>();
               response->predictions = resultSplitFunc->splitResult(
                   predictions, offset, context.batchSize, batch->batchSize);
               context.promise.setValue(std::move(response));
+              offset += context.batchSize;
             }
-            offset += context.batchSize;
+            CHECK_EQ(offset, batch->batchSize);
           }
-          CHECK_EQ(offset, batch->batchSize);
         });
   }
 }

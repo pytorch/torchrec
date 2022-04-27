@@ -17,8 +17,11 @@
 
 namespace torchrec {
 
-void handleException(
+void handleRequestException(
     folly::Promise<std::unique_ptr<PredictionResponse>>& promise,
+    const std::string& msg);
+void handleBatchException(
+    std::vector<RequestContext>& contexts,
     const std::string& msg);
 
 } // namespace torchrec
