@@ -3,7 +3,19 @@
 
 name: CPU Unit Test CI
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
 
 jobs:
 
