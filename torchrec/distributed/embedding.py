@@ -255,7 +255,7 @@ class ShardedEmbeddingCollection(
                     params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
                     for param_key, weight in m.fused_optimizer.params.items():
                         # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
-                        params["embedding_modules." + param_key] = weight
+                        params["embeddings." + param_key] = weight
                     m.fused_optimizer.params = params
                     optims.append(("", m.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
