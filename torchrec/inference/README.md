@@ -1,13 +1,11 @@
 # TorchRec Inference Library (**Experimental** Release)
 
 ## Overview
----
 TorchRec Inference is a C++ library that supports **multi-gpu inference**. The Torchrec library is used to shard models written and packaged in Python via [torch.package](https://pytorch.org/docs/stable/package.html) (an alternative to TorchScript). The [torch.deploy](https://pytorch.org/docs/stable/deploy.html) library is used to serve inference from C++ by launching multiple Python interpreters carrying the packaged model, thus subverting the GIL.
 
 Follow the instructions below to package a DLRM model in Python, run a C++ inference server with the model on a GPU and send requests to said server via a python client.
 
 ## Example
----
 
 C++ 17 is a requirement.
 
@@ -229,7 +227,7 @@ Response:  [0.13199582695960999, -0.1048036441206932, -0.06022112816572189, -0.0
 <br>
 
 ## Planned work
----
+
 - Provide benchmarks for torch deploy vs TorchScript and cpu, single gpu and multi-gpu inference
 - In-code documentation
 - Simplify installation process
@@ -237,7 +235,7 @@ Response:  [0.13199582695960999, -0.1048036441206932, -0.06022112816572189, -0.0
 <br>
 
 ## Potential issues and solutions
----
+
 Skip this section if you had no issues with installation or running the example.
 
 **Missing header files during pytorch installation**
