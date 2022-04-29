@@ -759,9 +759,9 @@ class ShardedEmbeddingTowerCollection(
     def fused_optimizer(self) -> KeyedOptimizer:
         return CombinedOptimizer(
             [
-                (name, embedding.fused_optimizer)
-                for name, embedding in self.embeddings.items()
-            ]
+                (f"towers.{tower_index}.embedding", embedding.fused_optimizer)
+                for tower_index, embedding in self.embeddings.items()
+            ],
         )
 
     def named_parameters(
