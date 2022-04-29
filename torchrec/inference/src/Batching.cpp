@@ -12,7 +12,6 @@
 #include <folly/Range.h>
 #include <folly/container/Enumerate.h>
 #include <folly/io/Cursor.h>
-
 #include "ATen/Functions.h"
 #include "torchrec/inference/Types.h"
 
