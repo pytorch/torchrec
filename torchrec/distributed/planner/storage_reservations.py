@@ -90,74 +90,116 @@ class HeuristicalStorageReservation(StorageReservation):
                 ]
             )
 
-        _reserve_unshardable_tensors_storage(
+        self._reserve_unshardable_tensors_storage(
             reserved_topology, module, shardable_parameters
         )
 
-        _reserve_kjt_storage(reserved_topology, all_input_lengths, BIGINT_DTYPE)
+        self._reserve_kjt_storage(reserved_topology, all_input_lengths, BIGINT_DTYPE)
 
-        _reserve_storage_percentage(reserved_topology, self._percentage)
+        self._reserve_storage_percentage(reserved_topology, self._percentage)
 
         return reserved_topology
 
+    def _reserve_unshardable_tensors_storage(
+        self,
+        topology: Topology,
+        module: nn.Module,
+        shardable_parameters: Set[nn.Parameter],
+    ) -> None:
+        unshardable_parameters = set(module.parameters()) - shardable_parameters
 
-def _reserve_unshardable_tensors_storage(
-    topology: Topology, module: nn.Module, shardable_parameters: Set[nn.Parameter]
-) -> None:
-    unshardable_parameters = set(module.parameters()) - shardable_parameters
-
-    unshardable_parameters_size = sum(
-        [
-            # heuristic: 6 * dense parameter size (https://fburl.com/q8qcxvgx)
-            # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
-            6 * parameter.element_size() * parameter.nelement()
-            for parameter in unshardable_parameters
-        ]
-    )
-
-    buffers_size = sum(
-        [
-            buffer.element_size() * buffer.nelement()
-            for _, buffer in module.named_buffers()
-        ]
-    )
-
-    unshardable_tensors_size = unshardable_parameters_size + buffers_size
-
-    unshardable_tensors_storage = Storage(
-        hbm=unshardable_tensors_size if topology.compute_device == "cuda" else 0,
-        ddr=unshardable_tensors_size if topology.compute_device == "cpu" else 0,
-    )
-
-    for device in topology.devices:
-        device.storage -= unshardable_tensors_storage
-
-
-def _reserve_kjt_storage(
-    topology: Topology,
-    all_input_lengths: List[float],
-    input_data_type_size: int,
-) -> None:
-    kjt_size = (
-        math.ceil(
-            topology.batch_size
-            # pyre-ignore[58]
-            * sum(all_input_lengths)
-            * input_data_type_size
+        unshardable_parameters_size = sum(
+            [
+                # heuristic: 6 * dense parameter size (https://fburl.com/q8qcxvgx)
+                # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
+                6 * parameter.element_size() * parameter.nelement()
+                for parameter in unshardable_parameters
+            ]
         )
-        * 20  # 2 pipelined batches each with 10 internal copies
-    )
 
-    kjt_storage = Storage(
-        hbm=kjt_size if topology.compute_device == "cuda" else 0,
-        ddr=kjt_size if topology.compute_device == "cpu" else 0,
-    )
+        buffers_size = sum(
+            [
+                buffer.element_size() * buffer.nelement()
+                for _, buffer in module.named_buffers()
+            ]
+        )
 
-    for device in topology.devices:
-        device.storage -= kjt_storage
+        unshardable_tensors_size = unshardable_parameters_size + buffers_size
+
+        unshardable_tensors_storage = Storage(
+            hbm=unshardable_tensors_size if topology.compute_device == "cuda" else 0,
+            ddr=unshardable_tensors_size if topology.compute_device == "cpu" else 0,
+        )
+
+        for device in topology.devices:
+            device.storage -= unshardable_tensors_storage
+
+    def _reserve_kjt_storage(
+        self,
+        topology: Topology,
+        all_input_lengths: List[float],
+        input_data_type_size: int,
+    ) -> None:
+        kjt_size = (
+            math.ceil(
+                topology.batch_size
+                # pyre-ignore[58]
+                * sum(all_input_lengths)
+                * input_data_type_size
+            )
+            * 20  # 2 pipelined batches each with 10 internal copies
+        )
+
+        kjt_storage = Storage(
+            hbm=kjt_size if topology.compute_device == "cuda" else 0,
+            ddr=kjt_size if topology.compute_device == "cpu" else 0,
+        )
+
+        for device in topology.devices:
+            device.storage -= kjt_storage
+
+    def _reserve_storage_percentage(self, topology: Topology, percent: float) -> None:
+        for device in topology.devices:
+            device.storage.hbm = int((1 - percent) * device.storage.hbm)
+            device.storage.ddr = int((1 - percent) * device.storage.ddr)
 
 
-def _reserve_storage_percentage(topology: Topology, percent: float) -> None:
-    for device in topology.devices:
-        device.storage.hbm = int((1 - percent) * device.storage.hbm)
-        device.storage.ddr = int((1 - percent) * device.storage.ddr)
+class InferenceStorageReservation(HeuristicalStorageReservation):
+    """
+    Reserves storage for inference.
+
+    Args:
+        percentage (float): extra storage percentage to reserve that acts as a margin of
+            error beyond heuristic calculation of storage.
+    """
+
+    def _reserve_unshardable_tensors_storage(
+        self,
+        topology: Topology,
+        module: nn.Module,
+        shardable_parameters: Set[nn.Parameter],
+    ) -> None:
+        unshardable_parameters = set(module.parameters()) - shardable_parameters
+
+        unshardable_parameters_size = sum(
+            [
+                parameter.element_size() * parameter.nelement()
+                for parameter in unshardable_parameters
+            ]
+        )
+
+        buffers_size = sum(
+            [
+                buffer.element_size() * buffer.nelement()
+                for _, buffer in module.named_buffers()
+            ]
+        )
+
+        unshardable_tensors_size = unshardable_parameters_size + buffers_size
+
+        unshardable_tensors_storage = Storage(
+            hbm=unshardable_tensors_size if topology.compute_device == "cuda" else 0,
+            ddr=unshardable_tensors_size if topology.compute_device == "cpu" else 0,
+        )
+
+        topology.devices[0].storage -= unshardable_tensors_storage
