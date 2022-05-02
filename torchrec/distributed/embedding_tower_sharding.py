@@ -611,7 +611,7 @@ class ShardedEmbeddingTowerCollection(
         self,
         ctx: ShardedModuleContext,
         kjt_features: KeyedJaggedTensor,
-        wkjt_features: KeyedJaggedTensor,
+        wkjt_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[SparseFeaturesList]:
 
         if self._has_uninitialized_input_dist:
@@ -629,7 +629,7 @@ class ShardedEmbeddingTowerCollection(
                     self._kjt_features_order,
                     cast(torch.Tensor, self._kjt_features_order_tensor),
                 )
-            if self._has_wkjt_features_permute:
+            if self._has_wkjt_features_permute and wkjt_features:
                 wkjt_features = wkjt_features.permute(
                     self._wkjt_features_order,
                     cast(torch.Tensor, self._wkjt_features_order_tensor),
