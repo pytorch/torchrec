@@ -222,6 +222,7 @@ class KeyedOptimizer(optim.Optimizer):
                     # pyre-ignore [16]
                     t = t.to_sparse()
                 # pyre-ignore [41]
+                # pyre-fixme[16]: `ShardedTensor` has no attribute `grad`.
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 
