@@ -18,7 +18,6 @@ from typing import (
     cast,
     Deque,
     Dict,
-    Final,
     Iterator,
     List,
     Mapping,
@@ -114,7 +113,7 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
-    _batch_window_buffers: Final[Optional[Dict[str, WindowBuffer]]]
+    _batch_window_buffers: Optional[Dict[str, WindowBuffer]]
 
     def __init__(
         self,
@@ -176,6 +175,7 @@ class RecMetricComputation(Metric, abc.ABC):
                 "Users is adding a window state while window metric is disabled."
             )
         window_state_name = self.get_window_state_name(state_name)
+        assert self._batch_window_buffers is not None
         self._batch_window_buffers[window_state_name].aggregate_state(
             getattr(self, window_state_name), curr_state=state, size=num_samples
         )
