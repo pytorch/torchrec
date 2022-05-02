@@ -9,7 +9,7 @@
 
 import abc
 import logging
-from typing import Any, Dict, Final, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -125,7 +125,7 @@ class RecMetricModule(nn.Module):
     world_size: int
     rec_tasks: List[RecTaskInfo]
     rec_metrics: RecMetricList
-    qps_metric: Final[Optional[QPSMetric]]
+    qps_metric: Optional[QPSMetric]
     state_metrics: Dict[str, StateMetric]
     memory_usage_limit_mb: float
     memory_usage_mb_avg: float
