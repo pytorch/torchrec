@@ -43,10 +43,7 @@ from torchrec.metrics.throughput import ThroughputMetric
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# This seems to be Pyre's bug as both CTRMetric and NEMetric are RecMetric.
-# pyre-ignore[9]: REC_METRICS_MAPPING has type `Dict[RecMetricEnum, RecMetric]`; used
-#  as `Dict[RecMetricEnum, Type[typing.Union[CTRMetric, NEMetric]]]`.
-REC_METRICS_MAPPING: Dict[RecMetricEnumBase, RecMetric] = {
+REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.NE: NEMetric,
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,
