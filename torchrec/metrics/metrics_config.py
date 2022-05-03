@@ -45,7 +45,7 @@ class RecComputeMode(Enum):
 
 
 _DEFAULT_WINDOW_SIZE = 10_000_000
-_DEFAULT_QPS_WINDOW_SECONDS = 100
+_DEFAULT_THROUGHPUT_WINDOW_SECONDS = 100
 
 
 @dataclass
@@ -76,8 +76,8 @@ class StateMetricEnum(StrValueMixin, Enum):
 
 
 @dataclass
-class QPSDef:
-    window_size: int = _DEFAULT_QPS_WINDOW_SECONDS
+class ThroughputDef:
+    window_size: int = _DEFAULT_THROUGHPUT_WINDOW_SECONDS
 
 
 @dataclass
@@ -90,7 +90,7 @@ class MetricsConfig:
             by all the metrics.
         rec_metrics (Dict[RecMetricEnum, RecMetricDef]): the confiurations of
             the RecMetric objects.
-        qps_metric: (Optional[QPSDef]): the configurations of the QPSMetric
+        throughput_metric: (Optional[ThroughputDef]): the configurations of the ThroughputMetric
             object.
         rec_compute_mode (RecComputeMode): the computation mode for the
             RecMetric objects. This will be applied to all the RecMetric
@@ -107,7 +107,7 @@ class MetricsConfig:
 
     rec_tasks: List[RecTaskInfo] = field(default_factory=list)
     rec_metrics: Dict[RecMetricEnum, RecMetricDef] = field(default_factory=dict)
-    qps_metric: Optional[QPSDef] = None
+    throughput_metric: Optional[ThroughputDef] = None
     rec_compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION
     fused_update_limit: int = 0
     state_metrics: List[StateMetricEnum] = field(default_factory=list)
@@ -134,7 +134,7 @@ DefaultMetricsConfig = MetricsConfig(
             rec_tasks=[DefaultTaskInfo], window_size=_DEFAULT_WINDOW_SIZE
         ),
     },
-    qps_metric=QPSDef(),
+    throughput_metric=ThroughputDef(),
     state_metrics=[],
 )
 
@@ -143,6 +143,6 @@ DefaultMetricsConfig = MetricsConfig(
 EmptyMetricsConfig = MetricsConfig(
     rec_tasks=[],
     rec_metrics={},
-    qps_metric=None,
+    throughput_metric=None,
     state_metrics=[],
 )

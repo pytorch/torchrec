@@ -34,11 +34,11 @@ from torchrec.metrics.model_utils import (
 )
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
-from torchrec.metrics.qps import QPSMetric
 from torchrec.metrics.rec_metric import (
     RecMetricList,
     RecMetric,
 )
+from torchrec.metrics.throughput import ThroughputMetric
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -78,12 +78,12 @@ class StateMetric(abc.ABC):
 class RecMetricModule(nn.Module):
     r"""
     For the current recommendation models, we assume there will be three
-    types of metrics, 1.) RecMetric, 2.) QPS, 3.) StateMetric.
+    types of metrics, 1.) RecMetric, 2.) Throughput, 3.) StateMetric.
 
     RecMetric is a metric that is computed from the model outputs (labels,
     predictions, weights).
 
-    QPS is being a standalone type as its unique characteristic, time-based.
+    Throughput is being a standalone type as its unique characteristic, time-based.
 
     StateMetric is a metric that is computed based on a model componenet
     (e.g., Optimizer) internal logic.
@@ -93,7 +93,7 @@ class RecMetricModule(nn.Module):
         world_size (int): the number of trainers.
         rec_tasks (Optional[List[RecTaskInfo]]): the information of the model tasks.
         rec_metrics (Optional[RecMetricList]): the list of the RecMetrics.
-        qps_metric (Optional[QPSMetric]): the QPSMetric.
+        throughput_metric (Optional[ThroughputMetric]): the ThroughputMetric.
         state_metrics (Optional[Dict[str, StateMetric]]): the dict of StateMetrics.
         compute_interval_steps (int): the intervals between two compute calls in the unit of batch number
         memory_usage_limit_mb (float): the memory usage limit for OOM check
@@ -125,7 +125,7 @@ class RecMetricModule(nn.Module):
     world_size: int
     rec_tasks: List[RecTaskInfo]
     rec_metrics: RecMetricList
-    qps_metric: Optional[QPSMetric]
+    throughput_metric: Optional[ThroughputMetric]
     state_metrics: Dict[str, StateMetric]
     memory_usage_limit_mb: float
     memory_usage_mb_avg: float
@@ -138,7 +138,7 @@ class RecMetricModule(nn.Module):
         world_size: int,
         rec_tasks: Optional[List[RecTaskInfo]] = None,
         rec_metrics: Optional[RecMetricList] = None,
-        qps_metric: Optional[QPSMetric] = None,
+        throughput_metric: Optional[ThroughputMetric] = None,
         state_metrics: Optional[Dict[str, StateMetric]] = None,
         compute_interval_steps: int = 100,
         memory_usage_limit_mb: float = 512,
@@ -146,7 +146,7 @@ class RecMetricModule(nn.Module):
         super().__init__()
         self.rec_tasks = rec_tasks if rec_tasks else []
         self.rec_metrics = rec_metrics if rec_metrics else RecMetricList([])
-        self.qps_metric = qps_metric
+        self.throughput_metric = throughput_metric
         self.state_metrics = state_metrics if state_metrics else {}
         self.trained_batches: int = 0
         self.batch_size = batch_size
@@ -205,12 +205,12 @@ class RecMetricModule(nn.Module):
         r"""update() is called per batch, usually right after forward() to
         update the local states of metrics based on the model_output.
 
-        QPS.update() is also called due to the implementation sliding window
-        QPS.
+        Throughput.update() is also called due to the implementation sliding window
+        throughput.
         """
         self._update_rec_metrics(model_out)
-        if self.qps_metric:
-            self.qps_metric.update()
+        if self.throughput_metric:
+            self.throughput_metric.update()
         self.trained_batches += 1
 
     def should_compute(self) -> bool:
@@ -226,8 +226,8 @@ class RecMetricModule(nn.Module):
         ret: Dict[str, MetricValue] = {}
         if self.rec_metrics:
             ret.update(self.rec_metrics.compute())
-        if self.qps_metric:
-            ret.update(self.qps_metric.compute())
+        if self.throughput_metric:
+            ret.update(self.throughput_metric.compute())
         if self.state_metrics:
             for namespace, component in self.state_metrics.items():
                 ret.update(
@@ -344,21 +344,21 @@ def generate_metric_module(
     rec_metrics = _generate_rec_metrics(
         metrics_config, world_size, my_rank, batch_size, process_group
     )
-    if metrics_config.qps_metric:
-        qps_metric = QPSMetric(
+    if metrics_config.throughput_metric:
+        throughput_metric = ThroughputMetric(
             batch_size=batch_size,
             world_size=world_size,
-            window_seconds=metrics_config.qps_metric.window_size,
+            window_seconds=metrics_config.throughput_metric.window_size,
         )
     else:
-        qps_metric = None
+        throughput_metric = None
     state_metrics = _generate_state_metrics(metrics_config, state_metrics_mapping)
     metrics = metric_class(
         batch_size=batch_size,
         world_size=world_size,
         rec_tasks=metrics_config.rec_tasks,
         rec_metrics=rec_metrics,
-        qps_metric=qps_metric,
+        throughput_metric=throughput_metric,
         state_metrics=state_metrics,
         compute_interval_steps=metrics_config.compute_interval_steps,
     )
