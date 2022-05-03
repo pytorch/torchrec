@@ -35,12 +35,12 @@ from torchrec.metrics.metrics_config import (
 from torchrec.metrics.model_utils import (
     parse_task_model_outputs,
 )
-from torchrec.metrics.qps import QPSMetric
 from torchrec.metrics.rec_metric import (
     RecMetricList,
     RecTaskInfo,
 )
 from torchrec.metrics.tests.test_utils import gen_test_batch, get_launch_config
+from torchrec.metrics.throughput import ThroughputMetric
 
 METRIC_MODULE_PATH = "torchrec.metrics.metric_module"
 
@@ -63,7 +63,7 @@ class TestMetricModule(RecMetricModule):
         world_size: int,
         rec_tasks: Optional[List[RecTaskInfo]] = None,
         rec_metrics: Optional[RecMetricList] = None,
-        qps_metric: Optional[QPSMetric] = None,
+        throughput_metric: Optional[ThroughputMetric] = None,
         state_metrics: Optional[Dict[str, StateMetric]] = None,
         compute_interval_steps: int = 100,
         memory_usage_limit_mb: float = 512,
@@ -73,7 +73,7 @@ class TestMetricModule(RecMetricModule):
             world_size,
             rec_tasks=rec_tasks,
             rec_metrics=rec_metrics,
-            qps_metric=qps_metric,
+            throughput_metric=throughput_metric,
             state_metrics=state_metrics,
             compute_interval_steps=compute_interval_steps,
             memory_usage_limit_mb=memory_usage_limit_mb,
@@ -130,7 +130,7 @@ class MetricModuleTest(unittest.TestCase):
                 rec_metric_list_patch.stop()
                 metric_module.rec_metrics.compute.assert_called_once()
                 self.assertTrue("ne-ne|lifetime_ne" in ret)
-                self.assertTrue("qps-qps|total_examples" in ret)
+                self.assertTrue("throughput-throughput|total_examples" in ret)
                 self.assertTrue("optimizers-optimizers|learning_rate" in ret)
             dist.destroy_process_group()
 
@@ -203,8 +203,8 @@ class MetricModuleTest(unittest.TestCase):
         logging.info(f"Metrics state keys = {keys}")
         metric_module.load_state_dict(state_dict)
         tc = unittest.TestCase()
-        tc.assertTrue("qps_metric.warmup_examples" in keys)
-        tc.assertTrue("qps_metric.total_examples" in keys)
+        tc.assertTrue("throughput_metric.warmup_examples" in keys)
+        tc.assertTrue("throughput_metric.total_examples" in keys)
         tc.assertTrue(
             "rec_metrics.rec_metrics.0._metrics_computations.0.cross_entropy_sum"
             in keys

@@ -37,7 +37,7 @@ class MetricName(MetricNameBase):
     DEFAULT = ""
 
     NE = "ne"
-    QPS = "qps"
+    THROUGHPUT = "throughput"
     TOTAL_EXAMPLES = "total_examples"
     CTR = "ctr"
     CALIBRATION = "calibration"
@@ -54,7 +54,7 @@ class MetricNamespace(MetricNamespaceBase):
     DEFAULT = ""
 
     NE = "ne"
-    QPS = "qps"
+    THROUGHPUT = "throughput"
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"

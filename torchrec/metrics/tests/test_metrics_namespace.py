@@ -24,53 +24,53 @@ class MetricNamespaceTest(unittest.TestCase):
     def test_compose_metric_key(self) -> None:
         self.assertEqual(
             compose_metric_key(
-                MetricNamespace.QPS,
+                MetricNamespace.THROUGHPUT,
                 self.task,
-                MetricName.QPS,
+                MetricName.THROUGHPUT,
                 MetricPrefix.LIFETIME,
             ),
-            f"qps-{self.task}|lifetime_qps",
+            f"throughput-{self.task}|lifetime_throughput",
         )
         self.assertEqual(
             compose_metric_key(
-                MetricNamespace.QPS,
+                MetricNamespace.THROUGHPUT,
                 self.task,
-                MetricName.QPS,
+                MetricName.THROUGHPUT,
                 MetricPrefix.WINDOW,
             ),
-            f"qps-{self.task}|window_qps",
+            f"throughput-{self.task}|window_throughput",
         )
         self.assertEqual(
             compose_metric_key(
-                MetricNamespace.QPS,
+                MetricNamespace.THROUGHPUT,
                 self.task,
-                MetricName.QPS,
+                MetricName.THROUGHPUT,
             ),
-            f"qps-{self.task}|qps",
+            f"throughput-{self.task}|throughput",
         )
 
     def test_task_wildcard_metric_pattern(self) -> None:
         pattern = task_wildcard_metrics_pattern(
-            MetricNamespace.QPS,
-            MetricName.QPS,
+            MetricNamespace.THROUGHPUT,
+            MetricName.THROUGHPUT,
             MetricPrefix.LIFETIME,
         )
         key1 = compose_metric_key(
-            MetricNamespace.QPS,
+            MetricNamespace.THROUGHPUT,
             "t1",
-            MetricName.QPS,
+            MetricName.THROUGHPUT,
             MetricPrefix.LIFETIME,
         )
         key2 = compose_metric_key(
-            MetricNamespace.QPS,
+            MetricNamespace.THROUGHPUT,
             "t2",
-            MetricName.QPS,
+            MetricName.THROUGHPUT,
             MetricPrefix.LIFETIME,
         )
         key3 = compose_metric_key(
-            MetricNamespace.QPS,
+            MetricNamespace.THROUGHPUT,
             "t3",
-            MetricName.QPS,
+            MetricName.THROUGHPUT,
             MetricPrefix.WINDOW,
         )
         self.assertTrue(re.search(pattern, key1))
