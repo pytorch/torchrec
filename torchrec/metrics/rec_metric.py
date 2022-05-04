@@ -500,7 +500,7 @@ class RecMetric(nn.Module, abc.ABC):
             attribute = attributes_q.popleft()
             if isinstance(attribute, torch.Tensor):
                 tensor_map[attribute] = (
-                    math.prod(attribute.shape) * attribute.element_size()
+                    attribute.size().numel() * attribute.element_size()
                 )
             elif isinstance(attribute, WindowBuffer):
                 attributes_q.extend(attribute.buffers)
