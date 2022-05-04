@@ -234,6 +234,8 @@ class ShardedQuantEmbeddingBagCollection(
             lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
         return destination
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
