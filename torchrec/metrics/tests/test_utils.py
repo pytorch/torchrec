@@ -16,14 +16,8 @@ from unittest.mock import Mock, patch
 import torch
 import torch.distributed as dist
 import torch.distributed.launcher as pet
-from torchrec.metrics.model_utils import (
-    parse_task_model_outputs,
-)
-from torchrec.metrics.rec_metric import (
-    RecComputeMode,
-    RecTaskInfo,
-    RecMetric,
-)
+from torchrec.metrics.model_utils import parse_task_model_outputs
+from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 
 TestRecMetricOutput = Tuple[
     Dict[str, torch.Tensor],
@@ -69,6 +63,20 @@ def gen_test_batch(
         test_batch[mask_tensor_name] = mask
 
     return test_batch
+
+
+def gen_test_tasks(
+    task_names: List[str],
+) -> List[RecTaskInfo]:
+    return [
+        RecTaskInfo(
+            name=task_name,
+            label_name=f"{task_name}-label",
+            prediction_name=f"{task_name}-prediction",
+            weight_name=f"{task_name}-weight",
+        )
+        for task_name in task_names
+    ]
 
 
 def gen_test_timestamps(
@@ -210,28 +218,19 @@ def rec_metric_value_test_helper(
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
+    tasks = gen_test_tasks(task_names)
     model_outs = []
     for _ in range(nsteps):
         _model_outs = [
             gen_test_batch(
-                label_name=f"{task}-label",
-                prediction_name=f"{task}-prediction",
-                weight_name=f"{task}-weight",
+                label_name=task.label_name,
+                prediction_name=task.prediction_name,
+                weight_name=task.weight_name,
                 batch_size=batch_size,
             )
-            for task in task_names
+            for task in tasks
         ]
         model_outs.append({k: v for d in _model_outs for k, v in d.items()})
-
-    tasks = [
-        RecTaskInfo(
-            name=task_name,
-            label_name=f"{task_name}-label",
-            prediction_name=f"{task_name}-prediction",
-            weight_name=f"{task_name}-weight",
-        )
-        for task_name in task_names
-    ]
 
     def get_target_rec_metric_value(
         model_outs: List[Dict[str, torch.Tensor]],
