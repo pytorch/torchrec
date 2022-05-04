@@ -451,6 +451,8 @@ class ShardedEmbeddingBagCollection(
                 append_prefix(prefix, "embedding_bags"), recurse
             )
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
@@ -695,6 +697,8 @@ class ShardedEmbeddingBag(
         for name, buffer in self._lookup.named_buffers("", recurse):
             yield append_prefix(prefix, name.split(".")[-1]), buffer
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",

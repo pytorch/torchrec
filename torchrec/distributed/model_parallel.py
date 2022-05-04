@@ -426,6 +426,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         add_prefix_to_state_dict(state_dict, prefix)
         return state_dict
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",

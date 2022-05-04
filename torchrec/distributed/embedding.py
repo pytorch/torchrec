@@ -466,6 +466,8 @@ class ShardedEmbeddingCollection(
                 append_prefix(prefix, "embeddings"), recurse
             )
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",

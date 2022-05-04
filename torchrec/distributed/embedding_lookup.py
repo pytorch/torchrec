@@ -177,6 +177,8 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
 
         return destination
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
@@ -355,6 +357,8 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
 
         return destination
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
@@ -475,6 +479,8 @@ class MetaInferGroupedEmbeddingsLookup(
 
         return destination
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
@@ -626,6 +632,8 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 
         return destination
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(
         self,
         state_dict: "OrderedDict[str, torch.Tensor]",
