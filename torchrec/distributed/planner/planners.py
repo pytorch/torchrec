@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
 from functools import reduce
 from typing import Tuple, Dict, Optional, List, cast, Union
 
@@ -19,7 +18,11 @@ from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
-from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
+from torchrec.distributed.planner.proposers import (
+    GridSearchProposer,
+    GreedyProposer,
+    UniformProposer,
+)
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
@@ -29,7 +32,6 @@ from torchrec.distributed.planner.types import (
     Partitioner,
     Topology,
     Stats,
-    Shard,
     Storage,
     ShardingOption,
     StorageReservation,
@@ -139,6 +141,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
         else:
             self._proposers = [
+                GridSearchProposer(),
                 GreedyProposer(),
                 GreedyProposer(use_depth=False),
                 UniformProposer(),

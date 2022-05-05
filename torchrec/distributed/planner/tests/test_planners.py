@@ -102,7 +102,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
 
-        self.assertEqual(self.planner._num_proposals, 3)
+        self.assertEqual(self.planner._num_proposals, 4)
 
     def test_fail_then_rerun(self) -> None:
         tables = [
