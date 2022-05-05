@@ -265,15 +265,14 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             EmbeddingComputeKernel.BATCHED_DENSE.value,
         ]
         if sharding_type != ShardingType.DATA_PARALLEL.value:
-            ret += [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
-                EmbeddingComputeKernel.SPARSE.value,
-            ]
-            if compute_device_type in {"cuda"}:
-                ret += [
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
-                ]
+            ret.append(EmbeddingComputeKernel.SPARSE.value)
+            if self._fused_params is not None and "optimizer" in self._fused_params:
+                ret.append(EmbeddingComputeKernel.BATCHED_FUSED.value)
+                if compute_device_type in {"cuda"}:
+                    ret += [
+                        EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
+                        EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
+                    ]
         return ret
 
     @property
