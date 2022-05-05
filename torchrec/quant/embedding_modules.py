@@ -36,6 +36,7 @@ from torchrec.sparse.jagged_tensor import (
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
 except OSError:
     pass
 
@@ -76,9 +77,16 @@ def quantize_state_dict(
                 dtype=module.qconfig.weight().dtype,
             )
         else:
-            quant_res = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-                tensor, num_bits
-            )
+            if tensor.dtype == torch.float:
+                quant_res = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
+                    tensor, num_bits
+                )
+            elif tensor.dtype == torch.float16:
+                quant_res = torch.ops.fbgemm.HalfToFusedNBitRowwiseQuantizedSBHalf(
+                    tensor, num_bits
+                )
+            else:
+                raise Exception("Unsupported dtype: {tensor.dtype}")
             quant_weight, scale_shift = (
                 quant_res[:, :-4],
                 quant_res[:, -4:],
