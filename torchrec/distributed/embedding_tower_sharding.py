@@ -610,13 +610,13 @@ class ShardedEmbeddingTowerCollection(
     def input_dist(
         self,
         ctx: ShardedModuleContext,
-        kjt_features: KeyedJaggedTensor,
-        wkjt_features: KeyedJaggedTensor,
+        kjt_features: Optional[KeyedJaggedTensor] = None,
+        wkjt_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[SparseFeaturesList]:
 
         if self._has_uninitialized_input_dist:
             self._cross_pg_global_batch_size = (
-                kjt_features.stride() * self._cross_pg_world_size
+                kjt_features.stride() * self._cross_pg_world_size  # pyre-ignore [16]
             )
             self._create_input_dist(
                 kjt_features.keys() if kjt_features else [],
@@ -625,7 +625,7 @@ class ShardedEmbeddingTowerCollection(
             self._has_uninitialized_input_dist = False
         with torch.no_grad():
             if self._has_kjt_features_permute:
-                kjt_features = kjt_features.permute(
+                kjt_features = kjt_features.permute(  # pyre-ignore [16]
                     self._kjt_features_order,
                     cast(torch.Tensor, self._kjt_features_order_tensor),
                 )
