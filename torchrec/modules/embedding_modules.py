@@ -228,7 +228,7 @@ class EmbeddingCollection(nn.Module):
     Example::
 
         e1_config = EmbeddingConfig(
-            name="t1", embedding_dim=2, num_embeddings=10, feature_names=["f1"]
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
         e2_config = EmbeddingConfig(
             name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
