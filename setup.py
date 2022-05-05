@@ -60,6 +60,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         action="store_true",
         help="if fbgemm_gpu will be installed with cpu_only flag",
     )
+    parser.add_argument(
+        "--fbgemm_install_dir",
+        type=str,
+        default="third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install",
+        help="the directory of external fbgemm_gpu install path. Only applicable when skip_fbgemm is enabled.",
+    )
     return parser.parse_known_args(argv)
 
 
@@ -116,12 +122,12 @@ def main(argv: List[str]) -> None:
 
         # the path to find all the packages
         fbgemm_install_base = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install"
+            args.fbgemm_install_dir
         )[0]
         packages.extend(find_packages(fbgemm_install_base))
         # to include the fbgemm_gpu.so
         fbgemm_gpu_package_dir = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install/fbgemm_gpu"
+            os.path.join(args.fbgemm_install_dir, "fbgemm_gpu")
         )[0]
 
     sys.argv = [sys.argv[0]] + unknown
