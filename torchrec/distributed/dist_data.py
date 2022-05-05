@@ -327,7 +327,7 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
             local_batch_sizes = torch.tensor(
                 [dim_1] * self._workers, device=self._device, dtype=torch.torch.int32
             )
-            with record_function("## all2all_data: B ##"):
+            with record_function("## all2all_data: Batch size ##"):
                 dist.all_to_all_single(
                     output=batch_size_per_rank_tensor,
                     input=local_batch_sizes,
@@ -389,9 +389,16 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
                     lengths_per_rank: List[torch.Tensor] = list(
                         self._lengths.split(self._output_split_sizes)
                     )
-                    out_lengths_per_worker = [
-                        int(length.sum().item()) for length in lengths_per_rank
-                    ]
+                    out_lengths_per_worker = (
+                        torch.cat(
+                            [
+                                length.sum(keepdim=True, dim=0)
+                                for length in lengths_per_rank
+                            ],
+                        )
+                        .cpu()
+                        .tolist()
+                    )
             else:
                 out_lengths_per_worker = (
                     self._lengths.view(self._workers, -1).sum(dim=1).cpu().tolist()
