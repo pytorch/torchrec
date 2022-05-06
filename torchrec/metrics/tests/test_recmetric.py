@@ -8,30 +8,23 @@
 import unittest
 
 import torch
-from torchrec.metrics.metrics_config import (
-    DefaultTaskInfo,
-)
-from torchrec.metrics.model_utils import (
-    parse_task_model_outputs,
-)
+from torchrec.metrics.metrics_config import DefaultTaskInfo
+from torchrec.metrics.model_utils import parse_task_model_outputs
+from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecComputeMode
-from torchrec.metrics.tests.test_utils import gen_test_batch
+from torchrec.metrics.tests.test_utils import gen_test_tasks, gen_test_batch
 
 
 class RecMetricTest(unittest.TestCase):
     def setUp(self) -> None:
         # Create testing labels, predictions and weights
         model_output = gen_test_batch(128)
-        model_output["weight"] = torch.ones_like(model_output["label"])
-        labels, predictions, weights = parse_task_model_outputs(
-            [DefaultTaskInfo], model_output
-        )
         self.labels, self.predictions, self.weights = parse_task_model_outputs(
             [DefaultTaskInfo], model_output
         )
 
-    def test_optional_weight(self) -> None:
+    def test_optional_weights(self) -> None:
         ne1 = NEMetric(
             world_size=1,
             my_rank=0,
@@ -51,15 +44,13 @@ class RecMetricTest(unittest.TestCase):
             fused_update_limit=0,
         )
 
-        model_output = gen_test_batch(128)
-        model_output["weight"] = torch.ones_like(model_output["label"])
-        labels, predictions, weights = parse_task_model_outputs(
-            [DefaultTaskInfo], model_output
-        )
+        default_weights = {
+            k: torch.ones_like(self.labels[k]) for k in self.weights.keys()
+        }
         ne1.update(
             predictions=self.predictions,
             labels=self.labels,
-            weights=self.weights,
+            weights=default_weights,
         )
         ne2.update(
             predictions=self.predictions,
@@ -72,6 +63,101 @@ class RecMetricTest(unittest.TestCase):
         self.assertTrue(ne1.weighted_num_samples == ne2.weighted_num_samples)
         self.assertTrue(ne1.pos_labels == ne2.pos_labels)
         self.assertTrue(ne1.neg_labels == ne2.neg_labels)
+
+    def test_zero_weights(self) -> None:
+        # Test if weights = 0 for an update
+        mse = MSEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=128,
+            tasks=[DefaultTaskInfo],
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+            fused_update_limit=0,
+        )
+        mse_computation = mse._metrics_computations[0]
+
+        zero_weights = {
+            k: torch.zeros_like(self.weights[k]) for k in self.weights.keys()
+        }
+        mse.update(
+            predictions=self.predictions,
+            labels=self.labels,
+            weights=zero_weights,
+        )
+        self.assertEqual(mse_computation.error_sum, torch.tensor(0.0))
+        self.assertEqual(mse_computation.weighted_num_samples, torch.tensor(0.0))
+
+        res = mse.compute()
+        self.assertEqual(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
+        self.assertEqual(res["mse-DefaultTask|lifetime_rmse"], torch.tensor(0.0))
+
+        mse.update(
+            predictions=self.predictions,
+            labels=self.labels,
+            weights=self.weights,
+        )
+        self.assertGreater(mse_computation.error_sum, torch.tensor(0.0))
+        self.assertGreater(mse_computation.weighted_num_samples, torch.tensor(0.0))
+
+        res = mse.compute()
+        self.assertGreater(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
+        self.assertGreater(res["mse-DefaultTask|lifetime_rmse"], torch.tensor(0.0))
+
+        # Test if weights = 0 for one task of an update
+        task_names = ["t1", "t2"]
+        tasks = gen_test_tasks(task_names)
+        _model_output = [
+            gen_test_batch(
+                label_name=task.label_name,
+                prediction_name=task.prediction_name,
+                weight_name=task.weight_name,
+                batch_size=128,
+            )
+            for task in tasks
+        ]
+        model_output = {k: v for d in _model_output for k, v in d.items()}
+        labels, predictions, weights = parse_task_model_outputs(tasks, model_output)
+        partial_zero_weights = {
+            "t1": torch.zeros_like(weights["t1"]),
+            "t2": weights["t2"],
+        }
+
+        ne = NEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=128,
+            tasks=tasks,
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+            fused_update_limit=0,
+        )
+        ne_computation = ne._metrics_computations
+
+        ne.update(
+            predictions=predictions,
+            labels=labels,
+            weights=partial_zero_weights,
+        )
+        self.assertEqual(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
+        self.assertEqual(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
+        self.assertGreater(ne_computation[1].cross_entropy_sum, torch.tensor(0.0))
+        self.assertGreater(ne_computation[1].weighted_num_samples, torch.tensor(0.0))
+
+        res = ne.compute()
+        self.assertEqual(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
+        self.assertGreater(res["ne-t2|lifetime_ne"], torch.tensor(0.0))
+
+        ne.update(
+            predictions=predictions,
+            labels=labels,
+            weights=weights,
+        )
+        self.assertGreater(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
+        self.assertGreater(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
+
+        res = ne.compute()
+        self.assertGreater(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
 
     def test_compute(self) -> None:
         # Rank 0 does computation.
