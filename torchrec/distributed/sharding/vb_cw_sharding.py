@@ -8,7 +8,9 @@
 from typing import Any, Dict, Optional
 
 import torch
-from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
+from fbgemm_gpu.permute_pooled_embedding_modules_split import (
+    PermutePooledEmbeddingsSplit,
+)
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
@@ -71,7 +73,7 @@ class VariableBatchCwPooledEmbeddingSharding(
             range(len(self._embedding_order))
         ):
             assert len(self._embedding_order) == len(self._embedding_dims)
-            embedding_permute_op = PermutePooledEmbeddings(
+            embedding_permute_op = PermutePooledEmbeddingsSplit(
                 self._embedding_dims,
                 self._embedding_order,
             ).to(device=device)
