@@ -39,6 +39,11 @@
 
 using namespace std::chrono_literals;
 
+DEFINE_bool(
+    batching_queue_use_high_pri_stream,
+    false,
+    "Use high priority CUDA stream in batching");
+
 namespace torchrec {
 
 void PredictionBatch::cuda() {
@@ -182,8 +187,8 @@ void BatchingQueue::createBatch() {
 
 void BatchingQueue::pinMemory(int gpuIdx) {
   at::cuda::CUDAGuard deviceGuard(gpuIdx);
-  at::cuda::CUDAStreamGuard streamGuard(
-      at::cuda::getStreamFromPool(/* isHighPriority */ false));
+  at::cuda::CUDAStreamGuard streamGuard(at::cuda::getStreamFromPool(
+      /* isHighPriority */ FLAGS_batching_queue_use_high_pri_stream));
   if (config_.warmupFn) {
     config_.warmupFn();
   }
