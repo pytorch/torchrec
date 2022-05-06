@@ -93,11 +93,6 @@ class MetricModuleTest(unittest.TestCase):
         rec_metric_list_patch = patch(
             METRIC_MODULE_PATH + ".RecMetricList",
         )
-        rec_metric_list_mock = rec_metric_list_patch.start()
-        mock_optimizer = MockOptimizer()
-        config = dataclasses.replace(
-            DefaultMetricsConfig, state_metrics=[StateMetricEnum.OPTIMIZERS]
-        )
 
         with tempfile.NamedTemporaryFile(delete=True) as backend:
             dist.init_process_group(
@@ -107,6 +102,11 @@ class MetricModuleTest(unittest.TestCase):
                 rank=0,
             )
             for pg in [None, dist.new_group([0])]:
+                rec_metric_list_mock = rec_metric_list_patch.start()
+                mock_optimizer = MockOptimizer()
+                config = dataclasses.replace(
+                    DefaultMetricsConfig, state_metrics=[StateMetricEnum.OPTIMIZERS]
+                )
                 metric_module = generate_metric_module(
                     TestMetricModule,
                     metrics_config=config,
