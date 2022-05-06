@@ -10,7 +10,7 @@ import logging
 import os
 import tempfile
 import unittest
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -25,20 +25,15 @@ from torchrec.metrics.metric_module import (
     StateMetricEnum,
 )
 from torchrec.metrics.metrics_config import (
-    DefaultMetricsConfig,
-    EmptyMetricsConfig,
-    DefaultTaskInfo,
-    RecMetricEnum,
-    RecMetricDef,
     _DEFAULT_WINDOW_SIZE,
+    DefaultMetricsConfig,
+    DefaultTaskInfo,
+    EmptyMetricsConfig,
+    RecMetricDef,
+    RecMetricEnum,
 )
-from torchrec.metrics.model_utils import (
-    parse_task_model_outputs,
-)
-from torchrec.metrics.rec_metric import (
-    RecMetricList,
-    RecTaskInfo,
-)
+from torchrec.metrics.model_utils import parse_task_model_outputs
+from torchrec.metrics.rec_metric import RecMetricList, RecTaskInfo
 from torchrec.metrics.tests.test_utils import gen_test_batch, get_launch_config
 from torchrec.metrics.throughput import ThroughputMetric
 
@@ -215,7 +210,10 @@ class MetricModuleTest(unittest.TestCase):
         state_dict = metric_module.state_dict()
         for k, v in state_dict.items():
             if k.startswith("rec_metrics."):
-                tc.assertEqual(v.item(), value * world_size)
+                if k.endswith("has_valid_update"):
+                    tc.assertEqual(v.item(), 1)
+                else:
+                    tc.assertEqual(v.item(), value * world_size)
 
         # 2. Test unsync()
         metric_module.unsync()
@@ -373,12 +371,13 @@ class MetricModuleTest(unittest.TestCase):
             device=torch.device("cpu"),
         )
         # Default NEMetric's dtype is
-        #   float64 (8 bytes) * 16 tensors of size 1 = 128 bytes
+        #   float64 (8 bytes) * 16 tensors of size 1 + unit8 (1 byte) * 2 tensors of size 1 = 130 bytes
         #       Tensors in NeMetricComputation:
-        #           8 in _default, 8 specific attributes: 4 attributes, 4 window
-        self.assertEqual(metric_module.get_memory_usage(), 128)
+        #           NE metric specific attributes: 8 in _default, 8 actual attribute values: 4 attributes, 4 window
+        #           RecMetric's has_valid_update attribute: 1 in _default, 1 actual attribute value
+        self.assertEqual(metric_module.get_memory_usage(), 130)
         metric_module.update(gen_test_batch(128))
-        self.assertEqual(metric_module.get_memory_usage(), 160)
+        self.assertEqual(metric_module.get_memory_usage(), 162)
 
     def test_calibration_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()
@@ -400,12 +399,13 @@ class MetricModuleTest(unittest.TestCase):
             device=torch.device("cpu"),
         )
         # Default calibration metric dtype is
-        #   float64 (8 bytes) * 8 tensors, size 1 = 64 bytes
+        #   float64 (8 bytes) * 8 tensors of size 1 + uint8 (1 byte) * 2 tensors of size 1 = 66 bytes
         #       Tensors in CalibrationMetricComputation:
-        #           4 in _default, 4 specific attributes: 2 attribute, 2 window
-        self.assertEqual(metric_module.get_memory_usage(), 64)
+        #           Calibration metric attributes: 4 in _default, 4 actual attribute values: 2 attribute, 2 window
+        #           RecMetric's has_valid_update attribute: 1 in _default, 1 actual attribute value
+        self.assertEqual(metric_module.get_memory_usage(), 66)
         metric_module.update(gen_test_batch(128))
-        self.assertEqual(metric_module.get_memory_usage(), 80)
+        self.assertEqual(metric_module.get_memory_usage(), 82)
 
     def test_auc_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()
@@ -426,11 +426,11 @@ class MetricModuleTest(unittest.TestCase):
             state_metrics_mapping={StateMetricEnum.OPTIMIZERS: mock_optimizer},
             device=torch.device("cpu"),
         )
-        # 3 (tensors) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 24)
+        # 3 (tensors) * 8 (double) + 1 (tensor) * 2 (uint8)
+        self.assertEqual(metric_module.get_memory_usage(), 26)
         metric_module.update(gen_test_batch(128))
-        # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 3096)
+        # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 8 (double) + 1 (tensor) * 2 (uint8)
+        self.assertEqual(metric_module.get_memory_usage(), 3098)
 
     def test_check_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()

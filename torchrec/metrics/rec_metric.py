@@ -138,6 +138,13 @@ class RecMetricComputation(Metric, abc.ABC):
             self._batch_window_buffers = {}
         else:
             self._batch_window_buffers = None
+        self._add_state(
+            "has_valid_update",
+            torch.zeros(self._n_tasks, dtype=torch.uint8),
+            add_window_state=False,
+            dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
+            persistent=True,
+        )
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
@@ -339,8 +346,22 @@ class RecMetric(nn.Module, abc.ABC):
         for metric_report in getattr(
             self._metrics_computations[0], compute_scope + "compute"
         )():
-            for task, metric_value in zip(self._tasks, metric_report.value):
-                yield task, metric_report.name, metric_value, compute_scope + metric_report.metric_prefix.value
+            for task, metric_value, has_valid_update in zip(
+                self._tasks,
+                metric_report.value,
+                self._metrics_computations[0].has_valid_update,
+            ):
+                # The attribute has_valid_update is a tensor whose length equals to the
+                # number of tasks. Each value in it is corresponding to whether a task
+                # has valid updates or not.
+                # If for a task there's no valid updates, the calculated metric_value
+                # will be meaningless, so we mask it with the default value, i.e. 0.
+                valid_metric_value = (
+                    metric_value
+                    if has_valid_update > 0
+                    else torch.zeros_like(metric_value)
+                )
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
 
     def _unfused_tasks_iter(self, compute_scope: str) -> ComputeIterType:
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
@@ -348,7 +369,16 @@ class RecMetric(nn.Module, abc.ABC):
             for metric_report in getattr(
                 metric_computation, compute_scope + "compute"
             )():
-                yield task, metric_report.name, metric_report.value, compute_scope + metric_report.metric_prefix.value
+                # The attribute has_valid_update is a tensor with only 1 value
+                # corresponding to whether the task has valid updates or not.
+                # If there's no valid update, the calculated metric_report.value
+                # will be meaningless, so we mask it with the default value, i.e. 0.
+                valid_metric_value = (
+                    metric_report.value
+                    if metric_computation.has_valid_update[0] > 0
+                    else torch.zeros_like(metric_report.value)
+                )
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
 
     def _fuse_update_buffers(self) -> Dict[str, RecModelOutput]:
         def fuse(outputs: List[RecModelOutput]) -> RecModelOutput:
@@ -398,6 +428,9 @@ class RecMetric(nn.Module, abc.ABC):
             self._default_weights[predictions.size()] = weights
         return weights
 
+    def _check_nonempty_weights(self, weights: torch.Tensor) -> torch.Tensor:
+        return torch.gt(torch.count_nonzero(weights, dim=-1), 0)
+
     def _update(
         self,
         *,
@@ -408,6 +441,7 @@ class RecMetric(nn.Module, abc.ABC):
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
                 assert isinstance(predictions, torch.Tensor)
+                # Reshape the predictions to size([len(self._tasks), self._batch_size])
                 predictions = predictions.view(-1, self._batch_size)
                 assert isinstance(labels, torch.Tensor)
                 labels = labels.view(-1, self._batch_size)
@@ -416,9 +450,19 @@ class RecMetric(nn.Module, abc.ABC):
                 else:
                     assert isinstance(weights, torch.Tensor)
                     weights = weights.view(-1, self._batch_size)
-                self._metrics_computations[0].update(
-                    predictions=predictions, labels=labels, weights=weights
-                )
+                # has_valid_weights is a tensor of bool whose length equals to the number
+                # of tasks. Each value in it is corresponding to whether the weights
+                # are valid, i.e. are set to non-zero values for that task in this update.
+                # If has_valid_weights are Falses for all the tasks, we just ignore this
+                # update.
+                has_valid_weights = self._check_nonempty_weights(weights)
+                if torch.any(has_valid_weights):
+                    self._metrics_computations[0].update(
+                        predictions=predictions, labels=labels, weights=weights
+                    )
+                    self._metrics_computations[0].has_valid_update.logical_or_(
+                        has_valid_weights
+                    ).byte()
             else:
                 for task, metric_ in zip(self._tasks, self._metrics_computations):
                     if task.name not in predictions:
@@ -427,17 +471,25 @@ class RecMetric(nn.Module, abc.ABC):
                         assert torch.numel(labels[task.name]) == 0
                         assert weights is None or torch.numel(weights[task.name]) == 0
                         continue
+                    # Reshape the predictions to size([1, self._batch_size])
                     task_predictions = predictions[task.name].view(1, -1)
                     task_labels = labels[task.name].view(1, -1)
                     if weights is None:
                         task_weights = self._create_default_weights(task_predictions)
                     else:
                         task_weights = weights[task.name].view(1, -1)
-                    metric_.update(
-                        predictions=task_predictions,
-                        labels=task_labels,
-                        weights=task_weights,
-                    )
+                    # has_valid_weights is a tensor with only 1 value corresponding to
+                    # whether the weights are valid, i.e. are set to non-zero values for
+                    # the task in this update.
+                    # If has_valid_update[0] is False, we just ignore this update.
+                    has_valid_weights = self._check_nonempty_weights(task_weights)
+                    if has_valid_weights[0]:
+                        metric_.update(
+                            predictions=task_predictions,
+                            labels=task_labels,
+                            weights=task_weights,
+                        )
+                        metric_.has_valid_update.logical_or_(has_valid_weights).byte()
 
     def update(
         self,
