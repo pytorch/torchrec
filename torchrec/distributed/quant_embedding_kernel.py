@@ -88,9 +88,17 @@ def _quantize_weight(
 ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
     quant_weight_list = []
     for weight in state_dict.values():
-        quantized_weights = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-            weight, DATA_TYPE_NUM_BITS[data_type]
-        )
+        if weight.dtype == torch.float:
+            quantized_weights = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
+                weight, DATA_TYPE_NUM_BITS[data_type]
+            )
+        elif weight.dtype == torch.float16:
+            quantized_weights = torch.ops.fbgemm.HalfToFusedNBitRowwiseQuantizedSBHalf(
+                weight, DATA_TYPE_NUM_BITS[data_type]
+            )
+        else:
+            raise Exception("Unsupported dtype: {weight.dtype}")
+
         # weight and 4 byte scale shift (2xfp16)
         quant_weight = quantized_weights[:, :-4]
         scale_shift = quantized_weights[:, -4:]
