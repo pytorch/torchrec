@@ -130,4 +130,5 @@ class PredictModule(nn.Module):
         prefix: str = "",
         keep_vars: bool = False,
     ) -> Dict[str, Any]:
+        # pyre-fixme[19]: Expected 0 positional arguments.
         return self._module.state_dict(destination, prefix, keep_vars)
