@@ -61,10 +61,10 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="if fbgemm_gpu will be installed with cpu_only flag",
     )
     parser.add_argument(
-        "--fbgemm_gpu_dir",
+        "--fbgemm_gpu_dir_override",
         type=str,
-        default="third_party/fbgemm/fbgemm_gpu",
-        help="the directory of external fbgemm_gpu path. Only applicable when skip_fbgemm is enabled.",
+        default=None,
+        help="the alternative directory of external fbgemm_gpu path.",
     )
     return parser.parse_known_args(argv)
 
@@ -95,13 +95,17 @@ def main(argv: List[str]) -> None:
 
     packages = find_packages(exclude=("*tests",))
     fbgemm_gpu_package_dir = []
-    fbgemm_install_dir = os.path.join(args.fbgemm_gpu_dir, "_skbuild/*/cmake-install")
+
+    fbgemm_gpu_dir = "third_party/fbgemm/fbgemm_gpu"
+    if args.fbgemm_gpu_dir_override is not None:
+        fbgemm_gpu_dir = args.fbgemm_gpu_dir_override
+    fbgemm_install_dir = os.path.join(fbgemm_gpu_dir, "_skbuild/*/cmake-install")
 
     if "clean" in unknown:
         print("Running clean for fbgemm_gpu first")
         out = check_output(
             [sys.executable, "setup.py", "clean"],
-            cwd="third_party/fbgemm/fbgemm_gpu",
+            cwd=fbgemm_gpu_dir,
         )
     # install/build
     else:
@@ -116,7 +120,7 @@ def main(argv: List[str]) -> None:
             fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
             out = check_output(
                 [sys.executable, "setup.py", "build", fbgemm_kw_args],
-                cwd="third_party/fbgemm/fbgemm_gpu",
+                cwd=fbgemm_gpu_dir,
                 env=my_env,
             )
             print(out)
