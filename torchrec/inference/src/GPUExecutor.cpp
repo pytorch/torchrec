@@ -38,6 +38,12 @@ DEFINE_bool(
     false,
     "emit NVTX markers/ranges to be visualized in NSight Systems");
 
+DEFINE_bool(gpu_executor_use_high_pri_stream_main_device, false, "");
+
+DEFINE_bool(gpu_executor_use_high_pri_stream_peer_device, false, "");
+
+DEFINE_bool(gpu_executor_use_high_pri_stream_d2h, false, "");
+
 namespace torchrec {
 
 namespace {
@@ -116,13 +122,16 @@ void GPUExecutor::process(int idx) {
 
   std::vector<c10::cuda::CUDAStream> streams;
   for (size_t i = 0; i < worldSize_; ++i) {
-    streams.push_back(
-        at::cuda::getStreamFromPool(/* isHighPriority */ true, i));
+    streams.push_back(at::cuda::getStreamFromPool(
+        /* isHighPriority */ i == rank_
+            ? FLAGS_gpu_executor_use_high_pri_stream_main_device
+            : FLAGS_gpu_executor_use_high_pri_stream_peer_device,
+        i));
   }
   at::cuda::CUDAMultiStreamGuard streamGuard(streams);
   at::cuda::CUDAGuard deviceGuard(rank_);
-  auto d2hStream =
-      at::cuda::getStreamFromPool(/* isHighPriority */ true, rank_);
+  auto d2hStream = at::cuda::getStreamFromPool(
+      /* isHighPriority */ FLAGS_gpu_executor_use_high_pri_stream_d2h, rank_);
 
   if (warmupFn_) {
     warmupFn_();
