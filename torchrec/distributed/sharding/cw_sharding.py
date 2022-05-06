@@ -9,7 +9,9 @@ from typing import Set, Callable, Dict, List, Optional, Tuple, TypeVar, Any
 
 import torch
 import torch.distributed as dist  # noqa
-from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
+from fbgemm_gpu.permute_pooled_embedding_modules_split import (
+    PermutePooledEmbeddingsSplit,
+)
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
@@ -218,13 +220,13 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[torch.Tensor]:
         device = device if device is not None else self._device
-        embedding_permute_op: Optional[PermutePooledEmbeddings] = None
+        embedding_permute_op: Optional[PermutePooledEmbeddingsSplit] = None
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None
         if self._permute_embeddings and self._embedding_order != list(
             range(len(self._embedding_order))
         ):
             assert len(self._embedding_order) == len(self._embedding_dims)
-            embedding_permute_op = PermutePooledEmbeddings(
+            embedding_permute_op = PermutePooledEmbeddingsSplit(
                 self._embedding_dims,
                 self._embedding_order,
             ).to(device=device)
