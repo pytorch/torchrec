@@ -99,7 +99,7 @@ def main(argv: List[str]) -> None:
     fbgemm_gpu_dir = "third_party/fbgemm/fbgemm_gpu"
     if args.fbgemm_gpu_dir_override is not None:
         fbgemm_gpu_dir = args.fbgemm_gpu_dir_override
-    fbgemm_install_dir = os.path.join(fbgemm_gpu_dir, "_skbuild/*/cmake-install")
+    fbgemm_gpu_install_dir = os.path.join(fbgemm_gpu_dir, "_skbuild/*/cmake-install")
 
     if "clean" in unknown:
         print("Running clean for fbgemm_gpu first")
@@ -132,7 +132,7 @@ def main(argv: List[str]) -> None:
         packages.extend(find_packages(fbgemm_install_base))
         # to include the fbgemm_gpu.so
         fbgemm_gpu_package_dir = glob.glob(
-            os.path.join(fbgemm_install_dir, "fbgemm_gpu")
+            os.path.join(fbgemm_gpu_install_dir, "fbgemm_gpu")
         )[0]
 
     sys.argv = [sys.argv[0]] + unknown
