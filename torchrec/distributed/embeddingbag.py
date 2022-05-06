@@ -662,6 +662,7 @@ class ShardedEmbeddingBag(
             destination = OrderedDict()
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
+        # pyre-fixme[19]: Expected 0 positional arguments.
         lookup_state_dict = self._lookup.state_dict(None, "", keep_vars)
         # update key to match embeddingBag state_dict key
         for key, item in lookup_state_dict.items():
