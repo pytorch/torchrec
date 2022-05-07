@@ -126,9 +126,7 @@ def main(argv: List[str]) -> None:
             print(out)
 
         # the path to find all the packages
-        fbgemm_install_base = glob.glob(
-            fbgemm_gpu_install_dir
-        )[0]
+        fbgemm_install_base = glob.glob(fbgemm_gpu_install_dir)[0]
         packages.extend(find_packages(fbgemm_install_base))
         # to include the fbgemm_gpu.so
         fbgemm_gpu_package_dir = glob.glob(
