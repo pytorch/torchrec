@@ -33,7 +33,6 @@ QUARTER_BLOCK_PENALTY: float = 1.75  # empirical studies
 BWD_COMPUTE_MULTIPLIER: float = 2  # empirical studies
 WEIGHTED_KERNEL_MULTIPLIER: float = 1.1  # empirical studies
 DP_ELEMENTWISE_KERNELS_PERF_FACTOR: float = 9.22  # empirical studies
-ALLREDUCE_MEMORY_MULTIPLIER: float = 1.875  # NVIDIA presentation: https://images.nvidia.com/events/sc15/pdfs/NCCL-Woolley.pdf
 
 
 def kernel_bw_lookup(
@@ -67,16 +66,16 @@ def kernel_bw_lookup(
         ("cuda", EmbeddingComputeKernel.SPARSE.value): 0.35 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_DENSE.value): 0.5 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED.value): 1 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM.value): DDR_MEM_BW / 100,
+        ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM.value): DDR_MEM_BW / 10,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value): (
             caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
         )
-        / 100,
+        / 10,
         ("cuda", EmbeddingComputeKernel.BATCHED_QUANT.value): 1 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT_UVM.value): DDR_MEM_BW / 100,
+        ("cuda", EmbeddingComputeKernel.BATCHED_QUANT_UVM.value): DDR_MEM_BW / 10,
         ("cuda", EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value): (
             caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
         )
-        / 100,
+        / 10,
     }
     return lookup.get((compute_device, compute_kernel))
