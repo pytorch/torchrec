@@ -77,13 +77,11 @@ def quantize_state_dict(
                 dtype=module.qconfig.weight().dtype,
             )
         else:
-            if tensor.dtype == torch.float:
-                quant_res = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-                    tensor, num_bits
-                )
-            elif tensor.dtype == torch.float16:
-                quant_res = torch.ops.fbgemm.HalfToFusedNBitRowwiseQuantizedSBHalf(
-                    tensor, num_bits
+            if tensor.dtype == torch.float or tensor.dtype == torch.float16:
+                quant_res = (
+                    torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
+                        tensor, num_bits
+                    )
                 )
             else:
                 raise Exception("Unsupported dtype: {tensor.dtype}")

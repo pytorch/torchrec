@@ -88,13 +88,11 @@ def _quantize_weight(
 ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
     quant_weight_list = []
     for weight in state_dict.values():
-        if weight.dtype == torch.float:
-            quantized_weights = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-                weight, DATA_TYPE_NUM_BITS[data_type]
-            )
-        elif weight.dtype == torch.float16:
-            quantized_weights = torch.ops.fbgemm.HalfToFusedNBitRowwiseQuantizedSBHalf(
-                weight, DATA_TYPE_NUM_BITS[data_type]
+        if weight.dtype == torch.float or weight.dtype == torch.float16:
+            quantized_weights = (
+                torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
+                    weight, DATA_TYPE_NUM_BITS[data_type]
+                )
             )
         else:
             raise Exception("Unsupported dtype: {weight.dtype}")
