@@ -520,7 +520,7 @@ class ShardedEmbeddingTowerCollection(
                 if lt_tables.issubset(pt_tables):
                     logical_to_physical_order[i].append(j)
                     found = True
-            if not found:
+            if not found and pt_tables:
                 raise RuntimeError(
                     f"Could not find any towers with features: {pt_tables}"
                 )
