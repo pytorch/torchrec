@@ -9,7 +9,7 @@
 Activation Modules
 """
 
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import torch
 from torch import nn

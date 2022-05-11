@@ -8,9 +8,7 @@
 import unittest
 
 from fbgemm_gpu.split_embedding_configs import SparseType
-from torchrec.distributed.batched_embedding_kernel import (
-    configure_fused_params,
-)
+from torchrec.distributed.batched_embedding_kernel import configure_fused_params
 
 
 class BatchedEmbeddingKernelTest(unittest.TestCase):

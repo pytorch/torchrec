@@ -32,10 +32,7 @@ These include:
 
 """
 
-from torchrec.distributed.comm import (  # noqa
-    get_local_rank,
-    get_local_size,
-)
+from torchrec.distributed.comm import get_local_rank, get_local_size  # noqa
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
     TrainPipeline,
@@ -44,13 +41,13 @@ from torchrec.distributed.train_pipeline import (  # noqa
 )
 from torchrec.distributed.types import (  # noqa
     Awaitable,
+    ModuleSharder,
     NoWait,
     ParameterSharding,
-    ModuleSharder,
-    ShardingPlanner,
     ShardedModule,
     ShardedTensor,
     ShardingEnv,
+    ShardingPlanner,
 )
 from torchrec.distributed.utils import (  # noqa
     get_unsharded_module_names,

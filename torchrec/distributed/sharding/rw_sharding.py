@@ -5,34 +5,34 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Dict, Any, Tuple, TypeVar
+from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatter
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
+    BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
+    bucketize_kjt_before_all2all,
+    EmbeddingSharding,
     group_tables,
     SparseFeaturesAllToAll,
-    BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
-    EmbeddingSharding,
-    BaseEmbeddingLookup,
-    bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
-    ShardedEmbeddingTable,
-    GroupedEmbeddingConfig,
-    SparseFeatures,
-    EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
+    SparseFeatures,
 )
 from torchrec.distributed.types import (
-    ShardingEnv,
-    ShardedTensorMetadata,
-    ShardMetadata,
     Awaitable,
     ParameterSharding,
+    ShardedTensorMetadata,
+    ShardingEnv,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable

@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from enum import Enum, unique
 from math import sqrt
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType

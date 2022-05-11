@@ -5,9 +5,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, cast
+from typing import cast, List
 
-from torchrec.distributed.planner.types import PerfModel, Topology, ShardingOption
+from torchrec.distributed.planner.types import PerfModel, ShardingOption, Topology
 
 
 class NoopPerfModel(PerfModel):

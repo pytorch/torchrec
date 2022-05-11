@@ -7,16 +7,16 @@
 
 import copy
 from dataclasses import dataclass
-from typing import List, cast
+from typing import cast, List
 
 from torchrec.distributed.planner.types import (
+    DeviceHardware,
+    PartitionByType,
     Partitioner,
-    Topology,
+    PlannerError,
     ShardingOption,
     Storage,
-    PartitionByType,
-    PlannerError,
-    DeviceHardware,
+    Topology,
 )
 from torchrec.distributed.types import ShardingType
 

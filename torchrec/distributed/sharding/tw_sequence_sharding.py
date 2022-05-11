@@ -5,36 +5,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import (
-    SequenceEmbeddingAllToAll,
-    EmbeddingsAllToOne,
-)
+from torchrec.distributed.dist_data import EmbeddingsAllToOne, SequenceEmbeddingAllToAll
 from torchrec.distributed.embedding_lookup import (
-    InferGroupedEmbeddingsLookup,
     GroupedEmbeddingsLookup,
+    InferGroupedEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
-    BaseSparseFeaturesDist,
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
 )
 from torchrec.distributed.embedding_types import (
+    BaseGroupedFeatureProcessor,
     SparseFeatures,
     SparseFeaturesList,
-    BaseGroupedFeatureProcessor,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
-    SequenceShardingContext,
     BaseSequenceEmbeddingDist,
+    SequenceShardingContext,
 )
 from torchrec.distributed.sharding.tw_sharding import (
-    TwSparseFeaturesDist,
     BaseTwEmbeddingSharding,
     InferTwSparseFeaturesDist,
+    TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import Awaitable
 

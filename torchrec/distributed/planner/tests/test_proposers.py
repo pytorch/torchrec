@@ -6,18 +6,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List, cast
+from typing import cast, List
 from unittest.mock import MagicMock
 
 import torch
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-)
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
-from torchrec.distributed.planner.types import Topology, ShardingOption
+from torchrec.distributed.planner.types import ShardingOption, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ShardingType, ModuleSharder
+from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 

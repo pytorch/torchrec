@@ -7,18 +7,7 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import (
-    TypeVar,
-    Dict,
-    Optional,
-    Any,
-    Type,
-    List,
-    Iterator,
-    Tuple,
-    Set,
-    cast,
-)
+from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -41,13 +30,13 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
-    ParameterSharding,
-    ShardingEnv,
-    ShardedModule,
     Awaitable,
-    ShardedModuleContext,
-    ShardingType,
     LazyAwaitable,
+    ParameterSharding,
+    ShardedModule,
+    ShardedModuleContext,
+    ShardingEnv,
+    ShardingType,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_modules import (
@@ -60,10 +49,8 @@ from torchrec.modules.embedding_tower import (
     tower_input_params,
 )
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-)
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 M = TypeVar("M", bound=nn.Module)
 

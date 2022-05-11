@@ -19,8 +19,8 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.metrics_config import (
     MetricsConfig,
-    RecMetricEnumBase,
     RecMetricEnum,
+    RecMetricEnumBase,
     RecTaskInfo,
     StateMetricEnum,
 )
@@ -29,15 +29,10 @@ from torchrec.metrics.metrics_namespace import (
     compose_metric_namespace,
     MetricNamespace,
 )
-from torchrec.metrics.model_utils import (
-    parse_task_model_outputs,
-)
+from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
-from torchrec.metrics.rec_metric import (
-    RecMetricList,
-    RecMetric,
-)
+from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.throughput import ThroughputMetric
 
 

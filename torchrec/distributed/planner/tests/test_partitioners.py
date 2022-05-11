@@ -7,7 +7,7 @@
 
 import copy
 import unittest
-from typing import List, cast
+from typing import cast, List
 
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -16,17 +16,14 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
-    Storage,
-    Topology,
     PartitionByType,
     PlannerError,
+    Storage,
+    Topology,
 )
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection,
-)
 
 
 class RWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):

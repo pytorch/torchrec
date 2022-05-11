@@ -12,7 +12,7 @@
 import argparse
 import os
 import sys
-from typing import Any, Union, cast, List, Dict
+from typing import Any, cast, Dict, List, Union
 
 import numpy as np
 import torch
@@ -43,9 +43,7 @@ try:
 
     # pyre-ignore[21]
     # @manual=//torchrec/github/examples/bert4rec/dataloader:bert4rec_movielens_dataloader
-    from dataloader.bert4rec_movielens_dataloader import (
-        Bert4RecDataloader,
-    )
+    from dataloader.bert4rec_movielens_dataloader import Bert4RecDataloader
 
     # pyre-ignore[21]
     # @manual=//torchrec/github/examples/bert4rec/models:bert4rec

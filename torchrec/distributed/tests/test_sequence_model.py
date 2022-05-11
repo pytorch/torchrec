@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Tuple, Any, Dict, Union, cast
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -13,12 +13,12 @@ from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestDenseArch,
+    TestSparseNNBase,
 )
-from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.modules.embedding_tower import EmbeddingTower
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, JaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")

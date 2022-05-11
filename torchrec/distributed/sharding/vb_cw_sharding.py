@@ -20,13 +20,11 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     SparseFeatures,
 )
-from torchrec.distributed.sharding.cw_sharding import (
-    BaseCwEmbeddingSharding,
-)
+from torchrec.distributed.sharding.cw_sharding import BaseCwEmbeddingSharding
 from torchrec.distributed.sharding.vb_sharding import BaseVariableBatchEmbeddingDist
 from torchrec.distributed.sharding.vb_tw_sharding import (
-    VariableBatchTwSparseFeaturesDist,
     VariableBatchTwPooledEmbeddingDist,
+    VariableBatchTwSparseFeaturesDist,
 )
 
 

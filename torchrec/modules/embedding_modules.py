@@ -6,21 +6,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
 from torchrec.modules.embedding_configs import (
     DataType,
-    EmbeddingConfig,
     EmbeddingBagConfig,
+    EmbeddingConfig,
     pooling_type_to_str,
 )
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-    JaggedTensor,
-    KeyedTensor,
-)
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):

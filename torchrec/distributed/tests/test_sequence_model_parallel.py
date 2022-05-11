@@ -12,7 +12,7 @@ from typing import List, Optional, Type
 import hypothesis.strategies as st
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import Verbosity, given, settings
+from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel_base import (
@@ -24,10 +24,7 @@ from torchrec.distributed.tests.test_sequence_model import (
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
-from torchrec.test_utils import (
-    skip_if_asan_class,
-    seed_and_log,
-)
+from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
 @skip_if_asan_class

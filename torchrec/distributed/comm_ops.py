@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, TypeVar, Any
+from typing import Any, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -24,7 +24,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual # noqa
+    import fbgemm_gpu  # @manual  # noqa
 except ImportError:
     pass
 

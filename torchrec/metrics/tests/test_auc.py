@@ -11,19 +11,13 @@ from typing import Dict, List, Type
 
 import torch
 import torch.distributed as dist
-from torchrec.metrics.auc import (
-    AUCMetric,
-)
+from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
-from torchrec.metrics.rec_metric import (
-    RecComputeMode,
-    RecMetric,
-    RecTaskInfo,
-)
+from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 from torchrec.metrics.tests.test_utils import (
-    TestMetric,
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
+    TestMetric,
 )
 
 

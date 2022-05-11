@@ -8,7 +8,7 @@
 import abc
 import copy
 from collections import OrderedDict
-from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -17,9 +17,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-)
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
@@ -27,19 +25,19 @@ from torchrec.distributed.planner import (
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
-    ShardingPlan,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
+    ShardingPlan,
 )
 from torchrec.distributed.utils import (
-    sharded_model_copy,
+    add_prefix_to_state_dict,
     append_prefix,
     filter_state_dict,
-    add_prefix_to_state_dict,
+    sharded_model_copy,
 )
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
 
 _DDP_STATE_DICT_PREFIX = "module."

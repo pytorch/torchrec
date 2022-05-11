@@ -15,9 +15,9 @@ jobs:
           python-version: 3.8
           architecture: x64
           packages: |
-            ufmt==1.3.0
+            ufmt==1.3.2
             black==21.9b0
-            usort==0.6.4
+            usort==1.0.2
       - name: Checkout Torchrec
         uses: actions/checkout@v2
       - name: Run pre-commit

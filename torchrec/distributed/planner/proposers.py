@@ -6,12 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from typing import List, Dict, Tuple, Optional, cast
+from typing import cast, Dict, List, Optional, Tuple
 
-from torchrec.distributed.planner.types import (
-    Proposer,
-    ShardingOption,
-)
+from torchrec.distributed.planner.types import Proposer, ShardingOption
 
 
 class GreedyProposer(Proposer):

@@ -9,12 +9,9 @@ import argparse
 import sys
 from typing import List
 
-from dlrm_predict import (
-    DLRMPredictFactory,
-    DLRMModelConfig,
-)
+from dlrm_predict import DLRMModelConfig, DLRMPredictFactory
 from torch.package import PackageExporter
-from torchrec.datasets.criteo import DEFAULT_INT_NAMES, DEFAULT_CAT_NAMES
+from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.inference.model_packager import PredictFactoryPackager
 
 # OSS Only

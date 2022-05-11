@@ -12,7 +12,7 @@ import socket
 import time
 from contextlib import closing
 from functools import wraps
-from typing import TypeVar, Callable, Optional
+from typing import Callable, Optional, TypeVar
 
 import numpy as np
 import torch

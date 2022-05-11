@@ -6,31 +6,28 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import TypeVar, Generic, List, Tuple, Optional, Dict, Any
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
-    KJTOneToAll,
     KJTAllToAllIndicesAwaitable,
+    KJTOneToAll,
 )
 from torchrec.distributed.embedding_types import (
-    GroupedEmbeddingConfig,
     BaseEmbeddingLookup,
-    SparseFeatures,
-    EmbeddingComputeKernel,
-    ShardedEmbeddingTable,
     BaseGroupedFeatureProcessor,
-    SparseFeaturesList,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
     ListOfSparseFeaturesList,
+    ShardedEmbeddingTable,
+    SparseFeatures,
+    SparseFeaturesList,
 )
-from torchrec.distributed.types import NoWait, Awaitable, ShardMetadata
-from torchrec.modules.embedding_configs import (
-    PoolingType,
-    DataType,
-)
+from torchrec.distributed.types import Awaitable, NoWait, ShardMetadata
+from torchrec.modules.embedding_configs import DataType, PoolingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 

@@ -11,8 +11,7 @@ import os
 
 import grpc
 import torch
-from gen.torchrec.inference import predictor_pb2
-from gen.torchrec.inference import predictor_pb2_grpc
+from gen.torchrec.inference import predictor_pb2, predictor_pb2_grpc
 from torch.utils.data import DataLoader
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.random import RandomRecDataset

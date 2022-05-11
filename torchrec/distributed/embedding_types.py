@@ -8,22 +8,22 @@
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Generic, List, Optional, Dict, Any, TypeVar, Iterator
+from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torch import nn
 from torchrec.distributed.types import (
     ModuleSharder,
-    ShardingType,
     ParameterStorage,
-    ShardMetadata,
     ShardedTensorMetadata,
+    ShardingType,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import (
-    PoolingType,
     DataType,
     EmbeddingTableConfig,
+    PoolingType,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable

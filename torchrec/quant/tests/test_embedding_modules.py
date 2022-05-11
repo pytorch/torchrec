@@ -10,14 +10,9 @@ from typing import List
 
 import hypothesis.strategies as st
 import torch
-from hypothesis import Verbosity, given, settings
-from torchrec.modules.embedding_configs import DataType
-from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-)
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection,
-)
+from hypothesis import given, settings, Verbosity
+from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )
