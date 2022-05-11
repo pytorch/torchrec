@@ -1,0 +1,278 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Push Binary Nightly
+
+on:
+  workflow_call:
+    secrets:
+      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
+        required: true
+      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
+        required: true
+      PYPI_TOKEN:
+        required: false
+  # run every day at 11:15am
+  schedule:
+    - cron:  '15 11 * * *'
+  # or manually trigger it
+  workflow_dispatch:
+
+
+jobs:
+
+  # build on cpu hosts and upload to GHA
+  build_on_cpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+         - os: linux.2xlarge
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.8
+           python-tag: "py38"
+           cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: "cu11"
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Check ldd --version
+      run: ldd --version
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+    # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
+    - name: Git Sumbodule Update
+      run: |
+        git submodule init
+        git submodule update --remote --recursive
+        cd third_party/fbgemm/
+        git submodule sync
+        git submodule update --init --recursive
+        git log
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install CUDA 11.3
+      shell: bash
+      run: |
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        sudo yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
+        sudo yum clean expire-cache
+        sudo yum install -y nvidia-driver-latest-dkms
+        sudo yum install -y cuda-11-3
+        sudo yum install -y cuda-drivers
+        sudo yum install -y libcudnn8-devel
+    - name: setup Path
+      run: |
+        echo /usr/local/cuda-11.3/bin >> $GITHUB_PATH
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: nvcc check
+      run: |
+        nvcc --version
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install -r requirements.txt
+    - name: Test Installation of dependencies
+      run: |
+        conda run -n build_binary python -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary python -c "import skbuild"
+        echo "skbuild succeeded"
+        conda run -n build_binary python -c "import numpy"
+        echo "numpy succeeded"
+    # for the conda run with quotes, we have to use "\" and double quotes
+    # here is the issue: https://github.com/conda/conda/issues/10972
+    - name: Build TorchRec Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrec-nightly \
+          --TORCH_CUDA_ARCH_LIST "'7.0;8.0'" \
+          --python-tag=${{ matrix.python-tag }}
+    - name: Upload wheel as GHA artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/torchrec_nightly-*.whl
+
+  # download from GHA, test on gpu and push to pypi
+  test_on_gpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [linux.4xlarge.nvidia.gpu]
+        python-version: [3.7, 3.8, 3.9]
+        cuda-tag: ["cu11"]
+    needs: build_on_cpu
+    # the glibc version should match the version of the one we used to build the binary
+    # for this case, it's 2.26
+    steps:
+    - name: Check ldd --version
+      run: ldd --version
+    - name: check cpu info
+      shell: bash
+      run: |
+        cat /proc/cpuinfo
+    - name: check distribution info
+      shell: bash
+      run: |
+        cat /proc/version
+    - name: Display EC2 information
+      shell: bash
+      run: |
+        set -euo pipefail
+        function get_ec2_metadata() {
+          # Pulled from instance metadata endpoint for EC2
+          # see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+          category=$1
+          curl -fsSL "http://169.254.169.254/latest/meta-data/${category}"
+        }
+        echo "ami-id: $(get_ec2_metadata ami-id)"
+        echo "instance-id: $(get_ec2_metadata instance-id)"
+        echo "instance-type: $(get_ec2_metadata instance-type)"
+    - name: check gpu info
+      shell: bash
+      run: |
+        sudo yum install lshw -y
+        sudo lshw -C display
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+    # Update references
+    # TODO: update the git submodule sync after we fixed the auto-sync part
+    - name: Git Sumbodule Update
+      run: |
+        git submodule init
+        git submodule update --remote --recursive
+        cd third_party/fbgemm/
+        git submodule sync
+        git submodule update --init --recursive
+        git log
+    - name: Update pip
+      run: |
+        sudo yum update -y
+        sudo yum -y install git python3-pip
+        sudo pip3 install --upgrade pip
+    - name: Setup conda
+      run: |
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
+    - name: check python version
+      run: |
+        conda run -n build_binary python --version
+    - name: Install CUDA 11.3
+      shell: bash
+      run: |
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+        sudo yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo
+        sudo yum clean expire-cache
+        sudo yum install -y nvidia-driver-latest-dkms
+        sudo yum install -y cuda-11-3
+        sudo yum install -y cuda-drivers
+        sudo yum install -y libcudnn8-devel
+    - name: setup Path
+      run: |
+        echo /usr/local/cuda-11.3/bin >> $GITHUB_PATH
+        echo /usr/local/bin >> $GITHUB_PATH
+    - name: nvcc check
+      run: |
+        nvcc --version
+    - name: Install PyTorch
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
+    # download wheel from GHA
+    - name: Download wheel
+      uses: actions/download-artifact@v2
+      with:
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+    - name: Display structure of downloaded files
+      run: ls -R
+    - name: Install TorchRec Nightly
+      run: |
+        rm -r dist || true
+        conda run -n build_binary python -m pip install *.whl
+    - name: Test fbgemm_gpu and torchrec installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        conda run -n build_binary \
+          python -c "import torchrec"
+    # Push to Pypi
+    - name: Push TorchRec Binary to S3
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY }}
+        S3_PATH: "s3://pytorch/whl/nightly/"
+      run: |
+        source /opt/conda/etc/profile.d/conda.sh
+        conda activate env${{ matrix.python-version }}
+        pip install --user awscli
+        set -x
+        if [[ -z "${AWS_ACCESS_KEY_ID}" ]]; then
+          echo "AWS_ACCESS_KEY_ID is not set, exiting upload"
+        exit 1
+        fi
+        for pkg in torchrec_nightly*.whl; do
+          ~/.local/bin/aws s3 cp "$pkg" "$S3_PATH" --acl public-read
+        done
+    - name: Push TorchRec Binary to PYPI
+      env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      run: |
+        conda run -n build_binary python -m pip install twine
+        conda run -n build_binary \
+          python -m twine upload \
+            --username __token__ \
+            --password "$PYPI_TOKEN" \
+            --skip-existing \
+            torchrec_nightly-*.whl \
+            --verbose
