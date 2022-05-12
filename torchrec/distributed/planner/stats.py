@@ -7,16 +7,10 @@
 
 import logging
 from collections import defaultdict
-from typing import Any, cast, Dict, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Tuple, Union
 
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
-from torchrec.distributed.planner.types import (
-    ParameterConstraints,
-    ShardingOption,
-    Stats,
-    Storage,
-    Topology,
-)
+from torchrec.distributed.planner.types import ShardingOption, Stats, Storage, Topology
 from torchrec.distributed.planner.utils import bytes_to_gb, bytes_to_mb
 from torchrec.distributed.types import ParameterSharding, ShardingPlan, ShardingType
 
