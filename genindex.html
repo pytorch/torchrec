@@ -582,7 +582,7 @@
       <ul>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.copy">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.copy">(torchrec.distributed.types.ShardedModule method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleCopyMixin.copy">(torchrec.distributed.types.ModuleCopyMixin method)</a>
 </li>
       </ul></li>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.Tracer.create_arg">create_arg() (torchrec.fx.tracer.Tracer method)</a>
@@ -916,6 +916,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.feedback">feedback() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.feedback">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer.feedback">(torchrec.distributed.planner.proposers.UniformProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Proposer.feedback">(torchrec.distributed.planner.types.Proposer method)</a>
@@ -1141,10 +1143,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.get_unsharded_module_names">get_unsharded_module_names() (in module torchrec.distributed.utils)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.get_unwrapped_module">get_unwrapped_module() (in module torchrec.distributed.model_parallel)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_max">get_weight_init_max() (torchrec.modules.embedding_configs.BaseEmbeddingConfig method)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_min">get_weight_init_min() (torchrec.modules.embedding_configs.BaseEmbeddingConfig method)</a>
@@ -1164,6 +1166,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner">GreedyPerfPartitioner (class in torchrec.distributed.planner.partitioners)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer">GreedyProposer (class in torchrec.distributed.planner.proposers)</a>
+</li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer">GridSearchProposer (class in torchrec.distributed.planner.proposers)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.group_tables">group_tables() (in module torchrec.distributed.embedding_sharding)</a>
 </li>
@@ -1416,6 +1420,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.load">load() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.load">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer.load">(torchrec.distributed.planner.proposers.UniformProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Proposer.load">(torchrec.distributed.planner.types.Proposer method)</a>
@@ -1658,6 +1664,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.module_type">(torchrec.distributed.types.ModuleSharder property)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleCopyMixin">ModuleCopyMixin (class in torchrec.distributed.types)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder">ModuleSharder (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.movielens.movielens_20m">movielens_20m() (in module torchrec.datasets.movielens)</a>
@@ -1892,14 +1900,14 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.plan">(torchrec.distributed.types.ShardingPlan attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan">plan() (torchrec.distributed.planner.planners.EmbeddingShardingPlanner method)</a>
 
       <ul>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner.plan">(torchrec.distributed.types.ShardingPlanner method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerError">PlannerError</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.policy">policy (torchrec.optim.warmup.WarmupStage attribute)</a>
@@ -1953,6 +1961,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.propose">propose() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.propose">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer.propose">(torchrec.distributed.planner.proposers.UniformProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Proposer.propose">(torchrec.distributed.planner.types.Proposer method)</a>

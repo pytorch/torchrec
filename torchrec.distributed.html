@@ -4909,6 +4909,18 @@ overlap (i.e. quickly waited the first one but long wait on the second)</p></li>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleCopyMixin</span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A mixin to allow modules to override copy behaviros in DMP.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin.copy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleSharder">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleSharder</span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleSharder" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.M</span></code>]</p>
@@ -5041,7 +5053,7 @@ ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ShardedModule</span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.CompIn</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.DistOut</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.Out</span></code>]</p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.CompIn</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.DistOut</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">torchrec.distributed.types.Out</span></code>], <a class="reference internal" href="#torchrec.distributed.types.ModuleCopyMixin" title="torchrec.distributed.types.ModuleCopyMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.distributed.types.ModuleCopyMixin</span></code></a></p>
 <p>All model-parallel modules implement this interface.
 Inputs and outputs are data-parallel.</p>
 <div class="admonition note">
@@ -5060,11 +5072,6 @@ from data-parallel to model parallel and vise-versa.</p>
 <dd><p>In case of multiple output distributions it makes sense to override this method
 and initiate output distibution as soon as the corresponding compute completes.</p>
 </dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.copy">
-<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule.copy" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.create_context">
