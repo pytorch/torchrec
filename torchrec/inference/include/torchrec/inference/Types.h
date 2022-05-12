@@ -49,6 +49,7 @@ struct PredictionRequest {
 };
 
 struct PredictionResponse {
+  uint32_t batchSize;
   c10::IValue predictions;
   // If set, the result is an exception.
   std::optional<folly::exception_wrapper> exception;
