@@ -12,7 +12,11 @@ from unittest.mock import MagicMock
 import torch
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
+from torchrec.distributed.planner.proposers import (
+    GreedyProposer,
+    GridSearchProposer,
+    UniformProposer,
+)
 from torchrec.distributed.planner.types import ShardingOption, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
@@ -25,6 +29,7 @@ class TestProposers(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(topology=topology)
         self.greedy_proposer = GreedyProposer()
         self.uniform_proposer = UniformProposer()
+        self.grid_search_proposer = GridSearchProposer()
 
     def test_greedy_two_table_perf(self) -> None:
         tables = [
@@ -224,3 +229,49 @@ class TestProposers(unittest.TestCase):
         ]
 
         self.assertEqual(expected_output, output)
+
+    def test_grid_search_to_table(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100 * i,
+                embedding_dim=10 * i,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1, 4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        search_space = self.enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
+        )
+
+        """
+        All sharding types but DP will have 3 possible compute kernels after pruning:
+            - batched_fused
+            - batched_fused_uvm_caching
+            - batched_fused_uvm
+        DP will have 1 possible compute kernel: batched_dense
+        So the total number of pruned options will be:
+            (num_sharding_types - 1) * 3 + 1 = 16
+        """
+        num_pruned_options = (len(ShardingType) - 1) * 3 + 1
+        self.grid_search_proposer.load(search_space)
+        for (
+            sharding_options
+        ) in self.grid_search_proposer._sharding_options_by_fqn.values():
+            # number of sharding types after pruning is number of sharding types * 3
+            # 3 compute kernels batched_fused/batched_dense, batched_fused_uvm_caching, batched_fused_uvm
+            print([(so.sharding_type, so.compute_kernel) for so in sharding_options])
+            self.assertEqual(len(sharding_options), num_pruned_options)
+
+        num_proposals = 0
+        proposal = self.grid_search_proposer.propose()
+        while proposal:
+            self.grid_search_proposer.feedback(partitionable=True)
+            proposal = self.grid_search_proposer.propose()
+            num_proposals += 1
+
+        self.assertEqual(num_pruned_options ** len(tables), num_proposals)
