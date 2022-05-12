@@ -1794,7 +1794,7 @@ as specified by corresponding ParameterSharding.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding.EmbeddingCollectionSharder.sharding_types">
 <span class="sig-name descname"><span class="pre">sharding_types</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding.EmbeddingCollectionSharder.sharding_types" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported sharding types. See ShardingType for well-known examples.</p>
+<dd><p>List of supported sharding types. See <cite>ShardingType</cite> for well-known examples.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1814,7 +1814,8 @@ This is part of the public API to allow for manual data dist pipelining.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.embedding.ShardedEmbeddingCollection.compute_and_output_dist">
 <span class="sig-name descname"><span class="pre">compute_and_output_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.ShardedModuleContext" title="torchrec.distributed.types.ShardedModuleContext"><span class="pre">torchrec.distributed.types.ShardedModuleContext</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.embedding_types.SparseFeaturesList" title="torchrec.distributed.embedding_types.SparseFeaturesList"><span class="pre">torchrec.distributed.embedding_types.SparseFeaturesList</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><span class="pre">torchrec.distributed.types.LazyAwaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding.ShardedEmbeddingCollection.compute_and_output_dist" title="Permalink to this definition">¶</a></dt>
 <dd><p>In case of multiple output distributions it makes sense to override this method
-and initiate output distibution as soon as the corresponding compute completes.</p>
+and initiate the output distibution as soon as the corresponding compute
+completes.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -3170,7 +3171,7 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_types.BaseEmbeddingSharder.compute_kernels">
 <span class="sig-name descname"><span class="pre">compute_kernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_types.BaseEmbeddingSharder.compute_kernels" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported compute kernels for a given sharding_type and compute device.</p>
+<dd><p>List of supported compute kernels for a given sharding type and compute device.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -3181,7 +3182,7 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_types.BaseEmbeddingSharder.sharding_types">
 <span class="sig-name descname"><span class="pre">sharding_types</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_types.BaseEmbeddingSharder.sharding_types" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported sharding types. See ShardingType for well-known examples.</p>
+<dd><p>List of supported sharding types. See <cite>ShardingType</cite> for well-known examples.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -3231,7 +3232,7 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.compute_kernels">
 <span class="sig-name descname"><span class="pre">compute_kernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.compute_kernels" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported compute kernels for a given sharding_type and compute device.</p>
+<dd><p>List of supported compute kernels for a given sharding type and compute device.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -3242,7 +3243,7 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.sharding_types">
 <span class="sig-name descname"><span class="pre">sharding_types</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.sharding_types" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported sharding types. See ShardingType for well-known examples.</p>
+<dd><p>List of supported sharding types. See <cite>ShardingType</cite> for well-known examples.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -3857,7 +3858,8 @@ This is part of the public API to allow for manual data dist pipelining.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.compute_and_output_dist">
 <span class="sig-name descname"><span class="pre">compute_and_output_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.ShardedModuleContext" title="torchrec.distributed.types.ShardedModuleContext"><span class="pre">torchrec.distributed.types.ShardedModuleContext</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.embedding_types.SparseFeaturesList" title="torchrec.distributed.embedding_types.SparseFeaturesList"><span class="pre">torchrec.distributed.embedding_types.SparseFeaturesList</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><span class="pre">torchrec.distributed.types.LazyAwaitable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.compute_and_output_dist" title="Permalink to this definition">¶</a></dt>
 <dd><p>In case of multiple output distributions it makes sense to override this method
-and initiate output distibution as soon as the corresponding compute completes.</p>
+and initiate the output distibution as soon as the corresponding compute
+completes.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -4567,7 +4569,8 @@ This is part of the public API to allow for manual data dist pipelining.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.compute_and_output_dist">
 <span class="sig-name descname"><span class="pre">compute_and_output_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.ShardedModuleContext" title="torchrec.distributed.types.ShardedModuleContext"><span class="pre">torchrec.distributed.types.ShardedModuleContext</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.embedding_types.ListOfSparseFeaturesList" title="torchrec.distributed.embedding_types.ListOfSparseFeaturesList"><span class="pre">torchrec.distributed.embedding_types.ListOfSparseFeaturesList</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><span class="pre">torchrec.distributed.types.LazyAwaitable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.compute_and_output_dist" title="Permalink to this definition">¶</a></dt>
 <dd><p>In case of multiple output distributions it makes sense to override this method
-and initiate output distibution as soon as the corresponding compute completes.</p>
+and initiate the output distibution as soon as the corresponding compute
+completes.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4912,7 +4915,7 @@ overlap (i.e. quickly waited the first one but long wait on the second)</p></li>
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleCopyMixin</span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>A mixin to allow modules to override copy behaviros in DMP.</p>
+<p>A mixin to allow modules to override copy behaviors in DMP.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin.copy">
 <span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.modules.module.Module</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin.copy" title="Permalink to this definition">¶</a></dt>
@@ -4929,7 +4932,7 @@ e.g. <cite>EmbeddingBagCollection</cite>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleSharder.compute_kernels">
 <span class="sig-name descname"><span class="pre">compute_kernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleSharder.compute_kernels" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported compute kernels for a given sharding_type and compute device.</p>
+<dd><p>List of supported compute kernels for a given sharding type and compute device.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -4971,7 +4974,7 @@ as specified by corresponding ParameterSharding.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleSharder.sharding_types">
 <span class="sig-name descname"><span class="pre">sharding_types</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compute_device_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleSharder.sharding_types" title="Permalink to this definition">¶</a></dt>
-<dd><p>List of supported sharding types. See ShardingType for well-known examples.</p>
+<dd><p>List of supported sharding types. See <cite>ShardingType</cite> for well-known examples.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -5070,7 +5073,8 @@ from data-parallel to model parallel and vise-versa.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.compute_and_output_dist">
 <span class="sig-name descname"><span class="pre">compute_and_output_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.ShardedModuleContext" title="torchrec.distributed.types.ShardedModuleContext"><span class="pre">torchrec.distributed.types.ShardedModuleContext</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torchrec.distributed.types.CompIn</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><span class="pre">torchrec.distributed.types.LazyAwaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">torchrec.distributed.types.Out</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule.compute_and_output_dist" title="Permalink to this definition">¶</a></dt>
 <dd><p>In case of multiple output distributions it makes sense to override this method
-and initiate output distibution as soon as the corresponding compute completes.</p>
+and initiate the output distibution as soon as the corresponding compute
+completes.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -5081,15 +5085,21 @@ and initiate output distibution as soon as the corresponding compute completes.<
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><span class="pre">torchrec.distributed.types.LazyAwaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">torchrec.distributed.types.Out</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines the computation performed at every call.</p>
-<p>Should be overridden by all subclasses.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Although the recipe for forward pass needs to be defined within
-this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
-instead of this since the former takes care of running the
-registered hooks while the latter silently ignores them.</p>
-</div>
+<dd><p>Executes the input dist, compute, and output dist steps.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>*input</strong> – input.</p></li>
+<li><p><strong>**kwargs</strong> – keyword arguments.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>awaitable of output from output dist.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable">LazyAwaitable</a>[Out]</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -5157,17 +5167,19 @@ enables <cite>DistributedModelParallel</cite> to be used during inference.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ShardingPlan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">torchrec.distributed.types.ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Representation of sharding plan.
-.. attribute:: plan</p>
-<blockquote>
-<div><p>dict keyed by module path of
+<p>Representation of sharding plan.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan.plan">
+<span class="sig-name descname"><span class="pre">plan</span></span><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan.plan" title="Permalink to this definition">¶</a></dt>
+<dd><p>dict keyed by module path of
 dict of parameter sharding specs keyed by parameter name.</p>
 <dl class="field-list simple">
-<dt class="field-odd">type</dt>
-<dd class="field-odd"><p>Dict[str, Dict[str, ParameterSharding]]</p>
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>Dict[str, Dict[str, <a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding">ParameterSharding</a>]]</p>
 </dd>
 </dl>
-</div></blockquote>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan.get_plan_for_module">
 <span class="sig-name descname"><span class="pre">get_plan_for_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">torchrec.distributed.types.ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan.get_plan_for_module" title="Permalink to this definition">¶</a></dt>
@@ -5185,8 +5197,8 @@ dict of parameter sharding specs keyed by parameter name.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan.plan">
-<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">torchrec.distributed.types.ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan.plan" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id17">
+<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">torchrec.distributed.types.ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id17" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
