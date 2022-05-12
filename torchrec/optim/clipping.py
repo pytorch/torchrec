@@ -9,7 +9,7 @@ from enum import Enum, unique
 from typing import Any, List
 
 import torch
-from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
+from torchrec.optim.keyed import KeyedOptimizer, OptimizerWrapper
 
 
 @unique

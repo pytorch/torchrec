@@ -7,7 +7,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 import torch
 import torchrec.distributed as trec_dist
@@ -15,8 +15,8 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     ParameterConstraints,
+    Topology,
 )
-from torchrec.distributed.planner import Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import ShardingType
 from torchrec.inference.model_packager import load_pickle_config

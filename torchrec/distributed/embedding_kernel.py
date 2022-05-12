@@ -8,21 +8,17 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import List, Optional, Dict, Any, Union, Tuple, Iterator
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
-    ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
 )
-from torchrec.distributed.types import (
-    Shard,
-    ShardedTensorMetadata,
-    ShardedTensor,
-)
+from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor

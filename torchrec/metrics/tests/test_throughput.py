@@ -10,9 +10,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from torchrec.metrics.throughput import (
-    ThroughputMetric,
-)
+from torchrec.metrics.throughput import ThroughputMetric
 
 
 THROUGHPUT_PATH = "torchrec.metrics.throughput"

@@ -12,10 +12,7 @@ from typing import Tuple
 
 import torch
 from torch.nn.modules.lazy import LazyModuleMixin
-from torchrec.modules.lazy_extension import (
-    LazyModuleExtensionMixin,
-    lazy_apply,
-)
+from torchrec.modules.lazy_extension import lazy_apply, LazyModuleExtensionMixin
 
 
 def remove_comment(source_code: str) -> str:

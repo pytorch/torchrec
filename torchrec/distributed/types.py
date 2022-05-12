@@ -9,17 +9,7 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Optional,
-    TypeVar,
-    List,
-    Type,
-    Iterator,
-)
+from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from torch.autograd.profiler import record_function
 
@@ -56,9 +46,9 @@ from torch.distributed._shard.sharded_tensor import (  # noqa
 
 # @manual
 from torch.distributed._shard.sharding_spec import (  # noqa
+    EnumerableShardingSpec,
     ShardingSpec,
     ShardMetadata,
-    EnumerableShardingSpec,
 )
 from torchrec.streamable import Multistreamable
 

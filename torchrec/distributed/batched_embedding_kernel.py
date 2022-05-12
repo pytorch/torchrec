@@ -10,41 +10,38 @@ import copy
 import itertools
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any, Union, Tuple, cast, Iterator
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
-    EmbeddingLocation,
     ComputeDevice,
-    PoolingMode,
     DenseTableBatchedEmbeddingBagsCodegen,
-    SplitTableBatchedEmbeddingBagsCodegen,
+    EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
+    PoolingMode,
+    SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
-from torchrec.distributed.embedding_kernel import (
-    BaseEmbedding,
-    get_state_dict,
-)
+from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 from torchrec.distributed.embedding_types import (
-    GroupedEmbeddingConfig,
     compute_kernel_to_embedding_location,
+    GroupedEmbeddingConfig,
 )
 from torchrec.distributed.types import (
     Shard,
+    ShardedTensor,
     ShardedTensorMetadata,
     ShardMetadata,
-    ShardedTensor,
     TensorProperties,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
-    pooling_type_to_pooling_mode,
     data_type_to_sparse_type,
+    pooling_type_to_pooling_mode,
 )
-from torchrec.optim.fused import FusedOptimizerModule, FusedOptimizer
+from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)

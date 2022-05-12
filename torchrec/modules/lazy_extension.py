@@ -7,21 +7,15 @@
 
 import functools
 import inspect
-from typing import (
-    Any,
-    Callable,
-)
+from typing import Any, Callable
 
 import torch
 import torch.utils.hooks as hooks
-from torch.nn.modules.lazy import (
-    _LazyProtocol,
-    LazyModuleMixin,
-)
+from torch.nn.modules.lazy import _LazyProtocol, LazyModuleMixin
 from torch.nn.modules.module import (
     _global_backward_hooks,
-    _global_forward_pre_hooks,
     _global_forward_hooks,
+    _global_forward_pre_hooks,
 )
 
 

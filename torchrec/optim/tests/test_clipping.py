@@ -9,7 +9,7 @@ import unittest
 
 import torch
 from torch.autograd import Variable
-from torchrec.optim.clipping import GradientClippingOptimizer, GradientClipping
+from torchrec.optim.clipping import GradientClipping, GradientClippingOptimizer
 from torchrec.optim.test_utils import DummyKeyedOptimizer
 
 

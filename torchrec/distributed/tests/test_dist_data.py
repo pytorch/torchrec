@@ -11,7 +11,7 @@ import multiprocessing
 import os
 import random
 import unittest
-from typing import List, Tuple, TypeVar, Any, Generator, Union
+from typing import Any, Generator, List, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
 import torch
@@ -22,9 +22,9 @@ from hypothesis import given, settings
 from numpy.testing import assert_array_equal
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
+    KJTAllToAllLengthsAwaitable,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
-    KJTAllToAllLengthsAwaitable,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import get_free_port, seed_and_log

@@ -10,16 +10,14 @@ import math
 import os
 import random
 import unittest
-from typing import List, Optional, Tuple, cast
+from typing import cast, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.distributed as dist
-from hypothesis import Verbosity, strategies as st, settings, given
+from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-)
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder

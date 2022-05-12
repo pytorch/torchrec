@@ -7,40 +7,37 @@
 
 import itertools
 import math
-from typing import List, Optional, Dict, Any, Tuple, cast, TypeVar
+from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.comm import (
-    intra_and_cross_node_pg,
-    get_local_size,
-)
+from torchrec.distributed.comm import get_local_size, intra_and_cross_node_pg
 from torchrec.distributed.dist_data import (
-    PooledEmbeddingsReduceScatter,
     PooledEmbeddingsAllToAll,
+    PooledEmbeddingsReduceScatter,
 )
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
+    BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
+    bucketize_kjt_before_all2all,
+    EmbeddingSharding,
     group_tables,
     SparseFeaturesAllToAll,
-    BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
-    EmbeddingSharding,
-    BaseEmbeddingLookup,
-    bucketize_kjt_before_all2all,
 )
 from torchrec.distributed.embedding_types import (
-    GroupedEmbeddingConfig,
-    SparseFeatures,
-    ShardedEmbeddingTable,
-    EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
+    SparseFeatures,
 )
 from torchrec.distributed.types import (
-    ShardingEnv,
-    ShardedTensorMetadata,
     Awaitable,
     ParameterSharding,
+    ShardedTensorMetadata,
+    ShardingEnv,
     ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig

@@ -7,43 +7,38 @@
 
 import os
 import unittest
-from typing import List, Optional, Dict, cast, Union
+from typing import cast, Dict, List, Optional, Union
 
 import hypothesis.strategies as st
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import Verbosity, given, settings
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.embedding_types import EmbeddingTableConfig
-from torchrec.distributed.model_parallel import (
-    DistributedModelParallel,
+from hypothesis import given, settings, Verbosity
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    EmbeddingTableConfig,
 )
+from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.test_model import (
-    TestSparseNN,
-    TestSparseNNBase,
+    _get_default_rtol_and_atol,
     TestEBCSharder,
     TestEBSharder,
+    TestSparseNN,
+    TestSparseNNBase,
 )
-from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
 from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelTestBase,
     _copy_state_dict,
     _gen_model_and_input,
+    ModelParallelTestBase,
 )
-from torchrec.distributed.types import (
-    ModuleSharder,
-    ShardingType,
-    ShardingEnv,
-)
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.test_utils import (
-    skip_if_asan_class,
     init_distributed_single_host,
     seed_and_log,
+    skip_if_asan_class,
 )
 
 

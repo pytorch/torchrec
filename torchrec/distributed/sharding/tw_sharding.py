@@ -5,41 +5,38 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable, List, Optional, Any, Dict, Tuple, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import (
-    EmbeddingsAllToOne,
-    PooledEmbeddingsAllToAll,
-)
+from torchrec.distributed.dist_data import EmbeddingsAllToOne, PooledEmbeddingsAllToAll
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
     InferGroupedPooledEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
+    BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
     EmbeddingSharding,
+    group_tables,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
-    group_tables,
-    BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
-    BaseEmbeddingLookup,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeaturesList,
-    GroupedEmbeddingConfig,
-    SparseFeatures,
-    ShardedEmbeddingTable,
-    EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
+    SparseFeatures,
+    SparseFeaturesList,
 )
 from torchrec.distributed.types import (
-    ShardingEnv,
-    ShardedTensorMetadata,
     Awaitable,
     NoWait,
     ParameterSharding,
+    ShardedTensorMetadata,
+    ShardingEnv,
     ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig

@@ -13,4 +13,4 @@ repos:
       - id: ufmt
         additional_dependencies:
           - black == 21.9b0
-          - usort == 0.6.4
+          - usort == 1.0

@@ -6,20 +6,20 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import List, Dict, Optional, Type, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
-    ListOfSparseFeaturesListAwaitable,
     EmbeddingSharding,
+    ListOfSparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
-    ListOfSparseFeaturesList,
-    SparseFeaturesList,
     BaseQuantEmbeddingSharder,
+    ListOfSparseFeaturesList,
+    SparseFeatures,
+    SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import (
     create_embedding_configs_by_sharding,
@@ -29,17 +29,15 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    LazyAwaitable,
     ParameterSharding,
-    ShardingType,
+    ShardedModule,
     ShardedModuleContext,
     ShardingEnv,
-    ShardedModule,
-    LazyAwaitable,
+    ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollectionInterface,
-)
+from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )

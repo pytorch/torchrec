@@ -7,7 +7,7 @@
 
 import abc
 from dataclasses import dataclass, field
-from typing import List, TypeVar, Optional
+from typing import List, Optional, TypeVar
 
 import torch
 from torchrec.distributed.embedding_sharding import BaseEmbeddingDist

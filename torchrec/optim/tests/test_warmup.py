@@ -12,7 +12,7 @@ from typing import Any
 import torch
 from torch.autograd import Variable
 from torchrec.optim.keyed import KeyedOptimizer
-from torchrec.optim.warmup import WarmupOptimizer, WarmupStage, WarmupPolicy
+from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage
 
 
 class DummyKeyedOptimizer(KeyedOptimizer):

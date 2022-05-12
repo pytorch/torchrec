@@ -12,32 +12,29 @@ import hypothesis.strategies as st
 import torch
 import torch.distributed as dist
 import torch.quantization as quant
-from hypothesis import Verbosity, given, settings
+from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_kernel import GroupedEmbeddingBag
 from torchrec.distributed.embedding_lookup import (
-    BatchedFusedEmbeddingBag,
-    BatchedDenseEmbeddingBag,
-    GroupedPooledEmbeddingsLookup,
-    GroupedEmbeddingsLookup,
     BatchedDenseEmbedding,
+    BatchedDenseEmbeddingBag,
     BatchedFusedEmbedding,
+    BatchedFusedEmbeddingBag,
     GroupedEmbedding,
+    GroupedEmbeddingsLookup,
+    GroupedPooledEmbeddingsLookup,
 )
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
-    ShardMetadata,
     ShardedTensorMetadata,
+    ShardMetadata,
 )
 from torchrec.distributed.quant_embedding_kernel import (
-    QuantBatchedEmbeddingBag,
     QuantBatchedEmbedding,
+    QuantBatchedEmbeddingBag,
 )
-from torchrec.modules.embedding_configs import (
-    PoolingType,
-    DataType,
-)
+from torchrec.modules.embedding_configs import DataType, PoolingType
 from torchrec.test_utils import get_free_port
 
 

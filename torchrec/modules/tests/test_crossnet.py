@@ -12,8 +12,8 @@ from torch.fx import GraphModule, Tracer
 from torchrec.modules.crossnet import (
     CrossNet,
     LowRankCrossNet,
-    VectorCrossNet,
     LowRankMixtureCrossNet,
+    VectorCrossNet,
 )
 
 # unit test for Full Rank CrossNet: CrossNet

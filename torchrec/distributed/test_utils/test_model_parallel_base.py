@@ -8,13 +8,13 @@
 import multiprocessing
 import os
 import unittest
-from typing import cast, Callable, Dict, List, Optional, Tuple, Union, Type
+from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from torchrec.distributed.comm import _INTRA_PG, _CROSS_PG
+from torchrec.distributed.comm import _CROSS_PG, _INTRA_PG
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import (
@@ -23,23 +23,23 @@ from torchrec.distributed.planner import (
     Topology,
 )
 from torchrec.distributed.test_utils.test_model import (
+    _get_default_rtol_and_atol,
     ModelInput,
     TestSparseNNBase,
 )
-from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
 from torchrec.distributed.types import (
-    ShardingType,
-    ShardingPlan,
-    ShardedTensor,
     ModuleSharder,
+    ShardedTensor,
     ShardingEnv,
+    ShardingPlan,
+    ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.test_utils import (
     get_free_port,
-    seed_and_log,
     init_distributed_single_host,
+    seed_and_log,
 )
 
 

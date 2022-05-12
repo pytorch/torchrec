@@ -11,14 +11,11 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Any, Dict, Generator, Tuple, Optional, List
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
 from pyre_extensions import none_throws
-from torchrec.datasets.criteo import (
-    INT_FEATURE_COUNT,
-    CAT_FEATURE_COUNT,
-)
+from torchrec.datasets.criteo import CAT_FEATURE_COUNT, INT_FEATURE_COUNT
 
 
 class CriteoTest(unittest.TestCase):

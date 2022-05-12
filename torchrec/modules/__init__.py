@@ -19,12 +19,14 @@ These modules include:
       `LazyModuleExtensionMixin`.
 """
 
-from . import activation  # noqa
-from . import crossnet  # noqa
-from . import deepfm  # noqa
-from . import embedding_configs  # noqa
-from . import embedding_modules  # noqa
-from . import embedding_tower  # noqa
-from . import feature_processor  # noqa
-from . import lazy_extension  # noqa
-from . import mlp  # noqa
+from . import (  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa
+    activation,
+    crossnet,
+    deepfm,
+    embedding_configs,
+    embedding_modules,
+    embedding_tower,
+    feature_processor,
+    lazy_extension,
+    mlp,
+)

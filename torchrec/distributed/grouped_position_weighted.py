@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import Dict, Optional, Iterator, Tuple, Any, List
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn as nn

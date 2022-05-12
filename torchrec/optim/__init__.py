@@ -16,14 +16,11 @@ It also contains several modules wrapping KeyedOptimizer, called CombinedOptimiz
 from torchrec.optim.clipping import GradientClipping, GradientClippingOptimizer  # noqa
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule  # noqa
 from torchrec.optim.keyed import (  # noqa
-    KeyedOptimizer,
     CombinedOptimizer,
+    KeyedOptimizer,
     KeyedOptimizerWrapper,
     OptimizerWrapper,
 )
-from torchrec.optim.warmup import WarmupPolicy, WarmupStage, WarmupOptimizer  # noqa
+from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage  # noqa
 
-from . import clipping  # noqa
-from . import fused  # noqa
-from . import keyed  # noqa
-from . import warmup  # noqa
+from . import clipping, fused, keyed, warmup  # noqa  # noqa  # noqa  # noqa

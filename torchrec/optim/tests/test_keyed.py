@@ -8,7 +8,7 @@
 import io
 import os
 import unittest
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
@@ -17,8 +17,8 @@ from torch.distributed._shard import sharded_tensor, sharding_spec
 from torchrec.optim.keyed import (
     CombinedOptimizer,
     KeyedOptimizer,
-    OptimizerWrapper,
     KeyedOptimizerWrapper,
+    OptimizerWrapper,
 )
 from torchrec.test_utils import get_free_port
 

@@ -6,36 +6,35 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
-    BIGINT_DTYPE,
-    INTRA_NODE_BANDWIDTH,
-    CROSS_NODE_BANDWIDTH,
-    kernel_bw_lookup,
-    POOLING_FACTOR,
-    UVM_CACHING_RATIO,
     BATCHED_COPY_PERF_FACTOR,
+    BIGINT_DTYPE,
+    BWD_COMPUTE_MULTIPLIER,
+    CROSS_NODE_BANDWIDTH,
+    DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
+    INTRA_NODE_BANDWIDTH,
+    kernel_bw_lookup,
+    POOLING_FACTOR,
     QUARTER_BLOCK_PENALTY,
-    BWD_COMPUTE_MULTIPLIER,
+    UVM_CACHING_RATIO,
     WEIGHTED_KERNEL_MULTIPLIER,
-    DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    PlannerError,
     ShardEstimator,
-    Topology,
     ShardingOption,
     Storage,
-    PlannerError,
+    Topology,
 )
-from torchrec.distributed.planner.utils import prod
-from torchrec.distributed.planner.utils import sharder_name
+from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
 
 

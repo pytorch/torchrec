@@ -9,10 +9,10 @@ import logging
 import math
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import List, Any, Tuple
+from typing import Any, List, Tuple
 
 import torch
-from torchrec.optim.keyed import OptimizerWrapper, KeyedOptimizer
+from torchrec.optim.keyed import KeyedOptimizer, OptimizerWrapper
 
 logger: logging.Logger = logging.getLogger(__name__)
 

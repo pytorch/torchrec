@@ -10,9 +10,7 @@ from typing import cast
 
 import torch
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-)
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology

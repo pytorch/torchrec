@@ -6,19 +6,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List, Optional, Any, Dict, cast
+from typing import Any, cast, Dict, List, Optional
 
 import torch
-from torch import nn
-from torch import quantization as quant
+from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.quant_embeddingbag import (
-    QuantEmbeddingBagCollectionSharder,
+from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+from torchrec.distributed.test_utils.test_model import (
+    _get_default_rtol_and_atol,
+    TestSparseNN,
 )
-from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
-from torchrec.distributed.types import ShardedModule, ShardingType, ShardingEnv
+from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (

@@ -7,32 +7,29 @@
 
 import copy
 from collections import OrderedDict
-from typing import Dict, Any, Optional, List, Iterator, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
-    IntNBitTableBatchedEmbeddingBagsCodegen,
     EmbeddingLocation,
+    IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import Tensor
 from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-    DataType,
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
+    DataType,
     dtype_to_data_type,
+    EmbeddingBagConfig,
     pooling_type_to_pooling_mode,
 )
 from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollection as OriginalEmbeddingBagCollection,
     ebc_get_embedding_names,
+    EmbeddingBagCollection as OriginalEmbeddingBagCollection,
+    EmbeddingBagCollectionInterface,
 )
-from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-    KeyedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -42,7 +39,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual # noqa
+    import fbgemm_gpu  # @manual  # noqa
 except ImportError:
     pass
 

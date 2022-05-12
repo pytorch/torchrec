@@ -11,7 +11,7 @@ from typing import List, Optional, Type
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import Verbosity, settings, given, strategies as st
+from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel import (
@@ -22,16 +22,13 @@ from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,
 )
 from torchrec.distributed.tests.test_sequence_model import (
-    TestSequenceSparseNN,
     TestEmbeddingCollectionSharder,
+    TestSequenceSparseNN,
     TestSequenceTowerSparseNN,
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
-from torchrec.test_utils import (
-    skip_if_asan_class,
-    seed_and_log,
-)
+from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
 @skip_if_asan_class

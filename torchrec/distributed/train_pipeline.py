@@ -9,16 +9,16 @@ import abc
 import logging
 from dataclasses import dataclass, field
 from typing import (
-    Iterator,
-    Tuple,
-    Optional,
-    TypeVar,
-    Generic,
-    cast,
     Any,
+    cast,
     Dict,
+    Generic,
+    Iterator,
     List,
+    Optional,
     Set,
+    Tuple,
+    TypeVar,
 )
 
 import torch
@@ -26,7 +26,7 @@ from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
-from torchrec.streamable import Pipelineable, Multistreamable
+from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
