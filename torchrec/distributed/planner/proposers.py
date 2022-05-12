@@ -187,6 +187,11 @@ class GridSearchProposer(Proposer):
             ]
         )
         if total_proposals > self._max_proposals:
+            total_proposals = (
+                "{:.2e}".format(total_proposals)
+                if total_proposals > 1e6
+                else total_proposals
+            )
             logger.info(
                 "Skipping grid search proposer as there are too many proposals.\n"
                 f"Total proposals to search: {total_proposals}\n"
