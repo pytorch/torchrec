@@ -29,6 +29,7 @@ from torchrec.distributed.types import (
     ShardedModule,
     ShardingEnv,
     ShardingPlan,
+    ModuleCopyMixin,
 )
 from torchrec.distributed.utils import (
     add_prefix_to_state_dict,
@@ -284,14 +285,17 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 return tensor
 
         # if this is a sharded module, customize the copy
-        if isinstance(module, ShardedModule):
+        if isinstance(module, ModuleCopyMixin):
             return module.copy(device)
         # this could be dense or a compound module
         for name, child in module.named_children():
             # potential DFS cache or bottom-up can save runtime
             # search immediate submodules
             if not any(
-                [isinstance(submodule, ShardedModule) for submodule in child.modules()]
+                [
+                    isinstance(submodule, ModuleCopyMixin)
+                    for submodule in child.modules()
+                ]
             ):
                 # if not containing ShardedModule down this submodule (this is a dense module)
                 # copy it.
