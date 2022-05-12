@@ -87,7 +87,7 @@ class CriteoTest(unittest.TestCase):
             self.assertTrue(self.INT_VAL_RANGE[0] <= int_val <= self.INT_VAL_RANGE[1])
         for idx in range(self.CAT_FEATURE_COUNT):
             cat_val = int(sample[f"cat_{idx}"], 16)
-            self.assertTrue(0 <= cat_val <= 16 ** 8 - 1)
+            self.assertTrue(0 <= cat_val <= 16**8 - 1)
 
     @classmethod
     @contextlib.contextmanager

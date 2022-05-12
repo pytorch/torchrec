@@ -162,7 +162,7 @@ class RecMetricModule(nn.Module):
         return sum(total.values())
 
     def check_memory_usage(self, compute_count: int) -> None:
-        memory_usage_mb = self.get_memory_usage() / (10 ** 6)
+        memory_usage_mb = self.get_memory_usage() / (10**6)
         if memory_usage_mb > self.memory_usage_limit_mb:
             self.oom_count += 1
             logger.warning(

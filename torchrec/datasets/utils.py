@@ -77,8 +77,8 @@ def train_filter(
     decimal_places: int,
     idx: int,
 ) -> bool:
-    return (key_fn(idx) % 10 ** decimal_places) < round(
-        train_perc * 10 ** decimal_places
+    return (key_fn(idx) % 10**decimal_places) < round(
+        train_perc * 10**decimal_places
     )
 
 
