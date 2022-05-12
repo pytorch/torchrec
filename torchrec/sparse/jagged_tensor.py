@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Optional, List, Dict, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.fx
@@ -20,7 +20,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual # noqa
+    import fbgemm_gpu  # @manual  # noqa
 except ImportError:
     pass
 

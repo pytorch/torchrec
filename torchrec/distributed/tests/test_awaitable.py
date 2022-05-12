@@ -30,7 +30,7 @@ class AwaitableTests(unittest.TestCase):
     def test_callback_chained(self) -> None:
         awaitable = AwaitableInstance()
         awaitable.callbacks.append(lambda ret: 2 * ret)
-        awaitable.callbacks.append(lambda ret: ret ** 2)
+        awaitable.callbacks.append(lambda ret: ret**2)
         self.assertTrue(
             torch.allclose(awaitable.wait(), torch.FloatTensor([4.0, 16.0, 36.0]))
         )

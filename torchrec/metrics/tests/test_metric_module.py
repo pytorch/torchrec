@@ -447,26 +447,26 @@ class MetricModuleTest(unittest.TestCase):
         metric_module.update(gen_test_batch(128))
         with patch("torchrec.metrics.metric_module.logger") as logger_mock:
             # Memory usage is fine.
-            metric_module.memory_usage_mb_avg = 160 / (10 ** 6)
+            metric_module.memory_usage_mb_avg = 160 / (10**6)
             metric_module.check_memory_usage(1000)
             self.assertEqual(metric_module.oom_count, 0)
             self.assertEqual(logger_mock.warning.call_count, 0)
 
             # OOM but memory usage does not exceed avg.
             metric_module.memory_usage_limit_mb = 0.000001
-            metric_module.memory_usage_mb_avg = 160 / (10 ** 6)
+            metric_module.memory_usage_mb_avg = 160 / (10**6)
             metric_module.check_memory_usage(1000)
             self.assertEqual(metric_module.oom_count, 1)
             self.assertEqual(logger_mock.warning.call_count, 1)
 
             # OOM and memory usage exceed avg but warmup is not over.
-            metric_module.memory_usage_mb_avg = 160 / (10 ** 6) / 10
+            metric_module.memory_usage_mb_avg = 160 / (10**6) / 10
             metric_module.check_memory_usage(2)
             self.assertEqual(metric_module.oom_count, 2)
             self.assertEqual(logger_mock.warning.call_count, 2)
 
             # OOM and memory usage exceed avg and warmup is over.
-            metric_module.memory_usage_mb_avg = 160 / (10 ** 6) / 1.25
+            metric_module.memory_usage_mb_avg = 160 / (10**6) / 1.25
             metric_module.check_memory_usage(1002)
             self.assertEqual(metric_module.oom_count, 3)
             self.assertEqual(logger_mock.warning.call_count, 4)

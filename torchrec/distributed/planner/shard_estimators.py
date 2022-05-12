@@ -12,31 +12,29 @@ import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
-    BIGINT_DTYPE,
-    INTRA_NODE_BANDWIDTH,
-    CROSS_NODE_BANDWIDTH,
-    kernel_bw_lookup,
-    POOLING_FACTOR,
-    UVM_CACHING_RATIO,
     BATCHED_COPY_PERF_FACTOR,
+    BIGINT_DTYPE,
+    BWD_COMPUTE_MULTIPLIER,
+    CROSS_NODE_BANDWIDTH,
+    DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
+    INTRA_NODE_BANDWIDTH,
+    kernel_bw_lookup,
+    POOLING_FACTOR,
     QUARTER_BLOCK_PENALTY,
-    BWD_COMPUTE_MULTIPLIER,
+    UVM_CACHING_RATIO,
     WEIGHTED_KERNEL_MULTIPLIER,
-    DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
-    ALLREDUCE_MEMORY_MULTIPLIER,
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    PlannerError,
     ShardEstimator,
-    Topology,
     ShardingOption,
     Storage,
-    PlannerError,
+    Topology,
 )
-from torchrec.distributed.planner.utils import prod
-from torchrec.distributed.planner.utils import sharder_name
+from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
 
 
@@ -475,9 +473,12 @@ def _get_dp_sharding_perf(
         input_read_size + embedding_lookup_size + output_write_size
     ) / device_bw
 
+    num_nodes = min(world_size / local_world_size, 2)
+    # all-reduce data transfer: https://images.nvidia.com/events/sc15/pdfs/NCCL-Woolley.pdf
     all_reduce = (
         table_size
-        * ALLREDUCE_MEMORY_MULTIPLIER
+        * (2 * num_nodes - 1)
+        / num_nodes
         / (bw_inter_host * local_world_size)  # 1 NIC per GPU
     )
     # inter host communication constraint
@@ -644,10 +645,6 @@ def calculate_shard_storages(
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         compute_kernel=compute_kernel,
-        on_device=compute_device == "cuda",
-        input_sizes=input_sizes,
-        input_data_type_size=input_data_type_size,
-        output_data_type_size=output_data_type_size,
     )
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
@@ -655,10 +652,6 @@ def calculate_shard_storages(
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         compute_kernel=compute_kernel,
-        on_device=compute_device == "cpu",
-        input_sizes=input_sizes,
-        input_data_type_size=input_data_type_size,
-        output_data_type_size=output_data_type_size,
     )
 
     hbm_sizes: List[int] = [
@@ -944,10 +937,6 @@ def _calculate_storage_specific_sizes(
     shard_sizes: List[List[int]],
     sharding_type: str,
     compute_kernel: str,
-    on_device: bool,
-    input_sizes: List[int],
-    input_data_type_size: int,
-    output_data_type_size: int,
 ) -> List[int]:
     tensor_sizes: List[int] = [
         math.ceil(storage * prod(size) / prod(shape))

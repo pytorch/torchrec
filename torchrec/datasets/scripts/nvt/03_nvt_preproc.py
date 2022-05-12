@@ -11,19 +11,19 @@ import os
 import shutil
 import time
 from contextlib import ExitStack
-from typing import List, Iterable
+from typing import Iterable, List
 
 import numpy as np
 import numpy.lib.format as fmt
 import nvtabular as nvt
 import pyarrow.parquet as pq
 from torchrec.datasets.criteo import (
+    CAT_FEATURE_COUNT,
+    DAYS,
     DEFAULT_CAT_NAMES,
     DEFAULT_INT_NAMES,
     DEFAULT_LABEL_NAME,
     INT_FEATURE_COUNT,
-    CAT_FEATURE_COUNT,
-    DAYS,
 )
 
 

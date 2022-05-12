@@ -15,7 +15,7 @@ import numpy
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
-from torchrec.test_utils import seed_and_log, get_free_port
+from torchrec.test_utils import get_free_port, seed_and_log
 
 
 class TestAllToAll(unittest.TestCase):

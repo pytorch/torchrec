@@ -9,17 +9,7 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Optional,
-    TypeVar,
-    List,
-    Type,
-    Iterator,
-)
+from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from torch.autograd.profiler import record_function
 
@@ -56,9 +46,9 @@ from torch.distributed._shard.sharded_tensor import (  # noqa
 
 # @manual
 from torch.distributed._shard.sharding_spec import (  # noqa
+    EnumerableShardingSpec,
     ShardingSpec,
     ShardMetadata,
-    EnumerableShardingSpec,
 )
 from torchrec.streamable import Multistreamable
 
@@ -366,7 +356,17 @@ class ShardingEnv:
         return cls(world_size, rank, None)
 
 
-class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
+class ModuleCopyMixin:
+    """
+    A mixin to allow modules to override copy behaviros in DMP.
+    """
+
+    def copy(self, device: torch.device) -> nn.Module:
+        # pyre-ignore [16]
+        return self.to(device)
+
+
+class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCopyMixin):
     """
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
@@ -432,9 +432,6 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for key, _ in self.named_parameters(prefix):
             yield key
-
-    def copy(self, device: torch.device) -> nn.Module:
-        return self.to(device)
 
 
 class ModuleSharder(abc.ABC, Generic[M]):

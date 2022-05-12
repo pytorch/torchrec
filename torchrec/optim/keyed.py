@@ -7,16 +7,16 @@
 
 from copy import deepcopy
 from typing import (
+    Any,
     Callable,
+    Collection,
+    Dict,
     List,
     Mapping,
+    Optional,
     Set,
-    Dict,
-    Any,
-    Collection,
     Tuple,
     Union,
-    Optional,
 )
 
 import torch

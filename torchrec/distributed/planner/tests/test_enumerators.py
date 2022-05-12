@@ -6,37 +6,29 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List, cast
+from typing import cast, List
 
 import torch
 from torchrec.distributed.embedding_tower_sharding import (
-    EmbeddingTowerSharder,
     EmbeddingTowerCollectionSharder,
+    EmbeddingTowerSharder,
 )
-from torchrec.distributed.embedding_types import (
-    EmbeddingComputeKernel,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner.constants import (
-    BIGINT_DTYPE,
-)
+from torchrec.distributed.planner.constants import BIGINT_DTYPE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
-    _calculate_tw_shard_io_sizes,
     _calculate_dp_shard_io_sizes,
+    _calculate_tw_shard_io_sizes,
 )
-from torchrec.distributed.planner.types import (
-    ParameterConstraints,
-    Storage,
-    Topology,
-)
+from torchrec.distributed.planner.types import ParameterConstraints, Storage, Topology
 from torchrec.distributed.planner.utils import prod
 from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
-    TestTowerSparseNN,
     TestTowerCollectionSparseNN,
+    TestTowerSparseNN,
 )
-from torchrec.distributed.types import ShardingType, ModuleSharder
+from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 

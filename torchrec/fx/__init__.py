@@ -12,4 +12,4 @@ Custom FX tracer for torchrec
 See `Torch.FX documentation <https://pytorch.org/docs/stable/fx.html>`_
 """
 
-from torchrec.fx.tracer import Tracer, symbolic_trace  # noqa
+from torchrec.fx.tracer import symbolic_trace, Tracer  # noqa

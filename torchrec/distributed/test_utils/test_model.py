@@ -6,20 +6,20 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import List, cast, Optional, Tuple, Any, Dict, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torchrec.distributed.embedding_tower_sharding import (
-    EmbeddingTowerSharder,
     EmbeddingTowerCollectionSharder,
+    EmbeddingTowerSharder,
 )
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.embeddingbag import (
-    EmbeddingBagSharder,
     EmbeddingBagCollectionSharder,
+    EmbeddingBagSharder,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig, BaseEmbeddingConfig
+from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor

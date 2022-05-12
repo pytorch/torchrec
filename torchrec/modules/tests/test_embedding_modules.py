@@ -10,10 +10,7 @@ import unittest
 import torch
 import torch.fx
 from torchrec.fx import symbolic_trace
-from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-    EmbeddingConfig,
-)
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,

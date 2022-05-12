@@ -6,19 +6,23 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List, Optional, Any, Dict, cast
+from typing import Any, cast, Dict, List, Optional
 
 import torch
-from torch import nn
-from torch import quantization as quant
+from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.quant_embeddingbag import (
-    QuantEmbeddingBagCollectionSharder,
+from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+from torchrec.distributed.test_utils.test_model import (
+    _get_default_rtol_and_atol,
+    TestSparseNN,
 )
-from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.test_utils.test_model import _get_default_rtol_and_atol
-from torchrec.distributed.types import ShardedModule, ShardingType, ShardingEnv
+from torchrec.distributed.types import (
+    ShardedModule,
+    ShardingType,
+    ShardingEnv,
+    ModuleCopyMixin,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
@@ -60,6 +64,25 @@ def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
         },
         inplace=inplace,
     )
+
+
+class CopyModule(nn.Module, ModuleCopyMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tensor: torch.Tensor = torch.empty((10), device="cpu")
+
+    def copy(self, device: torch.device) -> nn.Module:
+        self.tensor = self.tensor.to(device)
+        return self
+
+
+class NoCopyModule(nn.Module, ModuleCopyMixin):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tensor: torch.Tensor = torch.empty((10), device="cpu")
+
+    def copy(self, device: torch.device) -> nn.Module:
+        return self
 
 
 class QuantModelParallelModelCopyTest(unittest.TestCase):
@@ -174,3 +197,45 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
         dmp_1 = dmp.copy(device_1)
         self._recursive_device_check(dmp.module, dmp_1.module, device, device_1)
+
+    # pyre-fixme[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    def test_copy_mixin(self) -> None:
+        device = torch.device("cuda:0")
+        device_1 = torch.device("cuda:1")
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=device,
+            sparse_device=torch.device("meta"),
+        )
+        # pyre-ignore [16]
+        model.copy = CopyModule()
+        # pyre-ignore [16]
+        model.no_copy = NoCopyModule()
+        quant_model = _quantize(model, inplace=True)
+        dmp = DistributedModelParallel(
+            quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                    ),
+                )
+            ],
+            device=None,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+            init_data_parallel=False,
+        )
+
+        dmp_1 = dmp.copy(device_1)
+        # pyre-ignore [16]
+        self.assertEqual(dmp_1.module.copy.tensor.device, device_1)
+        # pyre-ignore [16]
+        self.assertEqual(dmp_1.module.no_copy.tensor.device, torch.device("cpu"))

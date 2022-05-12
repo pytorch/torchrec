@@ -7,31 +7,19 @@
 
 import copy
 from collections import OrderedDict
-from typing import (
-    List,
-    Dict,
-    Optional,
-    Type,
-    Any,
-    Mapping,
-    Union,
-    Tuple,
-    Iterator,
-    Set,
-)
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Type, Union
 
 import torch
-from torch import Tensor
-from torch import nn
+from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    SparseFeatures,
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
@@ -46,10 +34,10 @@ from torchrec.distributed.types import (
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
-    ShardingType,
     ShardedModuleContext,
     ShardedTensor,
     ShardingEnv,
+    ShardingType,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
@@ -58,7 +46,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollectionInterface,
 )
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 

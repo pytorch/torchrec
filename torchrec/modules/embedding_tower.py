@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -14,9 +14,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 def tower_input_params(module: nn.Module) -> Tuple[bool, bool]:

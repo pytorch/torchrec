@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import itertools
-from typing import List, Optional, Callable
+from typing import Callable, List, Optional
 
 import torch
 import torch.distributed as dist
@@ -32,7 +32,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual # noqa
+    import fbgemm_gpu  # @manual  # noqa
 except ImportError:
     pass
 

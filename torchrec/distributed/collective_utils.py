@@ -10,7 +10,7 @@ This file contains utilities for constructing collective based control flows.
 """
 
 from functools import wraps
-from typing import Optional, Callable, TypeVar, cast, Any
+from typing import Any, Callable, cast, Optional, TypeVar
 
 import torch.distributed as dist
 

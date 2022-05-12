@@ -5,49 +5,47 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
 from functools import reduce
-from typing import Tuple, Dict, Optional, List, cast, Union
+from typing import cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
-from torchrec.distributed.collective_utils import (
-    invoke_on_rank_and_broadcast_result,
-)
+from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
 from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
-from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
+from torchrec.distributed.planner.proposers import (
+    GreedyProposer,
+    GridSearchProposer,
+    UniformProposer,
+)
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
 )
 from torchrec.distributed.planner.types import (
+    Enumerator,
     ParameterConstraints,
     Partitioner,
-    Topology,
-    Stats,
-    Shard,
-    Storage,
-    ShardingOption,
-    StorageReservation,
-    Enumerator,
-    Proposer,
     PerfModel,
     PlannerError,
+    Proposer,
+    ShardingOption,
+    Stats,
+    Storage,
+    StorageReservation,
+    Topology,
 )
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
-    ShardMetadata,
-)
-from torchrec.distributed.types import (
+    ModuleSharder,
+    ParameterSharding,
     ShardingPlan,
     ShardingPlanner,
-    ModuleSharder,
     ShardingType,
-    ParameterSharding,
+    ShardMetadata,
 )
 
 
@@ -139,6 +137,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
         else:
             self._proposers = [
+                GridSearchProposer(),
                 GreedyProposer(),
                 GreedyProposer(use_depth=False),
                 UniformProposer(),

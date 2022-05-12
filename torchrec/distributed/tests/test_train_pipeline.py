@@ -8,24 +8,24 @@
 import os
 import unittest
 from dataclasses import dataclass
-from typing import Tuple, List, Optional, Dict, cast
+from typing import cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
     SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import (
-    ShardedEmbeddingBagCollection,
     EmbeddingBagCollectionSharder,
+    ShardedEmbeddingBagCollection,
 )
 from torchrec.distributed.test_utils.test_model import (
-    TestSparseNN,
     ModelInput,
     TestEBCSharder,
+    TestSparseNN,
 )
 from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
@@ -33,12 +33,10 @@ from torchrec.distributed.train_pipeline import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    ModuleSharder,
     ParameterSharding,
     ShardedModuleContext,
     ShardingEnv,
-    ModuleSharder,
-)
-from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig

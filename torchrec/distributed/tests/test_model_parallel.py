@@ -8,14 +8,14 @@
 import os
 import unittest
 from collections import OrderedDict
-from typing import List, Tuple, Optional, cast
+from typing import cast, List, Optional, Tuple
 
 import hypothesis.strategies as st
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from hypothesis import Verbosity, given, settings
+from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
@@ -31,20 +31,17 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.test_utils.test_model import (
-    TestSparseNN,
-    ModelInput,
-)
+from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.test_utils.test_model_parallel import (
+    create_test_sharder,
     ModelParallelTestShared,
     SharderType,
-    create_test_sharder,
 )
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardedTensor,
-    ShardingType,
     ShardingEnv,
+    ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection

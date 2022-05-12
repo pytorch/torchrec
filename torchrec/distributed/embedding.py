@@ -9,32 +9,21 @@
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import (
-    List,
-    Dict,
-    Optional,
-    Type,
-    Any,
-    Mapping,
-    Union,
-    Iterator,
-    Tuple,
-    Set,
-)
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Type, Union
 
 import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
-    SparseFeaturesListAwaitable,
     SparseFeaturesIndicesAwaitable,
+    SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
     ShardingType,
+    SparseFeatures,
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.dp_sequence_sharding import (
@@ -57,13 +46,12 @@ from torchrec.distributed.types import (
     ShardedTensor,
     ShardingEnv,
 )
-from torchrec.distributed.utils import append_prefix
-from torchrec.distributed.utils import filter_state_dict
+from torchrec.distributed.utils import append_prefix, filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, JaggedTensor
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")

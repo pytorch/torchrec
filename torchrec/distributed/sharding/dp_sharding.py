@@ -5,23 +5,23 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Dict, Any, Tuple, cast, TypeVar
+from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
+    BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
     EmbeddingSharding,
     group_tables,
-    BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
-    BaseEmbeddingLookup,
 )
 from torchrec.distributed.embedding_types import (
-    GroupedEmbeddingConfig,
-    SparseFeatures,
-    ShardedEmbeddingTable,
-    EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
+    SparseFeatures,
 )
 from torchrec.distributed.types import (
     Awaitable,

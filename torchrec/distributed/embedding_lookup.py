@@ -8,19 +8,19 @@
 import logging
 from abc import ABC
 from collections import OrderedDict
-from typing import List, Optional, Dict, Any, Tuple, cast, Iterator
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.batched_embedding_kernel import (
+    BaseBatchedEmbedding,
+    BaseBatchedEmbeddingBag,
     BatchedDenseEmbedding,
     BatchedDenseEmbeddingBag,
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
-    BaseBatchedEmbeddingBag,
-    BaseBatchedEmbedding,
 )
 from torchrec.distributed.embedding_kernel import (
     BaseEmbedding,
@@ -28,19 +28,17 @@ from torchrec.distributed.embedding_kernel import (
     GroupedEmbeddingBag,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeaturesList,
-    GroupedEmbeddingConfig,
     BaseEmbeddingLookup,
-    SparseFeatures,
-    EmbeddingComputeKernel,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+    SparseFeatures,
+    SparseFeaturesList,
 )
-from torchrec.distributed.grouped_position_weighted import (
-    GroupedPositionWeightedModule,
-)
+from torchrec.distributed.grouped_position_weighted import GroupedPositionWeightedModule
 from torchrec.distributed.quant_embedding_kernel import (
-    QuantBatchedEmbeddingBag,
     QuantBatchedEmbedding,
+    QuantBatchedEmbeddingBag,
 )
 from torchrec.distributed.types import ShardedTensor
 

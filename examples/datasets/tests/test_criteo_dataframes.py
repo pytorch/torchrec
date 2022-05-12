@@ -77,4 +77,4 @@ class CriteoDataFramesTest(CriteoTest):
             cat_vals = sparse_features[f"cat_{idx}"]
             for cat_val in cat_vals:
                 # stored as int32
-                self.assertTrue(-(2 ** 31) <= cat_val <= 2 ** 31 - 1)
+                self.assertTrue(-(2**31) <= cat_val <= 2**31 - 1)

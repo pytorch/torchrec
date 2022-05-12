@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Set, Callable, Dict, List, Optional, Tuple, TypeVar, Any
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist  # noqa
@@ -15,14 +15,14 @@ from fbgemm_gpu.permute_pooled_embedding_modules_split import (
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
     BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
 )
 from torchrec.distributed.embedding_types import (
-    ShardedEmbeddingTable,
-    EmbeddingComputeKernel,
-    SparseFeatures,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    ShardedEmbeddingTable,
+    SparseFeatures,
 )
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
@@ -30,10 +30,10 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import (
-    ShardingEnv,
-    ShardedTensorMetadata,
-    ShardMetadata,
     ParameterSharding,
+    ShardedTensorMetadata,
+    ShardingEnv,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable

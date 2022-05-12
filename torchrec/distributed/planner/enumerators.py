@@ -6,30 +6,27 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Tuple, Optional, Dict, List, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torchrec.distributed.planner.constants import (
-    MIN_CW_DIM,
-    POOLING_FACTOR,
-)
+from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.planner.types import (
-    ParameterConstraints,
     Enumerator,
-    ShardingOption,
-    Shard,
-    Topology,
+    ParameterConstraints,
     PartitionByType,
+    Shard,
     ShardEstimator,
+    ShardingOption,
+    Topology,
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
-from torchrec.modules.embedding_tower import EmbeddingTowerCollection, EmbeddingTower
+from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 
 
 class EmbeddingEnumerator(Enumerator):

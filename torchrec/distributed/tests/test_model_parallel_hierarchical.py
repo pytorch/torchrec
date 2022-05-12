@@ -8,17 +8,17 @@
 import unittest
 
 import torch
-from hypothesis import Verbosity, settings, given, strategies as st
+from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.test_model import (
-    TestTowerSparseNN,
     TestTowerCollectionSparseNN,
+    TestTowerSparseNN,
 )
 from torchrec.distributed.test_utils.test_model_parallel import (
+    create_test_sharder,
     ModelParallelTestShared,
     SharderType,
-    create_test_sharder,
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.test_utils import skip_if_asan_class
