@@ -25,11 +25,11 @@ from torchrec.distributed.planner import (
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
+    ModuleCopyMixin,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
     ShardingPlan,
-    ModuleCopyMixin,
 )
 from torchrec.distributed.utils import (
     add_prefix_to_state_dict,
