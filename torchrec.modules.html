@@ -630,36 +630,29 @@ be learnt, please use <cite>FactorizationMachine</cite> module instead, which wi
 the same embedding input of this module.</p>
 <p>To support modeling flexibility, we customize the key components as:</p>
 <ul class="simple">
-<li><dl class="simple">
-<dt>Different from the public paper, we change the input from raw sparse</dt><dd><p>features to embeddings of the features. It allows flexibility in embedding
-dimensions and the number of embeddings, as long as all embedding tensors
-have the same batch size.</p>
-</dd>
-</dl>
-</li>
-<li><dl class="simple">
-<dt>On top of the public paper, we allow users to customize the hidden layer</dt><dd><p>to be any module, not limited to just MLP.</p>
-</dd>
-</dl>
-</li>
+<li><p>Different from the public paper, we change the input from raw sparse features to
+embeddings of the features. It allows flexibility in embedding dimensions and the
+number of embeddings, as long as all embedding tensors have the same batch size.</p></li>
+<li><p>On top of the public paper, we allow users to customize the hidden layer to be any
+module, not limited to just MLP.</p></li>
 </ul>
 <p>The general architecture of the module is like:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1 x 1 output</span>
-<span class="c1"># ^</span>
-<span class="c1"># pass into `dense_module`</span>
-<span class="c1"># ^</span>
-<span class="c1"># 1 x 90</span>
-<span class="c1"># ^</span>
-<span class="c1"># concat</span>
-<span class="c1"># ^</span>
-<span class="c1"># 1 x 20, 1 x 30, 1 x 40 list of embeddings</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        1 x 10                  output
+         /|\
+          |                     pass into `dense_module`
+          |
+        1 x 90
+         /|\
+          |                     concat
+          |
+1 x 20, 1 x 30, 1 x 40          list of embeddings
 </pre></div>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>dense_module</strong> (<em>nn.Module</em>) – any customerized module that can be used (such as MLP) in DeepFM. The
-<cite>in_features</cite> of this module must be equal to the elements counts. For
-example, the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the
+<dd class="field-odd"><p><strong>dense_module</strong> (<em>nn.Module</em>) – any customized module that can be used (such as MLP) in DeepFM. The
+<cite>in_features</cite> of this module must be equal to the element counts. For
+example, if the input embedding is <cite>[randn(3, 2, 3), randn(3, 4, 5)]</cite>, the
 <cite>in_features</cite> should be: 2*3+4*5.</p>
 </dd>
 </dl>
@@ -730,28 +723,23 @@ can prepare the embeddings list to be the list of:</p>
 <p>This module does not cover the end-end functionality of the published paper.
 Instead, it covers only the FM part of the publication, and is used to learn
 2nd-order feature interactions.</p>
-<p>To support modeling flexibility, we customize the key components as:</p>
+<p>To support modeling flexibility, we customize the key components as different from
+the public paper:</p>
 <blockquote>
-<div><ul class="simple">
-<li><dl class="simple">
-<dt>Different from the public paper, we change the input from raw sparse</dt><dd><p>features to embeddings of the features. It allows flexibility in embedding
-dimensions and the number of embeddings, as long as all embedding tensors
-have the same batch size.</p>
-</dd>
-</dl>
-</li>
-</ul>
+<div><p>We change the input from raw sparse features to embeddings of the features.
+This allows flexibility in embedding dimensions and the number of embeddings,
+as long as all embedding tensors have the same batch size.</p>
 </div></blockquote>
 <p>The general architecture of the module is like:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1 x 1 output</span>
-<span class="c1"># ^</span>
-<span class="c1"># pass into `dense_module`</span>
-<span class="c1"># ^</span>
-<span class="c1"># 1 x 90</span>
-<span class="c1"># ^</span>
-<span class="c1"># concat</span>
-<span class="c1"># ^</span>
-<span class="c1"># 1 x 20, 1 x 30, 1 x 40 list of embeddings</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>        1 x 10                  output
+         /|\
+          |                     pass into `dense_module`
+          |
+        1 x 90
+         /|\
+          |                     concat
+          |
+1 x 20, 1 x 30, 1 x 40          list of embeddings
 </pre></div>
 </div>
 <p>Example:</p>
