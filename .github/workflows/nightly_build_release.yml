@@ -252,8 +252,6 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY }}
         S3_PATH: "s3://pytorch/whl/nightly/"
       run: |
-        source /opt/conda/etc/profile.d/conda.sh
-        conda activate env${{ matrix.python-version }}
         pip install --user awscli
         set -x
         if [[ -z "${AWS_ACCESS_KEY_ID}" ]]; then
@@ -261,7 +259,7 @@ jobs:
         exit 1
         fi
         for pkg in torchrec_nightly*.whl; do
-          ~/.local/bin/aws s3 cp "$pkg" "$S3_PATH" --acl public-read
+          aws s3 cp "$pkg" "$S3_PATH" --acl public-read
         done
     - name: Push TorchRec Binary to PYPI
       env:
