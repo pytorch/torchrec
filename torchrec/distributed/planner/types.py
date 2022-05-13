@@ -267,6 +267,7 @@ class ParameterConstraints:
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
     )  # Embedding Tables
+    num_objects: Optional[List[float]] = None  # Number of objects per sample in batch
 
 
 class PlannerError(Exception):
