@@ -864,9 +864,6 @@ def _calculate_rw_shard_io_sizes(
 ) -> Tuple[List[int], List[int]]:
 
     num_inputs = sum([x * y for x, y in zip(input_lengths, num_objects)]) / world_size
-    assert (
-        num_inputs == sum(input_lengths) / world_size
-    ), f"{num_inputs}, {input_lengths} / {world_size}, num: {num_objects}"
     num_outputs = sum(num_objects) if is_pooled else num_inputs
     input_sizes: List[int] = [
         math.ceil(batch_size * world_size * num_inputs * input_data_type_size)
