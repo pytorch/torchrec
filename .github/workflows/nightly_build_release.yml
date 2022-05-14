@@ -252,7 +252,7 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY }}
         S3_PATH: "s3://pytorch/whl/nightly/"
       run: |
-        conda run -n build_binary python -m pip install --user awcsli
+        conda run -n build_binary python -m pip install --user awscli
         set -x
         if [[ -z "${AWS_ACCESS_KEY_ID}" ]]; then
           echo "AWS_ACCESS_KEY_ID is not set, exiting upload"
