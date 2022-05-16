@@ -31,7 +31,12 @@ For convenience this example used a docker container.
 
 To start the docker run:
 
-    cd torchrec/examples/datasets/criteo_preprocessing
+    cd torchrec/datasets/scripts/nvt 
+
+    sudo apt-get install -y nvidia-docker2
+
+    sudo systemctl daemon-reload
+    sudo systemctl restart docker
 
     docker build -t criteo_preprocessing:latest . && \
     docker run --runtime=nvidia -ti --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
@@ -45,6 +50,6 @@ In our example the original tsv files are located in /data/criteo_tb.
 
 To convert the dataset we then execute the following command:
 
-    bash preproc.sh /data/criteo_tb /data
+    bash nvt_preproc.sh /data/criteo_tb /data
 
 The final result can then be found in /data/in_mem.
