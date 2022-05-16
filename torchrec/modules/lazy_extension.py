@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import functools
 import inspect
 from typing import Any, Callable
 
@@ -16,6 +15,7 @@ from torch.nn.modules.module import (
     _global_backward_hooks,
     _global_forward_hooks,
     _global_forward_pre_hooks,
+    _wrap_hook,
 )
 
 
@@ -246,8 +246,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
             grad_fn = var.grad_fn
             if grad_fn is not None:
                 for hook in non_full_backward_hooks:
-                    wrapper = functools.partial(hook, self)
-                    functools.update_wrapper(wrapper, hook)
+                    wrapper = _wrap_hook(hook, self)
                     grad_fn.register_hook(wrapper)
                 # pyre-ignore[16]
                 self._maybe_warn_non_full_backward_hook(input, result, grad_fn)
