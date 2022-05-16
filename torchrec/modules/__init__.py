@@ -15,8 +15,10 @@ These modules include:
     - established modules such as `DeepFM <https://arxiv.org/pdf/1703.04247.pdf>`_ and
       `CrossNet <https://arxiv.org/abs/1708.05123>`_.
     - common module patterns such as `MLP` and `SwishLayerNorm`.
-    - custom modules for torchrec such as `PositionWeightedModule` and
+    - custom modules for TorchRec such as `PositionWeightedModule` and
       `LazyModuleExtensionMixin`.
+    - `EmbeddingTower` and `EmbeddingTowerCollection`, logical "tower" of embeddings
+      passed to provided interaction module.
 """
 
 from . import (  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa  # noqa
