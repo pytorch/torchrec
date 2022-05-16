@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from functools import reduce
+from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -149,6 +150,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
+        self._start_time: float = 0
 
     def collective_plan(
         self,
@@ -176,6 +178,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
         self._num_proposals = 0
         self._num_plans = 0
+        self._start_time = perf_counter()
         best_plan = None
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE
@@ -255,11 +258,13 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         if best_plan:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
+            end_time = perf_counter()
             self._stats.log(
                 sharding_plan=sharding_plan,
                 topology=self._topology,
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,
+                run_time=end_time - self._start_time,
                 best_plan=best_plan,
                 debug=self._debug,
             )

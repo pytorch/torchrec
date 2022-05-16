@@ -405,6 +405,7 @@ class Stats(abc.ABC):
         topology: Topology,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
         debug: bool = False,
     ) -> None:

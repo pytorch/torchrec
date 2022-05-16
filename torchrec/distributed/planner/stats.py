@@ -32,6 +32,7 @@ class EmbeddingStats(Stats):
         topology: Topology,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
         debug: bool = False,
     ) -> None:
@@ -46,6 +47,7 @@ class EmbeddingStats(Stats):
             topology (Topology): device topology.
             num_proposals (int): number of proposals evaluated.
             num_plans (int): number of proposals successfully partitioned.
+            run_time (float): time program needed to execute (in seconds).
             best_plan (List[ShardingOption]): plan with expected performance.
             debug (bool): whether to enable debug mode.
         """
@@ -191,7 +193,8 @@ class EmbeddingStats(Stats):
 
         iter_text = (
             f"--- Evalulated {num_proposals} proposal(s), "
-            f"found {num_plans} possible plan(s) ---"
+            f"found {num_plans} possible plan(s), "
+            f"ran for {run_time:.2f}s ---"
         )
         logger.info(f"#{iter_text: ^{width-2}}#")
 
