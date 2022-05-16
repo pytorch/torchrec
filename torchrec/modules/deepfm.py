@@ -180,7 +180,7 @@ class FactorizationMachine(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            embeddings: List[torch.Tensor]:
+            embeddings (List[torch.Tensor]):
                 The list of all embeddings (e.g. dense, common_sparse,
                 specialized_sparse, embedding_features, raw_embedding_features) in the
                 shape of::
@@ -198,7 +198,7 @@ class FactorizationMachine(nn.Module):
                     tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
 
                 NOTE:
-                    batch_size of all input tensors need to be identical.
+                    `batch_size` of all input tensors need to be identical.
 
         Returns:
             torch.Tensor: output of fm with flattened and concatenated `embeddings` as input. Expected to be [B, 1].
