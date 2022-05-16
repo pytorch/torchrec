@@ -24,8 +24,8 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.embeddingbag import (
     create_embedding_configs_by_sharding,
     EmbeddingBagCollectionAwaitable,
-    filter_state_dict,
 )
+from torchrec.distributed.utils import filter_state_dict
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,

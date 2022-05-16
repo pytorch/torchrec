@@ -39,7 +39,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
-from torchrec.distributed.utils import append_prefix
+from torchrec.distributed.utils import append_prefix, filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
@@ -108,17 +108,6 @@ def create_embedding_bag_sharding(
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
-
-
-def filter_state_dict(
-    state_dict: "OrderedDict[str, torch.Tensor]", name: str
-) -> "OrderedDict[str, torch.Tensor]":
-    rtn_dict = OrderedDict()
-    for key, value in state_dict.items():
-        if key.startswith(name):
-            # + 1 to length is to remove the '.' after the key
-            rtn_dict[key[len(name) + 1 :]] = value
-    return rtn_dict
 
 
 def create_embedding_configs_by_sharding(
