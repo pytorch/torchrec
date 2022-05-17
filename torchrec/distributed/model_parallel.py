@@ -17,12 +17,14 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     ModuleCopyMixin,
@@ -47,7 +49,9 @@ _DDP_STATE_DICT_PREFIX = "module."
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
     return [
         cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
         cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
     ]
 
 
