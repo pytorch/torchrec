@@ -31,7 +31,7 @@ class TestProposers(unittest.TestCase):
         self.uniform_proposer = UniformProposer()
         self.grid_search_proposer = GridSearchProposer()
 
-    def test_greedy_two_table_perf(self) -> None:
+    def test_greedy_two_table(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
@@ -103,7 +103,7 @@ class TestProposers(unittest.TestCase):
 
         self.assertEqual(expected_output, output)
 
-    def test_uniform_three_table_perf(self) -> None:
+    def test_uniform_three_table(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 * i,
@@ -230,7 +230,7 @@ class TestProposers(unittest.TestCase):
 
         self.assertEqual(expected_output, output)
 
-    def test_grid_search_to_table(self) -> None:
+    def test_grid_search_three_table(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 * i,
@@ -264,7 +264,6 @@ class TestProposers(unittest.TestCase):
         ) in self.grid_search_proposer._sharding_options_by_fqn.values():
             # number of sharding types after pruning is number of sharding types * 3
             # 3 compute kernels batched_fused/batched_dense, batched_fused_uvm_caching, batched_fused_uvm
-            print([(so.sharding_type, so.compute_kernel) for so in sharding_options])
             self.assertEqual(len(sharding_options), num_pruned_options)
 
         num_proposals = 0
