@@ -8,10 +8,10 @@
 import copy
 import itertools
 import logging
-import math
 from typing import cast, Dict, List, Optional, Tuple
 
 from torchrec.distributed.planner.types import Proposer, ShardingOption
+from torchrec.distributed.planner.utils import prod
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ class GridSearchProposer(Proposer):
 
         _prune_sharding_options(self._sharding_options_by_fqn)
 
-        total_proposals = math.prod(
+        total_proposals = prod(
             [
                 len(sharding_options)
                 for sharding_options in self._sharding_options_by_fqn.values()
