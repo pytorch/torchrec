@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -42,7 +42,9 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
         pass
 
 
-def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
+def get_embedding_names_by_table(
+    tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
+) -> List[List[str]]:
     shared_feature: Dict[str, bool] = {}
     for embedding_config in tables:
         for feature_name in embedding_config.feature_names:
@@ -50,14 +52,16 @@ def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
                 shared_feature[feature_name] = False
             else:
                 shared_feature[feature_name] = True
-    embedding_names: List[str] = []
+    embedding_names_by_table: List[List[str]] = []
     for embedding_config in tables:
+        embedding_names: List[str] = []
         for feature_name in embedding_config.feature_names:
             if shared_feature[feature_name]:
                 embedding_names.append(feature_name + "@" + embedding_config.name)
             else:
                 embedding_names.append(feature_name)
-    return embedding_names
+        embedding_names_by_table.append(embedding_names)
+    return embedding_names_by_table
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
@@ -156,7 +160,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 len(embedding_config.feature_names) * [embedding_config.embedding_dim]
             )
 
-        self._embedding_names: List[str] = ebc_get_embedding_names(tables)
+        self._embedding_names: List[str] = [
+            embedding
+            for embeddings in get_embedding_names_by_table(tables)
+            for embedding in embeddings
+        ]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
@@ -197,7 +205,38 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         return self._is_weighted
 
 
-class EmbeddingCollection(nn.Module):
+class EmbeddingCollectionInterface(abc.ABC, nn.Module):
+    """
+    Interface for `EmbeddingBagCollection`.
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> Dict[str, JaggedTensor]:
+        pass
+
+    @abc.abstractproperty
+    def embedding_configs(
+        self,
+    ) -> List[EmbeddingConfig]:
+        pass
+
+    @abc.abstractproperty
+    def need_indices(self) -> bool:
+        pass
+
+    @abc.abstractproperty
+    def embedding_dim(self) -> int:
+        pass
+
+    @abc.abstractproperty
+    def embedding_names_by_table(self) -> List[List[str]]:
+        pass
+
+
+class EmbeddingCollection(EmbeddingCollectionInterface):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
 
@@ -261,19 +300,18 @@ class EmbeddingCollection(nn.Module):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self.embeddings: nn.ModuleDict = nn.ModuleDict()
-        self.embedding_configs = tables
-        self.embedding_dim: int = -1
-        self.need_indices: bool = need_indices
+        self._embedding_configs = tables
+        self._embedding_dim: int = -1
+        self._need_indices: bool = need_indices
         table_names = set()
-        shared_feature: Dict[str, bool] = {}
         for config in tables:
             if config.name in table_names:
                 raise ValueError(f"Duplicate table name {config.name}")
             table_names.add(config.name)
-            self.embedding_dim = (
-                config.embedding_dim if self.embedding_dim < 0 else self.embedding_dim
+            self._embedding_dim = (
+                config.embedding_dim if self._embedding_dim < 0 else self._embedding_dim
             )
-            if self.embedding_dim != config.embedding_dim:
+            if self._embedding_dim != config.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
                 )
@@ -288,21 +326,10 @@ class EmbeddingCollection(nn.Module):
             )
             if not config.feature_names:
                 config.feature_names = [config.name]
-            for feature_name in config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
 
-        self.embedding_names_by_table: List[List[str]] = []
-        for config in tables:
-            embedding_names = []
-            for feature_name in config.feature_names:
-                if shared_feature[feature_name]:
-                    embedding_names.append(feature_name + "@" + config.name)
-                else:
-                    embedding_names.append(feature_name)
-            self.embedding_names_by_table.append(embedding_names)
+        self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
+            tables
+        )
 
     def forward(
         self,
@@ -319,8 +346,8 @@ class EmbeddingCollection(nn.Module):
         feature_embeddings: Dict[str, JaggedTensor] = {}
         jt_dict: Dict[str, JaggedTensor] = features.to_dict()
         for config, embedding_names, emb_module in zip(
-            self.embedding_configs,
-            self.embedding_names_by_table,
+            self._embedding_configs,
+            self._embedding_names_by_table,
             self.embeddings.values(),
         ):
             for feature_name, embedding_name in zip(
@@ -333,6 +360,22 @@ class EmbeddingCollection(nn.Module):
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
-                    weights=f.values() if self.need_indices else None,
+                    weights=f.values() if self._need_indices else None,
                 )
         return feature_embeddings
+
+    @property
+    def need_indices(self) -> bool:
+        return self._need_indices
+
+    @property
+    def embedding_dim(self) -> int:
+        return self._embedding_dim
+
+    @property
+    def embedding_configs(self) -> List[EmbeddingConfig]:
+        return self._embedding_configs
+
+    @property
+    def embedding_names_by_table(self) -> List[List[str]]:
+        return self._embedding_names_by_table
