@@ -48,7 +48,10 @@ from torchrec.distributed.types import (
 )
 from torchrec.distributed.utils import append_prefix, filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
-from torchrec.modules.embedding_modules import EmbeddingCollection
+from torchrec.modules.embedding_modules import (
+    EmbeddingCollection,
+    EmbeddingCollectionInterface,
+)
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
@@ -79,7 +82,7 @@ def create_embedding_sharding(
 
 
 def _create_embedding_configs_by_sharding(
-    module: EmbeddingCollection,
+    module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
 ) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
     sharding_type_to_embedding_configs: Dict[
