@@ -70,7 +70,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
    export CUB_DIR=/usr/local/cuda-11.3/include/cub
    export CUDA_BIN_PATH=/usr/local/cuda-11.3/
    export CUDACXX=/usr/local/cuda-11.3/bin/nvcc
-   python setup.py install -DTORCH_CUDA_ARCH_LIST="7.0;8.0"
+   python setup.py install --TORCH_CUDA_ARCH_LIST="7.0;8.0"
    ```
    The last line of the above code block (`python setup.py install`...) which manually installs fbgemm_gpu can be skipped if you do not need to build fbgemm_gpu with custom build-related flags. Skip to the next step if that is the case.
 
