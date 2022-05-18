@@ -40,6 +40,14 @@ def _to_lengths(offsets: torch.Tensor) -> torch.Tensor:
     return offsets[1:] - offsets[:-1]
 
 
+def _batched_lengths_to_offsets(lengths: torch.Tensor) -> torch.Tensor:
+    (f, b) = lengths.shape
+    offsets_0 = lengths.new_zeros((f, 1))
+    offsets_1 = torch.cumsum(lengths, dim=-1).to(lengths.dtype)
+    offsets = torch.cat([offsets_0, offsets_1], dim=-1)
+    return offsets
+
+
 def _maybe_compute_lengths(
     lengths: Optional[torch.Tensor], offsets: Optional[torch.Tensor]
 ) -> torch.Tensor:
@@ -563,7 +571,6 @@ def _maybe_compute_kjt_to_jt_dict(
     length_per_key: List[int],
     values: torch.Tensor,
     lengths: torch.Tensor,
-    offsets: torch.Tensor,
     weights: Optional[torch.Tensor],
     jt_dict: Optional[Dict[str, JaggedTensor]],
 ) -> Dict[str, JaggedTensor]:
@@ -571,11 +578,15 @@ def _maybe_compute_kjt_to_jt_dict(
         _jt_dict: Dict[str, JaggedTensor] = {}
         values_list = torch.split(values, length_per_key)
         lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        offsets_tuple = torch.unbind(
+            _batched_lengths_to_offsets(lengths.view(-1, stride)), dim=0
+        )
+
         if weights is not None:
             weights_list = torch.split(weights, length_per_key)
             for idx, key in enumerate(keys):
                 length = lengths_tuple[idx]
-                offset = _to_offsets(length)
+                offset = offsets_tuple[idx]
                 _jt_dict[key] = JaggedTensor(
                     lengths=length,
                     offsets=offset,
@@ -585,7 +596,7 @@ def _maybe_compute_kjt_to_jt_dict(
         else:
             for idx, key in enumerate(keys):
                 length = lengths_tuple[idx]
-                offset = _to_offsets(length)
+                offset = offsets_tuple[idx]
                 _jt_dict[key] = JaggedTensor(
                     lengths=length,
                     offsets=offset,
@@ -986,7 +997,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self.length_per_key(),
             self.values(),
             self.lengths(),
-            self.offsets(),
             self.weights_or_none(),
             self._jt_dict,
         )
