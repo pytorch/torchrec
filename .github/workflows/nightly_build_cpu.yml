@@ -147,6 +147,7 @@ jobs:
         fi
         for pkg in torchrec_nightly_cpu*.whl; do
           aws s3 cp "$pkg" "$S3_PATH" --acl public-read
+        done
     # Disable because of PyPi 200MB limit. Request: https://github.com/pypa/pypi-support/issues/1913
     # Push to Pypi
     # - name: Push TorchRec Binary to PYPI
