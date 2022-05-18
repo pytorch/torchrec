@@ -81,7 +81,7 @@ def create_embedding_sharding(
         raise ValueError(f"Sharding not supported {sharding_type}")
 
 
-def _create_embedding_configs_by_sharding(
+def create_embedding_configs_by_sharding(
     module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
 ) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
@@ -213,7 +213,7 @@ class ShardedEmbeddingCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
+        sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
             module, table_name_to_parameter_sharding
         )
         self._sharding_type_to_sharding: Dict[
