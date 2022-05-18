@@ -21,7 +21,7 @@ from torchrec.distributed.planner.constants import (
     POOLING_FACTOR,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingPlan
-from torchrec.modules.embedding_modules import EmbeddingCollection
+from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 
 # ---- TOPOLOGY ---- #
 
@@ -222,11 +222,11 @@ class ShardingOption:
 
     @property
     def is_pooled(self) -> bool:
-        if isinstance(self.module[1], EmbeddingCollection):
+        if isinstance(self.module[1], EmbeddingCollectionInterface):
             return False
         for name, module in self.module[1].named_modules():
             if self.name in name:
-                if isinstance(module, EmbeddingCollection):
+                if isinstance(module, EmbeddingCollectionInterface):
                     return False
         return True
 

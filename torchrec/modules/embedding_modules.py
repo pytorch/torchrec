@@ -207,7 +207,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
 class EmbeddingCollectionInterface(abc.ABC, nn.Module):
     """
-    Interface for `EmbeddingBagCollection`.
+    Interface for `EmbeddingCollection`.
     """
 
     @abc.abstractmethod
@@ -258,7 +258,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
     Args:
         tables (List[EmbeddingConfig]): list of embedding tables.
         device (Optional[torch.device]): default compute device.
-        need_indices (bool): if we need to pass indices to the final lookup result dict
+        need_indices (bool): if we need to pass indices to the final lookup dict.
 
     Example::
 
