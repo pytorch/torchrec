@@ -45,6 +45,8 @@ class GreedyProposer(Proposer):
                 key=lambda x: _sharding_option_score(x, self._use_depth)
             )
 
+        _prune_sharding_options(self._sharding_options_by_fqn)
+
         self._current_proposal = {
             fqn: 0 for fqn in self._sharding_options_by_fqn.keys()
         }
