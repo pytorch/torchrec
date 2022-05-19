@@ -75,7 +75,7 @@ def get_ne_states(
 
 class NEMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for NE.
+    This class implementation the RecMetricComputation for NE, i.e. Normalized Entropy.
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.

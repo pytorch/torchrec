@@ -51,7 +51,7 @@ def get_mse_states(
 
 class MSEMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for MSE.
+    This class implementation the RecMetricComputation for MSE, i.e. Mean Square Error.
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
