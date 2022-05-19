@@ -636,7 +636,10 @@ def calculate_shard_storages(
     hbm_storage: int = tensor_storage.get("hbm", 0)
     ddr_storage: int = tensor_storage.get("ddr", 0)
 
-    if compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value:
+    if compute_kernel in {
+        EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
+        EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value,
+    }:
         hbm_storage = round(ddr_storage * caching_ratio)
 
     hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
