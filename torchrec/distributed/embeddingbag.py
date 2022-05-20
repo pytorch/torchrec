@@ -218,6 +218,7 @@ class ShardedEmbeddingBagCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
+        self.ebc_interface = module
         sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
