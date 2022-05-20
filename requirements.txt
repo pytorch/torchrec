@@ -35,7 +35,6 @@ tabulate
 torchmetrics
 torchx-nightly
 tqdm
-typing
 typing-inspect
 typing_extensions
 urllib3

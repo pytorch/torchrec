@@ -99,7 +99,7 @@ def main(argv: List[str]) -> None:
         backend = "gloo"
         print(
             "\033[92m"
-            + f"WARNING: Running in CPU mode. {torch.cuda.is_available()=}. {args.cpu_only=}"
+            + f"WARNING: Running in CPU mode. Cuda is available: {torch.cuda.is_available()}. CPU only: {args.cpu_only}"
         )
 
     dist.init_process_group(backend=backend)
