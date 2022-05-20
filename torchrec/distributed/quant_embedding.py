@@ -13,9 +13,10 @@ import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding import (
-    create_embedding_configs_by_sharding,
+    create_sharding_infos_by_sharding,
     EmbeddingCollectionAwaitable,
     EmbeddingCollectionContext,
+    EmbeddingShardingInfo,
 )
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
@@ -56,15 +57,13 @@ except OSError:
 
 def create_infer_embedding_sharding(
     sharding_type: str,
-    embedding_configs: List[
-        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-    ],
+    sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
     if sharding_type == ShardingType.TABLE_WISE.value:
 
-        return InferTwSequenceEmbeddingSharding(embedding_configs, env, device)
+        return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
@@ -86,7 +85,7 @@ class ShardedQuantEmbeddingCollection(
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
+        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding
         )
         self._sharding_type_to_sharding: Dict[
@@ -95,7 +94,7 @@ class ShardedQuantEmbeddingCollection(
             sharding_type: create_infer_embedding_sharding(
                 sharding_type, embedding_confings, env
             )
-            for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
+            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
         self._input_dists: nn.ModuleList = nn.ModuleList()

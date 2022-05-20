@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -19,6 +19,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
+    EmbeddingShardingInfo,
     group_tables,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
@@ -34,12 +35,10 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.types import (
     Awaitable,
     NoWait,
-    ParameterSharding,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable
 
 
@@ -54,9 +53,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
 
     def __init__(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> None:
@@ -67,7 +64,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
-        sharded_tables_per_rank = self._shard(embedding_configs)
+        sharded_tables_per_rank = self._shard(sharding_infos)
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
@@ -87,42 +84,47 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
 
     def _shard(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
         ]
-        for config in embedding_configs:
+        for info in sharding_infos:
             # pyre-fixme [16]
-            shards = config[1].sharding_spec.shards
+            shards = info.param_sharding.sharding_spec.shards
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
-                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+                size=torch.Size(
+                    [
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ]
+                ),
             )
 
             # pyre-fixme [16]
-            tables_per_rank[config[1].ranks[0]].append(
+            tables_per_rank[info.param_sharding.ranks[0]].append(
                 ShardedEmbeddingTable(
-                    num_embeddings=config[0].num_embeddings,
-                    embedding_dim=config[0].embedding_dim,
-                    name=config[0].name,
-                    embedding_names=config[0].embedding_names,
-                    data_type=config[0].data_type,
-                    feature_names=config[0].feature_names,
-                    pooling=config[0].pooling,
-                    is_weighted=config[0].is_weighted,
-                    has_feature_processor=config[0].has_feature_processor,
-                    local_rows=config[0].num_embeddings,
-                    local_cols=config[0].embedding_dim,
-                    compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                    num_embeddings=info.embedding_config.num_embeddings,
+                    embedding_dim=info.embedding_config.embedding_dim,
+                    name=info.embedding_config.name,
+                    embedding_names=info.embedding_config.embedding_names,
+                    data_type=info.embedding_config.data_type,
+                    feature_names=info.embedding_config.feature_names,
+                    pooling=info.embedding_config.pooling,
+                    is_weighted=info.embedding_config.is_weighted,
+                    has_feature_processor=info.embedding_config.has_feature_processor,
+                    local_rows=info.embedding_config.num_embeddings,
+                    local_cols=info.embedding_config.embedding_dim,
+                    compute_kernel=EmbeddingComputeKernel(
+                        info.param_sharding.compute_kernel
+                    ),
                     local_metadata=shards[0],
                     global_metadata=global_metadata,
-                    weight_init_max=config[0].weight_init_max,
-                    weight_init_min=config[0].weight_init_min,
+                    weight_init_max=info.embedding_config.weight_init_max,
+                    weight_init_min=info.embedding_config.weight_init_min,
                 )
             )
         return tables_per_rank
