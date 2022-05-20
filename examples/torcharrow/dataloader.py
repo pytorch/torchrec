@@ -34,7 +34,6 @@ class _JaggedTensorConversion(tap.TensorConversion):
                 value = row[idx]
                 kjt_values.extend(value)
                 kjt_lengths.append(len(value))
-        print(kjt_keys, kjt_values, kjt_lengths)
         kjt = KeyedJaggedTensor.from_lengths_sync(
             keys=kjt_keys,
             values=torch.tensor(kjt_values),
