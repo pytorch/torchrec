@@ -14,10 +14,7 @@ import torch.distributed as dist
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch.distributed.elastic.multiprocessing.errors import record
 from torchrec import EmbeddingBagCollection
-from torchrec.datasets.criteo import (
-    DEFAULT_CAT_NAMES,
-    INT_FEATURE_COUNT,
-)
+from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, INT_FEATURE_COUNT
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM
@@ -46,7 +43,8 @@ def main(
         device = torch.device("cpu")
         backend = "gloo"
         print(
-            "\033[92m" + f"WARNING: Running in CPU mode. cuda availablility {torch.cuda.is_available()}."
+            "\033[92m"
+            + f"WARNING: Running in CPU mode. cuda availablility {torch.cuda.is_available()}."
         )
 
     dist.init_process_group(backend=backend)
@@ -104,7 +102,6 @@ def main(
 
     print_example = dist.get_rank() == 0
     for (dense_features, kjt, labels) in it:
-
         if print_example:
             print("Example dense_features", dense_features)
             print("Example KJT input", kjt)
