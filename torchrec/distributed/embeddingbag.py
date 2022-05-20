@@ -235,10 +235,11 @@ class ShardedEmbeddingBagCollection(
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
+        # to support the FP16 hook
+        self._create_output_dist()
 
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
-        self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
         # Get all fused optimizers and combine them.
         optims = []
@@ -343,9 +344,6 @@ class ShardedEmbeddingBagCollection(
         ctx: ShardedModuleContext,
         output: List[torch.Tensor],
     ) -> LazyAwaitable[KeyedTensor]:
-        if self._has_uninitialized_output_dist:
-            self._create_output_dist()
-            self._has_uninitialized_output_dist = False
         return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
@@ -357,9 +355,6 @@ class ShardedEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: SparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
-        if self._has_uninitialized_output_dist:
-            self._create_output_dist()
-            self._has_uninitialized_output_dist = False
         return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(lookup(features))
