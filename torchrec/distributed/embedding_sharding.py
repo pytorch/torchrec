@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torch
@@ -26,8 +27,17 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
-from torchrec.distributed.types import Awaitable, NoWait, ShardMetadata
-from torchrec.modules.embedding_configs import DataType, PoolingType
+from torchrec.distributed.types import (
+    Awaitable,
+    NoWait,
+    ParameterSharding,
+    ShardMetadata,
+)
+from torchrec.modules.embedding_configs import (
+    DataType,
+    EmbeddingTableConfig,
+    PoolingType,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -649,3 +659,10 @@ class EmbeddingSharding(abc.ABC, Generic[F, T]):
     @abc.abstractmethod
     def id_score_list_feature_names(self) -> List[str]:
         pass
+
+
+@dataclass
+class EmbeddingShardingInfo:
+    embedding_config: EmbeddingTableConfig
+    param_sharding: ParameterSharding
+    param: torch.Tensor

@@ -8,9 +8,9 @@
 from typing import List, Optional, Tuple
 
 import torch
+from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
-from torchrec.distributed.types import ParameterSharding, ShardingEnv
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.distributed.types import ShardingEnv
 
 
 class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
@@ -22,13 +22,11 @@ class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
 
     def __init__(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
     ) -> None:
         super().__init__(
-            embedding_configs, env, device, permute_embeddings=permute_embeddings
+            sharding_infos, env, device, permute_embeddings=permute_embeddings
         )
