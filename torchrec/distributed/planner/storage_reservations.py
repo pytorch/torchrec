@@ -7,15 +7,15 @@
 
 import copy
 import math
-from typing import Dict, Optional, Set, List
+from typing import Dict, List, Optional, Set
 
 from torch import nn
 from torchrec.distributed.planner.constants import BIGINT_DTYPE, POOLING_FACTOR
 from torchrec.distributed.planner.types import (
-    StorageReservation,
-    Topology,
     ParameterConstraints,
     Storage,
+    StorageReservation,
+    Topology,
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder

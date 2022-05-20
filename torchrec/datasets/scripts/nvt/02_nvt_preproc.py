@@ -13,11 +13,11 @@ import time
 import numpy as np
 import nvtabular as nvt
 from torchrec.datasets.criteo import (
-    DEFAULT_COLUMN_NAMES,
+    DAYS,
     DEFAULT_CAT_NAMES,
+    DEFAULT_COLUMN_NAMES,
     DEFAULT_INT_NAMES,
     DEFAULT_LABEL_NAME,
-    DAYS,
 )
 from utils.dask import setup_dask
 

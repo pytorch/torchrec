@@ -9,32 +9,22 @@
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import (
-    List,
-    Dict,
-    Optional,
-    Type,
-    Any,
-    Mapping,
-    Union,
-    Iterator,
-    Tuple,
-    Set,
-)
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Type, Union
 
 import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
-    SparseFeaturesListAwaitable,
+    EmbeddingShardingInfo,
     SparseFeaturesIndicesAwaitable,
+    SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
     ShardingType,
+    SparseFeatures,
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.dp_sequence_sharding import (
@@ -57,13 +47,15 @@ from torchrec.distributed.types import (
     ShardedTensor,
     ShardingEnv,
 )
-from torchrec.distributed.utils import append_prefix
-from torchrec.distributed.utils import filter_state_dict
+from torchrec.distributed.utils import append_prefix, filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
-from torchrec.modules.embedding_modules import EmbeddingCollection
+from torchrec.modules.embedding_modules import (
+    EmbeddingCollection,
+    EmbeddingCollectionInterface,
+)
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, JaggedTensor
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -74,29 +66,25 @@ except OSError:
 
 def create_embedding_sharding(
     sharding_type: str,
-    embedding_configs: List[
-        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-    ],
+    sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwSequenceEmbeddingSharding(embedding_configs, env, device)
+        return TwSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwSequenceEmbeddingSharding(embedding_configs, env, device)
+        return RwSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpSequenceEmbeddingSharding(embedding_configs, env, device)
+        return DpSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
 
 
-def _create_embedding_configs_by_sharding(
-    module: EmbeddingCollection,
+def create_sharding_infos_by_sharding(
+    module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
-    sharding_type_to_embedding_configs: Dict[
-        str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]
-    ] = {}
+) -> Dict[str, List[EmbeddingShardingInfo]]:
+    sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = {}
     state_dict = module.state_dict()
     for (
         config,
@@ -117,28 +105,30 @@ def _create_embedding_configs_by_sharding(
         assert param_name in state_dict
         param = state_dict[param_name]
 
-        if parameter_sharding.sharding_type not in sharding_type_to_embedding_configs:
-            sharding_type_to_embedding_configs[parameter_sharding.sharding_type] = []
-        sharding_type_to_embedding_configs[parameter_sharding.sharding_type].append(
+        if parameter_sharding.sharding_type not in sharding_type_to_sharding_infos:
+            sharding_type_to_sharding_infos[parameter_sharding.sharding_type] = []
+        sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
             (
-                EmbeddingTableConfig(
-                    num_embeddings=config.num_embeddings,
-                    embedding_dim=config.embedding_dim,
-                    name=config.name,
-                    data_type=config.data_type,
-                    feature_names=copy.deepcopy(config.feature_names),
-                    pooling=PoolingType.NONE,
-                    is_weighted=False,
-                    has_feature_processor=False,
-                    embedding_names=embedding_names,
-                    weight_init_max=config.weight_init_max,
-                    weight_init_min=config.weight_init_min,
-                ),
-                parameter_sharding,
-                param,
+                EmbeddingShardingInfo(
+                    embedding_config=EmbeddingTableConfig(
+                        num_embeddings=config.num_embeddings,
+                        embedding_dim=config.embedding_dim,
+                        name=config.name,
+                        data_type=config.data_type,
+                        feature_names=copy.deepcopy(config.feature_names),
+                        pooling=PoolingType.NONE,
+                        is_weighted=False,
+                        has_feature_processor=False,
+                        embedding_names=embedding_names,
+                        weight_init_max=config.weight_init_max,
+                        weight_init_min=config.weight_init_min,
+                    ),
+                    param_sharding=parameter_sharding,
+                    param=param,
+                )
             )
         )
-    return sharding_type_to_embedding_configs
+    return sharding_type_to_sharding_infos
 
 
 def _construct_jagged_tensors(
@@ -222,7 +212,7 @@ class ShardedEmbeddingCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_embedding_configs = _create_embedding_configs_by_sharding(
+        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding
         )
         self._sharding_type_to_sharding: Dict[
@@ -231,7 +221,7 @@ class ShardedEmbeddingCollection(
             sharding_type: create_embedding_sharding(
                 sharding_type, embedding_confings, env, device
             )
-            for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
+            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
         self._device = device

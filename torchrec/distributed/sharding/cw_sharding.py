@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Set, Callable, Dict, List, Optional, Tuple, TypeVar, Any
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist  # noqa
@@ -15,14 +15,15 @@ from fbgemm_gpu.permute_pooled_embedding_modules_split import (
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
-    BaseSparseFeaturesDist,
     BaseEmbeddingLookup,
+    BaseSparseFeaturesDist,
+    EmbeddingShardingInfo,
 )
 from torchrec.distributed.embedding_types import (
-    ShardedEmbeddingTable,
-    EmbeddingComputeKernel,
-    SparseFeatures,
     BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    ShardedEmbeddingTable,
+    SparseFeatures,
 )
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
@@ -30,10 +31,10 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import (
-    ShardingEnv,
-    ShardedTensorMetadata,
-    ShardMetadata,
     ParameterSharding,
+    ShardedTensorMetadata,
+    ShardingEnv,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable
@@ -49,15 +50,13 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
 
     def __init__(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
     ) -> None:
         super().__init__(
-            embedding_configs,
+            sharding_infos,
             env,
             device,
         )
@@ -127,40 +126,45 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
 
     def _shard(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._pg.size()
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
         ]
-        for config in embedding_configs:
+        for info in sharding_infos:
             # pyre-fixme [16]
-            shards: List[ShardMetadata] = config[1].sharding_spec.shards
+            shards: List[ShardMetadata] = info.param_sharding.sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
-                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+                size=torch.Size(
+                    [
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ]
+                ),
             )
 
             # pyre-fixme [6]
-            for i, rank in enumerate(config[1].ranks):
+            for i, rank in enumerate(info.param_sharding.ranks):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
-                        num_embeddings=config[0].num_embeddings,
-                        embedding_dim=config[0].embedding_dim,
-                        name=config[0].name,
-                        embedding_names=config[0].embedding_names,
-                        data_type=config[0].data_type,
-                        feature_names=config[0].feature_names,
-                        pooling=config[0].pooling,
-                        is_weighted=config[0].is_weighted,
-                        has_feature_processor=config[0].has_feature_processor,
-                        local_rows=config[0].num_embeddings,
+                        num_embeddings=info.embedding_config.num_embeddings,
+                        embedding_dim=info.embedding_config.embedding_dim,
+                        name=info.embedding_config.name,
+                        embedding_names=info.embedding_config.embedding_names,
+                        data_type=info.embedding_config.data_type,
+                        feature_names=info.embedding_config.feature_names,
+                        pooling=info.embedding_config.pooling,
+                        is_weighted=info.embedding_config.is_weighted,
+                        has_feature_processor=info.embedding_config.has_feature_processor,
+                        local_rows=info.embedding_config.num_embeddings,
                         local_cols=shards[i].shard_sizes[1],
-                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                        compute_kernel=EmbeddingComputeKernel(
+                            info.param_sharding.compute_kernel
+                        ),
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
                     )

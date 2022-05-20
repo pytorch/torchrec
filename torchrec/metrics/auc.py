@@ -5,14 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Any, cast, List, Type
+from typing import Any, cast, List, Optional, Type
 
 import torch
-from torchrec.metrics.metrics_namespace import (
-    MetricName,
-    MetricNamespace,
-    MetricPrefix,
-)
+from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,
     RecMetric,
@@ -52,7 +48,7 @@ def _state_reduction(state: List[torch.Tensor]) -> List[torch.Tensor]:
 
 class AUCMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for AUC.
+    This class implementation the RecMetricComputation for AUC, i.e. Area Under the Curve.
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.

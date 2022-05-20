@@ -7,24 +7,17 @@
 
 import os
 import unittest
-from functools import update_wrapper, partial
+from functools import partial, update_wrapper
 from typing import Callable, Dict, List, Type
 
 import torch
 import torch.distributed as dist
-from torchrec.metrics.ne import (
-    NEMetric,
-    compute_cross_entropy,
-    compute_ne,
-)
-from torchrec.metrics.rec_metric import (
-    RecComputeMode,
-    RecMetric,
-)
+from torchrec.metrics.ne import compute_cross_entropy, compute_ne, NEMetric
+from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.tests.test_utils import (
-    TestMetric,
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
+    TestMetric,
 )
 
 

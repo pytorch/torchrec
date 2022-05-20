@@ -8,21 +8,17 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import List, Optional, Dict, Any, Union, Tuple, Iterator
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
-    ShardedEmbeddingTable,
     GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
 )
-from torchrec.distributed.types import (
-    Shard,
-    ShardedTensorMetadata,
-    ShardedTensor,
-)
+from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -90,7 +86,11 @@ def get_state_dict(
     for embedding_table, param in zip(embedding_tables, params):
         key = get_key_from_embedding_table(embedding_table)
         assert embedding_table.local_rows == param.size(0)
-        if embedding_table.compute_kernel != EmbeddingComputeKernel.BATCHED_QUANT:
+        if embedding_table.compute_kernel not in [
+            EmbeddingComputeKernel.BATCHED_QUANT,
+            EmbeddingComputeKernel.BATCHED_QUANT_UVM,
+            EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+        ]:
             assert embedding_table.local_cols == param.size(1)
         # for inference there is no pg, all tensors are local
         if embedding_table.global_metadata is not None and pg is not None:

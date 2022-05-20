@@ -44,30 +44,30 @@ class DeepFM(nn.Module):
 
     To support modeling flexibility, we customize the key components as:
 
-    * Different from the public paper, we change the input from raw sparse
-        features to embeddings of the features. It allows flexibility in embedding
-        dimensions and the number of embeddings, as long as all embedding tensors
-        have the same batch size.
-    * On top of the public paper, we allow users to customize the hidden layer
-        to be any module, not limited to just MLP.
+    * Different from the public paper, we change the input from raw sparse features to
+      embeddings of the features. It allows flexibility in embedding dimensions and the
+      number of embeddings, as long as all embedding tensors have the same batch size.
+
+    * On top of the public paper, we allow users to customize the hidden layer to be any
+      module, not limited to just MLP.
 
     The general architecture of the module is like::
 
-        # 1 x 1 output
-        # ^
-        # pass into `dense_module`
-        # ^
-        # 1 x 90
-        # ^
-        # concat
-        # ^
-        # 1 x 20, 1 x 30, 1 x 40 list of embeddings
+                                1 x 10                  output
+                                 /|\
+                                  |                     pass into `dense_module`
+                                  |
+                                1 x 90
+                                 /|\
+                                  |                     concat
+                                  |
+                        1 x 20, 1 x 30, 1 x 40          list of embeddings
 
     Args:
         dense_module (nn.Module):
-            any customerized module that can be used (such as MLP) in DeepFM. The
-            `in_features` of this module must be equal to the elements counts. For
-            example, the input embeddings is [randn(3, 2, 3), randn(3, 4, 5)], the
+            any customized module that can be used (such as MLP) in DeepFM. The
+            `in_features` of this module must be equal to the element counts. For
+            example, if the input embedding is `[randn(3, 2, 3), randn(3, 4, 5)]`, the
             `in_features` should be: 2*3+4*5.
 
     Example::
@@ -139,24 +139,23 @@ class FactorizationMachine(nn.Module):
     Instead, it covers only the FM part of the publication, and is used to learn
     2nd-order feature interactions.
 
-    To support modeling flexibility, we customize the key components as:
-
-        * Different from the public paper, we change the input from raw sparse
-            features to embeddings of the features. It allows flexibility in embedding
-            dimensions and the number of embeddings, as long as all embedding tensors
-            have the same batch size.
+    To support modeling flexibility, we customize the key components as different from
+    the public paper:
+        We change the input from raw sparse features to embeddings of the features.
+        This allows flexibility in embedding dimensions and the number of embeddings,
+        as long as all embedding tensors have the same batch size.
 
     The general architecture of the module is like::
 
-        # 1 x 1 output
-        # ^
-        # pass into `dense_module`
-        # ^
-        # 1 x 90
-        # ^
-        # concat
-        # ^
-        # 1 x 20, 1 x 30, 1 x 40 list of embeddings
+                                1 x 10                  output
+                                 /|\
+                                  |                     pass into `dense_module`
+                                  |
+                                1 x 90
+                                 /|\
+                                  |                     concat
+                                  |
+                        1 x 20, 1 x 30, 1 x 40          list of embeddings
 
     Example::
 
@@ -181,7 +180,7 @@ class FactorizationMachine(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            embeddings: List[torch.Tensor]:
+            embeddings (List[torch.Tensor]):
                 The list of all embeddings (e.g. dense, common_sparse,
                 specialized_sparse, embedding_features, raw_embedding_features) in the
                 shape of::
@@ -199,7 +198,7 @@ class FactorizationMachine(nn.Module):
                     tensor(B, 3, 16) (dense_features with num_embeddings=3, embedding_dim=32)
 
                 NOTE:
-                    batch_size of all input tensors need to be identical.
+                    `batch_size` of all input tensors need to be identical.
 
         Returns:
             torch.Tensor: output of fm with flattened and concatenated `embeddings` as input. Expected to be [B, 1].

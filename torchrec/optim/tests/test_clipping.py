@@ -9,7 +9,7 @@ import unittest
 
 import torch
 from torch.autograd import Variable
-from torchrec.optim.clipping import GradientClippingOptimizer, GradientClipping
+from torchrec.optim.clipping import GradientClipping, GradientClippingOptimizer
 from torchrec.optim.test_utils import DummyKeyedOptimizer
 
 
@@ -67,7 +67,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         param_1.grad = torch.tensor([2.0, 4.0])
         gradient_clipping_optimizer.step()
 
-        norm = 2.0 ** 2 + 4.0 ** 2
+        norm = 2.0**2 + 4.0**2
         expected_grad = torch.tensor([2.0, 4.0]) * norm ** (-0.5)
         self.assertTrue(torch.allclose(param_1.grad, expected_grad))
 
@@ -98,7 +98,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
         print(param_1.grad, param_2.grad)
 
-        norm = (2.0 ** 2 + 4.0 ** 2 + 4.0 ** 2 + 8.0 ** 2) ** (-0.5)
+        norm = (2.0**2 + 4.0**2 + 4.0**2 + 8.0**2) ** (-0.5)
         expected_grad_1 = torch.tensor([2.0, 4.0]) * norm * max_gradient
         expected_grad_2 = torch.tensor([4.0, 8.0]) * norm * max_gradient
 

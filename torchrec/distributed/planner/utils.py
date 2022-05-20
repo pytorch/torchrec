@@ -7,7 +7,7 @@
 
 import operator
 from functools import reduce
-from typing import Union, Iterable, Any, Type
+from typing import Any, Iterable, Type, Union
 
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:

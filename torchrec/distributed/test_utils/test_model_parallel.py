@@ -6,18 +6,18 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Dict, List, Optional, Union, Type
+from typing import Dict, List, Optional, Type, Union
 
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.test_model import (
-    TestSparseNN,
-    TestSparseNNBase,
     TestEBCSharder,
     TestEBSharder,
-    TestETSharder,
     TestETCSharder,
+    TestETSharder,
+    TestSparseNN,
+    TestSparseNNBase,
 )
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelTestBase,

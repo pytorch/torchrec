@@ -5,14 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Any, cast, Dict, List, Type
+from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
-from torchrec.metrics.metrics_namespace import (
-    MetricName,
-    MetricNamespace,
-    MetricPrefix,
-)
+from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,
     RecMetric,
@@ -39,7 +35,8 @@ def get_ctr_states(
 
 class CTRMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for CTR.
+    This class implementation the RecMetricComputation for CTR, i.e. Click Through Rate,
+    which is the ratio between the predicted positive examples and the total examples.
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.

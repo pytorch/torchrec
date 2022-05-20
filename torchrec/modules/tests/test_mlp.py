@@ -13,7 +13,7 @@ import torch
 from hypothesis import given, settings
 from torch import nn
 from torchrec.fx import symbolic_trace
-from torchrec.modules.mlp import Perceptron, MLP
+from torchrec.modules.mlp import MLP, Perceptron
 
 
 class TestMLP(unittest.TestCase):

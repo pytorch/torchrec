@@ -19,8 +19,8 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.metrics_config import (
     MetricsConfig,
-    RecMetricEnumBase,
     RecMetricEnum,
+    RecMetricEnumBase,
     RecTaskInfo,
     StateMetricEnum,
 )
@@ -29,15 +29,10 @@ from torchrec.metrics.metrics_namespace import (
     compose_metric_namespace,
     MetricNamespace,
 )
-from torchrec.metrics.model_utils import (
-    parse_task_model_outputs,
-)
+from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
-from torchrec.metrics.rec_metric import (
-    RecMetricList,
-    RecMetric,
-)
+from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.throughput import ThroughputMetric
 
 
@@ -162,7 +157,7 @@ class RecMetricModule(nn.Module):
         return sum(total.values())
 
     def check_memory_usage(self, compute_count: int) -> None:
-        memory_usage_mb = self.get_memory_usage() / (10 ** 6)
+        memory_usage_mb = self.get_memory_usage() / (10**6)
         if memory_usage_mb > self.memory_usage_limit_mb:
             self.oom_count += 1
             logger.warning(

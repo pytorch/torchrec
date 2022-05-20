@@ -8,7 +8,7 @@
 import abc
 import copy
 from collections import OrderedDict
-from typing import Dict, Any, Optional, cast, List, Tuple, Iterator
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -17,29 +17,30 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-)
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
-    ShardingPlan,
+    ModuleCopyMixin,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
+    ShardingPlan,
 )
 from torchrec.distributed.utils import (
-    sharded_model_copy,
+    add_prefix_to_state_dict,
     append_prefix,
     filter_state_dict,
-    add_prefix_to_state_dict,
+    sharded_model_copy,
 )
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
 
 _DDP_STATE_DICT_PREFIX = "module."
@@ -48,7 +49,9 @@ _DDP_STATE_DICT_PREFIX = "module."
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
     return [
         cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
         cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
     ]
 
 
@@ -286,14 +289,17 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 return tensor
 
         # if this is a sharded module, customize the copy
-        if isinstance(module, ShardedModule):
+        if isinstance(module, ModuleCopyMixin):
             return module.copy(device)
         # this could be dense or a compound module
         for name, child in module.named_children():
             # potential DFS cache or bottom-up can save runtime
             # search immediate submodules
             if not any(
-                [isinstance(submodule, ShardedModule) for submodule in child.modules()]
+                [
+                    isinstance(submodule, ModuleCopyMixin)
+                    for submodule in child.modules()
+                ]
             ):
                 # if not containing ShardedModule down this submodule (this is a dense module)
                 # copy it.

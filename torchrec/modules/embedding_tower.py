@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -14,19 +14,17 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import (
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 def tower_input_params(module: nn.Module) -> Tuple[bool, bool]:
     """
-    Utilty to compute mapping of tower kjt args to pass to embedding modules
+    Utilty to compute the mapping of tower KJT args to pass to the embedding modules.
 
     Args:
-        module: nn.Module
+        module (nn.Module):
     Returns:
-        Tuple[bool, bool]: representing kjt and wkjt required, respectively
+        Tuple[bool, bool]: tuple of 2 booleans representing if KJT and weighted KJT are required, respectively.
     """
     if isinstance(module, EmbeddingCollection):
         return True, False
@@ -38,19 +36,20 @@ def tower_input_params(module: nn.Module) -> Tuple[bool, bool]:
 
 class EmbeddingTower(nn.Module):
     """
-    Logical "Tower" of embeddings directly passed to custom interaction
+    Logical "Tower" of embeddings directly passed to provided interaction.
+    All TorchRec shardable embedding modules are supported.
 
     Args:
-        embedding_module: nn.Module,
-        interaction_module: nn.Module,
-        device: Optional[torch.device],
+        embedding_module (nn.Module):
+        interaction_module (nn.Module):
+        device (Optional[torch.device]):
 
-    Example:
+    Example::
 
-        >>> ebc, interaction = EmbeddingBagCollection(), MyInteractionModule()
-        >>> tower = EmbeddingTower(ebc, interaction, device)
-        >>> kjt = KeyedJaggedTensor()
-        >>> output = tower(kjt)
+        ebc, interaction = EmbeddingBagCollection(), MyInteractionModule()
+        tower = EmbeddingTower(ebc, interaction, device)
+        kjt = KeyedJaggedTensor()
+        output = tower(kjt)
     """
 
     def __init__(
@@ -71,14 +70,14 @@ class EmbeddingTower(nn.Module):
         **kwargs,
     ) -> torch.Tensor:
         """
-        Run the embedding module and interaction module, support all torchrec shardable embedding modules
+        Executes the embedding module and interaction module.
 
         Args:
-            *args: user provided
-            **kwargs: user provided
+            *args (Any): user provided positional arguments.
+            **kwargs (Any): user provided keyword arguments.
 
         Returns:
-            torch.Tensor, 2-D shape of N X B, where B is local batch size
+            torch.Tensor: 2-D tensor of shape of `N X B`, where `B` is local batch size.
         """
         embeddings = self.embedding(*args, **kwargs)
         return self.interaction(embeddings)
@@ -86,21 +85,22 @@ class EmbeddingTower(nn.Module):
 
 class EmbeddingTowerCollection(nn.Module):
     """
-    Collection of EmbeddingTowers
+    Collection of EmbeddingTowers.
 
     Args:
-        towers: List[EmbeddingTower]
-        device: Optional[torch.device],
+        towers (List[EmbeddingTower]): list of embedding towers that make up the
+            collection.
+        device (Optional[torch.device]): default compute device.
 
-    Example:
+    Example::
 
-        >>> ebc, ebc_interaction = EmbeddingBagCollection(), MyEBCInteractionModule()
-        >>> eb, eb_interaction = EmbeddingCollection(), MyECInteractionModule()
-        >>> tower_0 = EmbeddingTower(ebc, ebc_interaction, device)
-        >>> tower_1 = EmbeddingTower(eb, eb_interaction, device)
-        >>> tower_collection = EmbeddingTowerCollection([tower_0, tower_1])
-        >>> kjt = KeyedJaggedTensor()
-        >>> output = tower_collection(kjt)
+        ebc, ebc_interaction = EmbeddingBagCollection(), MyEBCInteractionModule()
+        eb, eb_interaction = EmbeddingCollection(), MyECInteractionModule()
+        tower_0 = EmbeddingTower(ebc, ebc_interaction, device)
+        tower_1 = EmbeddingTower(eb, eb_interaction, device)
+        tower_collection = EmbeddingTowerCollection([tower_0, tower_1])
+        kjt = KeyedJaggedTensor()
+        output = tower_collection(kjt)
     """
 
     def __init__(
@@ -120,15 +120,17 @@ class EmbeddingTowerCollection(nn.Module):
         weighted_features: Optional[KeyedJaggedTensor] = None,
     ) -> torch.Tensor:
         """
-        Run the collection of towers.  User is requires to pass features and/or weighted features as
-        required by underlying embedding modules
+        Executes the collection of towers.
+
+        Features and/or weighted features must be provided as required by the
+        underlying embedding modules.
 
         Args:
-            features: Optional[KeyedJaggedTensor]
-            weighted_features: Optional[KeyedJaggedTensor]
+            features (Optional[KeyedJaggedTensor]):
+            weighted_features (Optional[KeyedJaggedTensor]):
 
         Returns:
-            torch.Tensor, 2-D shape of M X B, where M sum(N_i) for tower output i, and B is local batch size
+            torch.Tensor: 2-D tensor of shape `M X B`, where `M = sum(N_i)` for tower output i, and `B` is local batch size.
         """
 
         tower_outputs = []

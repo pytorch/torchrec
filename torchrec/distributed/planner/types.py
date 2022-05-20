@@ -6,22 +6,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List, Dict, Tuple, Union, cast
+from typing import cast, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torchrec.distributed.planner.constants import (
-    CROSS_NODE_BANDWIDTH,
-    INTRA_NODE_BANDWIDTH,
-    HBM_CAP,
-    DDR_CAP,
-    POOLING_FACTOR,
     BATCH_SIZE,
+    CROSS_NODE_BANDWIDTH,
+    DDR_CAP,
+    HBM_CAP,
+    INTRA_NODE_BANDWIDTH,
+    POOLING_FACTOR,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingPlan
-from torchrec.modules.embedding_modules import EmbeddingCollection
+from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 
 # ---- TOPOLOGY ---- #
 
@@ -222,11 +222,11 @@ class ShardingOption:
 
     @property
     def is_pooled(self) -> bool:
-        if isinstance(self.module[1], EmbeddingCollection):
+        if isinstance(self.module[1], EmbeddingCollectionInterface):
             return False
         for name, module in self.module[1].named_modules():
             if self.name in name:
-                if isinstance(module, EmbeddingCollection):
+                if isinstance(module, EmbeddingCollectionInterface):
                     return False
         return True
 
@@ -267,6 +267,7 @@ class ParameterConstraints:
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
     )  # Embedding Tables
+    num_objects: Optional[List[float]] = None  # Number of objects per sample in batch
 
 
 class PlannerError(Exception):
@@ -404,6 +405,7 @@ class Stats(abc.ABC):
         topology: Topology,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
         debug: bool = False,
     ) -> None:

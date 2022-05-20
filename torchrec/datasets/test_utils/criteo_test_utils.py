@@ -11,14 +11,11 @@ import os
 import random
 import tempfile
 import unittest
-from typing import Any, Dict, Generator, Tuple, Optional, List
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
 from pyre_extensions import none_throws
-from torchrec.datasets.criteo import (
-    INT_FEATURE_COUNT,
-    CAT_FEATURE_COUNT,
-)
+from torchrec.datasets.criteo import CAT_FEATURE_COUNT, INT_FEATURE_COUNT
 
 
 class CriteoTest(unittest.TestCase):
@@ -87,7 +84,7 @@ class CriteoTest(unittest.TestCase):
             self.assertTrue(self.INT_VAL_RANGE[0] <= int_val <= self.INT_VAL_RANGE[1])
         for idx in range(self.CAT_FEATURE_COUNT):
             cat_val = int(sample[f"cat_{idx}"], 16)
-            self.assertTrue(0 <= cat_val <= 16 ** 8 - 1)
+            self.assertTrue(0 <= cat_val <= 16**8 - 1)
 
     @classmethod
     @contextlib.contextmanager

@@ -27,12 +27,23 @@ Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pi
 ```
 conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
 pip install torchrec-nightly
+
+or from pytorch S3
+
+pip install --pre torchrec -f https://download.pytorch.org/whl/torchrec/index.html
+pip install --pre torchrec_nightly -f https://download.pytorch.org/whl/nightly/torchrec_nightly/index.html
 ```
 
 ### CPU Only
 ```
 conda install pytorch cpuonly -c pytorch-nightly
 pip install torchrec-nightly-cpu
+
+or from pytorch S3
+
+pip install --pre torchrec_cpu -f https://download.pytorch.org/whl/torchrec_cpu/index.html
+pip install --pre torchrec_cpu_nightly -f https://download.pytorch.org/whl/nightly/torchrec_cpu_nightly/index.html
+
 ```
 
 ### Colab example: introduction + install
@@ -59,7 +70,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
    export CUB_DIR=/usr/local/cuda-11.3/include/cub
    export CUDA_BIN_PATH=/usr/local/cuda-11.3/
    export CUDACXX=/usr/local/cuda-11.3/bin/nvcc
-   python setup.py install -DTORCH_CUDA_ARCH_LIST="7.0;8.0"
+   python setup.py install --TORCH_CUDA_ARCH_LIST="7.0;8.0"
    ```
    The last line of the above code block (`python setup.py install`...) which manually installs fbgemm_gpu can be skipped if you do not need to build fbgemm_gpu with custom build-related flags. Skip to the next step if that is the case.
 

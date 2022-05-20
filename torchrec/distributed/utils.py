@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import Any, Dict, Optional, List, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import torch
 from torchrec.distributed.types import ShardedModule

@@ -7,18 +7,12 @@
 
 import logging
 from collections import defaultdict
-from typing import Union, Tuple, Optional, Any, List, Dict, cast
+from typing import Any, cast, Dict, List, Tuple, Union
 
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
-from torchrec.distributed.planner.types import (
-    ShardingOption,
-    Stats,
-    Topology,
-    ParameterConstraints,
-    Storage,
-)
+from torchrec.distributed.planner.types import ShardingOption, Stats, Storage, Topology
 from torchrec.distributed.planner.utils import bytes_to_gb, bytes_to_mb
-from torchrec.distributed.types import ShardingType, ParameterSharding, ShardingPlan
+from torchrec.distributed.types import ParameterSharding, ShardingPlan, ShardingType
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -38,6 +32,7 @@ class EmbeddingStats(Stats):
         topology: Topology,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
         debug: bool = False,
     ) -> None:
@@ -52,6 +47,7 @@ class EmbeddingStats(Stats):
             topology (Topology): device topology.
             num_proposals (int): number of proposals evaluated.
             num_plans (int): number of proposals successfully partitioned.
+            run_time (float): time taken to find plan (in seconds).
             best_plan (List[ShardingOption]): plan with expected performance.
             debug (bool): whether to enable debug mode.
         """
@@ -197,7 +193,8 @@ class EmbeddingStats(Stats):
 
         iter_text = (
             f"--- Evalulated {num_proposals} proposal(s), "
-            f"found {num_plans} possible plan(s) ---"
+            f"found {num_plans} possible plan(s), "
+            f"ran for {run_time:.2f}s ---"
         )
         logger.info(f"#{iter_text: ^{width-2}}#")
 

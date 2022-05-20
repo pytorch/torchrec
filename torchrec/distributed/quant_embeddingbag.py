@@ -6,40 +6,39 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from typing import List, Dict, Optional, Type, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
-    ListOfSparseFeaturesListAwaitable,
     EmbeddingSharding,
+    EmbeddingShardingInfo,
+    ListOfSparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
-    ListOfSparseFeaturesList,
-    SparseFeaturesList,
     BaseQuantEmbeddingSharder,
+    ListOfSparseFeaturesList,
+    SparseFeatures,
+    SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import (
-    create_embedding_configs_by_sharding,
+    create_sharding_infos_by_sharding,
     EmbeddingBagCollectionAwaitable,
-    filter_state_dict,
 )
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    LazyAwaitable,
     ParameterSharding,
-    ShardingType,
+    ShardedModule,
     ShardedModuleContext,
     ShardingEnv,
-    ShardedModule,
-    LazyAwaitable,
+    ShardingType,
 )
+from torchrec.distributed.utils import filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
-from torchrec.modules.embedding_modules import (
-    EmbeddingBagCollectionInterface,
-)
+from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )
@@ -48,13 +47,11 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 def create_infer_embedding_bag_sharding(
     sharding_type: str,
-    embedding_configs: List[
-        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-    ],
+    sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
 ) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwEmbeddingSharding(embedding_configs, env, device=None)
+        return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
@@ -75,7 +72,7 @@ class ShardedQuantEmbeddingBagCollection(
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
+        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
         self._sharding_type_to_sharding: Dict[
@@ -84,7 +81,7 @@ class ShardedQuantEmbeddingBagCollection(
             sharding_type: create_infer_embedding_bag_sharding(
                 sharding_type, embedding_confings, env
             )
-            for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
+            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
         self._is_weighted: bool = module.is_weighted

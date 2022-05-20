@@ -5,49 +5,48 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
 from functools import reduce
-from typing import Tuple, Dict, Optional, List, cast, Union
+from time import perf_counter
+from typing import cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
-from torchrec.distributed.collective_utils import (
-    invoke_on_rank_and_broadcast_result,
-)
+from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
 from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
-from torchrec.distributed.planner.proposers import GreedyProposer, UniformProposer
+from torchrec.distributed.planner.proposers import (
+    GreedyProposer,
+    GridSearchProposer,
+    UniformProposer,
+)
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
 )
 from torchrec.distributed.planner.types import (
+    Enumerator,
     ParameterConstraints,
     Partitioner,
-    Topology,
-    Stats,
-    Shard,
-    Storage,
-    ShardingOption,
-    StorageReservation,
-    Enumerator,
-    Proposer,
     PerfModel,
     PlannerError,
+    Proposer,
+    ShardingOption,
+    Stats,
+    Storage,
+    StorageReservation,
+    Topology,
 )
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
-    ShardMetadata,
-)
-from torchrec.distributed.types import (
+    ModuleSharder,
+    ParameterSharding,
     ShardingPlan,
     ShardingPlanner,
-    ModuleSharder,
     ShardingType,
-    ParameterSharding,
+    ShardMetadata,
 )
 
 
@@ -139,6 +138,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
         else:
             self._proposers = [
+                GridSearchProposer(),
                 GreedyProposer(),
                 GreedyProposer(use_depth=False),
                 UniformProposer(),
@@ -177,6 +177,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
         self._num_proposals = 0
         self._num_plans = 0
+        start_time = perf_counter()
         best_plan = None
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE
@@ -256,11 +257,13 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         if best_plan:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
+            end_time = perf_counter()
             self._stats.log(
                 sharding_plan=sharding_plan,
                 topology=self._topology,
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,
+                run_time=end_time - start_time,
                 best_plan=best_plan,
                 debug=self._debug,
             )

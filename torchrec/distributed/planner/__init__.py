@@ -20,11 +20,5 @@ The features includes:
 """
 
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner  # noqa
-from torchrec.distributed.planner.types import (  # noqa
-    Topology,
-    ParameterConstraints,
-)
-from torchrec.distributed.planner.utils import (  # noqa
-    sharder_name,
-    bytes_to_gb,
-)
+from torchrec.distributed.planner.types import ParameterConstraints, Topology  # noqa
+from torchrec.distributed.planner.utils import bytes_to_gb, sharder_name  # noqa

@@ -6,14 +6,14 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List, cast
+from typing import cast, List
 
 import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
-from torchrec.distributed.planner.types import Topology, PlannerError
+from torchrec.distributed.planner.types import PlannerError, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -102,7 +102,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
 
-        self.assertEqual(self.planner._num_proposals, 3)
+        self.assertEqual(self.planner._num_proposals, 4)
 
     def test_fail_then_rerun(self) -> None:
         tables = [

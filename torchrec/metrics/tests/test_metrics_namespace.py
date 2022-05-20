@@ -10,10 +10,10 @@ import unittest
 
 from torchrec.metrics.metrics_namespace import (
     compose_metric_key,
-    task_wildcard_metrics_pattern,
     MetricName,
     MetricNamespace,
     MetricPrefix,
+    task_wildcard_metrics_pattern,
 )
 
 

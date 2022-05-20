@@ -8,13 +8,12 @@
 import argparse
 import os
 import sys
-from typing import List, Iterator
+from typing import Iterator, List
 
 import torch
 import torch.distributed as dist
 from torch.distributed.elastic.multiprocessing.errors import record
-from torchrec import EmbeddingBagCollection
-from torchrec import KeyedJaggedTensor
+from torchrec import EmbeddingBagCollection, KeyedJaggedTensor
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM
 from torchrec.modules.embedding_configs import EmbeddingBagConfig

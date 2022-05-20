@@ -9,10 +9,7 @@ import unittest
 
 import torch
 from torchrec.fx import Tracer
-from torchrec.modules.deepfm import (
-    DeepFM,
-    FactorizationMachine,
-)
+from torchrec.modules.deepfm import DeepFM, FactorizationMachine
 
 
 class TestDeepFM(unittest.TestCase):

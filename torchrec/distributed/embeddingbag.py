@@ -7,31 +7,20 @@
 
 import copy
 from collections import OrderedDict
-from typing import (
-    List,
-    Dict,
-    Optional,
-    Type,
-    Any,
-    Mapping,
-    Union,
-    Tuple,
-    Iterator,
-    Set,
-)
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Type, Union
 
 import torch
-from torch import Tensor
-from torch import nn
+from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
+    EmbeddingShardingInfo,
     SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
-    SparseFeatures,
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    SparseFeatures,
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
@@ -46,34 +35,32 @@ from torchrec.distributed.types import (
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
-    ShardingType,
     ShardedModuleContext,
     ShardedTensor,
     ShardingEnv,
+    ShardingType,
 )
-from torchrec.distributed.utils import append_prefix
+from torchrec.distributed.utils import append_prefix, filter_state_dict
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
 )
 from torchrec.optim.fused import FusedOptimizerModule
-from torchrec.optim.keyed import KeyedOptimizer, CombinedOptimizer
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 def replace_placement_with_meta_device(
-    embedding_configs: List[
-        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-    ]
+    sharding_infos: List[EmbeddingShardingInfo],
 ) -> None:
     """Placement device and tensor device could be unmatched in some
     scenarios, e.g. passing meta device to DMP and passing cuda
     to EmbeddingShardingPlanner. We need to make device consistent
     after getting sharding planner.
     """
-    for config in embedding_configs:
-        sharding_spec = config[1].sharding_spec
+    for info in sharding_infos:
+        sharding_spec = info.param_sharding.sharding_spec
         if sharding_spec is None:
             continue
         if isinstance(sharding_spec, EnumerableShardingSpec):
@@ -93,51 +80,38 @@ def replace_placement_with_meta_device(
 
 def create_embedding_bag_sharding(
     sharding_type: str,
-    embedding_configs: List[
-        Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-    ],
+    sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if device is not None and device.type == "meta":
-        replace_placement_with_meta_device(embedding_configs)
+        replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwPooledEmbeddingSharding(embedding_configs, env, device)
+        return TwPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwPooledEmbeddingSharding(embedding_configs, env, device)
+        return RwPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpPooledEmbeddingSharding(embedding_configs, env, device)
+        return DpPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return TwRwPooledEmbeddingSharding(embedding_configs, env, device)
+        return TwRwPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwPooledEmbeddingSharding(
-            embedding_configs, env, device, permute_embeddings=permute_embeddings
+            sharding_infos, env, device, permute_embeddings=permute_embeddings
         )
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
         return TwCwPooledEmbeddingSharding(
-            embedding_configs, env, device, permute_embeddings=permute_embeddings
+            sharding_infos, env, device, permute_embeddings=permute_embeddings
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
-def filter_state_dict(
-    state_dict: "OrderedDict[str, torch.Tensor]", name: str
-) -> "OrderedDict[str, torch.Tensor]":
-    rtn_dict = OrderedDict()
-    for key, value in state_dict.items():
-        if key.startswith(name):
-            # + 1 to length is to remove the '.' after the key
-            rtn_dict[key[len(name) + 1 :]] = value
-    return rtn_dict
-
-
-def create_embedding_configs_by_sharding(
+def create_sharding_infos_by_sharding(
     module: EmbeddingBagCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     prefix: str,
-) -> Dict[str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]]:
+) -> Dict[str, List[EmbeddingShardingInfo]]:
     shared_feature: Dict[str, bool] = {}
     for embedding_config in module.embedding_bag_configs:
         if not embedding_config.feature_names:
@@ -148,9 +122,7 @@ def create_embedding_configs_by_sharding(
             else:
                 shared_feature[feature_name] = True
 
-    sharding_type_to_embedding_configs: Dict[
-        str, List[Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]]
-    ] = {}
+    sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = {}
     state_dict = module.state_dict()
     for config in module.embedding_bag_configs:
         table_name = config.name
@@ -173,11 +145,11 @@ def create_embedding_configs_by_sharding(
         assert param_name in state_dict
         param = state_dict[param_name]
 
-        if parameter_sharding.sharding_type not in sharding_type_to_embedding_configs:
-            sharding_type_to_embedding_configs[parameter_sharding.sharding_type] = []
-        sharding_type_to_embedding_configs[parameter_sharding.sharding_type].append(
-            (
-                EmbeddingTableConfig(
+        if parameter_sharding.sharding_type not in sharding_type_to_sharding_infos:
+            sharding_type_to_sharding_infos[parameter_sharding.sharding_type] = []
+        sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
+            EmbeddingShardingInfo(
+                embedding_config=EmbeddingTableConfig(
                     num_embeddings=config.num_embeddings,
                     embedding_dim=config.embedding_dim,
                     name=config.name,
@@ -190,11 +162,11 @@ def create_embedding_configs_by_sharding(
                     weight_init_max=config.weight_init_max,
                     weight_init_min=config.weight_init_min,
                 ),
-                parameter_sharding,
-                param,
+                param_sharding=parameter_sharding,
+                param=param,
             )
         )
-    return sharding_type_to_embedding_configs
+    return sharding_type_to_sharding_infos
 
 
 class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
@@ -241,7 +213,7 @@ class ShardedEmbeddingBagCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        sharding_type_to_embedding_configs = create_embedding_configs_by_sharding(
+        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
         self._sharding_type_to_sharding: Dict[
@@ -250,7 +222,7 @@ class ShardedEmbeddingBagCollection(
             sharding_type: create_embedding_bag_sharding(
                 sharding_type, embedding_confings, env, device, permute_embeddings=True
             )
-            for sharding_type, embedding_confings in sharding_type_to_embedding_configs.items()
+            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
         self._is_weighted: bool = module.is_weighted
@@ -586,11 +558,11 @@ class ShardedEmbeddingBag(
             SparseFeatures, torch.Tensor
         ] = create_embedding_bag_sharding(
             sharding_type=self.parameter_sharding.sharding_type,
-            embedding_configs=[
-                (
-                    embedding_table_config,
-                    self.parameter_sharding,
-                    next(iter(module.parameters())),
+            sharding_infos=[
+                EmbeddingShardingInfo(
+                    embedding_config=embedding_table_config,
+                    param_sharding=self.parameter_sharding,
+                    param=next(iter(module.parameters())),
                 ),
             ],
             env=env,

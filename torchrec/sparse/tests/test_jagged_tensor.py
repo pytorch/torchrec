@@ -7,16 +7,12 @@
 
 
 import unittest
-from typing import Tuple, List
+from typing import List, Tuple
 
 import torch
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
-from torchrec.sparse.jagged_tensor import (
-    JaggedTensor,
-    KeyedTensor,
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 torch.fx.wrap("len")
 

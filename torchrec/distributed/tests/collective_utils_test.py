@@ -14,11 +14,11 @@ from unittest import mock
 import torch.distributed as dist
 from torch._utils_internal import TEST_MASTER_ADDR as MASTER_ADDR  # @manual
 from torchrec.distributed.collective_utils import (
-    is_leader,
     invoke_on_rank_and_broadcast_result,
+    is_leader,
     run_on_leader,
 )
-from torchrec.test_utils import seed_and_log, get_free_port
+from torchrec.test_utils import get_free_port, seed_and_log
 
 
 class CollectiveUtilsTest(unittest.TestCase):

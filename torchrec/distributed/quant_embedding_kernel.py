@@ -7,32 +7,32 @@
 
 import copy
 import logging
-from typing import List, Optional, Tuple, Iterator, Dict, Any
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
 from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
-    PoolingMode,
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
+    PoolingMode,
     rounded_row_size_in_bytes,
 )
 from torchrec.distributed.batched_embedding_kernel import (
-    BaseBatchedEmbeddingBag,
     BaseBatchedEmbedding,
+    BaseBatchedEmbeddingBag,
 )
 from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
-    GroupedEmbeddingConfig,
     compute_kernel_to_embedding_location,
+    GroupedEmbeddingConfig,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
-    dtype_to_data_type,
     data_type_to_sparse_type,
     DataType,
+    dtype_to_data_type,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -88,13 +88,11 @@ def _quantize_weight(
 ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
     quant_weight_list = []
     for weight in state_dict.values():
-        if weight.dtype == torch.float:
-            quantized_weights = torch.ops.fbgemm.FloatToFusedNBitRowwiseQuantizedSBHalf(
-                weight, DATA_TYPE_NUM_BITS[data_type]
-            )
-        elif weight.dtype == torch.float16:
-            quantized_weights = torch.ops.fbgemm.HalfToFusedNBitRowwiseQuantizedSBHalf(
-                weight, DATA_TYPE_NUM_BITS[data_type]
+        if weight.dtype == torch.float or weight.dtype == torch.float16:
+            quantized_weights = (
+                torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
+                    weight, DATA_TYPE_NUM_BITS[data_type]
+                )
             )
         else:
             raise Exception("Unsupported dtype: {weight.dtype}")

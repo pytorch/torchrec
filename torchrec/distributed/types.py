@@ -9,17 +9,7 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Optional,
-    TypeVar,
-    List,
-    Type,
-    Iterator,
-)
+from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from torch.autograd.profiler import record_function
 
@@ -56,9 +46,9 @@ from torch.distributed._shard.sharded_tensor import (  # noqa
 
 # @manual
 from torch.distributed._shard.sharding_spec import (  # noqa
+    EnumerableShardingSpec,
     ShardingSpec,
     ShardMetadata,
-    EnumerableShardingSpec,
 )
 from torchrec.streamable import Multistreamable
 
@@ -366,7 +356,17 @@ class ShardingEnv:
         return cls(world_size, rank, None)
 
 
-class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
+class ModuleCopyMixin:
+    """
+    A mixin to allow modules to override copy behaviors in DMP.
+    """
+
+    def copy(self, device: torch.device) -> nn.Module:
+        # pyre-ignore [16]
+        return self.to(device)
+
+
+class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCopyMixin):
     """
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
@@ -410,13 +410,24 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     ) -> LazyAwaitable[Out]:
         """
         In case of multiple output distributions it makes sense to override this method
-        and initiate output distibution as soon as the corresponding compute completes.
+        and initiate the output distibution as soon as the corresponding compute
+        completes.
         """
         output = self.compute(ctx, input)
         return self.output_dist(ctx, output)
 
     # pyre-ignore[2]
     def forward(self, *input, **kwargs) -> LazyAwaitable[Out]:
+        """
+        Executes the input dist, compute, and output dist steps.
+
+        Args:
+            *input: input.
+            **kwargs: keyword arguments.
+
+        Returns:
+            LazyAwaitable[Out]: awaitable of output from output dist.
+        """
         ctx = self.create_context()
         dist_input = self.input_dist(ctx, *input, **kwargs).wait()
         return self.compute_and_output_dist(ctx, dist_input)
@@ -432,9 +443,6 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out]):
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for key, _ in self.named_parameters(prefix):
             yield key
-
-    def copy(self, device: torch.device) -> nn.Module:
-        return self.to(device)
 
 
 class ModuleSharder(abc.ABC, Generic[M]):
@@ -486,7 +494,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         """
-        List of supported sharding types. See ShardingType for well-known examples.
+        List of supported sharding types. See `ShardingType` for well-known examples.
         """
         return [ShardingType.DATA_PARALLEL.value]
 
@@ -494,7 +502,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         """
-        List of supported compute kernels for a given sharding_type and compute device.
+        List of supported compute kernels for a given sharding type and compute device.
         """
 
         return [ComputeKernel.DEFAULT.value]
@@ -519,8 +527,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
 class ShardingPlan:
     """
     Representation of sharding plan.
-    Attributes:
 
+    Attributes:
         plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of
             dict of parameter sharding specs keyed by parameter name.
     """

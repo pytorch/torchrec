@@ -9,18 +9,14 @@ import copy
 import unittest
 
 import torch
-from torchrec.metrics.auc import (
-    AUCMetric,
-)
-from torchrec.metrics.metric_module import RecMetricModule, generate_metric_module
+from torchrec.metrics.auc import AUCMetric
+from torchrec.metrics.metric_module import generate_metric_module, RecMetricModule
 from torchrec.metrics.metrics_config import (
-    RecMetricEnum,
     DefaultMetricsConfig,
     DefaultTaskInfo,
+    RecMetricEnum,
 )
-from torchrec.metrics.tests.test_utils import (
-    gen_test_batch,
-)
+from torchrec.metrics.tests.test_utils import gen_test_batch
 
 
 _CUDA_UNAVAILABLE: bool = not torch.cuda.is_available()

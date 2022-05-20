@@ -9,7 +9,7 @@ These three UDFs are extensively used in Meta's RecSys preprocessing stack. Nota
 
 Download the criteo tsv files (see the README in the main DLRM example). Use the nvtabular script (in torchrec/datasets/scripts/nvt/) to convert the TSV files to parquet.
 
-Install torcharrow from https://github.com/facebookresearch/torcharrow1`
+Install torcharrow from https://github.com/facebookresearch/torcharrow`
 ```
 pip install torchdata
 ```

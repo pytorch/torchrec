@@ -15,7 +15,7 @@ from datetime import date
 from subprocess import check_output
 from typing import List
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 
 def get_version():
@@ -60,6 +60,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         action="store_true",
         help="if fbgemm_gpu will be installed with cpu_only flag",
     )
+    parser.add_argument(
+        "--fbgemm_gpu_dir_override",
+        type=str,
+        default=None,
+        help="the alternative directory of external fbgemm_gpu path.",
+    )
     return parser.parse_known_args(argv)
 
 
@@ -90,11 +96,16 @@ def main(argv: List[str]) -> None:
     packages = find_packages(exclude=("*tests",))
     fbgemm_gpu_package_dir = []
 
+    fbgemm_gpu_dir = "third_party/fbgemm/fbgemm_gpu"
+    if args.fbgemm_gpu_dir_override is not None:
+        fbgemm_gpu_dir = args.fbgemm_gpu_dir_override
+    fbgemm_gpu_install_dir = os.path.join(fbgemm_gpu_dir, "_skbuild/*/cmake-install")
+
     if "clean" in unknown:
         print("Running clean for fbgemm_gpu first")
         out = check_output(
             [sys.executable, "setup.py", "clean"],
-            cwd="third_party/fbgemm/fbgemm_gpu",
+            cwd=fbgemm_gpu_dir,
         )
     # install/build
     else:
@@ -109,19 +120,17 @@ def main(argv: List[str]) -> None:
             fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
             out = check_output(
                 [sys.executable, "setup.py", "build", fbgemm_kw_args],
-                cwd="third_party/fbgemm/fbgemm_gpu",
+                cwd=fbgemm_gpu_dir,
                 env=my_env,
             )
             print(out)
 
         # the path to find all the packages
-        fbgemm_install_base = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install"
-        )[0]
+        fbgemm_install_base = glob.glob(fbgemm_gpu_install_dir)[0]
         packages.extend(find_packages(fbgemm_install_base))
         # to include the fbgemm_gpu.so
         fbgemm_gpu_package_dir = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install/fbgemm_gpu"
+            os.path.join(fbgemm_gpu_install_dir, "fbgemm_gpu")
         )[0]
 
     sys.argv = [sys.argv[0]] + unknown

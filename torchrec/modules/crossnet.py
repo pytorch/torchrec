@@ -11,7 +11,7 @@
 CrossNet API
 """
 
-from typing import Optional, Callable, Union
+from typing import Callable, Optional, Union
 
 import torch
 

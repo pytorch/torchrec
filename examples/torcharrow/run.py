@@ -46,7 +46,7 @@ def main(
         device = torch.device("cpu")
         backend = "gloo"
         print(
-            "\033[92m" + f"WARNING: Running in CPU mode. {torch.cuda.is_available()=}."
+            "\033[92m" + f"WARNING: Running in CPU mode. cuda availablility {torch.cuda.is_available()}."
         )
 
     dist.init_process_group(backend=backend)
