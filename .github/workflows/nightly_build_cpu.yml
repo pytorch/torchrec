@@ -145,7 +145,7 @@ jobs:
           echo "AWS_ACCESS_KEY_ID is not set, exiting upload"
         exit 1
         fi
-        for pkg in torchrec_nightly_cpu*.whl; do
+        for pkg in dist/*.whl; do
           aws s3 cp "$pkg" "$S3_PATH" --acl public-read
         done
     # Disable because of PyPi 200MB limit. Request: https://github.com/pypa/pypi-support/issues/1913
