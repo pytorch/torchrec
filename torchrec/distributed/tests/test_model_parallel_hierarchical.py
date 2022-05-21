@@ -48,15 +48,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
         local_size=st.sampled_from([2]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_twrw(
         self,
         sharder_type: str,
@@ -93,15 +91,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
         local_size=st.sampled_from([2]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_twcw(
         self,
         sharder_type: str,
@@ -136,14 +132,12 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_embedding_tower_nccl(
         self,
         sharding_type: str,
@@ -176,14 +170,12 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_embedding_tower_collection_nccl(
         self,
         sharding_type: str,

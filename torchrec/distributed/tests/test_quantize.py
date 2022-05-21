@@ -13,13 +13,11 @@ import torch
 import torch.distributed as dist
 import torch.quantization as quant
 from hypothesis import given, settings, Verbosity
-from torchrec.distributed.embedding_kernel import GroupedEmbeddingBag
 from torchrec.distributed.embedding_lookup import (
     BatchedDenseEmbedding,
     BatchedDenseEmbeddingBag,
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
-    GroupedEmbedding,
     GroupedEmbeddingsLookup,
     GroupedPooledEmbeddingsLookup,
 )
@@ -48,20 +46,16 @@ def quantize_sharded_embeddings(
     return quant.quantize_dynamic(
         module,
         qconfig_spec={
-            GroupedEmbeddingBag: qconfig,
             BatchedFusedEmbeddingBag: qconfig,
             BatchedDenseEmbeddingBag: qconfig,
             BatchedDenseEmbedding: qconfig,
             BatchedFusedEmbedding: qconfig,
-            GroupedEmbedding: qconfig,
         },
         mapping={
-            GroupedEmbeddingBag: QuantBatchedEmbeddingBag,
             BatchedFusedEmbeddingBag: QuantBatchedEmbeddingBag,
             BatchedDenseEmbeddingBag: QuantBatchedEmbeddingBag,
             BatchedDenseEmbedding: QuantBatchedEmbedding,
             BatchedFusedEmbedding: QuantBatchedEmbedding,
-            GroupedEmbedding: QuantBatchedEmbedding,
         },
         inplace=False,
     )
@@ -138,8 +132,6 @@ class QuantizeKernelTest(unittest.TestCase):
             [
                 EmbeddingComputeKernel.BATCHED_DENSE,
                 EmbeddingComputeKernel.BATCHED_FUSED,
-                EmbeddingComputeKernel.DENSE,
-                EmbeddingComputeKernel.SPARSE,
             ]
         ),
         dtype=st.sampled_from(
@@ -150,7 +142,7 @@ class QuantizeKernelTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=12, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_quantize_embedding_bag_kernels(
         self, compute_kernel: EmbeddingComputeKernel, dtype: torch.dtype
     ) -> None:
@@ -176,8 +168,6 @@ class QuantizeKernelTest(unittest.TestCase):
             [
                 EmbeddingComputeKernel.BATCHED_DENSE,
                 EmbeddingComputeKernel.BATCHED_FUSED,
-                EmbeddingComputeKernel.DENSE,
-                EmbeddingComputeKernel.SPARSE,
             ]
         ),
         dtype=st.sampled_from(
@@ -188,7 +178,7 @@ class QuantizeKernelTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=12, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_quantize_embedding_kernels(
         self, compute_kernel: EmbeddingComputeKernel, dtype: torch.dtype
     ) -> None:

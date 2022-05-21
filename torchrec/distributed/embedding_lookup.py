@@ -22,11 +22,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
-from torchrec.distributed.embedding_kernel import (
-    BaseEmbedding,
-    GroupedEmbedding,
-    GroupedEmbeddingBag,
-)
+from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
@@ -96,20 +92,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
                     pg=pg,
                     device=device,
                     fused_params=fused_params,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=False,
-                    pg=pg,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=True,
-                    pg=pg,
-                    device=device,
                 )
             else:
                 raise ValueError(
@@ -232,20 +214,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     pg=pg,
                     device=device,
                     fused_params=fused_params,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return GroupedEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    sparse=False,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
-                return GroupedEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    sparse=True,
-                    device=device,
                 )
             else:
                 raise ValueError(

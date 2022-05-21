@@ -421,8 +421,6 @@ def group_tables(
                 for is_weighted in [True, False]:
                     for has_feature_processor in [True, False]:
                         for compute_kernel in [
-                            EmbeddingComputeKernel.DENSE,
-                            EmbeddingComputeKernel.SPARSE,
                             EmbeddingComputeKernel.BATCHED_DENSE,
                             EmbeddingComputeKernel.BATCHED_FUSED,
                             EmbeddingComputeKernel.BATCHED_QUANT,

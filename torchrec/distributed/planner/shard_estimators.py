@@ -947,12 +947,7 @@ def _calculate_storage_specific_sizes(
 
     optimizer_sizes: List[int] = [
         tensor_size * 2
-        if compute_kernel
-        in {
-            EmbeddingComputeKernel.DENSE.value,
-            EmbeddingComputeKernel.SPARSE.value,
-            EmbeddingComputeKernel.BATCHED_DENSE.value,
-        }
+        if compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE.value
         else 0
         for tensor_size in tensor_sizes
     ]
