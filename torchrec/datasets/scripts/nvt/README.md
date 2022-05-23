@@ -31,7 +31,7 @@ For convenience this example used a docker container.
 
 To start the docker run:
 
-    cd torchrec/datasets/scripts/nvt 
+    cd torchrec/datasets/scripts/nvt
 
     sudo apt-get install -y nvidia-docker2
 
