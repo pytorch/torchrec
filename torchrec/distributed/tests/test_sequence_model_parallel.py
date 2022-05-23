@@ -42,8 +42,8 @@ class SequenceModelParallelTest(ModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
@@ -72,7 +72,7 @@ class SequenceModelParallelTest(ModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
             ]
         ),
     )
@@ -101,8 +101,8 @@ class SequenceModelParallelTest(ModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )

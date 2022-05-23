@@ -421,8 +421,6 @@ def group_tables(
                 for is_weighted in [True, False]:
                     for has_feature_processor in [True, False]:
                         for compute_kernel in [
-                            EmbeddingComputeKernel.DENSE,
-                            EmbeddingComputeKernel.SPARSE,
                             EmbeddingComputeKernel.BATCHED_DENSE,
                             EmbeddingComputeKernel.BATCHED_FUSED,
                             EmbeddingComputeKernel.BATCHED_QUANT,
@@ -430,6 +428,7 @@ def group_tables(
                             grouped_tables: List[ShardedEmbeddingTable] = []
                             grouped_score_tables: List[ShardedEmbeddingTable] = []
                             for table in embedding_tables:
+                                compute_kernel_type = table.compute_kernel
                                 if table.compute_kernel in [
                                     EmbeddingComputeKernel.BATCHED_FUSED_UVM,
                                     EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
@@ -444,8 +443,6 @@ def group_tables(
                                     compute_kernel_type = (
                                         EmbeddingComputeKernel.BATCHED_QUANT
                                     )
-                                else:
-                                    compute_kernel_type = table.compute_kernel
                                 if (
                                     table.data_type == data_type
                                     and table.pooling == pooling
