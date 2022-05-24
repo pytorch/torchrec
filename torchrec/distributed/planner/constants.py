@@ -56,14 +56,10 @@ def kernel_bw_lookup(
     caching_ratio = caching_ratio if caching_ratio else UVM_CACHING_RATIO
     lookup = {
         # CPU
-        ("cpu", EmbeddingComputeKernel.DENSE.value): 0.35 * DDR_MEM_BW,
-        ("cpu", EmbeddingComputeKernel.SPARSE.value): 0.35 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.BATCHED_DENSE.value): 0.5 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.BATCHED_FUSED.value): 1 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.BATCHED_QUANT.value): 1 * DDR_MEM_BW,
         # CUDA
-        ("cuda", EmbeddingComputeKernel.DENSE.value): 0.35 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.SPARSE.value): 0.35 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_DENSE.value): 0.5 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED.value): 1 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.BATCHED_FUSED_UVM.value): DDR_MEM_BW / 10,

@@ -43,8 +43,6 @@ class OptimType(Enum):
 
 @unique
 class EmbeddingComputeKernel(Enum):
-    DENSE = "dense"
-    SPARSE = "sparse"
     BATCHED_DENSE = "batched_dense"
     BATCHED_FUSED = "batched_fused"
     BATCHED_FUSED_UVM = "batched_fused_uvm"
@@ -144,7 +142,7 @@ class ShardedMetaConfig(ShardedConfig):
 
 @dataclass
 class EmbeddingAttributes:
-    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.DENSE
+    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.BATCHED_DENSE
 
 
 @dataclass
@@ -261,13 +259,11 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         ret = [
-            EmbeddingComputeKernel.DENSE.value,
             EmbeddingComputeKernel.BATCHED_DENSE.value,
         ]
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
-                EmbeddingComputeKernel.SPARSE.value,
             ]
             if compute_device_type in {"cuda"}:
                 ret += [

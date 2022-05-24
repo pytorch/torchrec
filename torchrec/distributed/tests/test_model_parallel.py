@@ -69,14 +69,12 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
         self,
         sharder_type: str,
@@ -110,12 +108,11 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_dp(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
@@ -146,8 +143,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
@@ -192,8 +187,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
@@ -227,8 +220,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
@@ -265,8 +256,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
@@ -312,10 +301,8 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.BATCHED_DENSE.value,
                 # TODO dp+batch_fused is numerically buggy in cpu
-                # EmbeddingComputeKernel.SPARSE.value,
                 # EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]
         ),
@@ -646,8 +633,6 @@ class ModelParallelStateDictTest(unittest.TestCase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
                 # EmbeddingComputeKernel.BATCHED_DENSE.value,
                 EmbeddingComputeKernel.BATCHED_FUSED.value,
             ]

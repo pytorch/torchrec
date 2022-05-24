@@ -97,20 +97,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
                     device=device,
                     fused_params=fused_params,
                 )
-            elif config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=False,
-                    pg=pg,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=True,
-                    pg=pg,
-                    device=device,
-                )
             else:
                 raise ValueError(
                     f"Compute kernel not supported {config.compute_kernel}"
@@ -232,20 +218,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     pg=pg,
                     device=device,
                     fused_params=fused_params,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return GroupedEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    sparse=False,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
-                return GroupedEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    sparse=True,
-                    device=device,
                 )
             else:
                 raise ValueError(

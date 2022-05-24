@@ -12,7 +12,6 @@ import torch.distributed as dist
 from torchrec.distributed.dist_data import SequenceEmbeddingAllToAll
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
-    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
