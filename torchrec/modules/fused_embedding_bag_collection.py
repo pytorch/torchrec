@@ -399,7 +399,7 @@ class FusedEmbeddingBagCollection(
             assert device is not None and device.type in [
                 "cuda",
                 "meta",
-            ], f"Using {location=} requires device=cuda or meta"
+            ], f"Using location={location} requires device=cuda or meta"
 
         if device is None:
             device = torch.device("cpu")
