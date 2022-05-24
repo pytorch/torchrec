@@ -50,6 +50,9 @@ class Storage:
     def __hash__(self) -> int:
         return hash((self.hbm, self.ddr))
 
+    def fits_in(self, other: "Storage") -> bool:
+        return self.hbm <= other.hbm and self.ddr <= other.ddr
+
 
 @dataclass
 class DeviceHardware:
