@@ -411,7 +411,7 @@ class TestEnumerators(unittest.TestCase):
             output_data_type_size = sharding_option.tensor.element_size()
 
             input_sizes, output_sizes = _calculate_dp_shard_io_sizes(
-                batch_size=self.batch_size,
+                batch_sizes=[self.batch_size] * sharding_option.num_inputs,
                 input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 num_shards=self.world_size,
@@ -464,7 +464,7 @@ class TestEnumerators(unittest.TestCase):
             output_data_type_size = sharding_option.tensor.element_size()
 
             input_sizes, output_sizes = _calculate_tw_shard_io_sizes(
-                batch_size=self.batch_size,
+                batch_sizes=[self.batch_size] * sharding_option.num_inputs,
                 world_size=self.world_size,
                 input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
