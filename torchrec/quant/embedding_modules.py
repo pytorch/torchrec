@@ -20,6 +20,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
 from torch import Tensor
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
+    data_type_to_dtype,
     data_type_to_sparse_type,
     DataType,
     dtype_to_data_type,
@@ -35,6 +36,7 @@ from torchrec.modules.embedding_modules import (
     get_embedding_names_by_table,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -71,26 +73,43 @@ def quantize_state_dict(
                 #  no attribute `weight`.
                 dtype=module.qconfig.weight().dtype,
             )
-            scale_shift = torch.empty(
-                (tensor.shape[0], 4),
-                device="meta",
-                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                #  no attribute `weight`.
-                dtype=module.qconfig.weight().dtype,
-            )
-        else:
-            if tensor.dtype == torch.float or tensor.dtype == torch.float16:
-                quant_res = (
-                    torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
-                        tensor, num_bits
-                    )
+            if (
+                data_type == DataType.INT8
+                or data_type == DataType.INT4
+                or data_type == DataType.INT2
+            ):
+                scale_shift = torch.empty(
+                    (tensor.shape[0], 4),
+                    device="meta",
+                    # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
+                    #  no attribute `weight`.
+                    dtype=module.qconfig.weight().dtype,
                 )
             else:
+                scale_shift = None
+        else:
+            if tensor.dtype == torch.float or tensor.dtype == torch.float16:
+                if tensor.dtype == torch.float16 and data_type == DataType.FP16:
+                    quant_res = tensor.view(torch.uint8)
+                else:
+                    quant_res = (
+                        torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
+                            tensor, num_bits
+                        )
+                    )
+            else:
                 raise Exception("Unsupported dtype: {tensor.dtype}")
-            quant_weight, scale_shift = (
-                quant_res[:, :-4],
-                quant_res[:, -4:],
-            )
+            if (
+                data_type == DataType.INT8
+                or data_type == DataType.INT4
+                or data_type == DataType.INT2
+            ):
+                quant_weight, scale_shift = (
+                    quant_res[:, :-4],
+                    quant_res[:, -4:],
+                )
+            else:
+                quant_weight, scale_shift = quant_res, None
         table_name_to_quantized_weights[table_name] = (quant_weight, scale_shift)
     return device
 
