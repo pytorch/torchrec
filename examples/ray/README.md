@@ -16,6 +16,12 @@ Or run locally
 torchx run -s ray -cfg working_dir=~/repos/torchrec/examples/ray,requirements=./requirements.txt dist.ddp -j 1x2 --script ~/repos/torchrec/examples/ray/train_torchrec.py
 ```
 
+To run with GPUs, add --gpus as a flag to the dist.ddp component
+For other dist.ddp options, see https://pytorch.org/torchx/latest/components/distributed.html
+```
+torchx run -s ray -cfg working_dir=~/repos/torchrec/examples/ray,requirements=./requirements.txt dist.ddp -j 1x2 --gpu 2 --script ~/repos/torchrec/examples/ray/train_torchrec.py
+```
+
 To run w/o ray scheduler (only torchx)
 For available settings https://pytorch.org/torchx/latest/cli.html?highlight=torchx%20run
 ```
