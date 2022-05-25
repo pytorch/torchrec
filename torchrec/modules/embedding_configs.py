@@ -46,7 +46,9 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
 
 
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:
-    if dtype == torch.quint8 or dtype == torch.qint8:
+    if dtype == torch.float16 or dtype == torch.half:
+        return DataType.FP16
+    elif dtype == torch.quint8 or dtype == torch.qint8 or dtype == torch.int8:
         return DataType.INT8
     elif dtype == torch.quint4x2:
         return DataType.INT4
@@ -87,6 +89,17 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
         return SparseType.INT2
     else:
         raise ValueError(f"Invalid DataType {data_type}")
+
+
+def data_type_to_dtype(data_type: DataType) -> torch.dtype:
+    if data_type == DataType.FP32:
+        return torch.float32
+    elif data_type == DataType.FP16:
+        return torch.float16
+    elif data_type == DataType.INT8:
+        return torch.int8
+    else:
+        raise ValueError(f"DataType {data_type} cannot be converted to dtype")
 
 
 @dataclass

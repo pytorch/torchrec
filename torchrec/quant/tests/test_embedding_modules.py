@@ -29,7 +29,10 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 class EmbeddingBagCollectionTest(unittest.TestCase):
     def _test_ebc(
-        self, tables: List[EmbeddingBagConfig], features: KeyedJaggedTensor
+        self,
+        tables: List[EmbeddingBagConfig],
+        features: KeyedJaggedTensor,
+        quant_type: torch.dtype = torch.qint8,
     ) -> None:
         ebc = EmbeddingBagCollection(tables=tables)
 
@@ -39,7 +42,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=torch.qint8
+                dtype=quant_type
             ),
             weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
         )
@@ -71,9 +74,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
                 DataType.FP16,
             ]
         ),
+        quant_type=st.sampled_from(
+            [
+                torch.half,
+                torch.qint8,
+            ]
+        ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_ebc(self, data_type: DataType) -> None:
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_ebc(self, data_type: DataType, quant_type: torch.dtype) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
             embedding_dim=16,
@@ -93,7 +102,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             values=torch.as_tensor([0, 1]),
             lengths=torch.as_tensor([1, 1]),
         )
-        self._test_ebc([eb1_config, eb2_config], features)
+        self._test_ebc([eb1_config, eb2_config], features, quant_type)
 
     def test_shared_tables(self) -> None:
         eb_config = EmbeddingBagConfig(
