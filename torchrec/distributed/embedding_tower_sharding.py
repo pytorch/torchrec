@@ -164,7 +164,7 @@ class ShardedEmbeddingTower(
                 intra_env,
                 device,
             )
-            # Hiearcherial DDP
+            # Hierarchical DDP
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
                 device_ids=[self._device],
@@ -172,6 +172,11 @@ class ShardedEmbeddingTower(
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
             )
+
+        # Setup output dists for quantized comms
+        self._output_dists: nn.ModuleList = (
+            self.embedding._output_dists if self.embedding else nn.ModuleList()
+        )
 
     def _create_input_dist(
         self,
@@ -551,7 +556,7 @@ class ShardedEmbeddingTowerCollection(
                     device,
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
-                # Hiearcherial DDP
+                # Hierarchical DDP
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
                     device_ids=[self._device],
@@ -561,11 +566,11 @@ class ShardedEmbeddingTowerCollection(
                     static_graph=True,
                 )
 
-        # Setup output_dist for quantized comms
-        embedding_dists = []
+        # Setup output dists for quantized comms
+        output_dists = nn.ModuleList()
         for embedding in self.embeddings.values():
-            embedding_dists.extend(embedding._input_dists)
-        self._output_dists: nn.ModuleList = nn.ModuleList(embedding_dists)
+            output_dists.extend(embedding._output_dists)
+        self._output_dists: nn.ModuleList = output_dists
 
     def _create_input_dist(
         self,
