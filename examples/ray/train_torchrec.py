@@ -124,7 +124,7 @@ def train(
             num_embeddings=num_embeddings, pin_memory=backend == "nccl"
         )
     )
-    for _ in tqdm(range(int(1e4))):
+    for _ in tqdm(range(int(1e4)), mininterval=5.0):
         train_pipeline.progress(train_iterator)
 
 
