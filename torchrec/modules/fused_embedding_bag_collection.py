@@ -275,16 +275,10 @@ def convert_optimizer_type_and_kwargs(
     if isinstance(optimizer_type, EmbOptimType):
         return (optimizer_type, optimizer_kwargs)
     if optimizer_type == torch.optim.SGD:
-        if device_type == "cuda":
-            return (
-                EmbOptimType.EXACT_SGD,
-                optimizer_kwargs,
-            )
-        else:
-            return (
-                EmbOptimType.SGD,
-                optimizer_kwargs,
-            )
+        return (
+            EmbOptimType.EXACT_SGD,
+            optimizer_kwargs,
+        )
     # TODO the below might not be perfect, will clean up
     # if optimizer_type == torch.optim.Adam:
     # return (
