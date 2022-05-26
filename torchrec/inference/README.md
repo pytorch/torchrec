@@ -127,13 +127,13 @@ The `PredictFactoryPackager` class in `model_packager.py` can be used to impleme
 implement `set_mocked_modules` to specify dependencies that should be mocked (necessary to import but not use). Read
 more about extern and mock modules in the `torch.package` documentation: https://pytorch.org/docs/stable/package.html.
 
-`/torchrec/examples/dlrm/inference/dlrm_package.py` provides an example of packaging a module for inference (`/torchrec/examples/dlrm/inference/dlrm_predict.py`).
+`/torchrec/examples/inference/dlrm_package.py` provides an example of packaging a module for inference (`/torchrec/examples/inference/dlrm_predict.py`).
 `DLRMPredictModule` is packaged for inference in the following example.
 
 ```
 git clone https://github.com/pytorch/torchrec.git
 
-cd ~/torchrec/examples/dlrm/inference/
+cd ~/torchrec/examples/inference/
 python dlrm_packager.py --output_path /tmp/model_package.zip
 ```
 
