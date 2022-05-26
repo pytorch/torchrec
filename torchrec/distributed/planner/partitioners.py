@@ -183,7 +183,7 @@ class GreedyPerfPartitioner(Partitioner):
             sorted_devices = sorted(devices, key=lambda device: device.perf)
             success = False
             for device in sorted_devices:
-                if device.storage >= shard.storage:
+                if cast(Storage, shard.storage).fits_in(device.storage):
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
                     device.perf += cast(float, shard.perf)
@@ -202,7 +202,7 @@ class GreedyPerfPartitioner(Partitioner):
             host_storage = Storage(hbm=0, ddr=0)
             for device in host_devices:
                 host_storage += device.storage
-            if host_storage < sharding_option_group.storage_sum:
+            if not sharding_option_group.storage_sum.fits_in(host_storage):
                 continue
 
             success = True
@@ -259,7 +259,7 @@ class GreedyPerfPartitioner(Partitioner):
                 )
             for i in range(len(devices)):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)
-                if storage_needed > devices[i].storage:
+                if not storage_needed.fits_in(devices[i].storage):
                     raise PlannerError(
                         f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}."
                     )
