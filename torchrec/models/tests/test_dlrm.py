@@ -9,8 +9,16 @@ import unittest
 
 import torch
 from torch.testing import FileCheck  # @manual
+from torchrec.datasets.utils import Batch
 from torchrec.fx import symbolic_trace
-from torchrec.models.dlrm import choose, DenseArch, DLRM, InteractionArch, SparseArch
+from torchrec.models.dlrm import (
+    choose,
+    DenseArch,
+    DLRM,
+    DLRMTrain,
+    InteractionArch,
+    SparseArch,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -513,3 +521,40 @@ class DLRMTest(unittest.TestCase):
 
         logits = scripted_gm(features, sparse_features)
         self.assertEqual(logits.size(), (B, 1))
+
+
+class DLRMTrainTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        B = 2
+        D = 8
+        dense_in_features = 100
+
+        eb1_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+        dlrm = DLRMTrain(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+        )
+
+        features = torch.rand((B, dense_in_features))
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f2"],
+            values=torch.tensor(range(3)),
+            offsets=torch.tensor([0, 2, 3]),
+        )
+        batch = Batch(
+            dense_features=features,
+            sparse_features=sparse_features,
+            labels=torch.randint(2, (B,)),
+        )
+
+        _, (_, logits, _) = dlrm(batch)
+        self.assertEqual(logits.size(), (B,))
