@@ -35,6 +35,7 @@
 #include <glog/logging.h>
 
 #include "torchrec/inference/Exception.h"
+#include "torchrec/inference/ResourceManager.h"
 #include "torchrec/inference/Types.h"
 
 using namespace std::chrono_literals;
@@ -65,11 +66,13 @@ size_t PredictionBatch::size() const {
 BatchingQueue::BatchingQueue(
     std::vector<BatchQueueCb> cbs,
     const Config& config,
-    int worldSize)
+    int worldSize,
+    std::shared_ptr<ResourceManager> resourceManager)
     : config_(config),
       cbs_(std::move(cbs)),
       stopping_(false),
-      worldSize_(worldSize) {
+      worldSize_(worldSize),
+      resourceManager_(std::move(resourceManager)) {
   for (const auto& [_, batchingFuncName] : config_.batchingMetadata) {
     if (batchingFuncs_.count(batchingFuncName) > 0) {
       continue;
@@ -169,7 +172,9 @@ void BatchingQueue::createBatch() {
          (std::chrono::steady_clock::now() - *startTime >=
           config_.batchingInterval))) {
       batchingQueues_[roundRobinIdx++]->blockingWrite(BatchingQueueEntry{
-          .requests = std::move(requests), .contexts = std::move(contexts)});
+          .requests = std::move(requests),
+          .contexts = std::move(contexts),
+          .addedTime = *startTime});
 
       startTime.reset();
       batchSize = 0;
@@ -254,6 +259,32 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               }
             };
 
+        if (resourceManager_ != nullptr) {
+          auto elapsed = std::chrono::steady_clock::now() - entry.addedTime;
+          auto slack = std::chrono::duration_cast<std::chrono::milliseconds>(
+              config_.queueTimeout - elapsed);
+          auto gpuFree = slack.count() > 0
+              ? resourceManager_->occupyDevice(gpuIdx, slack)
+              : false;
+
+          if (!gpuFree) {
+            // A device could not be chosen in time. Time out.
+            rejectionExecutor_->add([ctxs = std::move(contexts)]() mutable {
+              handleBatchException(
+                  ctxs, "All GPUs are busy. Batching queue timeout.");
+            });
+            continue;
+          }
+        }
+
+        // When resourceManagerGuard goes out of scope, the number of
+        // oustanding batches associated with a gpu is decremented. Should be
+        // defined before batching functions are called in case they throw
+        // an exception.
+        auto resourceManagerGuard = resourceManager_ != nullptr
+            ? std::make_unique<ResourceManagerGuard>(resourceManager_, gpuIdx)
+            : nullptr;
+
         for (auto& [featureName, batchingFuncName] : config_.batchingMetadata) {
           combineForwardArgs(batchingFuncs_[batchingFuncName]->batch(
               featureName,
@@ -264,8 +295,16 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               batchItemsLazy));
         }
 
-        auto batch = std::make_shared<PredictionBatch>(PredictionBatch{
-            combinedBatchSize, std::move(forwardArgs), std::move(contexts)});
+        // The batch is moved to the GPUExecutor, which can either
+        // throw an exception or complete the batch. Move resourceManagerGuard
+        // with the batch so when all references to the batch go to 0,
+        // num outstanding requests for the gpu decrements.
+        auto batch = std::make_shared<PredictionBatch>(
+            combinedBatchSize,
+            std::move(forwardArgs),
+            std::move(contexts),
+            std::move(resourceManagerGuard));
+
         batch->cuda();
         auto createEvent = [&]() {
           return Event(
@@ -274,6 +313,7 @@ void BatchingQueue::pinMemory(int gpuIdx) {
                   .release(),
               [](at::cuda::CUDAEvent* event) { delete event; });
         };
+
         batch->event = config_.eventCreationFn ? config_.eventCreationFn(gpuIdx)
                                                : createEvent();
         batch->event->record();
