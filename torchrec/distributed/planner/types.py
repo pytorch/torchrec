@@ -258,6 +258,9 @@ class PartitionByType(Enum):
 class ParameterConstraints:
     """
     Stores user provided constraints around the sharding plan.
+
+    If provided, `pooling_factors`, `num_objects`, and `batch_sizes` must match in
+    length, as per sample.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -266,7 +269,7 @@ class ParameterConstraints:
     caching_ratio: Optional[float] = None  # UVM caching
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
-    )  # Embedding Tables
+    )  # average number of embedding lookups required per sample
     num_objects: Optional[List[float]] = None  # number of objects per sample in batch
     batch_sizes: Optional[List[int]] = None  # batch size per input feature
 
