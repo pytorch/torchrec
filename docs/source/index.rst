@@ -38,6 +38,7 @@ TorchRec API
    torchrec.distributed.planner.rst
    torchrec.distributed.sharding.rst
    torchrec.fx.rst
+   torchrec.inference.rst
    torchrec.models.rst
    torchrec.modules.rst
    torchrec.optim.rst
