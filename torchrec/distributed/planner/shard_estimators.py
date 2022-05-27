@@ -75,6 +75,13 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 and self._constraints[sharding_option.name].batch_sizes
                 else [sharding_option.batch_size] * sharding_option.num_inputs
             )
+
+            assert (
+                len(sharding_option.input_lengths)
+                == len(num_objects)
+                == len(batch_sizes)
+            ), "Provided `pooling_factors`, `num_objects`, and `batch_sizes` constraints must match."
+
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
