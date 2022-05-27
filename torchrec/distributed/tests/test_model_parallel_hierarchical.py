@@ -15,9 +15,9 @@ from torchrec.distributed.test_utils.test_model import (
     TestTowerCollectionSparseNN,
     TestTowerSparseNN,
 )
-from torchrec.distributed.test_utils.test_model_parallel import (
+from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
+from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
-    ModelParallelTestShared,
     SharderType,
 )
 from torchrec.distributed.types import ShardingType

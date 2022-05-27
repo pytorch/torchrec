@@ -32,9 +32,9 @@ from torchrec.distributed.planner import (
     Topology,
 )
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
-from torchrec.distributed.test_utils.test_model_parallel import (
+from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
+from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
-    ModelParallelTestShared,
     SharderType,
 )
 from torchrec.distributed.types import (
@@ -82,9 +82,11 @@ class ModelParallelTest(ModelParallelTestShared):
         kernel_type: str,
     ) -> None:
         self._test_sharding(
-            # pyre-ignore[6]
             sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
+                cast(
+                    ModuleSharder[nn.Module],
+                    create_test_sharder(sharder_type, sharding_type, kernel_type),
+                ),
             ],
             backend="nccl",
         )
