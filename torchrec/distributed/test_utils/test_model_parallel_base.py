@@ -91,7 +91,7 @@ def _gen_model_and_input(
 
 
 def _copy_state_dict(
-    loc: Dict[str, Union[torch.Tensor, ShardedTensor]],
+    loc: Dict[str, torch.Tensor],
     glob: Dict[str, torch.Tensor],
 ) -> None:
     for name, tensor in loc.items():
