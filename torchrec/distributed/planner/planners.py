@@ -253,7 +253,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     proposer.feedback(partitionable=False)
 
                 proposal = proposer.propose()
-
         if best_plan:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
