@@ -13,13 +13,12 @@ import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
-from torchrec.distributed.test_utils.test_model_parallel import (
+from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
     SharderType,
-)
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelTestBase,
+    sharding_single_rank_test,
 )
 from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
@@ -32,7 +31,7 @@ from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
 @skip_if_asan_class
-class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
+class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
     """
     Testing hierarchical sharding types.
 
@@ -102,14 +101,12 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
     ) -> None:
         self._run_multi_process_test(
-            # pyre-ignore [6]
-            callable=self._test_sharding_single_rank,
+            callable=sharding_single_rank_test,
             world_size=world_size,
             local_size=local_size,
             model_class=model_class,
             tables=self.tables,
             embedding_groups=self.embedding_groups,
-            # pyre-fixme[6]
             sharders=sharders,
             optim=EmbOptimType.EXACT_SGD,
             backend=backend,
