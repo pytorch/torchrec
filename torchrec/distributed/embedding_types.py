@@ -56,6 +56,7 @@ def compute_kernel_to_embedding_location(
     compute_kernel: EmbeddingComputeKernel,
 ) -> EmbeddingLocation:
     if compute_kernel in [
+        EmbeddingComputeKernel.BATCHED_DENSE,
         EmbeddingComputeKernel.BATCHED_FUSED,
         EmbeddingComputeKernel.BATCHED_QUANT,
     ]:
