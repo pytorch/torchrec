@@ -22,11 +22,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
-from torchrec.distributed.embedding_kernel import (
-    BaseEmbedding,
-    GroupedEmbedding,
-    GroupedEmbeddingBag,
-)
+from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,

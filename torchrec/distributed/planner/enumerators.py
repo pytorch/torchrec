@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
@@ -81,6 +82,13 @@ class EmbeddingEnumerator(Enumerator):
         sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
+
+        fused_compute_kernels = [
+            EmbeddingComputeKernel.BATCHED_FUSED,
+            EmbeddingComputeKernel.BATCHED_FUSED_UVM,
+            EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
+        ]
+
         sharding_options: List[ShardingOption] = []
 
         named_modules_queue = [("", module)]
@@ -104,6 +112,14 @@ class EmbeddingEnumerator(Enumerator):
                         name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
+
+                        if sharding_type == ShardingType.DATA_PARALLEL:
+                            if compute_kernel in fused_compute_kernels:
+                                continue
+                        else:
+                            if compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
+                                continue
+
                         input_lengths = (
                             self._constraints[name].pooling_factors
                             if self._constraints and self._constraints.get(name)
