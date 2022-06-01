@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import cast, List
+from typing import cast, List, Optional
 from unittest.mock import MagicMock
 
 import torch
@@ -15,12 +15,32 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import (
     GreedyProposer,
     GridSearchProposer,
+    proposers_to_proposals_list,
     UniformProposer,
 )
-from torchrec.distributed.planner.types import ShardingOption, Topology
+from torchrec.distributed.planner.types import Proposer, ShardingOption, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
+
+
+class MockProposer(Proposer):
+    def load(
+        self,
+        search_space: List[ShardingOption],
+    ) -> None:
+        pass
+
+    def feedback(
+        self,
+        partitionable: bool,
+        plan: Optional[List[ShardingOption]] = None,
+        perf_rating: Optional[float] = None,
+    ) -> None:
+        pass
+
+    def propose(self) -> Optional[List[ShardingOption]]:
+        pass
 
 
 class TestProposers(unittest.TestCase):
@@ -274,3 +294,72 @@ class TestProposers(unittest.TestCase):
             num_proposals += 1
 
         self.assertEqual(num_pruned_options ** len(tables), num_proposals)
+
+    def test_proposers_to_proposals_list(self) -> None:
+        def make_mock_proposal(name: str) -> List[ShardingOption]:
+            return [
+                ShardingOption(
+                    name=name,
+                    tensor=torch.zeros(1),
+                    # pyre-ignore
+                    module=("model", None),
+                    upstream_modules=[],
+                    downstream_modules=[],
+                    input_lengths=[],
+                    batch_size=8,
+                    sharding_type="row_wise",
+                    partition_by="DEVICE",
+                    compute_kernel="batched_fused",
+                    shards=[],
+                )
+            ]
+
+        mock_proposer_1 = MockProposer()
+        mock_proposer_1_sharding_options = [
+            make_mock_proposal("p1so1"),
+            make_mock_proposal("p1so2"),
+            make_mock_proposal("p1so1"),
+            None,
+        ]
+        mock_proposer_1.propose = MagicMock(
+            side_effect=mock_proposer_1_sharding_options
+        )
+
+        mock_proposer_2 = MockProposer()
+        mock_proposer_2_sharding_options = [
+            make_mock_proposal("p2so1"),
+            make_mock_proposal("p2so1"),
+            make_mock_proposal("p1so2"),
+            make_mock_proposal("p2so2"),
+            None,
+        ]
+        mock_proposer_2.propose = MagicMock(
+            side_effect=mock_proposer_2_sharding_options
+        )
+
+        mock_proposer_3 = MockProposer()
+        mock_proposer_3_sharding_options = [
+            make_mock_proposal("p3so1"),
+            make_mock_proposal("p2so1"),
+            make_mock_proposal("p3so2"),
+            None,
+        ]
+        mock_proposer_3.propose = MagicMock(
+            side_effect=mock_proposer_3_sharding_options
+        )
+
+        proposers_list: List[Proposer] = [
+            mock_proposer_1,
+            mock_proposer_2,
+            mock_proposer_3,
+        ]
+
+        proposals_list = proposers_to_proposals_list(proposers_list, search_space=[])
+        proposals_list_names = []
+
+        for sharding_option in proposals_list:
+            proposals_list_names.append(sharding_option[0].name)
+
+        expected_list_names = ["p1so1", "p1so2", "p2so1", "p2so2", "p3so1", "p3so2"]
+
+        self.assertEqual(proposals_list_names, expected_list_names)

@@ -8,7 +8,7 @@
 import copy
 import itertools
 import logging
-from typing import cast, Dict, List, Optional, Tuple
+from typing import cast, Dict, List, Optional, Set, Tuple
 
 from torchrec.distributed.planner.types import Proposer, ShardingOption
 from torchrec.distributed.planner.utils import prod
@@ -269,3 +269,34 @@ def _prune_sharding_options(
                     sharding_option.sharding_type
                 ] = sharding_option.total_storage.hbm
         sorted_sharding_options_by_fqn[fqn] = pruned_sharding_options
+
+
+def proposers_to_proposals_list(
+    proposers_list: List[Proposer], search_space: List[ShardingOption]
+) -> List[List[ShardingOption]]:
+    """
+    only works for static_feedback proposers (the path of proposals to check is independent of the performance of the proposals)
+    """
+
+    proposals_list = []
+
+    proposal_cache: Set[Tuple[int, ...]] = set()
+
+    for proposer in proposers_list:
+        proposer.load(search_space=search_space)
+
+    for proposer in proposers_list:
+        proposal = proposer.propose()
+
+        while proposal:
+            proposal_key = tuple(sorted(map(hash, proposal)))
+            proposer.feedback(partitionable=True)
+            if proposal_key in proposal_cache:
+                proposal = proposer.propose()
+                continue
+
+            proposals_list.append(proposal)
+            proposal_cache.add(proposal_key)
+            proposal = proposer.propose()
+
+    return proposals_list
