@@ -11,7 +11,6 @@ import os
 from typing import cast, List, Optional
 
 import torch
-from dlrm_train import DLRMTrain
 from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from torch import distributed as dist, nn
 from torch.utils.data import DataLoader
@@ -21,6 +20,7 @@ from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.types import ModuleSharder
+from torchrec.models.dlrm import DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
