@@ -38,4 +38,5 @@ tqdm
 typing-inspect
 typing_extensions
 urllib3
+usort
 websocket-client

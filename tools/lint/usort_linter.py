@@ -8,91 +8,57 @@
 import argparse
 import concurrent.futures
 import json
-import logging
 import os
 import subprocess
-import sys
-import time
-from typing import BinaryIO, List
+from typing import List
 
-from utils import as_posix, IS_WINDOWS, LintMessage, LintSeverity
+from usort import config as usort_config, usort
 
-
-def _run_command(
-    args: List[str],
-    *,
-    stdin: BinaryIO,
-    timeout: int,
-) -> "subprocess.CompletedProcess[bytes]":
-    logging.debug("$ %s", " ".join(args))
-    start_time = time.monotonic()
-    try:
-        return subprocess.run(
-            args,
-            stdin=stdin,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=IS_WINDOWS,  # So batch scripts are found.
-            timeout=timeout,
-            check=True,
-        )
-    finally:
-        end_time = time.monotonic()
-        logging.debug("took %dms", (end_time - start_time) * 1000)
-
-
-def run_command(
-    args: List[str],
-    *,
-    stdin: BinaryIO,
-    retries: int,
-    timeout: int,
-) -> "subprocess.CompletedProcess[bytes]":
-    remaining_retries = retries
-    while True:
-        try:
-            return _run_command(args, stdin=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired as err:
-            if remaining_retries == 0:
-                raise err
-            remaining_retries -= 1
-            logging.warning(
-                "(%s/%s) Retrying because command failed with: %r",
-                retries - remaining_retries,
-                retries,
-                err,
-            )
-            time.sleep(1)
+from utils import as_posix, LintMessage, LintSeverity
 
 
 def check_file(
     filename: str,
-    retries: int,
-    timeout: int,
 ) -> List[LintMessage]:
     try:
-        with open(filename, "rb") as f:
+        top_of_file_cat = usort_config.Category("top_of_file")
+        known = usort_config.known_factory()
+        # cinder magic imports must be on top (after future imports)
+        known["__strict__"] = top_of_file_cat
+        known["__static__"] = top_of_file_cat
+
+        config = usort_config.Config(
+            categories=(
+                (
+                    usort_config.CAT_FUTURE,
+                    top_of_file_cat,
+                    usort_config.CAT_STANDARD_LIBRARY,
+                    usort_config.CAT_THIRD_PARTY,
+                    usort_config.CAT_FIRST_PARTY,
+                )
+            ),
+            known=known,
+        )
+
+        with open(filename, mode="rb") as f:
             original = f.read()
-        with open(filename, "rb") as f:
-            proc = run_command(
-                [sys.executable, "-mblack", "--stdin-filename", filename, "-"],
-                stdin=f,
-                retries=retries,
-                timeout=timeout,
-            )
+            result = usort(original, config)
+            if result.error:
+                raise result.error
+
     except subprocess.TimeoutExpired:
         return [
             LintMessage(
                 path=filename,
                 line=None,
                 char=None,
-                code="BLACK",
+                code="USORT",
                 severity=LintSeverity.ERROR,
                 name="timeout",
                 original=None,
                 replacement=None,
                 description=(
-                    "black timed out while trying to process a file. "
+                    "usort timed out while trying to process a file. "
                     "Please report an issue in pytorch/torchrec."
                 ),
             )
@@ -103,7 +69,7 @@ def check_file(
                 path=filename,
                 line=None,
                 char=None,
-                code="BLACK",
+                code="USORT",
                 severity=LintSeverity.ADVICE,
                 name="command-failed",
                 original=None,
@@ -126,7 +92,7 @@ def check_file(
             )
         ]
 
-    replacement = proc.stdout
+    replacement = result.output
     if original == replacement:
         return []
 
@@ -135,7 +101,7 @@ def check_file(
             path=filename,
             line=None,
             char=None,
-            code="BLACK",
+            code="USORT",
             severity=LintSeverity.WARNING,
             name="format",
             original=original.decode("utf-8"),
@@ -147,25 +113,8 @@ def check_file(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Format files with black.",
+        description="Format files with usort.",
         fromfile_prefix_chars="@",
-    )
-    parser.add_argument(
-        "--retries",
-        default=3,
-        type=int,
-        help="times to retry timed out black",
-    )
-    parser.add_argument(
-        "--timeout",
-        default=90,
-        type=int,
-        help="seconds to wait for black",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="verbose logging",
     )
     parser.add_argument(
         "filenames",
@@ -174,22 +123,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        format="<%(threadName)s:%(levelname)s> %(message)s",
-        level=logging.NOTSET
-        if args.verbose
-        else logging.DEBUG
-        if len(args.filenames) < 1000
-        else logging.INFO,
-        stream=sys.stderr,
-    )
-
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=os.cpu_count(),
         thread_name_prefix="Thread",
     ) as executor:
         futures = {
-            executor.submit(check_file, filename, args.retries, args.timeout): filename
+            executor.submit(check_file, filename): filename
             for filename in args.filenames
         }
         for future in concurrent.futures.as_completed(futures):
@@ -197,8 +136,7 @@ def main() -> None:
                 for lint_message in future.result():
                     print(json.dumps(lint_message._asdict()), flush=True)
             except Exception:
-                logging.critical('Failed at "%s".', futures[future])
-                raise
+                raise RuntimeError(f"Failed at {futures[future]}")
 
 
 if __name__ == "__main__":
