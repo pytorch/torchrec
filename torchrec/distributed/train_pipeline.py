@@ -99,11 +99,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
 
             with torch.no_grad():
-                # Init lazy modules if any.  An example lazy module is
-                # https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html
                 model = self._model
-                model(self._cur_batch)
-
                 # Make sure we init data parallel modules if not done yet.
                 if isinstance(model, DistributedModelParallel):
                     model.init_data_parallel()
@@ -470,10 +466,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 batch_i, self._device, non_blocking=True
             )
             with torch.no_grad():
-                # Init lazy modules if any.
                 model = self._model
-                model(self._batch_i)
-
                 if isinstance(model, DistributedModelParallel):
                     model.init_data_parallel()
 
