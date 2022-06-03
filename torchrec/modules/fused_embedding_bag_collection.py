@@ -441,6 +441,8 @@ class FusedEmbeddingBagCollection(
             self._emb_modules.append(emb_module)
             params: Dict[str, torch.Tensor] = {}
             for param_key, weight in emb_module.fused_optimizer.params.items():
+                # pyre-fixme[6]: For 2nd param expected `Tensor` but got
+                #  `Union[Tensor, ShardedTensor]`.
                 params[f"embedding_bags.{param_key}"] = weight
                 optims.append(("", emb_module.fused_optimizer))
 
