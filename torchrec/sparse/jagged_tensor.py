@@ -942,14 +942,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         permuted_keys: List[str] = []
         permuted_length_per_key: List[int] = []
         permuted_lengths_sum = 0
-        seen: Dict[str, int] = {}
         for index in indices:
             key = self._keys[index]
-            count = seen.get(key, 0)
             permuted_keys.append(key)
             permuted_lengths_sum += length_per_key[index]
             permuted_length_per_key.append(length_per_key[index])
-            seen[key] = count + 1
         (
             permuted_lengths,
             permuted_values,
