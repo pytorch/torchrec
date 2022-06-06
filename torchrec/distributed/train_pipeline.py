@@ -92,6 +92,8 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._cur_batch: Optional[In] = None
         self._connected = False
 
+        print("HELLO I WILL BE USING AUTOCAST!!!!")
+
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
         self._cur_batch = cur_batch
@@ -128,11 +130,14 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             _wait_for_batch(cur_batch, self._memcpy_stream)
 
         with record_function("## forward ##"):
-            (losses, output) = self._model(cur_batch)
+            with torch.autocast(device_type="cuda"):
+                (losses, output) = self._model(cur_batch)
 
         if self._model.training:
             with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
+                with torch.autocast(device_type="cuda"):
+                    loss = torch.sum(losses, dim=0)
+                loss.backward()
 
         # Copy the next batch to GPU
         self._cur_batch = cur_batch = next_batch
