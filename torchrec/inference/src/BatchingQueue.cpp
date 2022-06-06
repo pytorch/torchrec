@@ -35,6 +35,7 @@
 #include <glog/logging.h>
 
 #include "torchrec/inference/Exception.h"
+#include "torchrec/inference/Observer.h"
 #include "torchrec/inference/ResourceManager.h"
 #include "torchrec/inference/Types.h"
 
@@ -46,6 +47,14 @@ DEFINE_bool(
     "Use high priority CUDA stream in batching");
 
 namespace torchrec {
+
+namespace {
+std::chrono::milliseconds getTimeElapsedMS(
+    std::chrono::steady_clock::time_point startTime) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+}
+} // namespace
 
 void PredictionBatch::cuda() {
   for (auto& iter : forwardArgs) {
@@ -67,12 +76,15 @@ BatchingQueue::BatchingQueue(
     std::vector<BatchQueueCb> cbs,
     const Config& config,
     int worldSize,
+    std::unique_ptr<IBatchingQueueObserver> observer,
     std::shared_ptr<ResourceManager> resourceManager)
     : config_(config),
       cbs_(std::move(cbs)),
       stopping_(false),
       worldSize_(worldSize),
+      observer_(std::move(observer)),
       resourceManager_(std::move(resourceManager)) {
+  CHECK(observer_ != nullptr);
   for (const auto& [_, batchingFuncName] : config_.batchingMetadata) {
     if (batchingFuncs_.count(batchingFuncName) > 0) {
       continue;
@@ -140,9 +152,9 @@ void BatchingQueue::createBatch() {
     requestQueue_.withWLock([&](auto& queue) {
       while (!queue.empty()) {
         auto& front = queue.front();
-
         if (std::chrono::steady_clock::now() - front.addedTime >=
             config_.queueTimeout) {
+          observer_->addBatchingQueueTimeoutCount(1);
           rejectionExecutor_->add(
               [promise = std::move(front.context.promise)]() mutable {
                 handleRequestException(promise, "Batching queue timeout");
@@ -175,6 +187,10 @@ void BatchingQueue::createBatch() {
           .requests = std::move(requests),
           .contexts = std::move(contexts),
           .addedTime = *startTime});
+
+      observer_->addRequestsCount(requests.size());
+      observer_->recordBatchCreationLatency(
+          getTimeElapsedMS(*startTime).count());
 
       startTime.reset();
       batchSize = 0;
@@ -259,8 +275,11 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               }
             };
 
+        auto elapsed = getTimeElapsedMS(entry.addedTime);
+
+        observer_->recordBatchingQueueLatency(elapsed.count());
+
         if (resourceManager_ != nullptr) {
-          auto elapsed = std::chrono::steady_clock::now() - entry.addedTime;
           auto slack = std::chrono::duration_cast<std::chrono::milliseconds>(
               config_.queueTimeout - elapsed);
           auto gpuFree = slack.count() > 0
@@ -269,6 +288,7 @@ void BatchingQueue::pinMemory(int gpuIdx) {
 
           if (!gpuFree) {
             // A device could not be chosen in time. Time out.
+            observer_->addGPUBusyCount(1);
             rejectionExecutor_->add([ctxs = std::move(contexts)]() mutable {
               handleBatchException(
                   ctxs, "All GPUs are busy. Batching queue timeout.");
@@ -286,6 +306,7 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             : nullptr;
 
         for (auto& [featureName, batchingFuncName] : config_.batchingMetadata) {
+          const auto batchingFuncStart = std::chrono::steady_clock::now();
           combineForwardArgs(batchingFuncs_[batchingFuncName]->batch(
               featureName,
               requests,
@@ -293,6 +314,8 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               batchOffsetsLazy,
               c10::Device(c10::kCUDA, gpuIdx),
               batchItemsLazy));
+          observer_->recordBatchingFuncLatency(
+              getTimeElapsedMS(batchingFuncStart).count(), batchingFuncName);
         }
 
         // The batch is moved to the GPUExecutor, which can either
@@ -317,6 +340,9 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         batch->event = config_.eventCreationFn ? config_.eventCreationFn(gpuIdx)
                                                : createEvent();
         batch->event->record();
+
+        observer_->observeBatchCompletion(batch->size(), batch->batchSize);
+
         cbs_[gpuIdx](batch);
       }
     } catch (const std::exception& ex) {
