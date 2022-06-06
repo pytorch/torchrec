@@ -29,6 +29,7 @@
 #include <folly/io/async/EventBaseThread.h>
 #include <folly/synchronization/Baton.h>
 #include "torchrec/inference/Batching.h"
+#include "torchrec/inference/Observer.h"
 #include "torchrec/inference/ResourceManager.h"
 #include "torchrec/inference/Types.h"
 
@@ -92,6 +93,7 @@ class BatchingQueue {
       std::vector<BatchQueueCb> cbs,
       const Config& config,
       int worldSize,
+      std::unique_ptr<IBatchingQueueObserver> observer,
       std::shared_ptr<ResourceManager> resourceManager = nullptr);
   ~BatchingQueue();
 
@@ -118,6 +120,8 @@ class BatchingQueue {
 
   void pinMemory(int gpuIdx);
 
+  void observeBatchCompletion(size_t batchSizeBytes, size_t numRequests);
+
   const Config config_;
 
   // Batching func name to batching func instance.
@@ -132,6 +136,7 @@ class BatchingQueue {
       batchingQueues_;
   std::atomic<bool> stopping_;
   int worldSize_;
+  std::unique_ptr<IBatchingQueueObserver> observer_;
   std::shared_ptr<ResourceManager> resourceManager_;
 };
 

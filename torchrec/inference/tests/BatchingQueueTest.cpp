@@ -7,6 +7,7 @@
  */
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/Observer.h"
 
 #include <memory>
 #include <thread>
@@ -54,10 +55,13 @@ TEST(BatchingQueueTest, Basic) {
   std::vector<BatchQueueCb> batchQueueCbs;
   batchQueueCbs.push_back(
       [&](std::shared_ptr<PredictionBatch> batch) { res = batch; });
+  std::unique_ptr<IBatchingQueueObserver> batchingQueueObserver =
+      std::make_unique<EmptyBatchingQueueObserver>();
   BatchingQueue queue(
       batchQueueCbs,
       BatchingQueue::Config{.batchingMetadata = {{"float_features", "dense"}}},
-      /* worldSize */ 1);
+      /* worldSize */ 1,
+      std::move(batchingQueueObserver));
 
   queue.add(
       createRequest(2, 2),
