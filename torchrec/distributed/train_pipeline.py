@@ -97,17 +97,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._cur_batch = cur_batch
         with torch.cuda.stream(self._memcpy_stream):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
-
-            with torch.no_grad():
-                # Init lazy modules if any.  An example lazy module is
-                # https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html
-                model = self._model
-                model(self._cur_batch)
-
-                # Make sure we init data parallel modules if not done yet.
-                if isinstance(model, DistributedModelParallel):
-                    model.init_data_parallel()
-
         self._connected = True
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
@@ -469,18 +458,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._batch_i = batch_i = _to_device(
                 batch_i, self._device, non_blocking=True
             )
-            with torch.no_grad():
-                # Init lazy modules if any.
-                model = self._model
-                model(self._batch_i)
-
-                if isinstance(model, DistributedModelParallel):
-                    model.init_data_parallel()
-
-                # Try to pipeline input data dist.
-                self._pipelined_modules = _rewrite_model(
-                    model, self._context, self._data_dist_stream
-                )
+            # Try to pipeline input data dist.
+            self._pipelined_modules = _rewrite_model(
+                self._model, self._context, self._data_dist_stream
+            )
 
         with torch.cuda.stream(self._data_dist_stream):
             _wait_for_batch(batch_i, self._memcpy_stream)
