@@ -15,7 +15,7 @@ import torch.fx
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.fused_embedding_bag_collection import (
+from torchrec.modules.fused_embedding_modules import (
     fuse_optimizer,
     FusedEmbeddingBagCollection,
 )
