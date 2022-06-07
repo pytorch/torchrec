@@ -632,7 +632,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
     the entire dataset into memory to prevent disk speed from affecting throughout. Each
     rank reads only the data for the portion of the dataset it is responsible for.
 
-    The torchrec/datasets/scripts/preprocess_criteo.py script can be used to convert
+    The torchrec/datasets/scripts/npy_preproc_criteo.py script can be used to convert
     the Criteo tsv files to the npy files expected by this dataset.
 
     Args:
