@@ -199,10 +199,11 @@ class BinaryCriteoUtils:
         """
 
         def row_mapper(row: List[str]) -> Tuple[List[int], List[int], int]:
-            label = safe_cast(row[0], int, 0)
-            dense = [safe_cast(row[i], int, 0) for i in range(1, 1 + INT_FEATURE_COUNT)]
+            # Missing values are mapped to zero for both dense and sparse features
+            label = int(row[0] or "0")
+            dense = [int(row[i] or "0") for i in range(1, 1 + INT_FEATURE_COUNT)]
             sparse = [
-                int(safe_cast(row[i], str, "0") or "0", 16)
+                int(row[i] or "0", 16)
                 for i in range(
                     1 + INT_FEATURE_COUNT, 1 + INT_FEATURE_COUNT + CAT_FEATURE_COUNT
                 )
