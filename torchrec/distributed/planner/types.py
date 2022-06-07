@@ -262,7 +262,7 @@ class ParameterConstraints:
     """
     Stores user provided constraints around the sharding plan.
 
-    If provided, `pooling_factors`, `num_objects`, and `batch_sizes` must match in
+    If provided, `pooling_factors`, `num_poolings`, and `batch_sizes` must match in
     length, as per sample.
     """
 
@@ -273,7 +273,7 @@ class ParameterConstraints:
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
     )  # average number of embedding lookups required per sample
-    num_objects: Optional[List[float]] = None  # number of objects per sample in batch
+    num_poolings: Optional[List[float]] = None  # number of poolings per sample in batch
     batch_sizes: Optional[List[int]] = None  # batch size per input feature
 
 
