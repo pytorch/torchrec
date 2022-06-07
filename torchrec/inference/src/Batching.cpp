@@ -18,6 +18,17 @@
 
 namespace torchrec {
 
+std::unordered_map<std::string, at::Tensor> moveToDevice(
+    std::unordered_map<std::string, at::Tensor> combined,
+    const c10::Device& device) {
+  for (auto& [k, v] : combined) {
+    if (v.device() != device) {
+      v = v.to(device, /* non_blocking */ true);
+    }
+  }
+  return combined;
+}
+
 C10_DEFINE_REGISTRY(TorchRecBatchingFuncRegistry, BatchingFunc);
 
 std::unordered_map<std::string, at::Tensor> combineFloat(
@@ -266,9 +277,9 @@ class FloatBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       LazyTensorRef /* batchOffsets */,
-      const c10::Device& /* device */,
+      const c10::Device& device,
       LazyTensorRef /* batchItems */) override {
-    return combineFloat(featureName, requests);
+    return moveToDevice(combineFloat(featureName, requests), device);
   }
 };
 
@@ -279,9 +290,10 @@ class SparseBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       LazyTensorRef /* batchOffsets */,
-      const c10::Device& /* device */,
+      const c10::Device& device,
       LazyTensorRef /* batchItems */) override {
-    return combineSparse(featureName, requests, /* isWeighted */ false);
+    return moveToDevice(
+        combineSparse(featureName, requests, /* isWeighted */ false), device);
   }
 };
 
@@ -292,9 +304,10 @@ class WeightedSparseBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       LazyTensorRef /* batchOffsets */,
-      const c10::Device& /* device */,
+      const c10::Device& device,
       LazyTensorRef /* batchItems */) override {
-    return combineSparse(featureName, requests, /* isWeighted */ true);
+    return moveToDevice(
+        combineSparse(featureName, requests, /* isWeighted */ true), device);
   }
 };
 
@@ -305,9 +318,9 @@ class EmbeddingBatchingFunc : public BatchingFunc {
       const std::vector<std::shared_ptr<PredictionRequest>>& requests,
       const int64_t& /* totalNumBatch */,
       LazyTensorRef /* batchOffsets */,
-      const c10::Device& /* device */,
+      const c10::Device& device,
       LazyTensorRef /* batchItems */) override {
-    return combineEmbedding(featureName, requests);
+    return moveToDevice(combineEmbedding(featureName, requests), device);
   }
 };
 

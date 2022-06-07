@@ -65,4 +65,9 @@ using PredictionException = std::runtime_error;
 using Event = std::
     unique_ptr<at::cuda::CUDAEvent, std::function<void(at::cuda::CUDAEvent*)>>;
 
+struct BatchingMetadata {
+  std::string type;
+  std::string device;
+};
+
 } // namespace torchrec

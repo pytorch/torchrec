@@ -6,6 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import json
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Type
 
 import torch
@@ -45,6 +47,17 @@ def quantize_embeddings(
     )
 
 
+@dataclass
+class BatchingMetadata:
+    """
+    Metadata class for batching, this should be kept in sync with the C++ definition.
+    """
+
+    type: str
+    # cpu or cuda
+    device: str
+
+
 class PredictFactory(abc.ABC):
     """
     Creates a model (with already learned weights) to be used inference time.
@@ -61,11 +74,19 @@ class PredictFactory(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def batching_metadata(self) -> Dict[str, str]:
+    def batching_metadata(self) -> Dict[str, BatchingMetadata]:
         """
-        Returns a dict from input name to feature type. This infomation is used for batching.
+        Returns a dict from input name to BatchingMetadata. This infomation is used for batching for input requests.
         """
         pass
+
+    def batching_metadata_json(self) -> str:
+        """
+        Serialize the batching metadata to JSON, for ease of parsing with torch::deploy environments.
+        """
+        return json.dumps(
+            {key: asdict(value) for key, value in self.batching_metadata().items()}
+        )
 
     @abc.abstractmethod
     def result_metadata(self) -> str:

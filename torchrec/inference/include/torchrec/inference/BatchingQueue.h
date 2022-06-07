@@ -65,8 +65,6 @@ struct PredictionBatch : public boost::noncopyable {
         contexts(std::move(ctxs)),
         resourceManagerGuard(std::move(rmg)) {}
 
-  void cuda();
-
   size_t size() const;
 };
 
@@ -81,7 +79,7 @@ class BatchingQueue {
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
-    const std::unordered_map<std::string, std::string> batchingMetadata;
+    const std::unordered_map<std::string, BatchingMetadata> batchingMetadata;
     std::function<Event(at::DeviceIndex)> eventCreationFn;
     std::function<void()> warmupFn;
   };
@@ -125,8 +123,7 @@ class BatchingQueue {
   const Config config_;
 
   // Batching func name to batching func instance.
-  std::unordered_map<std::string, std::unique_ptr<torchrec::BatchingFunc>>
-      batchingFuncs_;
+  std::unordered_map<std::string, std::unique_ptr<BatchingFunc>> batchingFuncs_;
   std::vector<BatchQueueCb> cbs_;
   std::thread batchingThread_;
   std::vector<std::thread> memPinnerThreads_;
