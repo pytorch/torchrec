@@ -45,6 +45,8 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
     Bucketizes sparse features in TWRW fashion and then redistributes with an AlltoAll
     collective operation.
 
+    Supports variable batch size.
+
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
@@ -54,7 +56,8 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
         id_score_list_features_per_rank (List[int]): number of id score list features to
             send to each rank
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
-        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
+        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list
+            features.
         device (Optional[torch.device]): device on which buffers will be allocated.
         has_feature_processor (bool): existence of feature processor (ie. position
             weighted features).
@@ -173,7 +176,7 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
         performs staggered shuffle on the sparse features, and then performs AlltoAll
         operation.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to bucketize and
                 redistribute.
 
@@ -211,8 +214,8 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
 
     def _staggered_shuffle(self, features_per_rank: List[int]) -> List[int]:
         """
-        Reorders sparse data such that data is in contiguous blocks and correctly ordered
-        for global TWRW layout.
+        Reorders sparse data such that data is in contiguous blocks and correctly
+        ordered for global TWRW layout.
         """
 
         nodes = self._world_size // self._local_size
@@ -303,7 +306,8 @@ class VariableBatchTwRwPooledEmbeddingDist(
         self, local_size: int, nodes: int, batch_size_per_rank: List[int]
     ) -> Tuple[List[List[int]], List[int]]:
         """
-        Reorder batch_size_per_rank so it's aligned with reordered features after all2all
+        Reorders `batch_size_per_rank` so it's aligned with reordered features after
+        AlltoAll.
         """
         batch_size_per_rank_by_cross_group: List[List[int]] = []
         batch_size_sum_by_cross_group: List[int] = []
@@ -326,6 +330,8 @@ class VariableBatchTwRwPooledEmbeddingSharding(
 ):
     """
     Shards embedding bags table-wise then row-wise.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(

@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -30,12 +30,10 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    ParameterSharding,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable
 
 
@@ -45,7 +43,7 @@ T = TypeVar("T")
 
 class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
     """
-    base class for row-wise sharding
+    Base class for row-wise sharding.
     """
 
     def __init__(
@@ -200,18 +198,18 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     collective operation.
 
     Args:
-
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-        communication.
+            communication.
         num_id_list_features (int): total number of id list features.
         num_id_score_list_features (int): total number of id score list features
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
-        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
+        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list
+            features.
         device (Optional[torch.device]): device on which buffers will be allocated.
         is_sequence (bool): if this is for a sequence embedding.
         has_feature_processor (bool): existence of feature processor (ie. position
-        weighted features).
+            weighted features).
 
     """
 
@@ -270,7 +268,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         sparse_features: SparseFeatures,
     ) -> Awaitable[Awaitable[SparseFeatures]]:
         """
-        Bucketizes sparse feature values into  world size number of buckets, and then
+        Bucketizes sparse feature values into world size number of buckets and then
         performs AlltoAll operation.
 
         Args:

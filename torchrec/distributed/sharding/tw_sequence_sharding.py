@@ -43,7 +43,7 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
 
     Args:
         device (torch.device): device on which the tensors will be communicated to.
-        world_size (int): how many devices we are communicating with.
+        world_size (int): number of devices in the topology.
     """
 
     def __init__(
@@ -62,7 +62,7 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
         """
         Performs AlltoOne operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToOne
                 operation.
             local_embs (torch.Tensor): tensor of values to distribute.
@@ -75,13 +75,12 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
 
 class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
-    Redistributes sequence embedding tensor in TW fashion with an AlltoAll
-    operation.
+    Redistributes sequence embedding tensor in TW fashion with an AlltoAll operation.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         features_per_rank (List[int]): number of features (sum of dimensions) of the
-            embedding for each host.
+            embedding for each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
     """
 
@@ -103,10 +102,10 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         """
         Performs AlltoAll operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
+            local_embs (torch.Tensor): tensor of values to distribute.
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
                 operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
@@ -125,8 +124,8 @@ class TwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards sequence (unpooled) table-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank.
+    Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
+    placed entirely on a selected rank.
     """
 
     def create_input_dist(
@@ -169,8 +168,8 @@ class InferTwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
 ):
     """
-    Shards sequence (unpooled) table-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank, for inference.
+    Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
+    placed entirely on a selected rank, for inference.
     """
 
     def create_input_dist(

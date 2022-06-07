@@ -34,7 +34,7 @@ T = TypeVar("T")
 
 class BaseDpEmbeddingSharding(EmbeddingSharding[F, T]):
     """
-    base class for data-parallel sharding
+    Base class for data-parallel sharding.
     """
 
     def __init__(
@@ -152,11 +152,11 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         """
         No-op as sparse features are already distributed in data-parallel fashion.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): input sparse features.
 
         Returns:
-            Awaitable[Awaitable[SparseFeatures]]: wait twice to get sparse features.
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
         return NoWait(cast(Awaitable[SparseFeatures], NoWait(sparse_features)))
@@ -174,7 +174,7 @@ class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         """
         No-op as pooled embeddings are already distributed in data-parallel fashion.
 
-        Call Args:
+        Args:
             local_embs (torch.Tensor): output sequence embeddings.
 
         Returns:
@@ -186,8 +186,8 @@ class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
 
 class DpPooledEmbeddingSharding(BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
-    Shards embedding bags using data-parallel, with no table sharding i.e.. a given
-    embedding table is replicated across all ranks.
+    Shards embedding bags data-parallel, with no table sharding i.e.. a given embedding
+    table is replicated across all ranks.
     """
 
     def create_input_dist(

@@ -44,7 +44,7 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         """
         No-op as sequence embeddings are already distributed in data-parallel fashion.
 
-        Call Args:
+        Args:
             local_embs (torch.Tensor): output sequence embeddings.
 
         Returns:
@@ -58,8 +58,8 @@ class DpSequenceEmbeddingSharding(
     BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards sequence (unpooled) embedding using data-parallel, with no table sharding i.e.. a given
-    embedding table is replicated across all ranks.
+    Shards sequence (unpooled) embedding data-parallel, with no table sharding i.e.. a
+    given embedding table is replicated across all ranks.
     """
 
     def create_input_dist(

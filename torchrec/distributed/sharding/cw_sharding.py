@@ -30,13 +30,7 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwPooledEmbeddingDist,
     TwSparseFeaturesDist,
 )
-from torchrec.distributed.types import (
-    ParameterSharding,
-    ShardedTensorMetadata,
-    ShardingEnv,
-    ShardMetadata,
-)
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.distributed.types import ShardedTensorMetadata, ShardingEnv, ShardMetadata
 from torchrec.streamable import Multistreamable
 
 F = TypeVar("F", bound=Multistreamable)
@@ -45,7 +39,7 @@ T = TypeVar("T")
 
 class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
     """
-    base class for column-wise sharding
+    Base class for column-wise sharding.
     """
 
     def __init__(
@@ -189,8 +183,8 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
 
 class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]):
     """
-    Shards embedding bags column-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank.
+    Shards embedding bags column-wise, i.e.. a given embedding table is partitioned
+    along its columns and placed on specified ranks.
     """
 
     def create_input_dist(
