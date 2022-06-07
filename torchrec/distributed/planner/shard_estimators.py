@@ -61,11 +61,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 if self._constraints and self._constraints.get(sharding_option.name)
                 else None
             )
-            num_objects = (
-                cast(List[float], self._constraints[sharding_option.name].num_objects)
+            num_poolings = (
+                cast(List[float], self._constraints[sharding_option.name].num_poolings)
                 if self._constraints
                 and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].num_objects
+                and self._constraints[sharding_option.name].num_poolings
                 else [1.0] * sharding_option.num_inputs
             )
             batch_sizes = (
@@ -78,9 +78,9 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
             assert (
                 len(sharding_option.input_lengths)
-                == len(num_objects)
+                == len(num_poolings)
                 == len(batch_sizes)
-            ), "Provided `pooling_factors`, `num_objects`, and `batch_sizes` constraints must match."
+            ), "Provided `pooling_factors`, `num_poolings`, and `batch_sizes` constraints must match."
 
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
@@ -93,7 +93,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 input_lengths=sharding_option.input_lengths,
                 input_data_type_size=BIGINT_DTYPE,
                 output_data_type_size=sharding_option.tensor.element_size(),
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 bw_intra_host=getattr(
                     self._topology, "intra_host_bw", INTRA_NODE_BANDWIDTH
                 ),
@@ -125,7 +125,7 @@ def perf_func_emb_wall_time(
     input_lengths: List[float],
     input_data_type_size: float,
     output_data_type_size: float,
-    num_objects: List[float],
+    num_poolings: List[float],
     bw_intra_host: float,
     bw_inter_host: float,
     is_pooled: bool,
@@ -151,7 +151,7 @@ def perf_func_emb_wall_time(
             data_parallel input.
         output_data_type_size (float): the data type size of the distributed
             data_parallel output.
-        num_objects (List[float]): number of objects per sample, typically 1.0.
+        num_poolings (List[float]): number of poolings per sample, typically 1.0.
         bw_intra_host (float): the bandwidth within a single host like multiple threads.
         bw_inter_host (float): the bandwidth between two hosts like multiple machines.
         is_pooled (bool): True if embedding output is pooled (ie. EmbeddingBag), False
@@ -187,7 +187,7 @@ def perf_func_emb_wall_time(
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 device_bw=device_bw,
                 bw_inter_host=bw_inter_host,
                 bw_intra_host=bw_intra_host,
@@ -204,7 +204,7 @@ def perf_func_emb_wall_time(
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 device_bw=device_bw,
                 bw_inter_host=bw_inter_host,
                 bw_intra_host=bw_intra_host,
@@ -221,7 +221,7 @@ def perf_func_emb_wall_time(
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 device_bw=device_bw,
                 bw_inter_host=bw_inter_host,
                 bw_intra_host=bw_intra_host,
@@ -239,7 +239,7 @@ def perf_func_emb_wall_time(
                 emb_dim=emb_dim,
                 input_data_type_size=output_data_type_size,
                 output_data_type_size=output_data_type_size,
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 device_bw=device_bw,
                 bw_inter_host=bw_inter_host,
                 is_pooled=is_pooled,
@@ -263,7 +263,7 @@ def _get_tw_sharding_perf(
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
-    num_objects: List[float],
+    num_poolings: List[float],
     device_bw: float,
     bw_inter_host: float,
     bw_intra_host: float,
@@ -272,10 +272,10 @@ def _get_tw_sharding_perf(
     has_feature_processor: bool = False,
 ) -> float:
     batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)]
+        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -338,7 +338,7 @@ def _get_rw_sharding_perf(
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
-    num_objects: List[float],
+    num_poolings: List[float],
     device_bw: float,
     bw_inter_host: float,
     bw_intra_host: float,
@@ -347,11 +347,11 @@ def _get_rw_sharding_perf(
     has_feature_processor: bool = False,
 ) -> float:
     batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)])
+        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / world_size
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -401,7 +401,7 @@ def _get_twrw_sharding_perf(
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
-    num_objects: List[float],
+    num_poolings: List[float],
     device_bw: float,
     bw_inter_host: float,
     bw_intra_host: float,
@@ -410,11 +410,11 @@ def _get_twrw_sharding_perf(
     has_feature_processor: bool = False,
 ) -> float:
     batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)])
+        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / local_world_size
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -467,7 +467,7 @@ def _get_dp_sharding_perf(
     emb_dim: int,
     input_data_type_size: float,
     output_data_type_size: float,
-    num_objects: List[float],
+    num_poolings: List[float],
     device_bw: float,
     bw_inter_host: float,
     is_pooled: bool,
@@ -475,10 +475,10 @@ def _get_dp_sharding_perf(
     has_feature_processor: bool = False,
 ) -> float:
     batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)]
+        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -558,14 +558,14 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 if self._constraints and self._constraints.get(sharding_option.name)
                 else None
             )
-            num_objects = (
-                cast(List[float], self._constraints[sharding_option.name].num_objects)
+            num_poolings = (
+                cast(List[float], self._constraints[sharding_option.name].num_poolings)
                 if self._constraints
                 and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].num_objects
+                and self._constraints[sharding_option.name].num_poolings
                 else [1.0] * sharding_option.num_inputs
             )
-            assert len(num_objects) == sharding_option.num_inputs
+            assert len(num_poolings) == sharding_option.num_inputs
             batch_sizes = (
                 cast(List[int], self._constraints[sharding_option.name].batch_sizes)
                 if self._constraints
@@ -585,7 +585,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 world_size=self._topology.world_size,
                 local_world_size=self._topology.local_world_size,
                 input_lengths=sharding_option.input_lengths,
-                num_objects=num_objects,
+                num_poolings=num_poolings,
                 caching_ratio=caching_ratio if caching_ratio else UVM_CACHING_RATIO,
                 is_pooled=sharding_option.is_pooled,
             )
@@ -605,7 +605,7 @@ def calculate_shard_storages(
     world_size: int,
     local_world_size: int,
     input_lengths: List[float],
-    num_objects: List[float],
+    num_poolings: List[float],
     caching_ratio: float,
     is_pooled: bool,
 ) -> List[Storage]:
@@ -625,7 +625,8 @@ def calculate_shard_storages(
         local_world_size (int): total number of devices in host group topology.
         input_lengths (List[float]): average input lengths synonymous with pooling
             factors.
-        num_objects (List[float]): average number of objects per sample (typically 1.0)
+        num_poolings (List[float]): average number of poolings per sample
+            (typically 1.0).
         caching_ratio (float): ratio of HBM to DDR memory for UVM caching.
         is_pooled (bool): True if embedding output is pooled (ie. EmbeddingBag), False
             if unpooled/sequential (ie. Embedding).
@@ -647,7 +648,7 @@ def calculate_shard_storages(
         shard_sizes=shard_sizes,
         input_data_type_size=input_data_type_size,
         output_data_type_size=output_data_type_size,
-        num_objects=num_objects,
+        num_poolings=num_poolings,
         is_pooled=is_pooled,
     )
 
@@ -714,7 +715,7 @@ def _calculate_shard_io_sizes(
     shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     if sharding_type == ShardingType.DATA_PARALLEL.value:
@@ -725,7 +726,7 @@ def _calculate_shard_io_sizes(
             num_shards=len(shard_sizes),
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
-            num_objects=num_objects,
+            num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
     elif sharding_type == ShardingType.TABLE_WISE.value:
@@ -736,7 +737,7 @@ def _calculate_shard_io_sizes(
             emb_dim=emb_dim,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
-            num_objects=num_objects,
+            num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
     elif sharding_type in {
@@ -750,7 +751,7 @@ def _calculate_shard_io_sizes(
             shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
-            num_objects=num_objects,
+            num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
@@ -761,7 +762,7 @@ def _calculate_shard_io_sizes(
             shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
-            num_objects=num_objects,
+            num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
@@ -773,7 +774,7 @@ def _calculate_shard_io_sizes(
             shard_sizes=shard_sizes,
             input_data_type_size=input_data_type_size,
             output_data_type_size=output_data_type_size,
-            num_objects=num_objects,
+            num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
     else:
@@ -789,14 +790,14 @@ def _calculate_dp_shard_io_sizes(
     num_shards: int,
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)]
+        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -816,14 +817,14 @@ def _calculate_tw_shard_io_sizes(
     emb_dim: int,
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)]
+        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -843,14 +844,14 @@ def _calculate_cw_shard_io_sizes(
     shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)]
+        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -875,15 +876,15 @@ def _calculate_rw_shard_io_sizes(
     shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)])
+        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / world_size
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )
@@ -914,15 +915,15 @@ def _calculate_twrw_shard_io_sizes(
     shard_sizes: List[List[int]],
     input_data_type_size: int,
     output_data_type_size: int,
-    num_objects: List[float],
+    num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
     batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_objects, batch_sizes)])
+        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / local_world_size
     )
     batch_outputs = (
-        sum([x * y for x, y in zip(num_objects, batch_sizes)])
+        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
         if is_pooled
         else batch_inputs
     )

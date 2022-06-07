@@ -418,7 +418,7 @@ class TestEnumerators(unittest.TestCase):
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 is_pooled=sharding_option.is_pooled,
-                num_objects=[1.0] * sharding_option.num_inputs,
+                num_poolings=[1.0] * sharding_option.num_inputs,
             )
 
             tensor_sizes = [
@@ -471,7 +471,7 @@ class TestEnumerators(unittest.TestCase):
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 is_pooled=sharding_option.is_pooled,
-                num_objects=[1.0] * sharding_option.num_inputs,
+                num_poolings=[1.0] * sharding_option.num_inputs,
             )
 
             tensor_size = (
