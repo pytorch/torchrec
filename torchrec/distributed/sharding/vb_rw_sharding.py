@@ -38,7 +38,8 @@ class VariableBatchRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
     Bucketizes sparse features in RW fashion and then redistributes with an AlltoAll
     collective operation.
-    Support variable batch size
+
+    Supports variable batch size.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
@@ -108,10 +109,10 @@ class VariableBatchRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         sparse_features: SparseFeatures,
     ) -> Awaitable[Awaitable[SparseFeatures]]:
         """
-        Bucketizes sparse feature values into  world size number of buckets, and then
+        Bucketizes sparse feature values into world size number of buckets, and then
         performs AlltoAll operation.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to bucketize and
                 redistribute.
 
@@ -200,9 +201,10 @@ class VariableBatchRwPooledEmbeddingSharding(
     BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards pooled embeddings row-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank.
-    Support Variable batch size.
+    Shards pooled embeddings row-wise, i.e.. a given embedding table is evenly
+    distributed by rows and table slices are placed on all ranks.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(

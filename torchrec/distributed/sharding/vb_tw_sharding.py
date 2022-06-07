@@ -32,7 +32,8 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
     Redistributes sparse features in TW fashion with an AlltoAll collective
     operation.
-    Support variable batch size in each rank.
+
+    Supports variable batch size.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
@@ -67,12 +68,11 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         """
         Performs AlltoAll operation on sparse features.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to redistribute.
 
         Returns:
-            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
-                SparseFeatures.
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
         return self._dist(sparse_features)
@@ -104,7 +104,8 @@ class VariableBatchTwPooledEmbeddingSharding(
     """
     Shards pooled embeddings table-wise, i.e.. a given embedding table is entirely placed
     on a selected rank.
-    Support Variable batch size.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(

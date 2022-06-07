@@ -48,7 +48,7 @@ T = TypeVar("T")
 
 class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
     """
-    base class for table-wise sharding
+    Base class for table wise sharding.
     """
 
     def __init__(
@@ -222,15 +222,15 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
 
 class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
-    Redistributes sparse features in TW fashion with an AlltoAll collective
-    operation.
+    Redistributes sparse features with an AlltoAll collective operation for table wise
+    sharding.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         id_list_features_per_rank (List[int]): number of id list features to send to
-        each rank.
+            each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features to
-        send to each rank
+            send to each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
     """
 
@@ -256,13 +256,11 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         """
         Performs AlltoAll operation on sparse features.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to redistribute.
 
         Returns:
-            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
-                SparseFeatures.
-
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
         return self._dist(sparse_features)
@@ -270,15 +268,14 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
 class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     """
-    Redistributes pooled embedding tensor in TW fashion with an AlltoAll
-    collective operation.
+    Redistributes pooled embedding tensor with an AlltoAll collective operation for
+    table wise sharding.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
-        embedding in each rank.
+            embedding in each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
-
     """
 
     def __init__(
@@ -298,7 +295,7 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         """
         Performs AlltoAll operation on pooled embeddings tensor.
 
-        Call Args:
+        Args:
             local_embs (torch.Tensor): tensor of values to distribute.
 
         Returns:
@@ -357,11 +354,10 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
 
     Args:
         id_list_features_per_rank (List[int]): number of id list features to send
-        to each rank.
+            to each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features
-        to send to each rank.
+            to send to each rank.
         world_size (int): number of devices in the topology.
-
     """
 
     def __init__(
@@ -384,12 +380,11 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
         """
         Performs OnetoAll operation on sparse features.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to redistribute.
 
         Returns:
-            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
-            SparseFeatures.
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
         return NoWait(self._dist.forward(sparse_features))
@@ -419,9 +414,9 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
         """
         Performs AlltoOne operation on pooled embedding tensors.
 
-        Call Args:
+        Args:
             local_embs (List[torch.Tensor]): pooled embedding tensors with
-            len(local_embs) == world_size.
+                `len(local_embs) == world_size`.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of merged pooled embedding tensor.

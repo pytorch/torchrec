@@ -32,8 +32,10 @@ class VariableBatchCwPooledEmbeddingSharding(
     BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards embedding bags column-wise, i.e.. a given embedding table is placed
-    on selected ranks with evenly distributed columns.
+    Shards embedding bags column-wise, i.e.. a given embedding table is partitioned
+    along its columns and placed on specified ranks.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(

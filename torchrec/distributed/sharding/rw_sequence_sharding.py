@@ -58,10 +58,10 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         """
         Performs AlltoAll operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
+            local_embs (torch.Tensor): tensor of values to distribute.
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
                 operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
@@ -80,8 +80,8 @@ class RwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly distributed
-    by rows and table slices are placed on all ranks.
+    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly
+    distributed by rows and table slices are placed on all ranks.
     """
 
     def create_input_dist(

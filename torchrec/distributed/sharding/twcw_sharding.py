@@ -16,7 +16,7 @@ from torchrec.distributed.types import ShardingEnv
 class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
     """
     Shards embedding bags table-wise column-wise, i.e.. a given embedding table is
-    distributed by specified number of columns and table slices are placed on all ranks
+    partitioned along its columns and the table slices are placed on all ranks
     within a host group.
     """
 

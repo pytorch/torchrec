@@ -7,7 +7,7 @@
 
 import itertools
 import math
-from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, cast, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -36,12 +36,10 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    ParameterSharding,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable
 
 F = TypeVar("F", bound=Multistreamable)
@@ -50,7 +48,7 @@ T = TypeVar("T")
 
 class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
     """
-    base class for table-wise-row-wise sharding
+    Base class for table wise row wise sharding.
     """
 
     def __init__(
@@ -259,16 +257,17 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-        communication.
+            communication.
         id_list_features_per_rank (List[int]): number of id list features to send to
-        each rank.
+            each rank.
         id_score_list_features_per_rank (List[int]): number of id score list features to
-        send to each rank
+            send to each rank.
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
-        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
+        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list
+            features.
         device (Optional[torch.device]): device on which buffers will be allocated.
-        has_feature_processor (bool): existence of feature processor (ie. position
-        weighted features).
+        has_feature_processor (bool): existence of a feature processor (ie. position
+            weighted features).
 
     Example::
 
@@ -382,7 +381,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         performs staggered shuffle on the sparse features, and then performs AlltoAll
         operation.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to bucketize and
                 redistribute.
 
@@ -420,8 +419,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def _staggered_shuffle(self, features_per_rank: List[int]) -> List[int]:
         """
-        Reorders sparse data such that data is in contiguous blocks and correctly ordered
-        for global TWRW layout.
+        Reorders sparse data such that data is in contiguous blocks and correctly
+        ordered for global TWRW layout.
         """
 
         nodes = self._world_size // self._local_size
@@ -475,7 +474,7 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         Performs reduce-scatter pooled operation on pooled embeddings tensor followed by
         AlltoAll pooled operation.
 
-        Call Args:
+        Args:
             local_embs (torch.Tensor): pooled embeddings tensor to distribute.
 
         Returns:
