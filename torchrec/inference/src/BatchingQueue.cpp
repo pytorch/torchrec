@@ -56,14 +56,6 @@ std::chrono::milliseconds getTimeElapsedMS(
 }
 } // namespace
 
-void PredictionBatch::cuda() {
-  for (auto& iter : forwardArgs) {
-    if (iter.value().is_cpu()) {
-      iter.setValue(iter.value().to(at::kCUDA, /* non_blocking */ true));
-    }
-  }
-}
-
 size_t PredictionBatch::size() const {
   size_t size = 0;
   for (auto& iter : forwardArgs) {
@@ -85,12 +77,12 @@ BatchingQueue::BatchingQueue(
       observer_(std::move(observer)),
       resourceManager_(std::move(resourceManager)) {
   CHECK(observer_ != nullptr);
-  for (const auto& [_, batchingFuncName] : config_.batchingMetadata) {
-    if (batchingFuncs_.count(batchingFuncName) > 0) {
+  for (const auto& [_, metadata] : config_.batchingMetadata) {
+    if (batchingFuncs_.count(metadata.type) > 0) {
       continue;
     }
-    batchingFuncs_[batchingFuncName] =
-        TorchRecBatchingFuncRegistry()->Create(batchingFuncName);
+    batchingFuncs_[metadata.type] =
+        TorchRecBatchingFuncRegistry()->Create(metadata.type);
   }
   for (int i = 0; i < worldSize_; i++) {
     auto queue = std::make_shared<folly::MPMCQueue<BatchingQueueEntry>>(
@@ -305,17 +297,18 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             ? std::make_unique<ResourceManagerGuard>(resourceManager_, gpuIdx)
             : nullptr;
 
-        for (auto& [featureName, batchingFuncName] : config_.batchingMetadata) {
+        for (auto& [featureName, metadata] : config_.batchingMetadata) {
           const auto batchingFuncStart = std::chrono::steady_clock::now();
-          combineForwardArgs(batchingFuncs_[batchingFuncName]->batch(
+          combineForwardArgs(batchingFuncs_[metadata.type]->batch(
               featureName,
               requests,
               combinedBatchSize,
               batchOffsetsLazy,
-              c10::Device(c10::kCUDA, gpuIdx),
+              metadata.device == "cpu" ? c10::Device(c10::kCPU)
+                                       : c10::Device(c10::kCUDA, gpuIdx),
               batchItemsLazy));
           observer_->recordBatchingFuncLatency(
-              getTimeElapsedMS(batchingFuncStart).count(), batchingFuncName);
+              getTimeElapsedMS(batchingFuncStart).count(), metadata.type);
         }
 
         // The batch is moved to the GPUExecutor, which can either
@@ -328,7 +321,6 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             std::move(contexts),
             std::move(resourceManagerGuard));
 
-        batch->cuda();
         auto createEvent = [&]() {
           return Event(
               std::make_unique<at::cuda::CUDAEvent>(

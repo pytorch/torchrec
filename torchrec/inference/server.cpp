@@ -16,6 +16,7 @@
 #include <torch/csrc/deploy/path_environment.h>
 #include <torch/torch.h>
 
+#include <folly/json.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <grpc++/grpc++.h>
@@ -207,7 +208,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::unique_ptr<torchrec::GPUExecutor>> executors;
   std::vector<torch::deploy::ReplicatedObj> models;
   std::vector<torchrec::BatchQueueCb> batchQueueCbs;
-  std::unordered_map<std::string, std::string> batchingMetadataMap;
+  std::unordered_map<std::string, BatchingMetadata> batchingMetadataMap;
 
   std::shared_ptr<torch::deploy::Environment> env =
       std::make_shared<torch::deploy::PathEnvironment>(
@@ -224,12 +225,31 @@ int main(int argc, char* argv[]) {
     factoryType.attr("__init__")({factory});
 
     // Process forward metadata.
-    auto batchingMetadata =
-        factory.attr("batching_metadata")(at::ArrayRef<at::IValue>())
-            .toIValue();
-    for (const auto& iter : batchingMetadata.toGenericDict()) {
-      batchingMetadataMap[iter.key().toString()->string()] =
-          iter.value().toString()->string();
+    try {
+      auto batchingMetadataJsonStr =
+          factory.attr("batching_metadata_json")(at::ArrayRef<at::IValue>())
+              .toIValue()
+              .toString()
+              ->string();
+      auto dynamic = folly::parseJson(batchingMetadataJsonStr);
+      CHECK(dynamic.isObject());
+      for (auto it : dynamic.items()) {
+        torchrec::BatchingMetadata metadata;
+        metadata.type = it.second["type"].asString();
+        metadata.device = it.second["device"].asString();
+        batchingMetadataMap[it.first.asString()] = std::move(metadata);
+      }
+    } catch (...) {
+      auto batchingMetadata =
+          factory.attr("batching_metadata")(at::ArrayRef<at::IValue>())
+              .toIValue();
+      for (const auto& iter : batchingMetadata.toGenericDict()) {
+        torchrec::BatchingMetadata metadata;
+        metadata.type = iter.value().toString()->string();
+        metadata.device = "cuda";
+        batchingMetadataMap[iter.key().toString()->string()] =
+            std::move(metadata);
+      }
     }
 
     // Process result metadata.
