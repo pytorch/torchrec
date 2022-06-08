@@ -8,7 +8,7 @@
 import logging
 from abc import ABC
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -47,25 +47,37 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def _load_state_dict(
     emb_modules: "nn.ModuleList",
-    state_dict: "OrderedDict[str, torch.Tensor]",
+    state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor]]",
 ) -> Tuple[List[str], List[str]]:
     missing_keys = []
     unexpected_keys = list(state_dict.keys())
     for emb_module in emb_modules:
-        for key, param in emb_module.state_dict().items():
+        for key, dst_param in emb_module.state_dict().items():
             if key in state_dict:
-                if isinstance(param, ShardedTensor):
-                    assert len(param.local_shards()) == 1
-                    dst_tensor = param.local_shards()[0].tensor
+                src_param = state_dict[key]
+                if isinstance(dst_param, ShardedTensor):
+                    assert isinstance(src_param, ShardedTensor)
+                    assert len(dst_param.local_shards()) == len(
+                        src_param.local_shards()
+                    )
+                    for dst_local_shard, src_local_shard in zip(
+                        dst_param.local_shards(), src_param.local_shards()
+                    ):
+                        assert (
+                            dst_local_shard.metadata.shard_offsets
+                            == src_local_shard.metadata.shard_offsets
+                        )
+                        assert (
+                            dst_local_shard.metadata.shard_sizes
+                            == src_local_shard.metadata.shard_sizes
+                        )
+
+                        dst_local_shard.tensor.detach().copy_(src_local_shard.tensor)
                 else:
-                    dst_tensor = param
-                if isinstance(state_dict[key], ShardedTensor):
-                    # pyre-fixme[16]
-                    assert len(state_dict[key].local_shards()) == 1
-                    src_tensor = state_dict[key].local_shards()[0].tensor
-                else:
-                    src_tensor = state_dict[key]
-                dst_tensor.detach().copy_(src_tensor)
+                    assert isinstance(src_param, torch.Tensor) and isinstance(
+                        dst_param, torch.Tensor
+                    )
+                    dst_param.detach().copy_(src_param)
                 unexpected_keys.remove(key)
             else:
                 missing_keys.append(cast(str, key))
@@ -165,7 +177,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m, u = _load_state_dict(self._emb_modules, state_dict)
@@ -331,7 +343,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m1, u1 = _load_state_dict(self._emb_modules, state_dict)
@@ -453,7 +465,7 @@ class MetaInferGroupedEmbeddingsLookup(
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m, u = _load_state_dict(self._emb_modules, state_dict)
@@ -606,7 +618,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m1, u1 = _load_state_dict(self._emb_modules, state_dict)

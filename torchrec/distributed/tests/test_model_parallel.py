@@ -7,14 +7,16 @@
 
 import os
 import unittest
-from collections import OrderedDict
-from typing import cast, List, Optional, Tuple
+from collections import defaultdict, OrderedDict
+from typing import cast, Dict, List, Optional, Tuple
 
 import hypothesis.strategies as st
 import numpy as np
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+import torchrec.distributed as trec_dist
+from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import (
@@ -408,8 +410,13 @@ class ModelParallelStateDictTest(unittest.TestCase):
         super().tearDown()
 
     def _generate_dmps_and_batch(
-        self, sharders: Optional[List[ModuleSharder[nn.Module]]] = None
+        self,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
     ) -> Tuple[List[DistributedModelParallel], ModelInput]:
+
+        if constraints is None:
+            constraints = {}
         if sharders is None:
             sharders = get_default_sharders()
 
@@ -422,9 +429,22 @@ class ModelParallelStateDictTest(unittest.TestCase):
         )
         batch = local_batch[0].to(self.device)
 
-        # Create two TestSparseNN modules, wrap both in DMP
         dmps = []
+        pg = dist.GroupMember.WORLD
+        assert pg is not None, "Process group is not initialized"
+        env = ShardingEnv.from_process_group(pg)
+
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                local_world_size=trec_dist.comm.get_local_size(env.world_size),
+                world_size=env.world_size,
+                compute_device=self.device.type,
+            ),
+            constraints=constraints,
+        )
+
         for _ in range(2):
+            # Create two TestSparseNN modules, wrap both in DMP
             m = TestSparseNN(
                 tables=self.tables,
                 num_float_features=self.num_float_features,
@@ -432,11 +452,17 @@ class ModelParallelStateDictTest(unittest.TestCase):
                 dense_device=self.device,
                 sparse_device=torch.device("meta"),
             )
+            if pg is not None:
+                plan = planner.collective_plan(m, sharders, pg)
+            else:
+                plan = planner.plan(m, sharders)
+
             dmp = DistributedModelParallel(
                 module=m,
                 init_data_parallel=False,
                 device=self.device,
                 sharders=sharders,
+                plan=plan,
             )
 
             with torch.no_grad():
@@ -551,7 +577,6 @@ class ModelParallelStateDictTest(unittest.TestCase):
         sharders=st.sampled_from(
             [
                 [EmbeddingBagCollectionSharder()],
-                [EmbeddingBagSharder()],
             ]
         ),
     )
@@ -654,3 +679,124 @@ class ModelParallelStateDictTest(unittest.TestCase):
         param_keys = {key for (key, _) in m.named_parameters()}
         buffer_keys = {key for (key, _) in m.named_buffers()}
         self.assertEqual(state_dict_keys, {*param_keys, *buffer_keys})
+
+    # pyre-ignore
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.BATCHED_FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_load_state_dict_cw_multiple_shards(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    fused_params={
+                        "learning_rate": 0.2,
+                        "optimizer": EmbOptimType.EXACT_ROWWISE_ADAGRAD,
+                    },
+                ),
+            ),
+        ]
+
+        constraints = defaultdict(lambda: trec_dist.planner.ParameterConstraints())
+        num_cw_shards_per_table = {}
+        for table in self.tables + self.weighted_tables:
+            constraints[table.name].min_partition = 4
+            num_cw_shards_per_table[table.name] = table.embedding_dim // 4
+
+        (m1, m2), batch = self._generate_dmps_and_batch(
+            sharders, constraints=constraints
+        )
+
+        # load the second's (m2's) with the first (m1's) state_dict
+        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+
+        # load optimizer state dict
+
+        # Check to see that we can load optimizer state
+        src_optimizer = m1.fused_optimizer
+        dst_optimizer = m2.fused_optimizer
+
+        src_optimizer_state_dict = src_optimizer.state_dict()
+        dst_optimizer_state_dict = dst_optimizer.state_dict()
+        m2.fused_optimizer.load_state_dict(src_optimizer_state_dict)
+
+        # validate the models are equivalent
+        loss1, pred1 = m1(batch)
+        loss2, pred2 = m2(batch)
+        self.assertTrue(torch.equal(loss1, loss2))
+        self.assertTrue(torch.equal(pred1, pred2))
+
+        sd1 = m1.state_dict()
+        for key, value in m2.state_dict().items():
+            table_name = key.split(".")[-2]
+            v2 = sd1[key]
+            if isinstance(value, ShardedTensor):
+                self.assertEqual(
+                    len(value.local_shards()), num_cw_shards_per_table[table_name]
+                )
+                dst = value.local_shards()[0].tensor
+            else:
+                dst = value
+
+            if isinstance(v2, ShardedTensor):
+                self.assertEqual(
+                    len(value.local_shards()), num_cw_shards_per_table[table_name]
+                )
+
+                for src_local_shard, dst_local_shard in zip(
+                    value.local_shards(), v2.local_shards()
+                ):
+                    self.assertTrue(
+                        torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
+                    )
+            else:
+                src = v2
+                self.assertTrue(torch.equal(src, dst))
+
+        for param_name, dst_param_group in dst_optimizer_state_dict.items():
+            src_param_group = src_optimizer_state_dict[param_name]
+
+            for state_key, dst_opt_state in dst_param_group.items():
+                table_name = state_key.split(".")[-2]
+                src_opt_state = src_param_group[state_key]
+                if isinstance(dst_opt_state, ShardedTensor):
+                    self.assertIsInstance(src_param_group[state_key], ShardedTensor)
+
+                    self.assertEqual(
+                        len(dst_opt_state.local_shards()),
+                        num_cw_shards_per_table[table_name],
+                    )
+
+                    self.assertEqual(
+                        len(src_opt_state.local_shards()),
+                        num_cw_shards_per_table[table_name],
+                    )
+
+                    for src_local_shard, dst_local_shard in zip(
+                        src_opt_state.local_shards(), dst_opt_state.local_shards()
+                    ):
+                        self.assertTrue(
+                            torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
+                        )
+                elif isinstance(dst_opt_state, torch.Tensor):
+                    self.assertIsInstance(src_opt_state, torch.Tensor)
