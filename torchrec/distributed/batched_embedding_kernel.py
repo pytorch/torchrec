@@ -277,6 +277,8 @@ def configure_fused_params(
         # Set cache_precision to be the same as weights_precision
         # if it is not preset
         fused_params["cache_precision"] = weights_precision
+    if "max_gradients" in fused_params:
+        fused_params["gradient_clipping"] = True
 
     return fused_params
 
