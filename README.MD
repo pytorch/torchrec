@@ -25,25 +25,28 @@ Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pi
 
 ### CUDA
 ```
+Nightly
+
 conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
-pip install torchrec-nightly
-
-or from pytorch S3
-
-pip install --pre torchrec -f https://download.pytorch.org/whl/torchrec/index.html
 pip install --pre torchrec_nightly -f https://download.pytorch.org/whl/nightly/torchrec_nightly/index.html
+
+Stable
+
+conda install pytorch cudatoolkit=11.3 -c pytorch
+pip install --pre torchrec -f https://download.pytorch.org/whl/torchrec/index.html
 ```
 
 ### CPU Only
 ```
+Nightly
+
 conda install pytorch cpuonly -c pytorch-nightly
-pip install torchrec-nightly-cpu
-
-or from pytorch S3
-
-pip install --pre torchrec_cpu -f https://download.pytorch.org/whl/torchrec_cpu/index.html
 pip install --pre torchrec_cpu_nightly -f https://download.pytorch.org/whl/nightly/torchrec_cpu_nightly/index.html
 
+Stable
+
+conda install pytorch cpuonly -c pytorch
+pip install --pre torchrec_cpu -f https://download.pytorch.org/whl/torchrec_cpu/index.html
 ```
 
 ### Colab example: introduction + install
