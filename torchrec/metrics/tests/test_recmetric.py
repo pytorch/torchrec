@@ -74,6 +74,7 @@ class RecMetricTest(unittest.TestCase):
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
             fused_update_limit=0,
+            should_validate_update=True,
         )
         mse_computation = mse._metrics_computations[0]
 
@@ -131,6 +132,7 @@ class RecMetricTest(unittest.TestCase):
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
             fused_update_limit=0,
+            should_validate_update=True,
         )
         ne_computation = ne._metrics_computations
 

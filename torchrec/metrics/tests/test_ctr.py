@@ -51,6 +51,7 @@ class CTRMetricTest(unittest.TestCase):
         task_names: List[str],
         fused_update_limit: int = 0,
         compute_on_all_ranks: bool = False,
+        should_validate_update: bool = False,
     ) -> None:
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
@@ -66,6 +67,7 @@ class CTRMetricTest(unittest.TestCase):
             test_clazz=TestCTRMetric,
             fused_update_limit=fused_update_limit,
             compute_on_all_ranks=False,
+            should_validate_update=should_validate_update,
             world_size=world_size,
             my_rank=rank,
             task_names=task_names,
@@ -95,6 +97,7 @@ class CTRMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ctr,
         )
@@ -107,6 +110,7 @@ class CTRMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ctr,
         )

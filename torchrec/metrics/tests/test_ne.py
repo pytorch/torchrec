@@ -69,6 +69,7 @@ class NEMetricTest(unittest.TestCase):
         task_names: List[str],
         fused_update_limit: int = 0,
         compute_on_all_ranks: bool = False,
+        should_validate_update: bool = False,
         batch_window_size: int = 5,
     ) -> None:
         rank = int(os.environ["RANK"])
@@ -85,6 +86,7 @@ class NEMetricTest(unittest.TestCase):
             test_clazz=TestNEMetric,
             fused_update_limit=fused_update_limit,
             compute_on_all_ranks=False,
+            should_validate_update=should_validate_update,
             world_size=world_size,
             my_rank=rank,
             task_names=task_names,
@@ -122,6 +124,7 @@ class NEMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ne,
         )
@@ -134,6 +137,7 @@ class NEMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ne,
         )
@@ -146,6 +150,7 @@ class NEMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=5,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ne,
         )
@@ -157,6 +162,7 @@ class NEMetricTest(unittest.TestCase):
             task_names=["t1", "t2", "t3"],
             fused_update_limit=100,
             compute_on_all_ranks=False,
+            should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=self._test_ne_large_window_size,
         )
@@ -170,6 +176,7 @@ class NEMetricTest(unittest.TestCase):
         #     task_names=["t1", "t2", "t3"],
         #     fused_update_limit=5,
         #     compute_on_all_ranks=False,
+        #     should_validate_update=False,
         #     world_size=WORLD_SIZE,
         #     entry_point=self._test_ne,
         # )
@@ -181,6 +188,7 @@ class NEMetricTest(unittest.TestCase):
         #     task_names=["t1", "t2", "t3"],
         #     fused_update_limit=100,
         #     compute_on_all_ranks=False,
+        #     should_validate_update=False,
         #     world_size=WORLD_SIZE,
         #     entry_point=self._test_ne_large_window_size,
         # )
