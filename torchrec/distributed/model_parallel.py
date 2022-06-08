@@ -129,6 +129,8 @@ def get_unwrapped_module(module: nn.Module) -> nn.Module:
     ):
         if isinstance(module, DistributedModelParallel):
             module = module._dmp_wrapped_module
+        elif isinstance(module, FullyShardedDataParallel):
+            module = module._fsdp_wrapped_module
         else:
             module = module.module
     return module
