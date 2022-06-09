@@ -5,11 +5,17 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+
+import os
 from functools import reduce
+from multiprocessing.pool import ThreadPool as Pool
 from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
 
+import numpy
+
 import torch
+
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
@@ -20,6 +26,7 @@ from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.proposers import (
     GreedyProposer,
     GridSearchProposer,
+    proposers_to_proposals_list,
     UniformProposer,
 )
 from torchrec.distributed.planner.stats import EmbeddingStats
@@ -96,10 +103,10 @@ def _to_sharding_plan(
     return ShardingPlan(plan)
 
 
-class EmbeddingShardingPlanner(ShardingPlanner):
+class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
     """
     Provides an optimized sharding plan for a given module with shardable parameters
-    according to the provided sharders, topology, and constraints.
+    according to the provided sharders, topology, and constraints using multiprocessing to improve runtime and scalability.
     """
 
     def __init__(
@@ -108,6 +115,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         enumerator: Optional[Enumerator] = None,
         storage_reservation: Optional[StorageReservation] = None,
         proposer: Optional[Union[Proposer, List[Proposer]]] = None,
+        custom_cpu_count: Optional[int] = None,
         partitioner: Optional[Partitioner] = None,
         performance_model: Optional[PerfModel] = None,
         stats: Optional[Stats] = None,
@@ -150,6 +158,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
+        self._cpu_count: Optional[int] = (
+            custom_cpu_count if custom_cpu_count else os.cpu_count()
+        )
 
     def collective_plan(
         self,
@@ -178,9 +189,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals = 0
         self._num_plans = 0
         start_time = perf_counter()
-        best_plan = None
-        lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
-        best_perf_rating = MAX_SIZE
 
         storage_constraint: Topology = self._storage_reservation.reserve(
             topology=self._topology,
@@ -197,44 +205,34 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             # No shardable parameters
             return ShardingPlan({})
 
-        proposal_cache: Dict[
-            Tuple[int, ...],
-            Tuple[bool, Optional[List[ShardingOption]], Optional[float]],
-        ] = {}
+        proposals_list = proposers_to_proposals_list(
+            self._proposers, search_space=search_space
+        )
 
-        for proposer in self._proposers:
-            proposer.load(search_space=search_space)
+        self._num_proposals = len(proposals_list)
 
-        for proposer in self._proposers:
-            proposal = proposer.propose()
+        def get_best_plan(
+            proposal_group: List[List[ShardingOption]],
+        ) -> Tuple[Optional[List[ShardingOption]], float, Storage, int]:
 
-            while proposal:
-                proposal_key = tuple(sorted(map(hash, proposal)))
-                if proposal_key in proposal_cache:
-                    partitionable, plan, perf_rating = proposal_cache[proposal_key]
-                    proposer.feedback(
-                        partitionable=partitionable,
-                        plan=plan,
-                        perf_rating=perf_rating,
-                    )
-                    proposal = proposer.propose()
-                    continue
+            group_plans_num = 0
+            lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
+            best_perf_rating = MAX_SIZE
+            best_plan = None
 
-                self._num_proposals += 1
+            for proposal in proposal_group:
                 try:
                     plan = self._partitioner.partition(
                         proposal=proposal,
                         storage_constraint=storage_constraint,
                     )
-                    self._num_plans += 1
+                    group_plans_num += 1
                     perf_rating = self._perf_model.rate(plan=plan)
+
                     if perf_rating < best_perf_rating:
                         best_perf_rating = perf_rating
                         best_plan = plan
-                    proposal_cache[proposal_key] = (True, plan, perf_rating)
-                    proposer.feedback(
-                        partitionable=True, plan=plan, perf_rating=perf_rating
-                    )
+
                 except PlannerError:
                     current_storage = cast(
                         Storage,
@@ -249,14 +247,31 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     )
                     if current_storage < lowest_storage:
                         lowest_storage = current_storage
-                    proposal_cache[proposal_key] = (False, None, None)
-                    proposer.feedback(partitionable=False)
 
-                proposal = proposer.propose()
+            return (best_plan, best_perf_rating, lowest_storage, group_plans_num)
 
-        if best_plan:
+        grouped_proposals = numpy.array_split(proposals_list, self._cpu_count)
+
+        pool = Pool(self._cpu_count)
+        group_best_plans = pool.map(get_best_plan, grouped_proposals)
+
+        lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
+        best_perf_rating = MAX_SIZE
+        best_plan = None
+
+        for plan_info in group_best_plans:
+            current_plan = plan_info[0]
+            plan_perf_rating = plan_info[1]
+            plan_storage = plan_info[2]
+            self._num_plans += plan_info[3]
+            if plan_perf_rating < best_perf_rating:
+                best_plan = current_plan
+                best_perf_rating = plan_perf_rating
+            if plan_storage < lowest_storage:
+                lowest_storage = plan_storage
+
+        if best_plan is not None:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
-
             end_time = perf_counter()
             self._stats.log(
                 sharding_plan=sharding_plan,
