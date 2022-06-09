@@ -20,7 +20,7 @@ from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.types import ModuleSharder
-from torchrec.models.dlrm import DLRMTrain
+from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import KeyedOptimizerWrapper
@@ -82,7 +82,7 @@ def train(
         )
         for feature_idx, feature_name in enumerate(DEFAULT_CAT_NAMES)
     ]
-    train_model = DLRMTrain(
+    dlrm_model = DLRM(
         embedding_bag_collection=EmbeddingBagCollection(
             tables=eb_configs, device=torch.device("meta")
         ),
@@ -91,6 +91,7 @@ def train(
         over_arch_layer_sizes=over_arch_layer_sizes,
         dense_device=device,
     )
+    train_model = DLRMTrain(dlrm_model)
 
     # Enable optimizer fusion
     fused_params = {
