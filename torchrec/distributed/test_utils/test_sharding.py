@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -47,16 +47,23 @@ class SharderType(Enum):
 
 
 def create_test_sharder(
-    sharder_type: str, sharding_type: str, kernel_type: str
+    sharder_type: str,
+    sharding_type: str,
+    kernel_type: str,
+    fused_params: Optional[Dict[str, Any]] = None,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
+    if fused_params is None:
+        fused_params = {}
+    if "learning_rate" not in fused_params:
+        fused_params["learning_rate"] = 0.1
     if sharder_type == SharderType.EMBEDDING_BAG.value:
-        return TestEBSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+        return TestEBSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+        return TestEBCSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
-        return TestETSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+        return TestETSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
-        return TestETCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
+        return TestETCSharder(sharding_type, kernel_type, fused_params)
     else:
         raise ValueError(f"Sharder not supported {sharder_type}")
 
