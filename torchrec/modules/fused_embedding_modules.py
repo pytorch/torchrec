@@ -592,35 +592,62 @@ class FusedEmbeddingCollection(EmbeddingCollection, FusedOptimizerModule):
     pass
 
 
-def fuse_optimizer(
-    embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection],
-    optimizer_type: Type[torch.optim.Optimizer],
-    optimizer_kwargs: Dict[str, Any],
-    device: torch.device,
-    location: Optional[EmbeddingLocation] = None,
-) -> Union[FusedEmbeddingBagCollection, FusedEmbeddingCollection]:
-
-    if isinstance(embedding_module, EmbeddingBagCollection):
-        return FusedEmbeddingBagCollection(
-            embedding_module.embedding_bag_configs,
-            optimizer_type=optimizer_type,
-            optimizer_kwargs=optimizer_kwargs,
-            device=device,
-            location=location,
-        )
-    elif isinstance(embedding_module, EmbeddingCollection):
-        raise NotImplementedError()
-    raise ValueError(
-        "Only EmbeddingBagCollections and EmbeddingCollections can have operators fused to them"
-    )
-
-
 def fuse_embedding_optimizer(
     model: nn.Module,
     optimizer_type: Type[torch.optim.Optimizer],
     optimizer_kwargs: Dict[str, Any],
     device: torch.device,
-) -> None:
-    # TODO
-    # This module will replace all EBCs and ECs with a corresponding FusedEmbeddingModule. The passed in module can be anything that contains an EBC/EC
-    raise NotImplementedError()
+    location: Optional[EmbeddingLocation] = None,
+) -> nn.Module:
+    """
+    Recursively replaces EmbeddingBagCollection and EmbeddingCollection with
+    FusedEmbeddingBagCollection and FusedEmbeddingCollection in a model subtree.
+    The fused modules will be initialized using the passed in optimizer parameters, and model location.
+
+    Args:
+        model: (nn.Module):
+        optimizer_type: (Type[torch.optim.Optimizer]):
+        optimizer_kwargs: (Dict[Str, Any]):
+        device (Optional[torch.device]):
+        location: (Optional[EmbeddingLocation]): GPU location placement
+    Returns
+        nn.Module: input nn.Module with Fused Embedding Modules
+
+    Example::
+        ebc = EmbeddingBagCollection()
+        my_model = ExampleModel(ebc)
+        my_model = fused_embedding_optimizer(my_model, optimizer_type=torch.optim.SGD, optimizer_kwargs={"lr": .01})
+        kjt = KeyedJaggedTensor()
+        output = my_model(kjt)
+    """
+    # Replace all EBCs and ECs in a with a corresponding FusedEmbeddingModule.
+
+    # check if top-level module is EBC/EC
+    if isinstance(model, EmbeddingBagCollection):
+        return FusedEmbeddingBagCollection(
+            model.embedding_bag_configs,
+            optimizer_type=optimizer_type,
+            optimizer_kwargs=optimizer_kwargs,
+            device=device,
+            location=location,
+        )
+
+    def replace(_model: nn.Module) -> None:
+        for child_name, child in _model.named_children():
+            if isinstance(child, EmbeddingBagCollection):
+                setattr(
+                    _model,
+                    child_name,
+                    FusedEmbeddingBagCollection(
+                        tables=child.embedding_bag_configs,
+                        optimizer_type=optimizer_type,
+                        optimizer_kwargs=optimizer_kwargs,
+                        device=device,
+                        location=location,
+                    ),
+                )
+            else:
+                replace(child)
+
+    replace(model)
+    return model

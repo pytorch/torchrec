@@ -8,22 +8,35 @@
 
 import unittest
 from collections import OrderedDict
-from typing import Optional
+from typing import List, Optional
+
+import hypothesis.strategies as st
 
 import torch
 import torch.fx
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
+from hypothesis import given, settings
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import (
-    fuse_optimizer,
+    fuse_embedding_optimizer,
     FusedEmbeddingBagCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
+devices: List[torch.device] = [torch.device("cpu")]
+if torch.cuda.device_count() > 1:
+    devices.append(torch.device("cuda"))
+
 
 class FusedEmbeddingBagCollectionTest(unittest.TestCase):
-    def test_unweighted(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_unweighted(
+        self,
+        device: torch.device,
+    ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
         )
@@ -38,6 +51,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=[eb1_config, eb2_config, eb3_config],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
+            device=device,
         )
 
         #     0       1        2  <-- batch
@@ -50,7 +64,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             keys=["f1", "f2", "f3"],
             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8]),
             lengths=torch.tensor([2, 0, 1, 1, 1, 3, 0, 1, 0]),
-        )
+        ).to(device)
 
         pooled_embeddings = ebc(features)
 
@@ -59,11 +73,23 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings["f2"].shape, (features.stride(), 4))
         self.assertEqual(pooled_embeddings["f3"].shape, (features.stride(), 4))
 
-        torch.testing.assert_close(pooled_embeddings["f1"][1], torch.zeros(4))
-        torch.testing.assert_close(pooled_embeddings["f3"][0], torch.zeros(4))
-        torch.testing.assert_close(pooled_embeddings["f3"][2], torch.zeros(4))
+        torch.testing.assert_close(
+            pooled_embeddings["f1"][1], torch.zeros(4).to(device)
+        )
+        torch.testing.assert_close(
+            pooled_embeddings["f3"][0], torch.zeros(4).to(device)
+        )
+        torch.testing.assert_close(
+            pooled_embeddings["f3"][2], torch.zeros(4).to(device)
+        )
 
-    def test_shared_tables(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_shared_tables(
+        self,
+        device: torch.device,
+    ) -> None:
         ebc_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1", "f2"]
         )
@@ -71,6 +97,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=[ebc_config],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
+            device=device,
         )
 
         #     0       1        2  <-- batch
@@ -82,7 +109,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             keys=["f1", "f2"],
             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
             lengths=torch.tensor([2, 0, 1, 1, 1, 3]),
-        )
+        ).to(device)
 
         pooled_embeddings = ebc(features)
 
@@ -90,9 +117,17 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings["f1"].shape, (features.stride(), 4))
         self.assertEqual(pooled_embeddings["f2"].shape, (features.stride(), 4))
 
-        torch.testing.assert_close(pooled_embeddings["f1"][1], torch.zeros(4))
+        torch.testing.assert_close(
+            pooled_embeddings["f1"][1], torch.zeros(4).to(device)
+        )
 
-    def test_state_dict(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_state_dict(
+        self,
+        device: torch.device,
+    ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=2, feature_names=["f1"]
         )
@@ -107,12 +142,16 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=[eb1_config, eb2_config, eb3_config],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
+            device=device,
         )
 
         # pyre-ignore
         ebc.load_state_dict(ebc.state_dict())
 
-    def test_state_dict_manual(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_state_dict_manual(self, device: torch.device) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=2, feature_names=["f1"]
         )
@@ -127,6 +166,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=[eb1_config, eb2_config, eb3_config],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
+            device=device,
         )
 
         ebc.load_state_dict(
@@ -134,15 +174,15 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
                 [
                     (
                         "embedding_bags.t1.weight",
-                        torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]),
+                        torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
                     ),
                     (
                         "embedding_bags.t2.weight",
-                        torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]),
+                        torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
                     ),
                     (
                         "embedding_bags.t3.weight",
-                        torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]),
+                        torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]).to(device),
                     ),
                 ]
             )
@@ -151,15 +191,15 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         state_dict = ebc.state_dict()
         torch.testing.assert_close(
             state_dict["embedding_bags.t1.weight"],
-            torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]),
+            torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
         ),
         torch.testing.assert_close(
             state_dict["embedding_bags.t2.weight"],
-            torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]),
+            torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
         ),
         torch.testing.assert_close(
             state_dict["embedding_bags.t3.weight"],
-            torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]),
+            torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]).to(device),
         )
 
         #     0       1        2  <-- batch
@@ -172,7 +212,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             keys=["f1", "f2", "f3"],
             values=torch.tensor([0, 1, 0, 0, 1, 0, 1, 0]),
             lengths=torch.tensor([2, 0, 1, 1, 1, 2, 0, 0, 1]),
-        )
+        ).to(device)
 
         pooled_embeddings = ebc(features)
 
@@ -180,22 +220,25 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             pooled_embeddings["f1"],
             torch.tensor(
                 [[3, 3, 3, 3], [0, 0, 0, 0], [1, 1, 1, 1]], dtype=torch.float32
-            ),
+            ).to(device),
         )
         torch.testing.assert_close(
             pooled_embeddings["f2"],
             torch.tensor(
                 [[4, 4, 4, 4], [8, 8, 8, 8], [12, 12, 12, 12]], dtype=torch.float32
-            ),
+            ).to(device),
         )
         torch.testing.assert_close(
             pooled_embeddings["f3"],
             torch.tensor(
                 [[0, 0, 0, 0], [0, 0, 0, 0], [16, 16, 16, 16]], dtype=torch.float32
-            ),
+            ).to(device),
         )
 
-    def test_shared_tables_shared_features(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_shared_tables_shared_features(self, device: torch.device) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
             embedding_dim=4,
@@ -213,6 +256,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=[eb1_config, eb2_config],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
+            device=device,
         )
 
         ebc.load_state_dict(
@@ -220,11 +264,11 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
                 [
                     (
                         "embedding_bags.t1.weight",
-                        torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]),
+                        torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
                     ),
                     (
                         "embedding_bags.t2.weight",
-                        torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]),
+                        torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
                     ),
                 ]
             )
@@ -239,7 +283,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             keys=["f1", "f2", "shared_f1"],
             values=torch.tensor([0, 1, 0, 0, 1, 0, 1, 0, 0, 1]),
             lengths=torch.tensor([2, 0, 1, 1, 1, 2, 0, 1, 2]),
-        )
+        ).to(device)
 
         pooled_embeddings = ebc(features)
 
@@ -247,7 +291,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             pooled_embeddings["f1"],
             torch.tensor(
                 [[3, 3, 3, 3], [0, 0, 0, 0], [1, 1, 1, 1]], dtype=torch.float32
-            ),
+            ).to(device),
         )
 
         torch.testing.assert_close(
@@ -259,24 +303,27 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
                     [3, 3, 3, 3],
                 ],
                 dtype=torch.float32,
-            ),
+            ).to(device),
         )
 
         torch.testing.assert_close(
             pooled_embeddings["f2"],
             torch.tensor(
                 [[4, 4, 4, 4], [8, 8, 8, 8], [12, 12, 12, 12]], dtype=torch.float32
-            ),
+            ).to(device),
         )
 
         torch.testing.assert_close(
             pooled_embeddings["shared_f1@t2"],
             torch.tensor(
                 [[0, 0, 0, 0], [4, 4, 4, 4], [12, 12, 12, 12]], dtype=torch.float32
-            ),
+            ).to(device),
         )
 
-    def test_weighted(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_weighted(self, device: torch.device) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=2, feature_names=["f1"]
         )
@@ -289,6 +336,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
             is_weighted=True,
+            device=device,
         )
 
         ebc.load_state_dict(
@@ -320,23 +368,30 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             values=torch.tensor([0, 1, 0, 0, 1, 0, 1]),
             weights=torch.tensor([1.0, 2.0, 3.0, 5.0, 7.0, 11.0, 13.0]),
             lengths=torch.tensor([2, 0, 1, 1, 1, 2]),
-        )
+        ).to(device)
 
         pooled_embeddings = ebc(features)
 
         torch.testing.assert_close(
             pooled_embeddings["f1"],
-            torch.tensor([[5.0] * 4, [0.0] * 4, [3.0] * 4], dtype=torch.float32),
+            torch.tensor(
+                [[5.0] * 4, [0.0] * 4, [3.0] * 4], dtype=torch.float32, device=device
+            ),
         )
 
         torch.testing.assert_close(
             pooled_embeddings["f2"],
             torch.tensor(
-                [[20.0] * 4, [56.0] * 4, [4 * 11 + 8 * 13] * 4], dtype=torch.float32
+                [[20.0] * 4, [56.0] * 4, [4 * 11 + 8 * 13] * 4],
+                dtype=torch.float32,
+                device=device,
             ),
         )
 
-    def test_optimizer_fusion(self) -> None:
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_optimizer_fusion(self, device: torch.device) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=2,
@@ -356,19 +411,20 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             tables=tables,
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.1},
+            device=device,
         )
 
-        ebc = EmbeddingBagCollection(tables=tables)
+        ebc = EmbeddingBagCollection(tables=tables, device=device)
 
         state_dict = OrderedDict(
             [
                 (
                     "embedding_bags.table_0.weight",
-                    torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]),
+                    torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
                 ),
                 (
                     "embedding_bags.table_1.weight",
-                    torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]),
+                    torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
                 ),
             ]
         )
@@ -384,7 +440,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             keys=["feature_0", "feature_1"],
             values=torch.tensor([0, 0, 1, 1, 0, 1]),
             lengths=torch.tensor([0, 1, 2, 1, 2, 0]),
-        )
+        ).to(device)
 
         opt = torch.optim.SGD(ebc.parameters(), lr=0.1)
         # pyre-ignore
@@ -412,7 +468,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
 
         torch.testing.assert_close(
             fused_ebc.state_dict()["embedding_bags.table_0.weight"],
-            torch.Tensor([[1.0 - 2 * 0.1] * 4, [2.0 - 1 * 0.1] * 4]),
+            torch.Tensor([[1.0 - 2 * 0.1] * 4, [2.0 - 1 * 0.1] * 4]).to(device),
         )
 
         run_one_training_step()
@@ -423,7 +479,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
 
         torch.testing.assert_close(
             fused_ebc.state_dict()["embedding_bags.table_0.weight"],
-            torch.Tensor([[1.0 - 2 * 2 * 0.1] * 4, [2.0 - 2 * 1 * 0.1] * 4]),
+            torch.Tensor([[1.0 - 2 * 2 * 0.1] * 4, [2.0 - 2 * 1 * 0.1] * 4]).to(device),
         )
 
         # TODO, ensure this state dict is loaded correctly
@@ -449,7 +505,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             device=device,
         )
 
-        fused_ebc = fuse_optimizer(
+        fused_ebc = fuse_embedding_optimizer(
             ebc,
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
@@ -505,3 +561,61 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         self.unweighted_replacement(
             torch.device("cuda"), location=EmbeddingLocation.MANAGED_CACHING
         )
+
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_ebc_model_replacement(self, device: torch.device) -> None:
+        class TestModel(torch.nn.Module):
+            def __init__(self, ebc: EmbeddingBagCollection):
+                super().__init__()
+                self.ebc = ebc
+                self.over_arch = torch.nn.Linear(
+                    4,
+                    1,
+                )
+
+            def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
+                ebc_output = self.ebc.forward(kjt).to_dict()
+                sparse_features = []
+                for key in kjt.keys():
+                    sparse_features.append(ebc_output[key])
+                sparse_features = torch.cat(sparse_features, dim=0)
+                return self.over_arch(sparse_features)
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+        eb3_config = EmbeddingBagConfig(
+            name="t3", embedding_dim=4, num_embeddings=10, feature_names=["f3"]
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[eb1_config, eb2_config, eb3_config],
+        )
+        test_model = TestModel(ebc).to(device)
+        test_model = fuse_embedding_optimizer(
+            test_model,
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        self.assertIsInstance(test_model.ebc, FusedEmbeddingBagCollection)
+
+        #     0       1        2  <-- batch
+        # f1   [0,1] None    [2]
+        # f2   [3]    [4]    [5,6,7]
+        # f3   []    [8]    []
+        # ^
+        # feature
+
+        features = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8]),
+            lengths=torch.tensor([2, 0, 1, 1, 1, 3, 0, 1, 0]),
+        ).to(device)
+        test_model(features)
