@@ -37,16 +37,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
@@ -110,7 +100,6 @@ jobs:
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-test \
-          --TORCH_CUDA_ARCH_LIST "'7.0;8.0'" \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
@@ -164,16 +153,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
@@ -229,11 +208,9 @@ jobs:
       run: |
         rm -r dist || true
         conda run -n build_binary python -m pip install dist/*.whl
-    - name: Test fbgemm_gpu and torchrec installation
+    - name: Test torchrec installation
       shell: bash
       run: |
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
         conda run -n build_binary \
           python -c "import torchrec"
     - name: Test with pytest
