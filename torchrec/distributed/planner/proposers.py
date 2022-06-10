@@ -178,8 +178,6 @@ class GridSearchProposer(Proposer):
         for sharding_options in self._sharding_options_by_fqn.values():
             sharding_options.sort(key=lambda x: _sharding_option_score(x))
 
-        _prune_sharding_options(self._sharding_options_by_fqn)
-
         total_proposals = prod(
             [
                 len(sharding_options)
@@ -239,36 +237,6 @@ def _sharding_option_score(
         if use_depth
         else sum([cast(float, shard.perf) for shard in sharding_option.shards])
     )
-
-
-def _prune_sharding_options(
-    sorted_sharding_options_by_fqn: Dict[str, List[ShardingOption]]
-) -> None:
-    """
-    Prunes sharding options for each embedding table by sharding type.
-
-    Keeps sharding options for each sharding type with the lowest perf or with less HBM
-    memory usage.
-    """
-    for fqn in sorted_sharding_options_by_fqn:
-        pruned_sharding_options = []
-        sharding_type_to_min_hbm = {}
-        sharding_options = sorted_sharding_options_by_fqn[fqn]
-        for sharding_option in sharding_options:
-            if sharding_option.sharding_type not in sharding_type_to_min_hbm:
-                pruned_sharding_options.append(sharding_option)
-                sharding_type_to_min_hbm[
-                    sharding_option.sharding_type
-                ] = sharding_option.total_storage.hbm
-            elif (
-                sharding_option.total_storage.hbm
-                < sharding_type_to_min_hbm[sharding_option.sharding_type]
-            ):
-                pruned_sharding_options.append(sharding_option)
-                sharding_type_to_min_hbm[
-                    sharding_option.sharding_type
-                ] = sharding_option.total_storage.hbm
-        sorted_sharding_options_by_fqn[fqn] = pruned_sharding_options
 
 
 def proposers_to_proposals_list(

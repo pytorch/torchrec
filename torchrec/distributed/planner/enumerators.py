@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
@@ -104,6 +105,7 @@ class EmbeddingEnumerator(Enumerator):
                         name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
+
                         input_lengths = (
                             self._constraints[name].pooling_factors
                             if self._constraints and self._constraints.get(name)
@@ -172,22 +174,36 @@ class EmbeddingEnumerator(Enumerator):
         return sharding_types
 
     def _filter_compute_kernels(
-        self, name: str, compute_kernels: List[str]
+        self,
+        name: str,
+        compute_kernels: List[str],
     ) -> List[str]:
+
         if not self._constraints or not self._constraints.get(name):
-            return compute_kernels
-        constraints: ParameterConstraints = self._constraints[name]
-        if not constraints.compute_kernels:
-            return compute_kernels
-        constrained_compute_kernels: List[str] = constraints.compute_kernels
+            filtered_compute_kernels = compute_kernels
+        else:
+            constraints: ParameterConstraints = self._constraints[name]
+            if not constraints.compute_kernels:
+                filtered_compute_kernels = compute_kernels
+            else:
+                constrained_compute_kernels: List[str] = constraints.compute_kernels
+                filtered_compute_kernels = list(
+                    set(constrained_compute_kernels) & set(compute_kernels)
+                )
 
-        compute_kernels = list(set(constrained_compute_kernels) & set(compute_kernels))
+        if EmbeddingComputeKernel.BATCHED_DENSE.value in filtered_compute_kernels:
+            if (
+                EmbeddingComputeKernel.BATCHED_FUSED.value in filtered_compute_kernels
+            ):  # always false for data_parallel
+                filtered_compute_kernels.remove(
+                    EmbeddingComputeKernel.BATCHED_DENSE.value
+                )
 
-        if not compute_kernels:
+        if not filtered_compute_kernels:
             raise RuntimeError(
                 f"No available compute kernels after applying user provided constraints for {name}"
             )
-        return compute_kernels
+        return filtered_compute_kernels
 
 
 def get_partition_by_type(sharding_type: str) -> str:
