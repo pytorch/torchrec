@@ -50,22 +50,15 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                 0.0004935158269195386,
                 0.0004935158269195386,
             ],
-            ("batched_dense", "table_wise"): [0.0020919170400902315],
             ("batched_fused", "table_wise"): [0.0011095368078055323],
             ("batched_fused_uvm", "table_wise"): [0.1729105033126532],
             ("batched_fused_uvm_caching", "table_wise"): [0.040145097917908434],
-            ("batched_dense", "column_wise"): [0.0020919170400902315],
             ("batched_fused", "column_wise"): [0.0011095368078055323],
             ("batched_fused_uvm", "column_wise"): [0.1729105033126532],
             ("batched_fused_uvm_caching", "column_wise"): [0.040145097917908434],
-            ("batched_dense", "table_column_wise"): [0.0020919170400902315],
             ("batched_fused", "table_column_wise"): [0.0011095368078055323],
             ("batched_fused_uvm", "table_column_wise"): [0.1729105033126532],
             ("batched_fused_uvm_caching", "table_column_wise"): [0.040145097917908434],
-            ("batched_dense", "row_wise"): [
-                0.0007442274487005296,
-                0.0007442274487005296,
-            ],
             ("batched_fused", "row_wise"): [
                 0.00043569201211068144,
                 0.00043569201211068144,
@@ -77,10 +70,6 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("batched_fused_uvm_caching", "row_wise"): [
                 0.012695561962491483,
                 0.012695561962491483,
-            ],
-            ("batched_dense", "table_row_wise"): [
-                0.0007442274487005296,
-                0.0007442274487005296,
             ],
             ("batched_fused", "table_row_wise"): [
                 0.00043569201211068144,
@@ -134,14 +123,9 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                 0.002677347614879459,
                 0.002677347614879459,
             ],
-            ("batched_dense", "table_wise"): [0.003354041738520764],
             ("batched_fused", "table_wise"): [0.001880471390093715],
             ("batched_fused_uvm", "table_wise"): [0.25958192114736517],
             ("batched_fused_uvm_caching", "table_wise"): [0.060433813055248066],
-            ("batched_dense", "row_wise"): [
-                0.0013795850534768677,
-                0.0013795850534768677,
-            ],
             ("batched_fused", "row_wise"): [
                 0.0007915177871551004,
                 0.0007915177871551004,
