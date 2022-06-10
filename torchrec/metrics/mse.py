@@ -79,7 +79,7 @@ class MSEMetricComputation(RecMetricComputation):
         *,
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
-        weights: Optional[torch.Tensor]
+        weights: Optional[torch.Tensor],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(
