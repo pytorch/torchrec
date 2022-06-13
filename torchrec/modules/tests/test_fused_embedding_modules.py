@@ -8,12 +8,13 @@
 
 import unittest
 from collections import OrderedDict
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 
 import torch
 import torch.fx
+import torchrec
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from hypothesis import given, settings
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -390,8 +391,22 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
 
     @settings(deadline=None)
     # pyre-ignore
-    @given(device=st.sampled_from(devices))
-    def test_optimizer_fusion(self, device: torch.device) -> None:
+    @given(
+        optimizer_type_and_kwargs=st.sampled_from(
+            [
+                (torch.optim.SGD, {"lr": 0.1}),
+                (torch.optim.Adagrad, {"lr": 0.1}),
+                (torchrec.optim.RowWiseAdagrad, {"lr": 0.1}),
+            ]
+        ),
+        device=st.sampled_from(devices),
+    )
+    def test_optimizer_fusion(
+        self,
+        optimizer_type_and_kwargs: Tuple[Type[torch.optim.Optimizer], Dict[str, Any]],
+        device: torch.device,
+    ) -> None:
+        optimizer_type, optimizer_kwargs = optimizer_type_and_kwargs
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=2,
@@ -409,8 +424,8 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
 
         fused_ebc = FusedEmbeddingBagCollection(
             tables=tables,
-            optimizer_type=torch.optim.SGD,
-            optimizer_kwargs={"lr": 0.1},
+            optimizer_type=optimizer_type,
+            optimizer_kwargs=optimizer_kwargs,
             device=device,
         )
 
@@ -442,7 +457,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             lengths=torch.tensor([0, 1, 2, 1, 2, 0]),
         ).to(device)
 
-        opt = torch.optim.SGD(ebc.parameters(), lr=0.1)
+        opt = optimizer_type(ebc.parameters(), **optimizer_kwargs)
         # pyre-ignore
         def run_one_training_step() -> None:
             fused_pooled_embeddings = fused_ebc(features)
@@ -466,24 +481,12 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             fused_ebc.state_dict()["embedding_bags.table_0.weight"],
         )
 
-        torch.testing.assert_close(
-            fused_ebc.state_dict()["embedding_bags.table_0.weight"],
-            torch.Tensor([[1.0 - 2 * 0.1] * 4, [2.0 - 1 * 0.1] * 4]).to(device),
-        )
-
         run_one_training_step()
         torch.testing.assert_close(
             ebc.state_dict()["embedding_bags.table_0.weight"],
             fused_ebc.state_dict()["embedding_bags.table_0.weight"],
         )
 
-        torch.testing.assert_close(
-            fused_ebc.state_dict()["embedding_bags.table_0.weight"],
-            torch.Tensor([[1.0 - 2 * 2 * 0.1] * 4, [2.0 - 2 * 1 * 0.1] * 4]).to(device),
-        )
-
-        # TODO, ensure this state dict is loaded correctly
-        # SGD does not have any state (momentum etc, so need to expand this test)
         fused_optimizer = fused_ebc.fused_optimizer
         fused_optimizer.load_state_dict(fused_optimizer.state_dict())
 

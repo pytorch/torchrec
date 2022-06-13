@@ -14,6 +14,7 @@ from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, 
 
 import torch
 import torch.nn as nn
+import torchrec.optim as trec_optim
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     ComputeDevice,
@@ -243,60 +244,27 @@ class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
         self._emb_module.flush()
 
 
-VALID_OPTIMIZER_KEYS: Set[str] = {
-    "gradient_clipping",
-    "max_gradient",
-    "stochastic_rounding",
-    "learning_rate",
-    "eps",
-    "momentum",
-    "weight_decay",
-    "weight_decay_mode",
-    "eta",
-    "beta1",
-    "beta2",
-}
-
-
 def convert_optimizer_type_and_kwargs(
     optimizer_type: Type[torch.optim.Optimizer],
     optimizer_kwargs: Dict[str, Any],
-    device: Optional[torch.device],
 ) -> Optional[Tuple[EmbOptimType, Dict[str, Any]]]:
-    device_type = device.type if device is not None else "cpu"
     optimizer_kwargs = copy.deepcopy(optimizer_kwargs)
     if "lr" in optimizer_kwargs:
         optimizer_kwargs["learning_rate"] = optimizer_kwargs["lr"]
         optimizer_kwargs.pop("lr")
 
-    invalid_optimizer_kwargs = set(optimizer_kwargs.keys()).difference(
-        VALID_OPTIMIZER_KEYS
-    )
-
-    if invalid_optimizer_kwargs:
-        raise ValueError(f"Cannot use {invalid_optimizer_kwargs}")
-
-    if isinstance(optimizer_type, EmbOptimType):
-        return (optimizer_type, optimizer_kwargs)
     if optimizer_type == torch.optim.SGD:
         return (
             EmbOptimType.EXACT_SGD,
             optimizer_kwargs,
         )
-    # TODO the below might not be perfect, will clean up
-    # if optimizer_type == torch.optim.Adam:
-    # return (
-    # EmbOptimType.ADAM
-    # if optimizer_kwargs.get("partial_row_wise", False)
-    # else EmbOptimType.PARTIAL_ROWWISE_ADAM, {}
-    # )
-    # if optimizer_type == torch.optim.Adagrad:
-    # if optimizer_kwargs.get("exact", False):
-    # if optimizer_kwargs.get("row_wise", False):
-    # if optimizer_kwargs.get("weighted", False):
-    # return (EmbOptimType.EXACT_ROWWISE_WEIGHTED_ADAGRAD, {})
-    # return (EmbOptimType.EXACT_ROWWISE_ADAGRAD, {})
-    # return EmbOptimType.EXACT_ADAGRAD
+    elif optimizer_type == torch.optim.Adagrad:
+        return (EmbOptimType.EXACT_ADAGRAD, optimizer_kwargs)
+    elif optimizer_type == trec_optim.RowWiseAdagrad:
+        return (EmbOptimType.EXACT_ROWWISE_ADAGRAD, optimizer_kwargs)
+    elif optimizer_type == torch.optim.Adam:
+        return (EmbOptimType.ADAM, optimizer_kwargs)
+
     return None
 
 
@@ -381,7 +349,7 @@ class FusedEmbeddingBagCollection(
         self._optimizer_kwargs = optimizer_kwargs
 
         emb_optim_and_kwargs = convert_optimizer_type_and_kwargs(
-            optimizer_type, optimizer_kwargs, device
+            optimizer_type, optimizer_kwargs
         )
         if emb_optim_and_kwargs is None:
             raise ValueError(
@@ -448,7 +416,7 @@ class FusedEmbeddingBagCollection(
                 # pyre-fixme[6]: For 2nd param expected `Tensor` but got
                 #  `Union[Tensor, ShardedTensor]`.
                 params[f"embedding_bags.{param_key}"] = weight
-                optims.append(("", emb_module.fused_optimizer))
+            optims.append(("", emb_module.fused_optimizer))
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
         self._embedding_names = list(
