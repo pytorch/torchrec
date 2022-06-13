@@ -24,6 +24,8 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagSharder,
     ShardedEmbeddingBagCollection,
 )
+from torchrec.distributed.fused_embeddingbag import ShardedFusedEmbeddingBagCollection
+
 from torchrec.distributed.model_parallel import (
     DistributedModelParallel,
     get_default_sharders,
@@ -47,6 +49,7 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
 from torchrec.test_utils import get_free_port, skip_if_asan_class
 
 
@@ -360,6 +363,45 @@ class ModelParallelSparseOnlyTest(unittest.TestCase):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
+        dist.destroy_process_group()
+
+    def test_sharding_fused_ebc_as_top_level(self) -> None:
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["LOCAL_WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+
+        if torch.cuda.is_available():
+            curr_device = torch.device("cuda:0")
+            torch.cuda.set_device(curr_device)
+            backend = "nccl"
+        else:
+            curr_device = torch.device("cpu")
+            backend = "gloo"
+        dist.init_process_group(backend=backend)
+
+        embedding_dim = 128
+        num_embeddings = 256
+        ebc = FusedEmbeddingBagCollection(
+            device=torch.device("meta"),
+            tables=[
+                EmbeddingBagConfig(
+                    name="large_table",
+                    embedding_dim=embedding_dim,
+                    num_embeddings=num_embeddings,
+                    feature_names=["my_feature"],
+                    pooling=PoolingType.SUM,
+                ),
+            ],
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+        )
+
+        model = DistributedModelParallel(ebc, device=curr_device)
+
+        self.assertTrue(isinstance(model.module, ShardedFusedEmbeddingBagCollection))
         dist.destroy_process_group()
 
 
