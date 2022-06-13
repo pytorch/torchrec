@@ -120,6 +120,7 @@ void GPUExecutor::process(int idx) {
   folly::setThreadName(
       fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
 
+  c10::InferenceMode inferenceModeGuard;
   std::vector<c10::cuda::CUDAStream> streams;
   for (size_t i = 0; i < worldSize_; ++i) {
     streams.push_back(at::cuda::getStreamFromPool(
@@ -183,6 +184,7 @@ void GPUExecutor::process(int idx) {
          rank = rank_,
          d2hStream = d2hStream]() mutable {
           RECORD_USER_SCOPE("CompletionStage");
+          c10::InferenceMode imGuard;
 
           batch->event->block(d2hStream);
 
