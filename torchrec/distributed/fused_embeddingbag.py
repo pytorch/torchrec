@@ -40,7 +40,7 @@ class ShardedFusedEmbeddingBagCollection(
 
         fused_params = {}
         emb_opt_type_and_kwargs = convert_optimizer_type_and_kwargs(
-            optimizer_type, optimizer_kwargs, device=device
+            optimizer_type, optimizer_kwargs
         )
         assert emb_opt_type_and_kwargs is not None
         (emb_optim_type, emb_opt_kwargs) = emb_opt_type_and_kwargs

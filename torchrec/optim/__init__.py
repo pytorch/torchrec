@@ -10,7 +10,9 @@
 Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
 torch.tensor and `ShardedTensor <https://github.com/pytorch/pytorch/issues/55207>`_ in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
 
-It also contains several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
+It also contains
+- several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
+- Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc
 """
 
 from torchrec.optim.clipping import GradientClipping, GradientClippingOptimizer  # noqa
@@ -21,6 +23,13 @@ from torchrec.optim.keyed import (  # noqa
     KeyedOptimizerWrapper,
     OptimizerWrapper,
 )
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad  # noqa
 from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage  # noqa
 
-from . import clipping, fused, keyed, warmup  # noqa  # noqa  # noqa  # noqa
+from . import (  # noqa  # noqa  # noqa  # noqa
+    clipping,
+    fused,
+    keyed,
+    rowwise_adagrad,
+    warmup,
+)
