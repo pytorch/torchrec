@@ -19,6 +19,7 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     EmbeddingBagSharder,
 )
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
@@ -689,6 +690,22 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
+
+
+class TestFusedEBCSharder(FusedEmbeddingBagCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+    ) -> None:
+        super().__init__()
+        self._sharding_type = sharding_type
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
 
 
 class TestEBSharder(EmbeddingBagSharder):

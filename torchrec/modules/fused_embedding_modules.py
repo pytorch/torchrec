@@ -7,6 +7,7 @@
 
 #!/usr/bin/env python3
 
+import copy
 import itertools
 from collections import defaultdict, OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, Union
@@ -220,10 +221,12 @@ class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        combined_key = "/".join([table.name for table in self._embedding_tables])
-        name = f"{combined_key}.weight"
-        key = f"{prefix}.{name}" if (prefix and name) else (prefix + name)
-        yield key, cast(nn.Parameter, self._emb_module.weights)
+        for table, weight in zip(
+            self._embedding_tables, self.split_embedding_weights()
+        ):
+            name = table.name
+            key = f"{prefix}.{name}" if (prefix and name) else (prefix + name)
+            yield key, cast(nn.Parameter, weight)
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
@@ -261,6 +264,7 @@ def convert_optimizer_type_and_kwargs(
     device: Optional[torch.device],
 ) -> Optional[Tuple[EmbOptimType, Dict[str, Any]]]:
     device_type = device.type if device is not None else "cpu"
+    optimizer_kwargs = copy.deepcopy(optimizer_kwargs)
     if "lr" in optimizer_kwargs:
         optimizer_kwargs["learning_rate"] = optimizer_kwargs["lr"]
         optimizer_kwargs.pop("lr")
@@ -399,7 +403,7 @@ class FusedEmbeddingBagCollection(
             device = torch.device("cpu")
 
         if location is None:
-            if device.type == "cpu":
+            if device.type in ["cpu", "meta"]:
                 location = EmbeddingLocation.HOST
             elif device.type == "cuda":
                 location = EmbeddingLocation.DEVICE
