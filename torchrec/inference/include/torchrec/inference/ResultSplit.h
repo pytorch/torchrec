@@ -17,6 +17,8 @@ class ResultSplitFunc {
  public:
   virtual ~ResultSplitFunc() = default;
 
+  virtual std::string name() = 0;
+
   virtual c10::IValue splitResult(
       c10::IValue /* result */,
       size_t /* nOffset */,

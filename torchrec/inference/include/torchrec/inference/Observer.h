@@ -75,50 +75,117 @@ class IBatchingQueueObserver {
 class EmptyBatchingQueueObserver : public IBatchingQueueObserver {
  public:
   void recordBatchingQueueLatency(
-      double value,
-      std::chrono::steady_clock::time_point now =
-          std::chrono::steady_clock::now()) override {
-    (void)value, (void)now;
-  }
+      double /* value */,
+      std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordBatchingFuncLatency(
-      double value,
-      std::string batchingFuncName,
-      std::chrono::steady_clock::time_point now =
-          std::chrono::steady_clock::now()) override {
-    (void)value, (void)batchingFuncName, (void)now;
-  }
+      double /* value */,
+      std::string /* batchingFuncName */,
+      std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordBatchCreationLatency(
+      double /* value */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void addBatchingQueueTimeoutCount(double /* value */) override {}
+
+  void addGPUBusyCount(double /* value */) override {}
+
+  void addRequestsCount(double /* value */) override {}
+
+  void addBytesMovedToGPUCount(double /* value */) override {}
+
+  void addBatchesProcessedCount(double /* value */) override {}
+
+  void addRequestsProcessedCount(double /* value */) override {}
+};
+
+class IGPUExecutorObserver {
+ public:
+  // Record the amount of time a batch spends in the GPU Executor
+  // queue.
+  virtual void recordQueueLatency(
       double value,
       std::chrono::steady_clock::time_point now =
-          std::chrono::steady_clock::now()) override {
-    (void)value, (void)now;
-  }
+          std::chrono::steady_clock::now()) = 0;
 
-  void addBatchingQueueTimeoutCount(double value) override {
-    (void)value;
-  }
+  // Record the latency of prediction (forward call, H2D).
+  virtual void recordPredictionLatency(
+      double value,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
 
-  void addGPUBusyCount(double value) override {
-    (void)value;
-  }
+  // Record the latency of device to host transfer facilitated
+  // by result split function.
+  virtual void recordDeviceToHostLatency(
+      double value,
+      std::string resultSplitFuncName,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
 
-  void addRequestsCount(double value) override {
-    (void)value;
-  }
+  // Record the latency of splitting the result.
+  virtual void recordResultSplitLatency(
+      double value,
+      std::string resultSplitFuncName,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
 
-  void addBytesMovedToGPUCount(double value) override {
-    (void)value;
-  }
+  // Record the latency from enqueue to completion.
+  virtual void recordTotalLatency(
+      double value,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
 
-  void addBatchesProcessedCount(double value) override {
-    (void)value;
-  }
+  // Increment the number of GPUExecutor queue timeouts.
+  virtual void addQueueTimeoutCount(double value) = 0;
 
-  void addRequestsProcessedCount(double value) override {
-    (void)value;
-  }
+  // Increment the number of predict exceptions.
+  virtual void addPredictionExceptionCount(double value) = 0;
+
+  // Increment the number of batches successfully processed.
+  virtual void addBatchesProcessedCount(double value) = 0;
+
+  virtual ~IGPUExecutorObserver() {}
 };
+
+// Can be used for testing or for opt-ing out of observation.
+class EmptyGPUExecutorObserver : public IGPUExecutorObserver {
+ public:
+  void recordQueueLatency(
+      double /* value */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void recordPredictionLatency(
+      double /* value */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void recordDeviceToHostLatency(
+      double /* value */,
+      std::string /* resultSplitFuncName */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void recordResultSplitLatency(
+      double /* value */,
+      std::string /* resultSplitFuncName */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void recordTotalLatency(
+      double /* value */,
+      std::chrono::steady_clock::time_point /* now */) override {}
+
+  void addQueueTimeoutCount(double /* value */) override {}
+
+  void addPredictionExceptionCount(double /* value */) override {}
+
+  void addBatchesProcessedCount(double /* value */) override {}
+};
+
+// Helper for determining how much time has elapsed in milliseconds since a
+// given time point.
+inline std::chrono::milliseconds getTimeElapsedMS(
+    std::chrono::steady_clock::time_point startTime) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - startTime);
+}
 
 } // namespace torchrec
