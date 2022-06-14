@@ -44,6 +44,8 @@ class ShardedFusedEmbeddingBagCollection(
         )
         assert emb_opt_type_and_kwargs is not None
         (emb_optim_type, emb_opt_kwargs) = emb_opt_type_and_kwargs
+
+        fused_params["optimizer"] = emb_optim_type
         fused_params.update(emb_opt_kwargs)
 
         super().__init__(
