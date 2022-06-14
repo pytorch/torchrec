@@ -48,14 +48,6 @@ DEFINE_bool(
 
 namespace torchrec {
 
-namespace {
-std::chrono::milliseconds getTimeElapsedMS(
-    std::chrono::steady_clock::time_point startTime) {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now() - startTime);
-}
-} // namespace
-
 size_t PredictionBatch::size() const {
   size_t size = 0;
   for (auto& iter : forwardArgs) {

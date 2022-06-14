@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <stdexcept>
+#include <string>
 
 #include <folly/MPMCQueue.h>
 #include <folly/Synchronized.h>
@@ -21,7 +22,9 @@
 #include <torch/csrc/deploy/deploy.h> // @manual
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/Observer.h"
 #include "torchrec/inference/ResultSplit.h"
+#include "torchrec/inference/include/torchrec/inference/Observer.h"
 
 namespace torchrec {
 
@@ -34,6 +37,8 @@ class GPUExecutor {
       int worldSize,
       std::shared_ptr<torchrec::ResultSplitFunc> func,
       std::chrono::milliseconds queueTimeout,
+      std::shared_ptr<IGPUExecutorObserver>
+          observer, // shared_ptr because used in completion executor callback
       std::function<void()> warmupFn = {});
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
@@ -56,6 +61,7 @@ class GPUExecutor {
   std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
   std::shared_ptr<torchrec::ResultSplitFunc> resultSplitFunc_;
   const std::chrono::milliseconds queueTimeout_;
+  std::shared_ptr<IGPUExecutorObserver> observer_;
   std::function<void()> warmupFn_;
 };
 

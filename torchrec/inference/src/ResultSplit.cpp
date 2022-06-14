@@ -101,6 +101,10 @@ namespace {
 
 class DictOfTensorResultSplitFunc : public ResultSplitFunc {
  public:
+  std::string name() override {
+    return "dict_of_tensor";
+  }
+
   c10::IValue splitResult(
       c10::IValue result,
       size_t nOffset,
@@ -129,6 +133,10 @@ class DictOfTensorResultSplitFunc : public ResultSplitFunc {
 
 class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
  public:
+  std::string name() override {
+    return "dict_of_tensors";
+  }
+
   c10::IValue splitResult(
       c10::IValue result,
       size_t nOffset,
@@ -166,6 +174,10 @@ class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
 
 class DictWithMaskTensorResultSplitFunc : public torchrec::ResultSplitFunc {
  public:
+  std::string name() override {
+    return "dict_with_mask_tensor";
+  }
+
   c10::IValue splitResult(
       c10::IValue result,
       size_t offset,
