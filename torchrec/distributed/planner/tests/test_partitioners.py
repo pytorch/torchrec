@@ -13,7 +13,7 @@ from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
+from torchrec.distributed.planner.partitioners import partition
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
     PartitionByType,
@@ -92,7 +92,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         self.topology = Topology(world_size=2, compute_device=compute_device)
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyPerfPartitioner()
 
     def test_tw_balanced_perf_device(self) -> None:
         sharding_options = self.enumerator.enumerate(
@@ -104,12 +103,14 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=candidate_topology,
-        )
-        # pyre-ignore [16]
-        solution_topology = self.partitioner._topology
+        )[0]
+        solution_topology = partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
+        )[1]
 
         expected_ranks = {
             "table_0": [0],
@@ -147,12 +148,14 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=candidate_topology,
-        )
-        # pyre-ignore[16]
-        solution_topology = self.partitioner._topology
+        )[0]
+        solution_topology = partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
+        )[1]
 
         expected_ranks = {
             "table_0": [0],
@@ -195,7 +198,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWRWSharder()]
         )
@@ -207,12 +209,14 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             sharding_option.partition_by = PartitionByType.HOST.value
 
         candidate_topology = copy.deepcopy(self.topology)
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=candidate_topology,
-        )
-        # pyre-ignore[16]
-        solution_topology = self.partitioner._topology
+        )[0]
+        solution_topology = partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
+        )[1]
 
         expected_ranks = {
             "table_0": [0, 1, 2, 3, 4, 5, 6, 7],
@@ -249,7 +253,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
         self.enumerator = EmbeddingEnumerator(topology=self.topology)
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[RWSharder()]
         )
@@ -261,12 +264,14 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             sharding_option.partition_by = PartitionByType.UNIFORM.value
 
         candidate_topology = copy.deepcopy(self.topology)
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=candidate_topology,
-        )
-        # pyre-ignore[16]
-        solution_topology = self.partitioner._topology
+        )[0]
+        solution_topology = partition(
+            proposal=sharding_options,
+            storage_constraint=candidate_topology,
+        )[1]
 
         expected_ranks = {
             "table_0": [0, 1, 2, 3],
@@ -311,7 +316,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, constraints=constraints
         )
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model,
             sharders=[TWCWSharder()],
@@ -323,10 +327,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=self.topology,
-        )
+        )[0]
 
         expected_ranks = {
             "table_0": [8, 9, 10, 11, 12, 13, 14, 15, 8, 9],
@@ -373,7 +377,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, constraints=constraints
         )
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model,
             sharders=[HostLevelSharder()],
@@ -386,10 +389,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=self.topology,
-        )
+        )[0]
         expected_ranks = {
             "table_0": [8, 9, 10, 11, 12, 13, 14, 15],
             "table_1": [0, 1, 2, 3, 4, 5, 6, 7, 0, 1],
@@ -436,7 +439,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, constraints=constraints
         )
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model,
             sharders=[HostLevelSharder()],
@@ -451,10 +453,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             if i <= 2:
                 sharding_option.dependency = "host_0"
 
-        sharding_plan = self.partitioner.partition(
+        sharding_plan = partition(
             proposal=sharding_options,
             storage_constraint=self.topology,
-        )
+        )[0]
         expected_ranks = {
             "table_0": [0, 1, 2, 3, 4, 5, 6, 7],
             "table_1": [0, 1, 2, 3, 4, 5, 6, 7, 0, 1],
@@ -469,8 +471,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.assertEqual(expected_ranks, ranks)
 
-        # pyre-ignore [16]
-        solution_topology = self.partitioner._topology
+        solution_topology = partition(
+            proposal=sharding_options,
+            storage_constraint=self.topology,
+        )[1]
         for i in range(self.topology.world_size):
             total_storage = Storage(0, 0)
             total_perf = 0
@@ -517,7 +521,6 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, constraints=constraints
         )
-        self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model,
             sharders=[HostLevelSharder()],
@@ -538,7 +541,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_option.dependency = "host_0"
 
         with self.assertRaises(PlannerError):
-            self.partitioner.partition(
+            partition(
                 proposal=sharding_options,
                 storage_constraint=self.topology,
-            )
+            )[0]
