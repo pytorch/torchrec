@@ -254,6 +254,8 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
 
         pool = Pool(self._cpu_count)
         group_best_plans = pool.map(get_best_plan, grouped_proposals)
+        pool.close()
+        pool.join()
 
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         best_perf_rating = MAX_SIZE
