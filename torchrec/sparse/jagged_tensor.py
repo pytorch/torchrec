@@ -162,21 +162,25 @@ class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
 
 
 class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
-    """Represents an (optionally weighted) jagged tensor
+    """
+    Represents an (optionally weighted) jagged tensor.
 
     A `JaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
-    slices may be of different lengths. See KeyedJaggedTensor for full example.
+    slices may be of different lengths. See `KeyedJaggedTensor` for full example.
 
-    Implementation is torch.jit.script-able
+    Implementation is torch.jit.script-able.
 
-    Note that we will NOT do the input validation as it's expensive, you should always
-    pass in the valid lengths, offsets, etc.
+    NOTE:
+        We will NOT do input validation as it's expensive, you should always pass in the
+        valid lengths, offsets, etc.
 
     Args:
-        values (torch.Tensor): values tensor in dense representation
-        weights (Optional[torch.Tensor]): if values have weights. Tensor with same shape as values.
+        values (torch.Tensor): values tensor in dense representation.
+        weights (Optional[torch.Tensor]): if values have weights. Tensor with same shape
+            as values.
         lengths (Optional[torch.Tensor]): jagged slices, represented as lengths.
-        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative offsets.
+        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative
+            offsets.
     """
 
     def __init__(
@@ -216,7 +220,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         Constructs `JaggedTensor` from dense values/weights of shape (B, N,).
 
         Note that `lengths` is still of shape (B,).
-
         """
         mask2d = torch.arange(values.size(1), device=values.device).expand(
             values.size(0), -1
@@ -235,35 +238,36 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         """
         Constructs `JaggedTensor` from dense values/weights of shape (B, N,).
 
-        Note that `lengths/offsets` is still of shape (B,).
+        Note that `lengths` and `offsets` are still of shape (B,).
 
         Args:
             values (List[torch.Tensor]): a list of tensors for dense representation
-            weights (Optional[List[torch.Tensor]]): if values have weights, tensor with same shape as values.
+            weights (Optional[List[torch.Tensor]]): if values have weights, tensor with
+                the same shape as values.
 
         Returns:
-            JaggedTensor: JaggedTensor created from 2d dense tensor
+            JaggedTensor: JaggedTensor created from 2D dense tensor.
 
-        Example:
+        Example::
+
             values = [
                 torch.Tensor([1.0]),
                 torch.Tensor(),
                 torch.Tensor([7.0, 8.0]),
                 torch.Tensor([10.0, 11.0, 12.0]),
-                ]
+            ]
             weights = [
                 torch.Tensor([1.0]),
                 torch.Tensor(),
                 torch.Tensor([7.0, 8.0]),
                 torch.Tensor([10.0, 11.0, 12.0]),
-                ]
+            ]
             j1 = JaggedTensor.from_dense(
                 values=values,
                 weights=weights,
-                )
+            )
 
             # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
-
         """
         lengths = torch.IntTensor([value.size(0) for value in values])
         # pyre-ignore [9]: values is declared to have type `List[Tensor]` but is used as type `Tensor`.
@@ -282,14 +286,13 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     def to_dense(self) -> List[torch.Tensor]:
         """
-        Constructs dense-reprensentation Tensor from JT .
-
-        Args:
+        Constructs dense-reprensentation tensor from JT.
 
         Returns:
-            List[torch.Tensor]: list of tensors
+            List[torch.Tensor]: list of tensors.
 
-        Example:
+        Example::
+
             values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
             offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
             jt = JaggedTensor(values=values, offsets=offsets)
@@ -303,10 +306,8 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             #     torch.tensor([4.0]),
             #     torch.tensor([5.0]),
             #     torch.tensor([6.0, 7.0, 8.0]),
-            #     ]
-
+            # ]
         """
-
         tensor_list = []
         for index in range(self.offsets().size(0) - 1):
             offset = self.offsets()[index].item()
@@ -318,64 +319,48 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self,
         desired_length: Optional[int] = None,
         padding_value: float = 0.0,
-        pad_from_beginning: bool = True,
-        chop_from_beginning: bool = True,
     ) -> torch.Tensor:
-        """Constructs 2d dense Tensor from JT to shape (B, N,).
-        Note that B is the lengths of length
-        N is the longest feature length or the assigned value
-        if desired_length > length, we will use 0 or the padding_value to fill it up else,
-        we will select the last desired_length values
+        """
+        Constructs 2D dense Tensor from JT to shape (B, N,).
+
+        Note that `B` is the length of self.lengths() and `N` is the longest feature
+        length or `desired_length`.
+
+        If `desired_length` > `length` we will pad with `padding_value`, otherwise we
+        will select the last value at `desired_length`.
+
         Args:
-            desired_length (int): the length of the tensor
-            padding_value (float): padding value if we need to pad
-            pad_from_beginning (bool): if we need to pad from beginning
-            chop_from_beginning (bool): if we need chop from beginning
+            desired_length (int): the length of the tensor.
+            padding_value (float): padding value if we need to pad.
+
         Returns:
-            torch.Tensor: 2d dense tensor
-        Example:
+            torch.Tensor: 2d dense tensor.
+
+        Example::
+
             values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
             offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
             jt = JaggedTensor(values=values, offsets=offsets)
 
-            t = jt.to_padded_dense(
+            dt = jt.to_padded_dense(
                 desired_length=2,
                 padding_value=10.0,
-                pad_from_beginning=False,
-                )
+            )
 
-            # t = [
+            # dt = [
             #     [1.0, 2.0],
             #     [10.0, 10.0],
             #     [3.0, 10.0],
             #     [4.0, 10.0],
             #     [5.0, 10.0],
             #     [7.0, 8.0],
-            #     ]
-            #
-
+            # ]
         """
         lengths_list: List[int] = self.lengths().tolist()
         N = max(lengths_list) if desired_length is None else desired_length
-        offset = 0
-        values = []
-        for length in lengths_list:
-            value = self.values()[offset : offset + length]
-            if length <= N:
-                padding_tensor = torch.full(
-                    [N - length], padding_value, device=self.values().device
-                )
-                value = (
-                    torch.cat((padding_tensor, value), 0)
-                    if pad_from_beginning
-                    else torch.cat((value, padding_tensor), 0)
-                )
-            else:
-                value = value[-N:] if chop_from_beginning else value[:N]
-            values.append(value)
-            offset += length
-        final_tensor = torch.stack(values)
-        return final_tensor
+        return torch.ops.fbgemm.jagged_to_padded_dense(
+            self.values(), [self.offsets()], [N], padding_value
+        )
 
     def lengths(self) -> torch.Tensor:
         _lengths = _maybe_compute_lengths(self._lengths, self._offsets)
@@ -637,7 +622,24 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
-    For example::
+    Implementation is torch.jit.script-able.
+
+    Args:
+        keys (List[str]): keys to the jagged Tensor.
+        values (torch.Tensor): values tensor in dense representation.
+        weights (Optional[torch.Tensor]): if the values have weights. Tensor with the
+            same shape as values.
+        lengths (Optional[torch.Tensor]): jagged slices, represented as lengths.
+        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative
+            offsets.
+        stride (Optional[int]): number of examples per batch.
+        length_per_key (Optional[List[int]]): start length for each key.
+        offset_per_key (Optional[List[int]]): start offset for each key and final
+            offset.
+        index_per_key (Optional[Dict[str, int]]): index for each key.
+        jt_dict (Optional[Dict[str, JaggedTensor]]):
+
+    Example::
 
         #              0       1        2  <-- dim_1
         # "Feature0"   [V0,V1] None    [V2]
@@ -649,30 +651,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         dim_1: optional second dimension (ie. batch size)
         dim_2: The jagged dimension which has slice lengths between 0-3 in the above example
 
-        We represent this data with following inputs:
+        # We represent this data with following inputs:
 
-        values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7], V == any tensor datatype
-        weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7], W == any tensor datatype
-        lengths: torch.Tensor = [2, 0, 1, 1, 1, 3], representing the jagged slice
-        offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8], offsets from 0 for each jagged slice
-        keys: List[int] = ["Feature0", "Feature1"], which corresponds to each value of dim_0
-        index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}, index for each key
-        offset_per_key: List[int] = [0, 3, 8], start offset for each key and final offset
-
-
-    Implementation is torch.jit.script-able
-
-    Args:
-        keys (List[str]): keys to the jagged Tensor.
-        values (torch.Tensor): values tensor in dense representation.
-        weights (Optional[torch.Tensor]): if values have weights. Tensor with same shape as values.
-        lengths (Optional[torch.Tensor]): jagged slices, represented as lengths.
-        offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative offsets.
-        stride (Optional[int]): number of examples per batch.
-        length_per_key (Optional[List[int]]): start length for each key.
-        offset_per_key (Optional[List[int]]): start offset for each key and final offset.
-        index_per_key (Optional[Dict[str, int]]): index for each key.
-        jt_dict (Optional[Dict[str, JaggedTensor]]):
+        values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7]  # V == any tensor datatype
+        weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
+        lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
+        offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
+        keys: List[int] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
+        index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}  # index for each key
+        offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
     """
 
     def __init__(
@@ -1118,19 +1105,20 @@ def _keyed_values_string(values: torch.Tensor) -> str:
 
 class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """
-    KeyedTensor holds a concatenated list of dense tensors
-    each of which can be accessed by a key.
-    Keyed dimension can be variable length (length_per_key).
+    KeyedTensor holds a concatenated list of dense tensors, each of which can be
+    accessed by a key.
+
+    The keyed dimension can be of variable length (length_per_key).
     Common use cases uses include storage of pooled embeddings of different dimensions.
 
+    Implementation is torch.jit.script-able.
+
     Args:
-        keys (List[str]): list of keys
-        length_per_key (List[int]): length of each key along key dimension
-        values (torch.Tensor): dense tensor, concatenated typically along key dimension
-        key_dim (int): key dimension, zero indexed - defaults to 1 (typically B is 0-dimension)
-
-    Implementation is torch.jit.script-able
-
+        keys (List[str]): list of keys.
+        length_per_key (List[int]): length of each key along key dimension.
+        values (torch.Tensor): dense tensor, concatenated typically along key dimension.
+        key_dim (int): key dimension, zero indexed - defaults to 1
+            (typically B is 0-dimension).
 
     Example::
 
@@ -1140,21 +1128,28 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         #     "Embedding A"    [1,1]       [1,1]        [1,1]
         #     "Embedding B"    [2,1,2]     [2,1,2]      [2,1,2]
         #     "Embedding C"    [3,1,2,3]   [3,1,2,3]    [3,1,2,3]
-        # tensor_list = [
-        #         torch.tensor([[1,1]] * 3),
-        #         torch.tensor([[2,1,2]] * 3),
-        #         torch.tensor([[3,1,2,3]] * 3),
-        #     ]
+
+        tensor_list = [
+            torch.tensor([[1,1]] * 3),
+            torch.tensor([[2,1,2]] * 3),
+            torch.tensor([[3,1,2,3]] * 3),
+        ]
+
         keys = ["Embedding A", "Embedding B", "Embedding C"]
+
         kt = KeyedTensor.from_tensor_list(keys, tensor_list)
+
         kt.values()
-            tensor([[1, 1, 2, 1, 2, 3, 1, 2, 3],
-            [1, 1, 2, 1, 2, 3, 1, 2, 3],
-            [1, 1, 2, 1, 2, 3, 1, 2, 3]])
+            # tensor(
+            #     [
+            #         [1, 1, 2, 1, 2, 3, 1, 2, 3],
+            #         [1, 1, 2, 1, 2, 3, 1, 2, 3],
+            #         [1, 1, 2, 1, 2, 3, 1, 2, 3],
+            #     ]
+            # )
+
         kt["Embedding B"]
-            tensor([[2, 1, 2],
-            [2, 1, 2],
-            [2, 1, 2]])
+            # tensor([[2, 1, 2], [2, 1, 2], [2, 1, 2]])
     """
 
     def __init__(

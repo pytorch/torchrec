@@ -133,54 +133,30 @@ class TestJaggedTensor(unittest.TestCase):
             self.assertTrue(torch.equal(t0, expected_t0))
 
     def test_to_padded_dense(self) -> None:
-        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).type(
+            torch.float64
+        )
         offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
         jt = JaggedTensor(
             values=values,
             offsets=offsets,
         )
         t0 = jt.to_padded_dense()
+        self.assertEqual(t0.dtype, torch.float64)
         t0_value = [
-            [0.0, 1.0, 2.0],
+            [1.0, 2.0, 0.0],
             [0.0, 0.0, 0.0],
-            [0.0, 0.0, 3.0],
-            [0.0, 0.0, 4.0],
-            [0.0, 0.0, 5.0],
+            [3.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
             [6.0, 7.0, 8.0],
         ]
-        expected_t0 = torch.tensor(t0_value)
+        expected_t0 = torch.tensor(t0_value).type(torch.float64)
         self.assertTrue(torch.equal(t0, expected_t0))
+
         t1 = jt.to_padded_dense(desired_length=2, padding_value=10.0)
+        self.assertEqual(t1.dtype, torch.float64)
         t1_value = [
-            [1.0, 2.0],
-            [10.0, 10.0],
-            [10.0, 3.0],
-            [10.0, 4.0],
-            [10.0, 5.0],
-            [7.0, 8.0],
-        ]
-        expected_t1 = torch.tensor(t1_value)
-        self.assertTrue(torch.equal(t1, expected_t1))
-        t2 = jt.to_padded_dense(
-            desired_length=2, padding_value=10.0, pad_from_beginning=False
-        )
-        t2_value = [
-            [1.0, 2.0],
-            [10.0, 10.0],
-            [3.0, 10.0],
-            [4.0, 10.0],
-            [5.0, 10.0],
-            [7.0, 8.0],
-        ]
-        expected_t2 = torch.tensor(t2_value)
-        self.assertTrue(torch.equal(t2, expected_t2))
-        t3 = jt.to_padded_dense(
-            desired_length=2,
-            padding_value=10.0,
-            pad_from_beginning=False,
-            chop_from_beginning=False,
-        )
-        t3_value = [
             [1.0, 2.0],
             [10.0, 10.0],
             [3.0, 10.0],
@@ -188,8 +164,47 @@ class TestJaggedTensor(unittest.TestCase):
             [5.0, 10.0],
             [6.0, 7.0],
         ]
-        expected_t3 = torch.tensor(t3_value)
-        self.assertTrue(torch.equal(t3, expected_t3))
+        expected_t1 = torch.tensor(t1_value).type(torch.float64)
+        self.assertTrue(torch.equal(t1, expected_t1))
+
+        values = torch.Tensor(
+            [
+                [1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0],
+                [10.0, 11.0, 12.0],
+            ]
+        ).type(torch.int64)
+        jt = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 0]),
+        )
+        t2 = jt.to_padded_dense(desired_length=3)
+        self.assertEqual(t2.dtype, torch.int64)
+        t2_value = [
+            [
+                [1.0, 2.0, 3.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+        ]
+        expected_t2 = torch.tensor(t2_value).type(torch.int64)
+        self.assertTrue(torch.equal(t2, expected_t2))
 
     def test_key_lookup(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
