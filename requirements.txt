@@ -23,7 +23,7 @@ portalocker
 pyarrow
 pyDeprecate
 pyparsing
-pyre-extensions
+pyre-extensions==0.0.27
 python-dateutil
 pytz
 PyYAML
