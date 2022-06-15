@@ -322,10 +322,14 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
             batch_size_per_rank_tensor = torch.empty(
                 self._workers,
                 device=self._device,
+                # pyre-fixme[16]: Module `torch` has no attribute `torch`.
                 dtype=torch.torch.int32,
             )
             local_batch_sizes = torch.tensor(
-                [dim_1] * self._workers, device=self._device, dtype=torch.torch.int32
+                # pyre-fixme[16]: Module `torch` has no attribute `torch`.
+                [dim_1] * self._workers,
+                device=self._device,
+                dtype=torch.torch.int32,
             )
             with record_function("## all2all_data: Batch size ##"):
                 dist.all_to_all_single(

@@ -366,6 +366,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         )
         assert_array_equal(
             _input.cpu().detach().div_(world_size),
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
             _input.grad.cpu().detach(),
         )
 
@@ -429,6 +430,7 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
     ) -> None:
         assert_array_equal(actual_output.cpu().detach(), expected_output.cpu().detach())
         assert_array_equal(
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
             input.grad.cpu().detach(),
             torch.ones(input.size()).div_(world_size),
         )

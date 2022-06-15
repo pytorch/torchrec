@@ -23,7 +23,6 @@ from torch import nn
 from torch.fx import wrap
 
 
-# pyre-ignore[56]: Pyre was not able to infer the type of the decorator `torch.fx.wrap`.
 @wrap
 def _get_flatten_input(inputs: List[torch.Tensor]) -> torch.Tensor:
     return torch.cat(

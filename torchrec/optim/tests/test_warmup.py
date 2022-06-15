@@ -28,6 +28,7 @@ class TestWarmupOptimizer(unittest.TestCase):
     def test_load_state_dict(self) -> None:
         def get_optimizer() -> WarmupOptimizer:
             param_1_t = torch.tensor([1.0, 2.0])
+            # pyre-fixme[19]: Expected 0 positional arguments.
             param_1 = Variable(param_1_t)
             keyed_optimizer = DummyKeyedOptimizer(
                 {"param_1": param_1}, defaultdict(dict), [{"params": [param_1]}]

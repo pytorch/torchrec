@@ -35,7 +35,6 @@ def recalls_and_ndcgs_for_ks(
     _, cut = torch.sort(-scores, dim=1)
     for k in sorted(ks, reverse=True):
         cut = cut[:, :k]
-        # pyre-fixme[16]: `torch.FloatTensor` has no attribute `gather`.
         hits = labels_float.gather(1, cut)
         metrics["Recall@%d" % k] = (
             (
@@ -48,6 +47,7 @@ def recalls_and_ndcgs_for_ks(
         )
 
         position = torch.arange(2, 2 + k)
+        # pyre-fixme[58]: `/` is not supported for operand types `int` and `Tensor`.
         weights = 1 / torch.log2(position.float())
         # pyre-fixme[16]: `float` has no attribute `to`.
         dcg = (hits * weights.to(hits.device)).sum(1)

@@ -158,6 +158,8 @@ class ModelInput(Pipelineable):
             local_input = ModelInput(
                 float_features=global_float[r * batch_size : (r + 1) * batch_size],
                 idlist_features=local_idlist_kjt,
+                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
+                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=local_idscore_kjt,
                 label=global_label[r * batch_size : (r + 1) * batch_size],
             )
@@ -167,6 +169,8 @@ class ModelInput(Pipelineable):
             ModelInput(
                 float_features=global_float,
                 idlist_features=global_idlist_kjt,
+                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
+                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=global_idscore_kjt,
                 label=global_label,
             ),
@@ -191,10 +195,12 @@ class ModelInput(Pipelineable):
         )
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.float_features.record_stream(stream)
         self.idlist_features.record_stream(stream)
         if self.idscore_features is not None:
             self.idscore_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.label.record_stream(stream)
 
 

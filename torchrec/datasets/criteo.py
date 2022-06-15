@@ -208,7 +208,7 @@ class BinaryCriteoUtils:
                     1 + INT_FEATURE_COUNT, 1 + INT_FEATURE_COUNT + CAT_FEATURE_COUNT
                 )
             ]
-            return dense, sparse, label  # pyre-ignore[7]
+            return dense, sparse, label
 
         dense, sparse, labels = [], [], []
         for (row_dense, row_sparse, row_label) in CriteoIterDataPipe(

@@ -39,7 +39,6 @@ class _RandomRecBatch:
 
         if manual_seed is not None:
             self.generator = torch.Generator()
-            # pyre-ignore[16]
             self.generator.manual_seed(manual_seed)
         else:
             self.generator = None
@@ -74,7 +73,6 @@ class _RandomRecBatch:
             num_ids_in_batch = self.ids_per_features[key_idx]
 
             values.append(
-                # pyre-ignore
                 torch.randint(
                     high=hash_size,
                     size=(num_ids_in_batch * self.batch_size,),
@@ -94,7 +92,6 @@ class _RandomRecBatch:
             self.num_dense,
             generator=self.generator,
         )
-        # pyre-ignore[28]
         labels = torch.randint(
             low=0,
             high=2,

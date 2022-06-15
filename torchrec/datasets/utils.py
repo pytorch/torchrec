@@ -40,8 +40,10 @@ class Batch(Pipelineable):
         )
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.dense_features.record_stream(stream)
         self.sparse_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.labels.record_stream(stream)
 
     def pin_memory(self) -> "Batch":

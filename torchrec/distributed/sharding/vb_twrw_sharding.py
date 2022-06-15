@@ -275,6 +275,7 @@ class VariableBatchTwRwPooledEmbeddingDist(
         # Skip padding when a host has no table assigned, in which case its dim is 0
         max_length = max(batch_size_sum_by_cross_group)
         if local_embs.shape[1] != 0:
+            # pyre-fixme[28]: Unexpected keyword argument `pin_memory`.
             lengths = torch.tensor(
                 batch_size_sum_by_cross_group,
                 pin_memory=True,

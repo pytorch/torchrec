@@ -242,7 +242,6 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
                     var = next((v for v in var.values() if isinstance(v, torch.Tensor)))
                 else:
                     var = var[0]
-            # pyre-ignore[16]
             grad_fn = var.grad_fn
             if grad_fn is not None:
                 for hook in non_full_backward_hooks:

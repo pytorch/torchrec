@@ -101,6 +101,7 @@ class SparseArchTest(unittest.TestCase):
         F = len(sparse_arch.sparse_feature_names)
         gm = symbolic_trace(sparse_arch)
 
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("cat").run(gm.code)
 
         keys = ["f1", "f2", "f3", "f4", "f5"]
@@ -467,6 +468,7 @@ class DLRMTest(unittest.TestCase):
             over_arch_layer_sizes=[5, 1],
         )
         gm = symbolic_trace(sparse_nn)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("cat").check("f2").run(gm.code)
 
         features = torch.rand((B, dense_in_features))

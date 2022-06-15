@@ -16,6 +16,7 @@ from torchrec.optim.test_utils import DummyKeyedOptimizer
 class TestGradientClippingOptimizer(unittest.TestCase):
     def test_clip_all_gradients_norm(self) -> None:
         # Clip all gradients to zero
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -27,6 +28,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer.zero_grad()
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([1.0, 2.0])
         gradient_clipping_optimizer.step()
 
@@ -34,6 +36,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
     def test_clip_no_gradients_norm(self) -> None:
         # gradients are too small to be clipped
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -45,6 +48,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer.zero_grad()
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([0.5, 0.5])
         gradient_clipping_optimizer.step()
 
@@ -52,6 +56,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
     def test_clip_partial_gradients_norm(self) -> None:
         # test partial clipping
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -64,6 +69,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
         gradient_clipping_optimizer.zero_grad()
 
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([2.0, 4.0])
         gradient_clipping_optimizer.step()
 
@@ -74,7 +80,9 @@ class TestGradientClippingOptimizer(unittest.TestCase):
     def test_clip_partial_gradients_norm_multi_params(self) -> None:
         # test partial clipping
         max_gradient = 2.0
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_2 = Variable(torch.tensor([2.0, 4.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -91,6 +99,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
         gradient_clipping_optimizer.zero_grad()
 
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([2.0, 4.0])
         param_2.grad = torch.tensor([4.0, 8.0])
 
@@ -109,6 +118,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
     def test_clip_all_gradients_value(self) -> None:
         # Clip all gradients to zero
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -120,6 +130,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer.zero_grad()
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([1.0, 2.0])
         gradient_clipping_optimizer.step()
 
@@ -127,6 +138,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
     def test_clip_no_gradients_value(self) -> None:
         # gradients are too small to be clipped
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -138,6 +150,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         )
 
         gradient_clipping_optimizer.zero_grad()
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([0.5, 0.5])
         gradient_clipping_optimizer.step()
 
@@ -145,6 +158,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
     def test_clip_gradients_value(self) -> None:
         # test partial clipping
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -157,6 +171,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
         gradient_clipping_optimizer.zero_grad()
 
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([2.0, 4.0])
         gradient_clipping_optimizer.step()
 
@@ -167,7 +182,9 @@ class TestGradientClippingOptimizer(unittest.TestCase):
     def test_clip_partial_gradients_value_multi_params(self) -> None:
         # test partial clipping
         max_gradient = 2.0
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_1 = Variable(torch.tensor([1.0, 2.0]), requires_grad=True)
+        # pyre-fixme[28]: Unexpected keyword argument `requires_grad`.
         param_2 = Variable(torch.tensor([2.0, 4.0]), requires_grad=True)
 
         keyed_optimizer = DummyKeyedOptimizer(
@@ -184,6 +201,7 @@ class TestGradientClippingOptimizer(unittest.TestCase):
 
         gradient_clipping_optimizer.zero_grad()
 
+        # pyre-fixme[16]: `Variable` has no attribute `grad`.
         param_1.grad = torch.tensor([2.0, 4.0])
         param_2.grad = torch.tensor([4.0, 8.0])
 

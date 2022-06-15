@@ -462,6 +462,7 @@ class TestJaggedTensorTracing(unittest.TestCase):
         # Case 1: JaggedTensor is only used as an output of the root module.
         m = ModuleUseJaggedTensorAsOutput()
         gm = symbolic_trace(m)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("JaggedTensor").check("return jagged_tensor").run(gm.code)
 
         values = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7])
@@ -873,7 +874,10 @@ class TestKeyedJaggedTensor(unittest.TestCase):
 
     def test_string_none(self) -> None:
         jag_tensor = KeyedJaggedTensor(
+            # pyre-fixme[6]: For 1st param expected `List[str]` but got `Tensor`.
             torch.Tensor(),
+            # pyre-fixme[6]: For 2nd param expected `Tensor` but got
+            #  `List[Variable[_T]]`.
             [],
         )
 
@@ -1053,6 +1057,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # the root module's input/output interface.
         m = ModuleCreateAndAccessKeyedJaggedTensor()
         gm = symbolic_trace(m)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("return 35").check_not("KeyedJaggedTensor").run(gm.code)
         ref_out = m(8)
         traced_out = gm(8)
@@ -1079,6 +1084,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 3: KeyedJaggedTensor is used as both an input and an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsInputAndOutput()
         gm = symbolic_trace(m)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("values()").check(
             "._stride"
         ).run(gm.code)
@@ -1110,6 +1116,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 2: KeyedJaggedTensor is only used as an input of the root module.
         m = ModuleUseKeyedJaggedTensorAsInput()
         gm = symbolic_trace(m)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("len").check(
             "values()"
         ).check("numel()").run(gm.code)
@@ -1143,6 +1150,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 1: KeyedJaggedTensor is only used as an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsOutput()
         gm = symbolic_trace(m)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check(
             "return (keyed_jagged_tensor,"
         ).run(gm.code)

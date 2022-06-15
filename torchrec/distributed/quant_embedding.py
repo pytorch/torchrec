@@ -223,8 +223,12 @@ class ShardedQuantEmbeddingCollection(
                 sharding_ctx.features_before_input_dist
             )
         return EmbeddingCollectionAwaitable(
+            # pyre-fixme[6]: For 1st param expected `List[Awaitable[Tensor]]` but
+            #  got `List[Awaitable[Dict[str, JaggedTensor]]]`.
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
+            # pyre-fixme[6]: For 3rd param expected `List[str]` but got
+            #  `List[List[str]]`.
             embedding_names_per_sharding=self._embedding_names_per_sharding,
             need_indices=self._need_indices,
         )
