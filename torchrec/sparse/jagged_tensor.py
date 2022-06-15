@@ -146,6 +146,8 @@ def _jagged_values_string(
         "["
         + ", ".join(
             [
+                # pyre-fixme[6]: For 2nd param expected `int` but got `Tensor`.
+                # pyre-fixme[6]: For 3rd param expected `int` but got `Tensor`.
                 _values_string(values, offsets[index], offsets[index + 1])
                 for index in range(offset_start, offset_end)
             ]
@@ -154,6 +156,7 @@ def _jagged_values_string(
     )
 
 
+# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
     pass
 
@@ -269,7 +272,10 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights = torch.cat(weights, dim=0) if weights is not None else None
 
         return JaggedTensor(
+            # pyre-fixme[6]: For 1st param expected `Tensor` but got `List[Tensor]`.
             values=values,
+            # pyre-fixme[6]: For 2nd param expected `Optional[Tensor]` but got
+            #  `Optional[List[Tensor]]`.
             weights=weights,
             lengths=lengths,
         )
@@ -407,18 +413,21 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             else None,
         )
 
-    # pyre-ignore [56]
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
         if weights is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             weights.record_stream(stream)
         if lengths is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             lengths.record_stream(stream)
         if offsets is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             offsets.record_stream(stream)
 
     def __str__(self) -> str:
@@ -486,7 +495,6 @@ def _maybe_compute_stride_kjt(
 # correct results in case of usage with jit.tracing.
 # This module is returning torch.Tensor instead of int, because ji.trace doesn't
 # support int type at the current moment.
-# pyre-ignore[56]: Pyre was not able to infer the type of the decorator
 @torch.jit.script
 def _maybe_compute_stride_kjt_scripted(
     keys: List[str],
@@ -1000,18 +1008,21 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._jt_dict = _jt_dict
         return _jt_dict
 
-    # pyre-ignore [56]
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
         if weights is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             weights.record_stream(stream)
         if lengths is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             lengths.record_stream(stream)
         if offsets is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             offsets.record_stream(stream)
 
     def to(
@@ -1208,7 +1219,6 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         index = self._key_indices()[key]
         start = self.offset_per_key()[index]
         length = self._length_per_key[index]
-        # pyre-ignore [16]: Undefined attribute `torch.Tensor` has no attribute `narrow`
         return self._values.narrow(dim=self._key_dim, start=start, length=length)
 
     def to_dict(self) -> Dict[str, torch.Tensor]:
@@ -1223,9 +1233,9 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     ) -> List[torch.Tensor]:
         return _regroup_keyed_tensors(keyed_tensors, groups)
 
-    # pyre-ignore [56]
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
 
     def to(self, device: torch.device, non_blocking: bool = False) -> "KeyedTensor":

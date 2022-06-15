@@ -547,6 +547,8 @@ def main(argv: List[str]) -> None:
         val_loader,
         test_loader,
         device,
+        # pyre-fixme[6]: For 6th param expected `Adam` but got
+        #  `Union[CombinedOptimizer, Adam]`.
         optimizer,
         lr_scheduler,
         args.num_epochs,

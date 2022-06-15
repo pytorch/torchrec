@@ -100,6 +100,8 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         if sharded_parameter_names == all_paramemeter_names:
             return
 
+        # pyre-fixme[16]: `DistributedDataParallel` has no attribute
+        #  `_set_params_and_buffers_to_ignore_for_model`.
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
             params_and_buffers_to_ignore=[
@@ -109,6 +111,7 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         # initialize DDP
         dmp._dmp_wrapped_module = cast(
             nn.Module,
+            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             DistributedDataParallel(
                 module=dmp._dmp_wrapped_module.to(device),
                 device_ids=None if device.type == "cpu" else [device],

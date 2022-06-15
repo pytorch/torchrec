@@ -408,6 +408,7 @@ def reduce_scatter_pooled(
         return NoWait(inputs[dist.get_rank(group)])
 
     myreq = Request(group)
+    # pyre-fixme[6]: For 1st param expected `List[int]` but got `List[Size]`.
     rsi = ReduceScatterInfo(input_sizes=[tensor.size() for tensor in inputs])
     # pyre-fixme[16]: `ReduceScatter_Req` has no attribute `apply`.
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)

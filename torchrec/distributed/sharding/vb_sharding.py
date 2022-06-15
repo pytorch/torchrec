@@ -32,6 +32,7 @@ class VariableBatchShardingContext(Multistreamable):
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         if self.batch_size_per_rank_tensor is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.batch_size_per_rank_tensor.record_stream(stream)
 
 

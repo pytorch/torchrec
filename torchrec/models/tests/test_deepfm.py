@@ -129,6 +129,7 @@ class SimpleDeepFMNNTest(unittest.TestCase):
             deep_fm_dimension=5,
         )
         gm = symbolic_trace(deepfm_nn)
+        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("cat").check("f2").run(gm.code)
 
         features = torch.rand((B, num_dense_features))

@@ -93,7 +93,9 @@ class ModelInputSimple(Pipelineable):
         )
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.float_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.label.record_stream(stream)
 
 

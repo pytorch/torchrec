@@ -165,6 +165,7 @@ class ShardedEmbeddingTower(
                 device,
             )
             # Hierarchical DDP
+            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
                 device_ids=[self._device],
@@ -174,6 +175,8 @@ class ShardedEmbeddingTower(
             )
 
         # Setup output dists for quantized comms
+        # pyre-fixme[8]: Attribute has type `ModuleList`; used as `Union[Module,
+        #  Tensor]`.
         self._output_dists: nn.ModuleList = (
             self.embedding._output_dists if self.embedding else nn.ModuleList()
         )
@@ -323,7 +326,11 @@ class ShardedEmbeddingTower(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
-            pg=self._cross_pg, dim_sum_per_rank=dim_sum_per_rank, device=self._device
+            pg=self._cross_pg,
+            # pyre-fixme[6]: For 2nd param expected `List[int]` but got
+            #  `List[Union[bool, float, int]]`.
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=self._device,
         )
 
     def output_dist(
@@ -557,6 +564,7 @@ class ShardedEmbeddingTowerCollection(
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
                 # Hierarchical DDP
+                # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
                     device_ids=[self._device],
@@ -729,7 +737,11 @@ class ShardedEmbeddingTowerCollection(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
-            pg=self._cross_pg, dim_sum_per_rank=dim_sum_per_rank, device=self._device
+            pg=self._cross_pg,
+            # pyre-fixme[6]: For 2nd param expected `List[int]` but got
+            #  `List[Union[bool, float, int]]`.
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=self._device,
         )
 
     # pyre-ignore [14]

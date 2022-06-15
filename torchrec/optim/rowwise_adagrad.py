@@ -82,6 +82,9 @@ class RowWiseAdagrad(Optimizer):
                     else initial_accumulator_value
                 )
                 state["sum"] = (
+                    # pyre-fixme[28]: Unexpected keyword argument `axis`.
+                    # pyre-fixme[6]: For 2nd param expected `Union[bool, float,
+                    #  int]` but got `complex`.
                     torch.full_like(p, init_value, memory_format=torch.preserve_format)
                     .mean(axis=1)
                     .view(-1, 1)

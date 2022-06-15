@@ -132,7 +132,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         # Update
         if self._model.training:
             with record_function("## optimizer ##"):
-                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         return output
@@ -212,6 +211,7 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
             assert isinstance(
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             data.record_stream(cur_stream)
 
             ctx = self._context.module_contexts[self._name]
@@ -521,7 +521,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
             # Update
             with record_function("## optimizer ##"):
-                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         self._batch_i = batch_ip1

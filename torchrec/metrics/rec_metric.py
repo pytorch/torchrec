@@ -440,9 +440,11 @@ class RecMetric(nn.Module, abc.ABC):
         )
 
     def _create_default_weights(self, predictions: torch.Tensor) -> torch.Tensor:
+        # pyre-fixme[6]: For 1st param expected `Tuple[int, ...]` but got `Size`.
         weights = self._default_weights.get(predictions.size(), None)
         if weights is None:
             weights = torch.ones_like(predictions)
+            # pyre-fixme[6]: For 1st param expected `Tuple[int, ...]` but got `Size`.
             self._default_weights[predictions.size()] = weights
         return weights
 

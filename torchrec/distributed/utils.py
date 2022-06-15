@@ -159,7 +159,6 @@ class sharded_model_copy:
                 _copy_or_not(param, memo), requires_grad=param.requires_grad
             )
 
-        # pyre-ignore [16]
         torch.Tensor.__deepcopy__ = _copy_or_not
         torch.nn.Parameter.__deepcopy__ = _param_copy
         torch._C._distributed_c10d.ProcessGroupNCCL.__deepcopy__ = _no_copy

@@ -271,7 +271,6 @@ def gen_full_pred_after_one_step(
     model.train(True)
     loss, _ = model(input)
     loss.backward()
-    # pyre-fixme[20]: Argument `closure` expected.
     opt.step()
 
     # Run a forward pass of the global model.

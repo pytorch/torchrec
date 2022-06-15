@@ -68,7 +68,6 @@ def train_one_epoch(
         for _name, param in pooled_embeddings.to_dict().items():
             vals.append(param)
         torch.cat(vals, dim=1).sum().backward()
-        # pyre-ignore[20]
         optimizer.step()
 
     end_time = time.perf_counter()
