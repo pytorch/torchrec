@@ -36,16 +36,6 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
@@ -79,11 +69,16 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/test/cpu/torch_test.html
+        conda run -n build_binary python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
     - name: Install Dependencies
       shell: bash
       run: |
         conda run -n build_binary python -m pip install -r requirements.txt
+    - name: Replace fbgemm_gpu_gpu to fbgemm_gpu_cpu
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip uninstall fbgemm_gpu-nightly -y
+        conda run -n build_binary python -m pip install fbgemm-gpu-nightly-cpu
     - name: Test Installation of dependencies
       run: |
         conda run -n build_binary python -c "import torch.distributed"
@@ -92,6 +87,8 @@ jobs:
         echo "skbuild succeeded"
         conda run -n build_binary python -c "import numpy"
         echo "numpy succeeded"
+        conda run -n build_binary python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
     # for the conda run with quotes, we have to use "\" and double quotes
     # here is the issue: https://github.com/conda/conda/issues/10972
     - name: Build TorchRec
@@ -99,16 +96,13 @@ jobs:
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-test-cpu \
-          --cpu_only \
           --python-tag=${{ matrix.python-tag }}
     - name: Install TorchRec
       run: |
         conda run -n build_binary python -m pip install dist/*.whl
-    - name: Test fbgemm_gpu and torchrec installation
+    - name: Test torchrec installation
       shell: bash
       run: |
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
         conda run -n build_binary \
           python -c "import torchrec"
     - name: Test with pytest
