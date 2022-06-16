@@ -445,6 +445,7 @@ def main(argv: List[str]) -> None:
 
     world_size = dist.get_world_size()
 
+    # pyre-fixme[16]: Module `data` has no attribute `bert4rec_movielens_datasets`.
     raw_data = get_raw_dataframe(
         args.dataset_name,
         args.random_user_count,
@@ -454,6 +455,7 @@ def main(argv: List[str]) -> None:
         args.dataset_path,
     )
 
+    # pyre-fixme[16]: Module `data` has no attribute `bert4rec_movielens_datasets`.
     df = Bert4RecPreprocsser(
         raw_data,
         args.min_rating,
