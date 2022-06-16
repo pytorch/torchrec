@@ -24,6 +24,8 @@ The inference library uses torch deploy which is a library in pytorch that's onl
 ```
 export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
 export USE_DEPLOY=1
+export BUILD_SPLIT_CUDA=1
+
 python setup.py develop
 ```
 
@@ -81,23 +83,21 @@ Replace these variables with the relevant paths in your system. Check `CMakeList
 
 ```
 # provide the cmake prefix path of pytorch, folly, and fmt.
-# fmt is pulled from folly's installation in this example.
-
+# fmt and boost are pulled from folly's installation in this example.
 export FOLLY_CMAKE_DIR="~/folly-build/installed/folly/lib/cmake/folly"
-export FMT_CMAKE_DIR="~/folly-build/installed/fmt-dGmDTkdcPS1pyvm65J7UcKzxzLonWCKaaxWmgYpScUw/lib/cmake/fmt"
-export INFERENCE_CMAKE_PREFIX_PATH=
-"$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)');$FOLLY_CMAKE_DIR;"
+export FMT_CMAKE_DIR="~/folly-build/fmt-WuK9LOk2P03KJKCt1so6VofoXa4qtyD5kQk6cZMphjg/lib64/cmake/fmt"
+export BOOST_CMAKE_DIR="~/folly-build/installed/boost-4M2ZnvEM4UWTqpsEJRQTB4oejmX3LmgYC9pcBiuVlmA/lib/cmake/Boost-1.78.0"
 
 #  provide fmt from pytorch for torch deploy
-export PYTORCH_FMT_INCLUDE_PATH="~/repos/pytorch/third_party/fmt/include/"
-export PYTORCH_LIB_FMT="~/repos/pytorch/build/lib/libfmt.a"
+export PYTORCH_FMT_INCLUDE_PATH="~/pytorch/third_party/fmt/include/"
+export PYTORCH_LIB_FMT="~/pytorch/build/lib/libfmt.a"
 
 #  provide necessary info to link to torch deploy
-export DEPLOY_INTERPRETER_PATH="/repos/pytorch/build/torch/csrc/deploy/libtorch_deployinterpreter.o"
-export DEPLOY_SRC_PATH="~/repos/pytorch/torch/csrc/deploy/"
+export DEPLOY_INTERPRETER_PATH="/pytorch/build/torch/csrc/deploy"
+export DEPLOY_SRC_PATH="~/pytorch/torch/csrc/deploy"
 
 #  provide common.cmake from grpc/examples, makes linking to grpc easier
-export GRPC_COMMON_CMAKE_PATH="~/grpc/examples/cpp/cmake/common.cmake"
+export GRPC_COMMON_CMAKE_PATH="~/grpc/examples/cpp/cmake"
 export GRPC_HEADER_INCLUDE_PATH="~/.local/include/"
 
 # provide libfbgemm_gpu_py.so to enable fbgemm_gpu c++ operators
@@ -107,14 +107,14 @@ export FBGEMM_LIB="~/anaconda3/envs/inference/lib/python3.8/site-packages/fbgemm
 export PYTHON_PACKAGES_PATH="~/anaconda3/envs/inference/lib/python3.8/site-packages/"
 ```
 
-Update `$LD_LIBRARY_PATH` and `$LIBRARY_PATH` to make it easier for linker to locate certain shared libs.
+Update `$LD_LIBRARY_PATH` and `$LIBRARY_PATH` to enable linker to locate libraries.
 
 ```
 # double-conversion, fmt and gflags are pulled from folly's installation in this example
 export DOUBLE_CONVERSION_LIB_PATH="~/folly-build/installed/double-conversion-skGL6pOaPHjtDwdXY-agzdwT1gvTXP0bD-7P4gKJD9I/lib"
-export FMT_LIB_PATH="~/folly-build/installed/fmt-dGmDTkdcPS1pyvm65J7UcKzxzLonWCKaaxWmgYpScUw/lib"
+export FMT_LIB_PATH="~/folly-build/fmt-WuK9LOk2P03KJKCt1so6VofoXa4qtyD5kQk6cZMphjg/lib64/"
 export GFLAGS_LIB_PATH="~/folly-build/installed/gflags-KheHQBqQ3_iL3yJBFwWe5M5f8Syd-LKAX352cxkhQMc/lib"
-export PYTORCH_LIB_PATH="~/repos/pytorch/build/lib/"
+export PYTORCH_LIB_PATH="~/pytorch/build/lib/"
 
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$DOUBLE_CONVERSION_LIB_PATH:$FMT_LIB_PATH:$GFLAGS_LIB_PATH:$PYTORCH_LIB_PATH"
 export LIBRARY_PATH="$PYTORCH_LIB_PATH"
@@ -148,7 +148,8 @@ cd ~/torchrec/inference/
 mkdir -p gen/torchrec/inference
 
 # C++ (server)
-protoc -I protos/ --grpc_out=gen/torchrec/inference --plugin=protoc-gen-grpc=~/.local/bin/grpc_cpp_plugin protos/predictor.proto
+protoc -I protos/ --grpc_out=gen/torchrec/inference --plugin=protoc-gen-grpc=/home/shabab/.local/bin/grpc_cpp_plugin protos/predictor.proto
+
 protoc -I protos/ --cpp_out=gen/torchrec/inference protos/predictor.proto
 
 
@@ -159,14 +160,12 @@ python -m grpc_tools.protoc -I protos --python_out=gen/torchrec/inference --grpc
 
 Build inference library and example server
 ```
-cmake -S . -B build/ \
--DCMAKE_PREFIX_PATH="$INFERENCE_CMAKE_PREFIX_PATH" \
+cmake -S . -B build/ -DCMAKE_PREFIX_PATH="$(python -c 'import torch.utils; print(torch.utils.cmake_prefix_path)');$FOLLY_CMAKE_DIR;$BOOST_CMAKE_DIR;$BOOST_CMAKE_DIR;"
 -DPYTORCH_FMT_INCLUDE_PATH="$PYTORCH_FMT_INCLUDE_PATH" \
 -DPYTORCH_LIB_FMT="$PYTORCH_LIB_FMT" \
 -DDEPLOY_INTERPRETER_PATH="$DEPLOY_INTERPRETER_PATH" \
--DDEPLOY_SRC_PATH="$DEPLOY_INTERPRETER_PATH" \
--DGRPC_COMMON_CMAKE_PATH="$GRPC_COMMON_CMAKE_PATH" \
--DGRPC_HEADER_INCLUDE_PATH="$GRPC_HEADER_INCLUDE_PATH"
+-DDEPLOY_SRC_PATH="$DEPLOY_SRC_PATH" \
+-DGRPC_COMMON_CMAKE_PATH="$GRPC_COMMON_CMAKE_PATH" \ -DGRPC_HEADER_INCLUDE_PATH="$GRPC_HEADER_INCLUDE_PATH" \
 -DFBGEMM_LIB="$FBGEMM_LIB"
 
 cd build
@@ -178,7 +177,7 @@ make -j
 
 Run server. Update `CUDA_VISABLE_DEVICES` depending on the world size.
 ```
-CUDA_VISABLE_DEVICES="0" ./example --package_path="/tmp/model_package.zip"
+CUDA_VISABLE_DEVICES="0" ./server --package_path="/tmp/model_package.zip" --python_packages_path $PYTHON_PACKAGES_PATH
 ```
 
 **output**
