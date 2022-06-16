@@ -123,7 +123,7 @@ def main() -> None:
         compute_device=args.compute_device,
     )
 
-    if args.embedding_sharding_planner_type == "non_parallelized":
+    if args.planner_type == "non_parallelized":
         planner = EmbeddingShardingPlanner(topology=topology)
     else:
         planner = ParallelizedEmbeddingShardingPlanner(topology=topology)
