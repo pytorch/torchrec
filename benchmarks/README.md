@@ -2,7 +2,7 @@
 
 We evaluate the performance of two EmbeddingBagCollection modules:
 
-1. `EmbeddingBagCollection` (EBC) ([code](https://github.com/pytorch/torchrec/blob/main/torchrec/modules/embedding_modules.py#L67)): a simple module backed by [torch.nn.EmbeddingBag](https://pytorch.org/docs/stable/generated/torch.nn.EmbeddingBag.html).
+1. `EmbeddingBagCollection` (EBC) ([code](https://pytorch.org/torchrec/torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection)): a simple module backed by [torch.nn.EmbeddingBag](https://pytorch.org/docs/stable/generated/torch.nn.EmbeddingBag.html).
 
 2. `FusedEmbeddingBagCollection` (Fused EBC) ([code](https://github.com/pytorch/torchrec/blob/main/torchrec/modules/fused_embedding_bag_collection.py#L299)): a module backed by [FBGEMM](https://github.com/pytorch/FBGEMM) kernels which enables more efficient, high-performance operations on embedding tables. It is equipped with a fused optimizer, and UVM caching/management that makes much larger memory available for GPUs.
 
@@ -17,7 +17,7 @@ embedding_dim_size = 128
 
 Other setup includes:
 -   Optimizer: Stochastic Gradient Descent (SGD)
--   Dataset: Random dataset ([code](https://github.com/pytorch/torchrec/blob/main/torchrec/datasets/random.py))
+-   Dataset: Random dataset ([code](https://pytorch.org/torchrec/torchrec.datasets.html#module-torchrec.datasets.random))
 -   CUDA 11.7, NCCL 2.11.4.
 -   AWS EC2 instance with 8 16GB NVIDIA Tesla V100
 
@@ -62,7 +62,7 @@ Here, we demonstrate the advantage of UVM/UVM-caching with Fused EBC. With UVM c
 |Fused EBC with UVM | 0.62 (+/- 5.34) second | full sized DLRM EMB |
 
 The above performance comparison is also put in a bar chart for better visualization.
-![EBC_benchmarks_dlrm_emb](EBC_benchmarks_dlrm_emb.png)
+![EBC_benchmarks_dlrm_emb](https://github.com/pytorch/torchrec/tree/main/benchmarks/EBC_benchmarks_dlrm_emb.png)
 
 
 ### 3. Comparison between EBC and fused_EBC on different sized embedding tables (`ebc_comparison_scaling`)
