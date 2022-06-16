@@ -33,7 +33,7 @@ class RWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -43,7 +43,7 @@ class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class TWRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -53,7 +53,7 @@ class TWRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class TWCWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -63,7 +63,7 @@ class TWCWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class HostLevelSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -73,7 +73,7 @@ class HostLevelSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class TestGreedyPerfPartitioner(unittest.TestCase):

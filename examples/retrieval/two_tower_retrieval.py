@@ -162,7 +162,7 @@ def infer(
     for feature_name in two_tower_column_names:
         constraints[f"t_{feature_name}"] = ParameterConstraints(
             sharding_types=[ShardingType.TABLE_WISE.value],
-            compute_kernels=[EmbeddingComputeKernel.BATCHED_QUANT.value],
+            compute_kernels=[EmbeddingComputeKernel.QUANT.value],
         )
 
     quant_model = trec_infer.modules.quantize_embeddings(

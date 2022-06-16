@@ -157,7 +157,7 @@ class DLRMPredictFactory(PredictFactory):
         for feature_name in self.model_config.id_list_features_keys:
             constraints[f"t_{feature_name}"] = ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_WISE.value],
-                compute_kernels=[EmbeddingComputeKernel.BATCHED_QUANT.value],
+                compute_kernels=[EmbeddingComputeKernel.QUANT.value],
             )
 
         module = quantize_embeddings(module, dtype=torch.qint8, inplace=True)

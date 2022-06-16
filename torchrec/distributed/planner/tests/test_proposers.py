@@ -100,24 +100,24 @@ class TestProposers(unittest.TestCase):
 
         expected_output = [
             [
-                ("table_0", "row_wise", "batched_fused"),
-                ("table_1", "row_wise", "batched_fused"),
+                ("table_0", "row_wise", "fused"),
+                ("table_1", "row_wise", "fused"),
             ],
             [
-                ("table_0", "table_row_wise", "batched_fused"),
-                ("table_1", "row_wise", "batched_fused"),
+                ("table_0", "table_row_wise", "fused"),
+                ("table_1", "row_wise", "fused"),
             ],
             [
-                ("table_1", "row_wise", "batched_fused"),
-                ("table_0", "data_parallel", "batched_dense"),
+                ("table_1", "row_wise", "fused"),
+                ("table_0", "data_parallel", "dense"),
             ],
             [
-                ("table_1", "table_row_wise", "batched_fused"),
-                ("table_0", "data_parallel", "batched_dense"),
+                ("table_1", "table_row_wise", "fused"),
+                ("table_0", "data_parallel", "dense"),
             ],
             [
-                ("table_0", "data_parallel", "batched_dense"),
-                ("table_1", "data_parallel", "batched_dense"),
+                ("table_0", "data_parallel", "dense"),
+                ("table_1", "data_parallel", "dense"),
             ],
         ]
 
@@ -182,68 +182,68 @@ class TestProposers(unittest.TestCase):
                 (
                     "table_1",
                     "data_parallel",
-                    "batched_dense",
+                    "dense",
                 ),
                 (
                     "table_2",
                     "data_parallel",
-                    "batched_dense",
+                    "dense",
                 ),
                 (
                     "table_3",
                     "data_parallel",
-                    "batched_dense",
+                    "dense",
                 ),
             ],
             [
                 (
                     "table_1",
                     "table_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_2",
                     "table_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_3",
                     "table_wise",
-                    "batched_fused",
+                    "fused",
                 ),
             ],
             [
                 (
                     "table_1",
                     "row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_2",
                     "row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_3",
                     "row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
             ],
             [
                 (
                     "table_1",
                     "table_row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_2",
                     "table_row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
                 (
                     "table_3",
                     "table_row_wise",
-                    "batched_fused",
+                    "fused",
                 ),
             ],
         ]
@@ -270,10 +270,10 @@ class TestProposers(unittest.TestCase):
 
         """
         All sharding types but DP will have 3 possible compute kernels after pruning:
-            - batched_fused
-            - batched_fused_uvm_caching
-            - batched_fused_uvm
-        DP will have 1 possible compute kernel: batched_dense
+            - fused
+            - fused_uvm_caching
+            - fused_uvm
+        DP will have 1 possible compute kernel: dense
         So the total number of pruned options will be:
             (num_sharding_types - 1) * 3 + 1 = 16
         """
@@ -283,7 +283,7 @@ class TestProposers(unittest.TestCase):
             sharding_options
         ) in self.grid_search_proposer._sharding_options_by_fqn.values():
             # number of sharding types after pruning is number of sharding types * 3
-            # 3 compute kernels batched_fused/batched_dense, batched_fused_uvm_caching, batched_fused_uvm
+            # 3 compute kernels fused/dense, fused_uvm_caching, fused_uvm
             self.assertEqual(len(sharding_options), num_pruned_options)
 
         num_proposals = 0
@@ -309,7 +309,7 @@ class TestProposers(unittest.TestCase):
                     batch_size=8,
                     sharding_type="row_wise",
                     partition_by="DEVICE",
-                    compute_kernel="batched_fused",
+                    compute_kernel="fused",
                     shards=[],
                 )
             ]

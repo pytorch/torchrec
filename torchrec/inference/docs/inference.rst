@@ -222,7 +222,7 @@ Run server. Update `CUDA_VISABLE_DEVICES` depending on the world size.
     INFO:<torch_package_0>.torchrec.distributed.planner.stats:# HBM: est. peak memory usage for shards - parameter, comms, optimizer, and gradients             #
     INFO:<torch_package_0>.torchrec.distributed.planner.stats:#                                                                                                 #
     INFO:<torch_package_0>.torchrec.distributed.planner.stats:# Compute Kernels:                                                                                #
-    INFO:<torch_package_0>.torchrec.distributed.planner.stats:#   batched_quant: 26                                                                             #
+    INFO:<torch_package_0>.torchrec.distributed.planner.stats:#   quant: 26                                                                             #
 
 ``nvidia-smi`` output should also show allocation of the model onto the gpu:
 

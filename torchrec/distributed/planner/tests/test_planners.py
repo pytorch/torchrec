@@ -26,7 +26,7 @@ class TWvsRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -36,7 +36,7 @@ class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class TestEmbeddingShardingPlanner(unittest.TestCase):

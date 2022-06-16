@@ -41,8 +41,8 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
     )
@@ -71,7 +71,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.DENSE.value,
             ]
         ),
     )
@@ -100,8 +100,8 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
     )
