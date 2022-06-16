@@ -12,16 +12,15 @@
 
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
-#include <torch/csrc/deploy/deploy.h>
-#include <torch/csrc/deploy/path_environment.h>
-#include <torch/torch.h>
-
 #include <folly/json.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <grpc++/grpc++.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
+#include <torch/csrc/deploy/deploy.h>
+#include <torch/csrc/deploy/path_environment.h>
+#include <torch/torch.h>
 
 #include "torchrec/inference/GPUExecutor.h"
 #include "torchrec/inference/predictor.grpc.pb.h"
@@ -42,8 +41,10 @@ DEFINE_string(package_path, "", "");
 DEFINE_int32(batching_interval, 10, "");
 DEFINE_int32(queue_timeout, 500, "");
 
+DEFINE_int32(num_exception_threads, 4, "");
 DEFINE_int32(num_mem_pinner_threads, 4, "");
 DEFINE_int32(max_batch_size, 2048, "");
+DEFINE_int32(gpu_executor_queue_timeout, 50, "");
 
 DEFINE_string(server_address, "0.0.0.0", "");
 DEFINE_string(server_port, "50051", "");
@@ -110,11 +111,11 @@ std::unique_ptr<torchrec::PredictionRequest> toTorchRecRequest(
     sparseFeature.lengths = folly::IOBuf{
         folly::IOBuf::COPY_BUFFER,
         encoded_lengths.data(),
-        encoded_lengths.size())};
+        encoded_lengths.size()};
     sparseFeature.values = folly::IOBuf{
         folly::IOBuf::COPY_BUFFER,
         encoded_values.data(),
-        encoded_values.size())};
+        encoded_values.size()};
     sparseFeature.weights = folly::IOBuf{
         folly::IOBuf::COPY_BUFFER,
         encoded_weights.data(),
@@ -273,7 +274,12 @@ int main(int argc, char* argv[]) {
 
     for (int rank = 0; rank < FLAGS_n_gpu; rank++) {
       auto executor = std::make_unique<torchrec::GPUExecutor>(
-          manager, std::move(models[rank]), rank, FLAGS_n_gpu, resultSplitFunc);
+          manager,
+          std::move(models[rank]),
+          rank,
+          FLAGS_n_gpu,
+          resultSplitFunc,
+          std::chrono::milliseconds(FLAGS_gpu_executor_queue_timeout));
       executors.push_back(std::move(executor));
       batchQueueCbs.push_back(
           [&, rank](std::shared_ptr<torchrec::PredictionBatch> batch) {
@@ -288,6 +294,7 @@ int main(int argc, char* argv[]) {
           .batchingInterval =
               std::chrono::milliseconds(FLAGS_batching_interval),
           .queueTimeout = std::chrono::milliseconds(FLAGS_queue_timeout),
+          .numExceptionThreads = FLAGS_num_exception_threads,
           .numMemPinnerThreads = FLAGS_num_mem_pinner_threads,
           .maxBatchSize = FLAGS_max_batch_size,
           .batchingMetadata = std::move(batchingMetadataMap),

@@ -22,11 +22,12 @@ if(DEFINED GLIBCXX_USE_CXX11_ABI)
   endif()
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+# keep it static for now since folly-shared version is broken
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 # dependencies
-
+find_package(Boost REQUIRED)
 find_package(Torch REQUIRED)
 find_package(folly REQUIRED)
 find_package(gflags REQUIRED)
@@ -38,13 +39,12 @@ include_directories(${PYTORCH_FMT_INCLUDE_PATH})
 set(CMAKE_CXX_STANDARD 17)
 
 # torch deploy library
-
 add_library(torch_deploy_internal STATIC
-    {$DEPLOY_INTERPRETER_PATH}/libtorch_deployinterpreter.o
-    {$DEPLOY_SRC_PATH}/deploy.cpp
-    {$DEPLOY_SRC_PATH}/deploy/loader.cpp
-    {$DEPLOY_SRC_PATH}/path_environment.cpp
-    {$DEPLOY_SRC_PATH}/elf_file.cpp)
+    ${DEPLOY_INTERPRETER_PATH}/libtorch_deployinterpreter.o
+    ${DEPLOY_SRC_PATH}/deploy.cpp
+    ${DEPLOY_SRC_PATH}/loader.cpp
+    ${DEPLOY_SRC_PATH}/path_environment.cpp
+    ${DEPLOY_SRC_PATH}/elf_file.cpp)
 
 # For python builtins. caffe2_interface_library properly
 # makes use of the --whole-archive option.
@@ -63,11 +63,13 @@ include_directories(include/)
 include_directories(gen/)
 
 # define our library target
-add_library(inference SHARED
+add_library(inference STATIC
   src/Batching.cpp
   src/BatchingQueue.cpp
   src/GPUExecutor.cpp
   src/ResultSplit.cpp
+  src/Exception.cpp
+  src/ResourceManager.cpp
 )
 
 # -rdynamic is needed to link against the static library
@@ -85,7 +87,7 @@ set(pred_grpc_hdrs "gen/torchrec/inference/predictor.grpc.pb.h")
 set(pred_proto_srcs "gen/torchrec/inference/predictor.pb.cc")
 set(pred_proto_hdrs "gen/torchrec/inference/predictor.pb.h")
 
-add_library(pred_grpc_proto SHARED
+add_library(pred_grpc_proto STATIC
   ${pred_grpc_srcs}
   ${pred_grpc_hdrs}
   ${pred_proto_srcs}
@@ -97,13 +99,15 @@ target_link_libraries(pred_grpc_proto
   ${_PROTOBUF_LIBPROTOBUF})
 
 # server
-
 add_executable(server server.cpp)
 target_link_libraries(server
   inference
+  torch_deploy
   pred_grpc_proto
   "${TORCH_LIBRARIES}"
   ${FOLLY_LIBRARIES}
+  ${PYTORCH_LIB_FMT}
+  ${FBGEMM_LIB}
   ${_REFLECTION}
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
