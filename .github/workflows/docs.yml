@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 jobs:
   build_docs_job:
     runs-on: ${{ matrix.os }}
@@ -13,7 +14,8 @@ jobs:
          - os: linux.2xlarge
            python-version: 3.9
     steps:
-    # Checkout the repository to the GitHub Actions runner
+    - name: Check ldd --version
+      run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
       with:
@@ -45,6 +47,9 @@ jobs:
       run: |
         conda create --name build_binary python=${{ matrix.python-version }}
         conda info
+    - name: check python version no Conda
+      run: |
+        python --version
     - name: check python version
       run: |
         conda run -n build_binary python --version
@@ -71,9 +76,16 @@ jobs:
         echo "skbuild succeeded"
         conda run -n build_binary python -c "import numpy"
         echo "numpy succeeded"
-    - name: Install TorchRec Nightly
+    - name: Build TorchRec
       run: |
-        conda run -n build_binary python -m pip install torchrec-nightly-cpu
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrec \
+          --cpu_only \
+          --python-tag=${{ matrix.python-tag }}
+    - name: Install TorchRec
+      run: |
+        conda run -n build_binary python -m pip install dist/*.whl
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
