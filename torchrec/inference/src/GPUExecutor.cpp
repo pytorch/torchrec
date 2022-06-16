@@ -23,10 +23,10 @@
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <torch/csrc/autograd/profiler_legacy.h>
 #include <torch/csrc/deploy/deploy.h> // @manual
 
 #include "ATen/cuda/CUDAEvent.h"
-#include "caffe2/torch/csrc/autograd/profiler_legacy.h"
 #include "torchrec/inference/BatchingQueue.h"
 #include "torchrec/inference/Exception.h"
 #include "torchrec/inference/Observer.h"
