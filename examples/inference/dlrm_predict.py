@@ -108,6 +108,15 @@ class DLRMPredictModule(PredictModule):
         except Exception as e:
             logger.info(e)
             raise e
+
+        # Flip predictions tensor to be 1D. TODO: Determine why prediction shape
+        # can be 2D at times (likely due to input format?)
+        predictions = predictions.reshape(
+            [
+                predictions.size()[0],
+            ]
+        )
+
         return {
             "default": predictions.to(torch.device("cpu"), non_blocking=True).float()
         }

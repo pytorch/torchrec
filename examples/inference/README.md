@@ -16,6 +16,9 @@ The `DLRMPredictFactory` class (implements `PredictFactory` from `torchrec.infer
 
 This model includes sharding from `TorchRec` as it is wrapped in `DistributedModelParallel`.
 
+### Unsharded example - single GPU
+
+In order to use the single GPU example with no sharding from TorchRec, replace `DLRMPredictFactory` with `DLRMPredictSingleGPUFactory` (from `dlrm_predict_single_gpu.py`) in `dlrm_packager.py`.
 
 ### **PredictFactoryPackager** - Packaging the model code
 
