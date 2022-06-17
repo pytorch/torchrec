@@ -29,7 +29,9 @@ from torchrec.datasets.criteo import (
 )
 
 from dlrm_train import DLRMTrain
-from nvt_criteo_dataloader import get_nvt_criteo_dataloader
+from nvt_criteo_dataloader import NvtCriteoDataloader
+import cupy
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -99,13 +101,17 @@ def main(argv: List[str]):
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
-        torch.cuda.set_device(device)
     else:
         device: torch.device = torch.device("cpu")
         backend = "gloo"
 
+    os.environ['CUDA_VISIBLE_DEVICES'] = os.environ["LOCAL_RANK"]
     if not torch.distributed.is_initialized():
         dist.init_process_group(backend=backend)
+
+    cupy.cuda.Device(rank).use()
+    torch.cuda.set_device(device)
+
 
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -118,12 +124,22 @@ def main(argv: List[str]):
 
     train_paths = sorted(glob.glob(os.path.join(args.train_path, "*", "*.parquet")))
 
-    train_loader = get_nvt_criteo_dataloader(
+    from time import perf_counter
+    start_time = perf_counter()
+
+    train_loader = NvtCriteoDataloader(
         train_paths,
         batch_size=args.batch_size,
         world_size=world_size,
         rank=rank,
-    )
+    ).get_nvt_criteo_dataloader()
+
+    # it = iter(train_loader)
+    # for batch in it:
+    #     pass
+    # stop = perf_counter()
+    # print(f"FINISHED, took {stop-start_time}")
+    # return
 
     eb_configs = [
         EmbeddingBagConfig(
