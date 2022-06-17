@@ -41,7 +41,7 @@ pip install --pre torchrec -f https://download.pytorch.org/whl/torchrec/index.ht
 Nightly
 
 conda install pytorch cpuonly -c pytorch-nightly
-pip install --pre torchrec_cpu_nightly -f https://download.pytorch.org/whl/nightly/torchrec_cpu_nightly/index.html
+pip install --pre torchrec_nightly_cpu -f https://download.pytorch.org/whl/nightly/torchrec_nightly_cpu/index.html
 
 Stable
 
