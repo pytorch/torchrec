@@ -9,22 +9,20 @@ import logging
 import os
 import sys
 from typing import Dict, List, Optional
-from hypothesis import target
 
 import torch
 import torch.distributed as dist
+from hypothesis import target
 from torch.distributed.elastic.multiprocessing.errors import record
 from torchrec import EmbeddingBagCollection
 from torchrec.datasets.random import RandomRecDataset
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.model_parallel import DistributedModelParallel
+
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
-from torchrec.metrics.ne import NEMetric
-
-from torchrec.metrics.metrics_config import DefaultTaskInfo
 
 logger: logging.Logger = logging.getLogger(__name__)
 
