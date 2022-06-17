@@ -144,9 +144,11 @@ class Tracer(torch.fx.Tracer):
     # that, we can likely remove this line
     proxy_buffer_attributes = False
 
-    def __init__(self, unsharded_module_names: List[str]) -> None:
+    def __init__(self, unsharded_module_names: Optional[List[str]] = None) -> None:
         super().__init__()
-        self._unsharded_module_names = unsharded_module_names
+        self._unsharded_module_names: List[str] = (
+            unsharded_module_names if unsharded_module_names is not None else []
+        )
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
         if (
