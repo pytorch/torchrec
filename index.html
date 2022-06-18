@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -229,6 +229,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
@@ -307,7 +308,7 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="welcome-to-the-torchrec-documentation">
-<h1>Welcome to the TorchRec documentation!<a class="headerlink" href="#welcome-to-the-torchrec-documentation" title="Permalink to this headline">¶</a></h1>
+<h1>Welcome to the TorchRec documentation!<a class="headerlink" href="#welcome-to-the-torchrec-documentation" title="Permalink to this heading">¶</a></h1>
 <p>TorchRec is a PyTorch domain library built to provide common
 sparsity &amp; parallelism primitives needed for large-scale recommender
 systems (RecSys). It allows authors to train models with large
@@ -315,7 +316,7 @@ embedding tables sharded across many GPUs.</p>
 <p>For installation instructions, visit</p>
 <p><a class="reference external" href="https://github.com/pytorch/torchrec#readme">https://github.com/pytorch/torchrec#readme</a></p>
 <section id="tutorial">
-<h2>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this headline">¶</a></h2>
+<h2>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this heading">¶</a></h2>
 <p>In this tutorial, we introduce the primary torchRec
 API called DistributedModelParallel, or DMP.
 Like pytorch’s DistributedDataParallel,
@@ -326,7 +327,7 @@ DMP wraps a model to enable distributed training.</p>
 </ul>
 </section>
 <section id="torchrec-api">
-<h2>TorchRec API<a class="headerlink" href="#torchrec-api" title="Permalink to this headline">¶</a></h2>
+<h2>TorchRec API<a class="headerlink" href="#torchrec-api" title="Permalink to this heading">¶</a></h2>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
@@ -389,6 +390,12 @@ DMP wraps a model to enable distributed training.</p>
 <li class="toctree-l2"><a class="reference internal" href="torchrec.fx.html#module-0">Module contents</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#torchrec-inference-model-packager">torchrec.inference.model_packager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#torchrec-inference-modules">torchrec.inference.modules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#module-0">Module contents</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrec.models.html#module-torchrec.models.deepfm">torchrec.models.deepfm</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrec.models.html#module-torchrec.models.dlrm">torchrec.models.dlrm</a></li>
@@ -431,7 +438,7 @@ DMP wraps a model to enable distributed training.</p>
 </section>
 </section>
 <section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
@@ -504,6 +511,7 @@ DMP wraps a model to enable distributed training.</p>
          <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
          <script src="_static/jquery.js"></script>
          <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
      
 

@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -230,6 +230,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
@@ -308,7 +309,7 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="module-torchrec.quant">
-<span id="torchrec-quant"></span><h1>torchrec.quant<a class="headerlink" href="#module-torchrec.quant" title="Permalink to this headline">¶</a></h1>
+<span id="torchrec-quant"></span><h1>torchrec.quant<a class="headerlink" href="#module-torchrec.quant" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Quantization</p>
 <p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
 It relies on fbgemm quantized ops.
@@ -334,11 +335,11 @@ This reduces the size of the model weights and speeds up model execution.</p>
 </pre></div>
 </div>
 <section id="module-torchrec.quant.embedding_modules">
-<span id="torchrec-quant-embedding-modules"></span><h2>torchrec.quant.embedding_modules<a class="headerlink" href="#module-torchrec.quant.embedding_modules" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-quant-embedding-modules"></span><h2>torchrec.quant.embedding_modules<a class="headerlink" href="#module-torchrec.quant.embedding_modules" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.quant.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table_name_to_quantized_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_configs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.device</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface" title="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.quant.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table_name_to_quantized_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_configs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface" title="torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface"><code class="xref py py-class docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface</span></code></a></p>
 <p>EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
 This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops</p>
 <p>It processes sparse data in the form of KeyedJaggedTensor
@@ -352,7 +353,7 @@ F: features (keys)
 D: each feature’s (key’s) embedding dimension
 B: batch size</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>table_name_to_quantized_weights</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>Tuple</em><em>[</em><em>Tensor</em><em>, </em><em>Tensor</em><em>]</em><em>]</em>) – map of tables to quantized weights</p></li>
 <li><p><strong>embedding_configs</strong> (<em>List</em><em>[</em><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><em>EmbeddingBagConfig</em></a><em>]</em>) – list of embedding tables</p></li>
@@ -366,7 +367,7 @@ B: batch size</p>
 </dd>
 </dl>
 <dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>KeyedTensor</p>
 </dd>
 </dl>
@@ -403,12 +404,12 @@ B: batch size</p>
 </div>
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">torchrec.modules.embedding_configs.EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Defines the computation performed at every call.</p>
 <p>Should be overridden by all subclasses.</p>
 <div class="admonition note">
@@ -422,7 +423,7 @@ registered hooks while the latter silently ignores them.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.from_float">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">torchrec.modules.embedding_modules.EmbeddingBagCollection</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection" title="torchrec.quant.embedding_modules.EmbeddingBagCollection"><span class="pre">torchrec.quant.embedding_modules.EmbeddingBagCollection</span></a></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.from_float" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">EmbeddingBagCollection</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection" title="torchrec.quant.embedding_modules.EmbeddingBagCollection"><span class="pre">EmbeddingBagCollection</span></a></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.from_float" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -432,11 +433,11 @@ registered hooks while the latter silently ignores them.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.named_buffers">
-<span class="sig-name descname"><span class="pre">named_buffers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.nn.parameter.Parameter</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.named_buffers" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">named_buffers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Parameter</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.named_buffers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns an iterator over module buffers, yielding both the
 name of the buffer as well as the buffer itself.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>prefix</strong> (<em>str</em>) – prefix to prepend to all buffer names.</p></li>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields buffers of this module
@@ -444,7 +445,7 @@ and all submodules. Otherwise, yields only buffers that
 are direct members of this module.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Yields</dt>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
 <dd class="field-even"><p><em>(string, torch.Tensor)</em> – Tuple containing the name and buffer</p>
 </dd>
 </dl>
@@ -476,7 +477,7 @@ future releases.</p>
 designed for end-users.</p>
 </div>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>destination</strong> (<em>dict</em><em>, </em><em>optional</em>) – If provided, the state of module will
 be updated into the dict and the same object is returned.
@@ -490,10 +491,10 @@ set to <code class="docutils literal notranslate"><span class="pre">True</span><
 Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>a dictionary containing a whole state of the module</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>dict</p>
 </dd>
 </dl>
@@ -511,14 +512,192 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 
 </dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.quant.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">EmbeddingCollection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table_name_to_quantized_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><span class="pre">EmbeddingConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">need_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingCollectionInterface" title="torchrec.modules.embedding_modules.EmbeddingCollectionInterface"><code class="xref py py-class docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface</span></code></a></p>
+<p>EmbeddingCollection represents a collection of non-pooled embeddings.</p>
+<p>It processes sparse data in the form of <cite>KeyedJaggedTensor</cite> of the form [F X B X L]
+where:</p>
+<ul class="simple">
+<li><p>F: features (keys)</p></li>
+<li><p>B: batch size</p></li>
+<li><p>L: length of sparse features (variable)</p></li>
+</ul>
+<p>and outputs <cite>Dict[feature (key), JaggedTensor]</cite>.
+Each <cite>JaggedTensor</cite> contains values of the form (B * L) X D
+where:</p>
+<ul class="simple">
+<li><p>B: batch size</p></li>
+<li><p>L: length of sparse features (jagged)</p></li>
+<li><p>D: each feature’s (key’s) embedding dimension and lengths are of the form L</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tables</strong> (<em>List</em><em>[</em><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><em>EmbeddingConfig</em></a><em>]</em>) – list of embedding tables.</p></li>
+<li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
+<li><p><strong>need_indices</strong> (<em>bool</em>) – if we need to pass indices to the final lookup result dict</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">e1_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">e2_config</span> <span class="o">=</span> <span class="n">EmbeddingConfig</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">ec</span> <span class="o">=</span> <span class="n">EmbeddingCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">e1_config</span><span class="p">,</span> <span class="n">e2_config</span><span class="p">])</span>
+
+<span class="c1">#     0       1        2  &lt;-- batch</span>
+<span class="c1"># 0   [0,1] None    [2]</span>
+<span class="c1"># 1   [3]    [4]    [5,6,7]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+<span class="n">feature_embeddings</span> <span class="o">=</span> <span class="n">ec</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">feature_embeddings</span><span class="p">[</span><span class="s1">&#39;f2&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+<span class="n">tensor</span><span class="p">([[</span><span class="o">-</span><span class="mf">0.2050</span><span class="p">,</span>  <span class="mf">0.5478</span><span class="p">,</span>  <span class="mf">0.6054</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.7352</span><span class="p">,</span>  <span class="mf">0.3210</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.0399</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.1279</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1756</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4130</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.7519</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4341</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.0499</span><span class="p">],</span>
+<span class="p">[</span> <span class="mf">0.9329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0697</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8095</span><span class="p">]],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">EmbeddingBackward</span><span class="o">&gt;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_configs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><span class="pre">EmbeddingConfig</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.embedding_dim">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_dim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_dim" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.embedding_names_by_table">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">embedding_names_by_table</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_names_by_table" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of form [F X B X L].</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict[str, JaggedTensor]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.from_float">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingCollection" title="torchrec.modules.embedding_modules.EmbeddingCollection"><span class="pre">EmbeddingCollection</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection" title="torchrec.quant.embedding_modules.EmbeddingCollection"><span class="pre">EmbeddingCollection</span></a></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.from_float" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.named_buffers">
+<span class="sig-name descname"><span class="pre">named_buffers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recurse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Parameter</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.named_buffers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an iterator over module buffers, yielding both the
+name of the buffer as well as the buffer itself.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>prefix</strong> (<em>str</em>) – prefix to prepend to all buffer names.</p></li>
+<li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields buffers of this module
+and all submodules. Otherwise, yields only buffers that
+are direct members of this module.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>(string, torch.Tensor)</em> – Tuple containing the name and buffer</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">buf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">named_buffers</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span>   <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;running_var&#39;</span><span class="p">]:</span>
+<span class="gp">&gt;&gt;&gt; </span>       <span class="nb">print</span><span class="p">(</span><span class="n">buf</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.need_indices">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">need_indices</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.need_indices" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.state_dict">
+<span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.state_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<p>Both parameters and persistent buffers (e.g. running averages) are
+included. Keys are corresponding parameter and buffer names.
+Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
+<code class="docutils literal notranslate"><span class="pre">destination</span></code>, <code class="docutils literal notranslate"><span class="pre">prefix</span></code> and <code class="docutils literal notranslate"><span class="pre">keep_vars</span></code> in order. However,
+this is being deprecated and keyword arguments will be enforced in
+future releases.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Please avoid the use of argument <code class="docutils literal notranslate"><span class="pre">destination</span></code> as it is not
+designed for end-users.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination</strong> (<em>dict</em><em>, </em><em>optional</em>) – If provided, the state of module will
+be updated into the dict and the same object is returned.
+Otherwise, an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> will be created and returned.
+Default: <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>prefix</strong> (<em>str</em><em>, </em><em>optional</em>) – a prefix added to parameter and buffer
+names to compose the keys in state_dict. Default: <code class="docutils literal notranslate"><span class="pre">''</span></code>.</p></li>
+<li><p><strong>keep_vars</strong> (<em>bool</em><em>, </em><em>optional</em>) – by default the <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code> s
+returned in the state dict are detached from autograd. If it’s
+set to <code class="docutils literal notranslate"><span class="pre">True</span></code>, detaching will not be performed.
+Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a dictionary containing a whole state of the module</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<span class="go">[&#39;bias&#39;, &#39;weight&#39;]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.quantize_state_dict">
-<span class="sig-prename descclassname"><span class="pre">torchrec.quant.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">quantize_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.modules.module.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_name_to_quantized_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.DataType" title="torchrec.modules.embedding_configs.DataType"><span class="pre">torchrec.modules.embedding_configs.DataType</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.device</span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.quantize_state_dict" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrec.quant.embedding_modules.</span></span><span class="sig-name descname"><span class="pre">quantize_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_name_to_quantized_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.DataType" title="torchrec.modules.embedding_configs.DataType"><span class="pre">DataType</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">device</span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.quantize_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </section>
 <section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Quantization</p>
 <p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
 It relies on fbgemm quantized ops.
@@ -612,6 +791,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
          <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
          <script src="_static/jquery.js"></script>
          <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
      
 

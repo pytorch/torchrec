@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.models" href="torchrec.models.html" />
+    <link rel="next" title="torchrec.inference" href="torchrec.inference.html" />
     <link rel="prev" title="torchrec.distributed.sharding" href="torchrec.distributed.sharding.html" />
   <!-- Google Analytics -->
   
@@ -230,6 +230,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
@@ -308,16 +309,16 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="module-torchrec.fx">
-<span id="torchrec-fx"></span><h1>torchrec.fx<a class="headerlink" href="#module-torchrec.fx" title="Permalink to this headline">¶</a></h1>
+<span id="torchrec-fx"></span><h1>torchrec.fx<a class="headerlink" href="#module-torchrec.fx" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Tracer</p>
 <p>Custom FX tracer for torchrec</p>
 <p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
 <section id="module-torchrec.fx.tracer">
-<span id="torchrec-fx-tracer"></span><h2>torchrec.fx.tracer<a class="headerlink" href="#module-torchrec.fx.tracer" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-fx-tracer"></span><h2>torchrec.fx.tracer<a class="headerlink" href="#module-torchrec.fx.tracer" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">Tracer</span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.fx._symbolic_trace.Tracer</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Tracer</span></code></p>
 <p>Custom FX tracer for torchrec</p>
 <p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
 <p>We create a custom FX tracer to trace torchrec based models. The custom tracer
@@ -325,18 +326,18 @@ handles python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
 TorchScript if needed</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.create_arg">
-<span class="sig-name descname"><span class="pre">create_arg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Node</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.dtype</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.device</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.memory_format</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.layout</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.create_arg" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">create_arg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Node</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">device</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">memory_format</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">layout</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.create_arg" title="Permalink to this definition">¶</a></dt>
 <dd><p>A method to specify the behavior of tracing when preparing values to
 be used as arguments to nodes in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
 <p>Adds support for the NoWait type in addition to the default tracer</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>a</strong> (<em>Any</em>) – The value to be emitted as an <code class="docutils literal notranslate"><span class="pre">Argument</span></code> in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The value <code class="docutils literal notranslate"><span class="pre">a</span></code> converted into the appropriate <code class="docutils literal notranslate"><span class="pre">Argument</span></code></p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Argument</p>
 </dd>
 </dl>
@@ -344,30 +345,30 @@ be used as arguments to nodes in the <code class="docutils literal notranslate">
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.graph">
-<span class="sig-name descname"><span class="pre">graph</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.fx.graph.Graph</span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.graph" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">graph</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Graph</span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.graph" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.symbolic_trace">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">symbolic_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.nn.modules.module.Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.fx.graph_module.GraphModule</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.symbolic_trace" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">symbolic_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GraphModule</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.symbolic_trace" title="Permalink to this definition">¶</a></dt>
 <dd><p>Symbolic tracing API</p>
 <p>Given an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or function instance <code class="docutils literal notranslate"><span class="pre">root</span></code>, this function will return a <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code>
 constructed by recording operations seen while tracing through <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">concrete_args</span></code> allows you to partially specialize your function, whether it’s to remove control flow or data structures.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>root</strong> (<em>Union</em><em>[</em><em>torch.nn.Module</em><em>, </em><em>Callable</em><em>]</em>) – Module or function to be traced and converted
 into a Graph representation.</p></li>
 <li><p><strong>concrete_args</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>any</em><em>]</em><em>]</em>) – Inputs to be partially specialized</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns</dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>a Module created from the recorded operations from <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
 </dd>
-<dt class="field-odd">Return type</dt>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>GraphModule</p>
 </dd>
 </dl>
@@ -375,7 +376,7 @@ into a Graph representation.</p></li>
 
 </section>
 <section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Tracer</p>
 <p>Custom FX tracer for torchrec</p>
 <p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
@@ -390,7 +391,7 @@ into a Graph representation.</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.models.html" class="btn btn-neutral float-right" title="torchrec.models" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrec.inference.html" class="btn btn-neutral float-right" title="torchrec.inference" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
         <a href="torchrec.distributed.sharding.html" class="btn btn-neutral" title="torchrec.distributed.sharding" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
@@ -448,6 +449,7 @@ into a Graph representation.</p></li>
          <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
          <script src="_static/jquery.js"></script>
          <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
      
 

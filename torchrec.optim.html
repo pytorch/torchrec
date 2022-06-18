@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -230,6 +230,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.optim</a></li>
@@ -308,17 +309,19 @@
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
   <section id="module-torchrec.optim">
-<span id="torchrec-optim"></span><h1>torchrec.optim<a class="headerlink" href="#module-torchrec.optim" title="Permalink to this headline">¶</a></h1>
+<span id="torchrec-optim"></span><h1>torchrec.optim<a class="headerlink" href="#module-torchrec.optim" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Optimizers</p>
 <p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
 torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
-<p>It also contains several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper</p>
+<p>It also contains
+- several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
+- Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc</p>
 <section id="module-torchrec.optim.clipping">
-<span id="torchrec-optim-clipping"></span><h2>torchrec.optim.clipping<a class="headerlink" href="#module-torchrec.optim.clipping" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-optim-clipping"></span><h2>torchrec.optim.clipping<a class="headerlink" href="#module-torchrec.optim.clipping" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.clipping.GradientClipping">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.clipping.</span></span><span class="sig-name descname"><span class="pre">GradientClipping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.clipping.GradientClipping" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
 <p>An enumeration.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.clipping.GradientClipping.NONE">
@@ -339,11 +342,11 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.clipping.GradientClippingOptimizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.clipping.</span></span><span class="sig-name descname"><span class="pre">GradientClippingOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">clipping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping" title="torchrec.optim.clipping.GradientClipping"><span class="pre">torchrec.optim.clipping.GradientClipping</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">GradientClipping.NONE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_gradient</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.clipping.GradientClippingOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.OptimizerWrapper</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.clipping.</span></span><span class="sig-name descname"><span class="pre">GradientClippingOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">clipping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping" title="torchrec.optim.clipping.GradientClipping"><span class="pre">GradientClipping</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">GradientClipping.NONE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_gradient</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.clipping.GradientClippingOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptimizerWrapper</span></code></a></p>
 <p>Clips gradients before doing optimization step.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> (<a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><em>KeyedOptimizer</em></a>) – optimizer to wrap</p></li>
 <li><p><strong>clipping</strong> (<a class="reference internal" href="#torchrec.optim.clipping.GradientClipping" title="torchrec.optim.clipping.GradientClipping"><em>GradientClipping</em></a>) – how to clip gradients</p></li>
@@ -356,7 +359,7 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
 <span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.clipping.GradientClippingOptimizer.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -372,11 +375,11 @@ returns the loss. Optional for most optimizers.</p>
 
 </section>
 <section id="module-torchrec.optim.fused">
-<span id="torchrec-optim-fused"></span><h2>torchrec.optim.fused<a class="headerlink" href="#module-torchrec.optim.fused" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-optim-fused"></span><h2>torchrec.optim.fused<a class="headerlink" href="#module-torchrec.optim.fused" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.fused.FusedOptimizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.fused.</span></span><span class="sig-name descname"><span class="pre">FusedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.distributed._shard.sharded_tensor.api.ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Collection</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.fused.</span></span><span class="sig-name descname"><span class="pre">FusedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Collection</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <p>Assumes that weight update is done during backward pass,
 thus step() is a no-op.</p>
 <dl class="py method">
@@ -384,7 +387,7 @@ thus step() is a no-op.</p>
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -401,7 +404,7 @@ returns the loss. Optional for most optimizers.</p>
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
 This will in general have lower memory footprint, and can modestly improve performance.
 However, it changes certain behaviors. For example:
@@ -421,27 +424,27 @@ the step altogether).</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.fused.FusedOptimizerModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.fused.</span></span><span class="sig-name descname"><span class="pre">FusedOptimizerModule</span></span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizerModule" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <p>Module, which does weight update during backward pass.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.optim.fused.FusedOptimizerModule.fused_optimizer">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fused_optimizer</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></em><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizerModule.fused_optimizer" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fused_optimizer</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a></em><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizerModule.fused_optimizer" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
 
 </section>
 <section id="module-torchrec.optim.keyed">
-<span id="torchrec-optim-keyed"></span><h2>torchrec.optim.keyed<a class="headerlink" href="#module-torchrec.optim.keyed" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-optim-keyed"></span><h2>torchrec.optim.keyed<a class="headerlink" href="#module-torchrec.optim.keyed" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.CombinedOptimizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">CombinedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">CombinedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a></p>
 <p>Combines multiple KeyedOptimizers into one.</p>
 <p>Meant to combine different optimizers for different submodules</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.CombinedOptimizer.optimizers">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">optimizers</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.optimizers" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">optimizers</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.optimizers" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -451,7 +454,7 @@ the step altogether).</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.CombinedOptimizer.params">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.distributed._shard.sharded_tensor.api.ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.params" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.params" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -466,7 +469,7 @@ the step altogether).</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.CombinedOptimizer.state">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.state" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.state" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -474,7 +477,7 @@ the step altogether).</p>
 <span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -491,7 +494,7 @@ returns the loss. Optional for most optimizers.</p>
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
 This will in general have lower memory footprint, and can modestly improve performance.
 However, it changes certain behaviors. For example:
@@ -510,8 +513,8 @@ the step altogether).</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.KeyedOptimizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">KeyedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.distributed._shard.sharded_tensor.api.ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Collection</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.optim.optimizer.Optimizer</span></code></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">KeyedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Collection</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Optimizer</span></code></p>
 <p>Takes a dict of parameters and exposes state_dict by parameter key.</p>
 <p>This implementation is much stricter than the one in torch.Optimizer:
 it requires implementations to fully initialize their state during first optimization iteration,
@@ -529,7 +532,7 @@ so it makes little sense to save them as a part of the state to begin with.</p>
 <p>This can be useful when fine tuning a pre-trained network as frozen layers can be made
 trainable and added to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Optimizer</span></code> as training progresses.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>param_group</strong> (<em>dict</em>) – Specifies what Tensors should be optimized along with group
 specific optimization options.</p>
 </dd>
@@ -585,8 +588,8 @@ This allows for advanced functionality like optimizer re-sharding to be implemen
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.KeyedOptimizerWrapper">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">KeyedOptimizerWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.distributed._shard.sharded_tensor.api.ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optim_factory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.distributed._shard.sharded_tensor.api.ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.optim.optimizer.Optimizer</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizerWrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">KeyedOptimizerWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optim_factory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Optimizer</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizerWrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a></p>
 <p>Takes a dict of parameters and exposes state_dict by parameter key.</p>
 <p>Convenience wrapper to take in optim_factory callable to create KeyedOptimizer</p>
 <dl class="py method">
@@ -594,7 +597,7 @@ This allows for advanced functionality like optimizer re-sharding to be implemen
 <span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -611,7 +614,7 @@ returns the loss. Optional for most optimizers.</p>
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.zero_grad" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
 This will in general have lower memory footprint, and can modestly improve performance.
 However, it changes certain behaviors. For example:
@@ -630,8 +633,8 @@ the step altogether).</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.OptimizerWrapper">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">OptimizerWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.keyed.</span></span><span class="sig-name descname"><span class="pre">OptimizerWrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a></p>
 <p>Wrapper which takes in a KeyedOptimizer and is a KeyedOptimizer</p>
 <p>Subclass for Optimizers like GradientClippingOptimizer and WarmupOptimizer</p>
 <dl class="py method">
@@ -641,7 +644,7 @@ the step altogether).</p>
 <p>This can be useful when fine tuning a pre-trained network as frozen layers can be made
 trainable and added to the <code class="xref py py-class docutils literal notranslate"><span class="pre">Optimizer</span></code> as training progresses.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>param_group</strong> (<em>dict</em>) – Specifies what Tensors should be optimized along with group
 specific optimization options.</p>
 </dd>
@@ -690,7 +693,7 @@ This allows for advanced functionality like optimizer re-sharding to be implemen
 <span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -707,7 +710,7 @@ returns the loss. Optional for most optimizers.</p>
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper.zero_grad" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
 This will in general have lower memory footprint, and can modestly improve performance.
 However, it changes certain behaviors. For example:
@@ -726,14 +729,14 @@ the step altogether).</p>
 
 </section>
 <section id="module-torchrec.optim.warmup">
-<span id="torchrec-optim-warmup"></span><h2>torchrec.optim.warmup<a class="headerlink" href="#module-torchrec.optim.warmup" title="Permalink to this headline">¶</a></h2>
+<span id="torchrec-optim-warmup"></span><h2>torchrec.optim.warmup<a class="headerlink" href="#module-torchrec.optim.warmup" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupOptimizer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">torchrec.optim.keyed.KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">stages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage" title="torchrec.optim.warmup.WarmupStage"><span class="pre">torchrec.optim.warmup.WarmupStage</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_param</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'lr'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'__warmup'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">torchrec.optim.keyed.OptimizerWrapper</span></code></a></p>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><span class="pre">KeyedOptimizer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">stages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage" title="torchrec.optim.warmup.WarmupStage"><span class="pre">WarmupStage</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_param</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'lr'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'__warmup'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper" title="torchrec.optim.keyed.OptimizerWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptimizerWrapper</span></code></a></p>
 <p>Adjusts learning rate according to the schedule.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>optimizer</strong> (<a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><em>KeyedOptimizer</em></a>) – optimizer to wrap</p></li>
 <li><p><strong>stages</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage" title="torchrec.optim.warmup.WarmupStage"><em>WarmupStage</em></a><em>]</em>) – stages to go through</p></li>
@@ -753,7 +756,7 @@ the step altogether).</p>
 <span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.warmup.WarmupOptimizer.step" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a single optimization step (parameter update).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>closure</strong> (<em>callable</em>) – A closure that reevaluates the model and
 returns the loss. Optional for most optimizers.</p>
 </dd>
@@ -770,7 +773,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupPolicy">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupPolicy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupPolicy" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">enum.Enum</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
 <p>An enumeration.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupPolicy.CONSTANT">
@@ -825,7 +828,7 @@ returns the loss. Optional for most optimizers.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupStage.policy">
-<span class="sig-name descname"><span class="pre">policy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy" title="torchrec.optim.warmup.WarmupPolicy"><span class="pre">torchrec.optim.warmup.WarmupPolicy</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'linear'</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage.policy" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">policy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy" title="torchrec.optim.warmup.WarmupPolicy"><span class="pre">WarmupPolicy</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'linear'</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage.policy" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -837,11 +840,13 @@ returns the loss. Optional for most optimizers.</p>
 
 </section>
 <section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this headline">¶</a></h2>
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Optimizers</p>
 <p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
 torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
-<p>It also contains several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper</p>
+<p>It also contains
+- several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
+- Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc</p>
 </section>
 </section>
 
@@ -914,6 +919,7 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
          <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
          <script src="_static/jquery.js"></script>
          <script src="_static/underscore.js"></script>
+         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
      
 
