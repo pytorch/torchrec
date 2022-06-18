@@ -64,28 +64,9 @@ jobs:
       shell: bash
       run: |
         conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        conda run -n build_binary python -m pip install -r requirements.txt
-    - name: Test Installation of dependencies
-      run: |
-        conda run -n build_binary python -c "import torch.distributed"
-        echo "torch.distributed succeeded"
-        conda run -n build_binary python -c "import skbuild"
-        echo "skbuild succeeded"
-        conda run -n build_binary python -c "import numpy"
-        echo "numpy succeeded"
-    - name: Build TorchRec
-      run: |
-        conda run -n build_binary \
-          python setup.py bdist_wheel \
-          --package_name torchrec \
-          --cpu_only \
-          --python-tag=${{ matrix.python-tag }}
     - name: Install TorchRec
       run: |
-        conda run -n build_binary python -m pip install dist/*.whl
+        conda run -n build_binary python -m pip install --pre torchrec_nightly_cpu -f https://download.pytorch.org/whl/nightly/torchrec_nightly_cpu/index.html
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
