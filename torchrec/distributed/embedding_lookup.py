@@ -96,13 +96,13 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         def _create_lookup(
             config: GroupedEmbeddingConfig,
         ) -> BaseEmbedding:
-            if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
+            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbedding(
                     config=config,
                     pg=pg,
                     device=device,
                 )
-            elif config.compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
+            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbedding(
                     config=config,
                     pg=pg,
@@ -218,13 +218,13 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
-            if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
+            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
                     pg=pg,
                     device=device,
                 )
-            elif config.compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
+            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
                     config=config,
                     pg=pg,

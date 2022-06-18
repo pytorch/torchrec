@@ -76,7 +76,7 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 @dataclass
@@ -247,7 +247,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
                     ModuleSharder[nn.Module],
                     TestEBCSharder(
                         sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.BATCHED_DENSE.value,
+                        kernel_type=EmbeddingComputeKernel.DENSE.value,
                     ),
                 )
             ],

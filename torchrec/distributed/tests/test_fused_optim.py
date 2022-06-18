@@ -71,7 +71,7 @@ class ModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         optim_type=st.sampled_from(
@@ -110,7 +110,7 @@ class ModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         optim_type=st.sampled_from(

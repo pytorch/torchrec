@@ -130,8 +130,8 @@ class QuantizeKernelTest(unittest.TestCase):
     @given(
         compute_kernel=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_DENSE,
-                EmbeddingComputeKernel.BATCHED_FUSED,
+                EmbeddingComputeKernel.DENSE,
+                EmbeddingComputeKernel.FUSED,
             ]
         ),
         dtype=st.sampled_from(
@@ -166,8 +166,8 @@ class QuantizeKernelTest(unittest.TestCase):
     @given(
         compute_kernel=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_DENSE,
-                EmbeddingComputeKernel.BATCHED_FUSED,
+                EmbeddingComputeKernel.DENSE,
+                EmbeddingComputeKernel.FUSED,
             ]
         ),
         dtype=st.sampled_from(

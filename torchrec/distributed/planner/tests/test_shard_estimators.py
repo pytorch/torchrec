@@ -46,40 +46,40 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_perfs = {
-            ("batched_dense", "data_parallel"): [
+            ("dense", "data_parallel"): [
                 0.0004935158269195386,
                 0.0004935158269195386,
             ],
-            ("batched_fused", "table_wise"): [0.0011095368078055323],
-            ("batched_fused_uvm", "table_wise"): [0.1729105033126532],
-            ("batched_fused_uvm_caching", "table_wise"): [0.040145097917908434],
-            ("batched_fused", "column_wise"): [0.0011095368078055323],
-            ("batched_fused_uvm", "column_wise"): [0.1729105033126532],
-            ("batched_fused_uvm_caching", "column_wise"): [0.040145097917908434],
-            ("batched_fused", "table_column_wise"): [0.0011095368078055323],
-            ("batched_fused_uvm", "table_column_wise"): [0.1729105033126532],
-            ("batched_fused_uvm_caching", "table_column_wise"): [0.040145097917908434],
-            ("batched_fused", "row_wise"): [
+            ("fused", "table_wise"): [0.0011095368078055323],
+            ("fused_uvm", "table_wise"): [0.1729105033126532],
+            ("fused_uvm_caching", "table_wise"): [0.040145097917908434],
+            ("fused", "column_wise"): [0.0011095368078055323],
+            ("fused_uvm", "column_wise"): [0.1729105033126532],
+            ("fused_uvm_caching", "column_wise"): [0.040145097917908434],
+            ("fused", "table_column_wise"): [0.0011095368078055323],
+            ("fused_uvm", "table_column_wise"): [0.1729105033126532],
+            ("fused_uvm_caching", "table_column_wise"): [0.040145097917908434],
+            ("fused", "row_wise"): [
                 0.00043569201211068144,
                 0.00043569201211068144,
             ],
-            ("batched_fused_uvm", "row_wise"): [
+            ("fused_uvm", "row_wise"): [
                 0.054393095128676475,
                 0.054393095128676475,
             ],
-            ("batched_fused_uvm_caching", "row_wise"): [
+            ("fused_uvm_caching", "row_wise"): [
                 0.012695561962491483,
                 0.012695561962491483,
             ],
-            ("batched_fused", "table_row_wise"): [
+            ("fused", "table_row_wise"): [
                 0.00043569201211068144,
                 0.00043569201211068144,
             ],
-            ("batched_fused_uvm", "table_row_wise"): [
+            ("fused_uvm", "table_row_wise"): [
                 0.054393095128676475,
                 0.054393095128676475,
             ],
-            ("batched_fused_uvm_caching", "table_row_wise"): [
+            ("fused_uvm_caching", "table_row_wise"): [
                 0.012695561962491483,
                 0.012695561962491483,
             ],
@@ -119,19 +119,19 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_perfs = {
-            ("batched_dense", "data_parallel"): [
+            ("dense", "data_parallel"): [
                 0.002677347614879459,
                 0.002677347614879459,
             ],
-            ("batched_fused", "table_wise"): [0.001880471390093715],
-            ("batched_fused_uvm", "table_wise"): [0.25958192114736517],
-            ("batched_fused_uvm_caching", "table_wise"): [0.060433813055248066],
-            ("batched_fused", "row_wise"): [
+            ("fused", "table_wise"): [0.001880471390093715],
+            ("fused_uvm", "table_wise"): [0.25958192114736517],
+            ("fused_uvm_caching", "table_wise"): [0.060433813055248066],
+            ("fused", "row_wise"): [
                 0.0007915177871551004,
                 0.0007915177871551004,
             ],
-            ("batched_fused_uvm", "row_wise"): [0.1036341050091912, 0.1036341050091912],
-            ("batched_fused_uvm_caching", "row_wise"): [
+            ("fused_uvm", "row_wise"): [0.1036341050091912, 0.1036341050091912],
+            ("fused_uvm_caching", "row_wise"): [
                 0.024158779217047007,
                 0.024158779217047007,
             ],

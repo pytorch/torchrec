@@ -191,13 +191,11 @@ class EmbeddingEnumerator(Enumerator):
                     set(constrained_compute_kernels) & set(compute_kernels)
                 )
 
-        if EmbeddingComputeKernel.BATCHED_DENSE.value in filtered_compute_kernels:
+        if EmbeddingComputeKernel.DENSE.value in filtered_compute_kernels:
             if (
-                EmbeddingComputeKernel.BATCHED_FUSED.value in filtered_compute_kernels
+                EmbeddingComputeKernel.FUSED.value in filtered_compute_kernels
             ):  # always false for data_parallel
-                filtered_compute_kernels.remove(
-                    EmbeddingComputeKernel.BATCHED_DENSE.value
-                )
+                filtered_compute_kernels.remove(EmbeddingComputeKernel.DENSE.value)
 
         if not filtered_compute_kernels:
             raise RuntimeError(

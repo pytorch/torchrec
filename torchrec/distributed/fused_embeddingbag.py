@@ -136,13 +136,13 @@ class FusedEmbeddingBagCollectionSharder(
         ret = []
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
             if compute_device_type in {"cuda"}:
                 ret += [
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
+                    EmbeddingComputeKernel.FUSED_UVM.value,
+                    EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         else:
-            ret.append(EmbeddingComputeKernel.BATCHED_DENSE.value)
+            ret.append(EmbeddingComputeKernel.DENSE.value)
         return ret

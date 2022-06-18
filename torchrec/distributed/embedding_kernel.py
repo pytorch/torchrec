@@ -87,9 +87,9 @@ def get_state_dict(
         key = get_key_from_embedding_table(embedding_table)
         assert embedding_table.local_rows == param.size(0)
         if embedding_table.compute_kernel not in [
-            EmbeddingComputeKernel.BATCHED_QUANT,
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM,
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+            EmbeddingComputeKernel.QUANT,
+            EmbeddingComputeKernel.QUANT_UVM,
+            EmbeddingComputeKernel.QUANT_UVM_CACHING,
         ]:
             assert embedding_table.local_cols == param.size(1)
         # for inference there is no pg, all tensors are local

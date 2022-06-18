@@ -76,7 +76,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_QUANT.value,
+                EmbeddingComputeKernel.QUANT.value,
             ]
         ),
     )

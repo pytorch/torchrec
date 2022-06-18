@@ -187,7 +187,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
                         sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
             ],
@@ -225,7 +225,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
                         sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
             ],
