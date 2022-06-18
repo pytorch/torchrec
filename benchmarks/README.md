@@ -62,7 +62,7 @@ Here, we demonstrate the advantage of UVM/UVM-caching with Fused EBC. With UVM c
 |Fused EBC with UVM | 0.62 (+/- 5.34) second | full sized DLRM EMB |
 
 The above performance comparison is also put in a bar chart for better visualization.
-![EBC_benchmarks_dlrm_emb](https://github.com/pytorch/torchrec/tree/main/benchmarks/EBC_benchmarks_dlrm_emb.png)
+![EBC_benchmarks_dlrm_emb](EBC_benchmarks_dlrm_emb.png)
 
 
 ### 3. Comparison between EBC and fused_EBC on different sized embedding tables (`ebc_comparison_scaling`)
