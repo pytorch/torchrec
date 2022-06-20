@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import EmbeddingsAllToOne, SequenceEmbeddingAllToAll
+from torchrec.distributed.dist_data import (
+    EmbeddingsAllToOne,
+    SequenceEmbeddingsAllToAll,
+)
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
     InferGroupedEmbeddingsLookup,
@@ -92,7 +95,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, features_per_rank, device)
+        self._dist = SequenceEmbeddingsAllToAll(pg, features_per_rank, device)
 
     def forward(
         self,
