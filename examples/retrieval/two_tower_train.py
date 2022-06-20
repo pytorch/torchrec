@@ -171,6 +171,7 @@ def train(
         lambda params: torch.optim.Adam(params, lr=learning_rate),
     )
 
+    # pyre-fixme[16]: Module `data` has no attribute `dataloader`.
     dataloader = get_dataloader(
         batch_size=batch_size,
         num_embeddings=num_embeddings,
