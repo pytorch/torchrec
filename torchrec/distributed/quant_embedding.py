@@ -7,7 +7,7 @@
 
 
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
 from torch import nn
@@ -42,7 +42,6 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.distributed.utils import filter_state_dict
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
 )
@@ -62,7 +61,6 @@ def create_infer_embedding_sharding(
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-
         return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
@@ -109,9 +107,6 @@ class ShardedQuantEmbeddingCollection(
         self._has_uninitialized_output_dist: bool = True
 
         self._embedding_dim: int = module.embedding_dim
-        self._embedding_names_per_sharding: List[List[str]] = []
-        for sharding in self._sharding_type_to_sharding.values():
-            self._embedding_names_per_sharding.append(sharding.embedding_names())
         self._need_indices: bool = module.need_indices
 
     def _create_input_dist(
@@ -210,26 +205,20 @@ class ShardedQuantEmbeddingCollection(
     def output_dist(
         self, ctx: ShardedModuleContext, output: List[List[torch.Tensor]]
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
-        awaitables_per_sharding: List[Awaitable[Dict[str, JaggedTensor]]] = []
+        awaitables_per_sharding: List[Awaitable[torch.Tensor]] = []
         features_before_all2all_per_sharding: List[KeyedJaggedTensor] = []
         for odist, embeddings, sharding_ctx in zip(
             self._output_dists,
             output,
-            # pyre-ignore [16]
-            ctx.sharding_contexts,
+            cast(EmbeddingCollectionContext, ctx).sharding_contexts,
         ):
             awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
             features_before_all2all_per_sharding.append(
                 sharding_ctx.features_before_input_dist
             )
         return EmbeddingCollectionAwaitable(
-            # pyre-fixme[6]: For 1st param expected `List[Awaitable[Tensor]]` but
-            #  got `List[Awaitable[Dict[str, JaggedTensor]]]`.
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
-            # pyre-fixme[6]: For 3rd param expected `List[str]` but got
-            #  `List[List[str]]`.
-            embedding_names_per_sharding=self._embedding_names_per_sharding,
             need_indices=self._need_indices,
         )
 

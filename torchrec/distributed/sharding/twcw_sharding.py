@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import torch
 from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
