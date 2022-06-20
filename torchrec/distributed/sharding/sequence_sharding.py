@@ -20,8 +20,8 @@ from torchrec.streamable import Multistreamable
 @dataclass
 class SequenceShardingContext(Multistreamable):
     """
-    Stores KJTAllToAll context and reuses it in SequenceEmbeddingAllToAll.
-    SequenceEmbeddingAllToAll has the same comm pattern as KJTAllToAll.
+    Stores KJTAllToAll context and reuses it in SequenceEmbeddingsAllToAll.
+    SequenceEmbeddingsAllToAll has the same comm pattern as KJTAllToAll.
 
     Attributes:
         features_before_input_dist (Optional[KeyedJaggedTensor]): stores the original
