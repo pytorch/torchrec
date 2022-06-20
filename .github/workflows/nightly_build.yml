@@ -106,13 +106,13 @@ jobs:
         rm -r dist || true
         conda run -n build_binary \
           python setup.py bdist_wheel \
-          --package_name torchrec-nightly \
+          --package_name torchrec \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
-        path: dist/torchrec_nightly-*.whl
+        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/torchrec*.whl
 
   # download from GHA, test on gpu and push to pypi
   test_on_gpu:
@@ -207,7 +207,7 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Install TorchRec Nightly
@@ -231,6 +231,6 @@ jobs:
           echo "AWS_ACCESS_KEY_ID is not set, exiting upload"
         exit 1
         fi
-        for pkg in torchrec_nightly*.whl; do
+        for pkg in torchrec*.whl; do
           aws s3 cp "$pkg" "$S3_PATH" --acl public-read
         done
