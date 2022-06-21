@@ -736,26 +736,48 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @staticmethod
     def concat(
-        a: "KeyedJaggedTensor",
-        b: "KeyedJaggedTensor",
+        kjt_list: List["KeyedJaggedTensor"],
     ) -> "KeyedJaggedTensor":
-        if a.stride() != b.stride():
-            raise ValueError(
-                f"Can only merge KJTs of the same stride ({a.stride()}, {b.stride()})."
-            )
-        length_per_key = (
-            a._length_per_key + b._length_per_key
-            if a._length_per_key is not None and b._length_per_key is not None
-            else None
-        )
+        if len(kjt_list) == 0:
+            raise ValueError("Can't concat empty KJT list")
+        stride: int = kjt_list[0].stride()
+        is_weighted: bool = kjt_list[0].weights_or_none() is not None
+        has_length_per_key: bool = True
+
+        length_per_key: List[int] = []
+        keys: List[str] = []
+        value_list: List[torch.Tensor] = []
+        weight_list: List[torch.Tensor] = []
+        length_list: List[torch.Tensor] = []
+
+        for kjt in kjt_list:
+            if kjt.stride() != stride:
+                raise ValueError(
+                    f"Can only merge KJTs of the same stride ({stride} != kjt.stride())"
+                )
+            curr_is_weighted: bool = kjt.weights_or_none() is not None
+            if is_weighted != curr_is_weighted:
+                raise ValueError("Can't merge weighted KJT with unweighted KJT")
+
+            if kjt._length_per_key is None:
+                has_length_per_key = False
+
+            if has_length_per_key:
+                # pyre-ignore[6]
+                length_per_key += kjt._length_per_key
+            keys += kjt.keys()
+            value_list.append(kjt.values())
+            if is_weighted:
+                weight_list.append(kjt.weights())
+            length_list.append(kjt.lengths())
 
         return KeyedJaggedTensor(
-            keys=a.keys() + b.keys(),
-            values=torch.cat([a.values(), b.values()], dim=0),
-            weights=_merge_weights_or_none(a.weights_or_none(), b.weights_or_none()),
-            lengths=torch.cat([a.lengths(), b.lengths()], dim=0),
-            stride=a.stride(),
-            length_per_key=length_per_key,
+            keys=keys,
+            values=torch.cat(value_list, dim=0),
+            weights=torch.cat(weight_list, dim=0) if is_weighted else None,
+            lengths=torch.cat(length_list, dim=0),
+            stride=stride,
+            length_per_key=length_per_key if has_length_per_key else None,
         )
 
     @staticmethod
