@@ -363,9 +363,9 @@ along its columns and placed on specified ranks.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>device</strong> (<em>torch.device</em>) – device on which buffer will be allocated</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em>) – device on which buffer will be allocated.</p></li>
 <li><p><strong>world_size</strong> (<em>int</em>) – number of devices in the topology.</p></li>
-<li><p><strong>cat_dim</strong> (<em>int</em>) – which dimension you like to concate on.
+<li><p><strong>cat_dim</strong> (<em>int</em>) – which dimension you would like to concatenate on.
 For pooled embedding it is 1; for sequence embedding it is 0.</p></li>
 </ul>
 </dd>
@@ -373,13 +373,13 @@ For pooled embedding it is 1; for sequence embedding it is 0.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.dist_data.EmbeddingsAllToOne.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs AlltoOne operation on pooled embeddings tensors.</p>
+<dd><p>Performs AlltoOne operation on pooled/sequence embeddings tensors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>tensors</strong> (<em>List</em><em>[</em><em>torch.Tensor</em><em>]</em>) – list of pooled embedding tensors.</p>
+<dd class="field-odd"><p><strong>tensors</strong> (<em>List</em><em>[</em><em>torch.Tensor</em><em>]</em>) – list of embedding tensors.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>awaitable of the merged pooled embeddings.</p>
+<dd class="field-even"><p>awaitable of the merged embeddings.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[torch.Tensor]</p>
@@ -410,9 +410,9 @@ correct space), and one to transmit actual sparse values.</p>
 send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
 destination rank. Same for all ranks.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
-<li><p><strong>stagger</strong> (<em>int</em>) – stagger value to apply to recat tensor, see _recat function for
+<li><p><strong>stagger</strong> (<em>int</em>) – stagger value to apply to recat tensor, see <cite>_recat</cite> function for
 more detail.</p></li>
-<li><p><strong>variable_batch_size</strong> (<em>bool</em>) – variable batch size in each rank</p></li>
+<li><p><strong>variable_batch_size</strong> (<em>bool</em>) – whether variable batch size in each rank is enabled.</p></li>
 </ul>
 </dd>
 </dl>
@@ -486,14 +486,17 @@ Second wait will have indices/weights results.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – ProcessGroup for AlltoAll communication.</p></li>
-<li><p><strong>input</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – Input KJT tensor.</p></li>
-<li><p><strong>lengths</strong> – Output lengths tensor</p></li>
+<li><p><strong>input</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – input KJT tensor.</p></li>
+<li><p><strong>lengths</strong> (<em>torch.Tensor</em>) – output lengths tensor.</p></li>
 <li><p><strong>splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – List of len(pg.size()) which indicates how many features to
-send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
+send to each pg.rank(). It is assumed the <cite>KeyedJaggedTensor</cite> is ordered by
 destination rank. Same for all ranks.</p></li>
 <li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – KJT keys after AlltoAll.</p></li>
 <li><p><strong>recat</strong> (<em>torch.Tensor</em>) – recat tensor for reordering tensor order after AlltoAll.</p></li>
-<li><p><strong>in_lengths_per_worker</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – indices number of indices each rank will get.</p></li>
+<li><p><strong>in_lengths_per_worker</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – number of indices each rank will get.</p></li>
+<li><p><strong>out_lengths_per_worker</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – number of indices per rank in output.</p></li>
+<li><p><strong>batch_size_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – batch size per rank, need to support variable
+batch size.</p></li>
 </ul>
 </dd>
 </dl>
@@ -510,12 +513,15 @@ awaitable where indices and weights AlltoAll will be issued.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – ProcessGroup for AlltoAll communication.</p></li>
-<li><p><strong>input</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – Input KJT tensor</p></li>
-<li><p><strong>splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – List of len(pg.size()) which indicates how many features to
-send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
+<li><p><strong>input</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – input KJT tensor</p></li>
+<li><p><strong>splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of len(pg.size()) which indicates how many features to
+send to each pg.rank(). It is assumed the <cite>KeyedJaggedTensor</cite> is ordered by
 destination rank. Same for all ranks.</p></li>
 <li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – KJT keys after AlltoAll</p></li>
+<li><p><strong>stagger</strong> (<em>int</em>) – stagger value to apply to recat tensor, see <cite>_recat</cite> function for
+more detail.</p></li>
 <li><p><strong>recat</strong> (<em>torch.Tensor</em>) – recat tensor for reordering tensor order after AlltoAll.</p></li>
+<li><p><strong>variable_batch_size</strong> (<em>bool</em>) – whether variable batch size is enabled.</p></li>
 </ul>
 </dd>
 </dl>
@@ -531,10 +537,9 @@ to the devices.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – lengths of features to split the KeyJaggedTensor features
+<li><p><strong>splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – lengths of features to split the <cite>KeyJaggedTensor</cite> features
 into before copying them.</p></li>
 <li><p><strong>world_size</strong> (<em>int</em>) – number of devices in the topology.</p></li>
-<li><p><strong>recat</strong> (<em>torch.Tensor</em>) – recat tensor for reordering tensor order after AlltoAll.</p></li>
 </ul>
 </dd>
 </dl>
@@ -547,7 +552,7 @@ into before copying them.</p></li>
 <dd class="field-odd"><p><strong>kjt</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – the input features.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>awaitable of KeyedJaggedTensor splits.</p>
+<dd class="field-even"><p>awaitable of <cite>KeyedJaggedTensor</cite> splits.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[List[<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a>]]</p>
@@ -576,7 +581,8 @@ into before copying them.</p></li>
 <li><p><strong>dim_sum_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – number of features (sum of dimensions) of the
 embedding in each rank.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
-<li><p><strong>callbacks</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>torch.Tensor</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em><em>]</em>) – </p></li>
+<li><p><strong>callbacks</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>torch.Tensor</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em><em>]</em>) – callback
+functions.</p></li>
 </ul>
 </dd>
 </dl>
@@ -605,7 +611,11 @@ embedding in each rank.</p></li>
 <dd><p>Performs AlltoAll pooled operation on pooled embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of values to distribute.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of values to distribute.</p></li>
+<li><p><strong>batch_size_per_rank</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – batch size per rank, to support
+variable batch size.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>awaitable of pooled embeddings.</p>
@@ -694,8 +704,8 @@ happens within.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingAllToAll">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">SequenceEmbeddingAllToAll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">features_per_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingAllToAll" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">SequenceEmbeddingsAllToAll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">features_per_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
 <p>Redistributes sequence embedding to a <cite>ProcessGroup</cite> according to splits.</p>
 <dl class="field-list simple">
@@ -703,7 +713,7 @@ happens within.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the AlltoAll communication
 happens within.</p></li>
-<li><p><strong>features_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – List of number of features per rank.</p></li>
+<li><p><strong>features_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of number of features per rank.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
 </ul>
 </dd>
@@ -712,7 +722,7 @@ happens within.</p></li>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">init_distributed</span><span class="p">(</span><span class="n">rank</span><span class="o">=</span><span class="n">rank</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">)</span>
 <span class="n">pg</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;nccl&quot;</span><span class="p">)</span>
 <span class="n">features_per_rank</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
-<span class="n">m</span> <span class="o">=</span> <span class="n">SequenceEmbeddingAllToAll</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="n">features_per_rank</span><span class="p">)</span>
+<span class="n">m</span> <span class="o">=</span> <span class="n">SequenceEmbeddingsAllToAll</span><span class="p">(</span><span class="n">pg</span><span class="p">,</span> <span class="n">features_per_rank</span><span class="p">)</span>
 <span class="n">local_embs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
 <span class="n">sharding_ctx</span><span class="p">:</span> <span class="n">SequenceShardingContext</span>
 <span class="n">output</span> <span class="o">=</span> <span class="n">m</span><span class="p">(</span>
@@ -726,8 +736,8 @@ happens within.</p></li>
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingAllToAll.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbucketize_permute_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable" title="torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable"><span class="pre">SequenceEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingAllToAll.forward" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbucketize_permute_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable" title="torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable"><span class="pre">SequenceEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs AlltoAll operation on sequence embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -741,14 +751,17 @@ of the KJT bucketize (for row-wise sharding only).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>SequenceEmbeddingsAwaitable</p>
+<dd class="field-even"><p>awaitable of sequence embeddings.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable" title="torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">SequenceEmbeddingsAwaitable</a></p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingAllToAll.training">
-<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingAllToAll.training" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -765,6 +778,7 @@ of the KJT bucketize (for row-wise sharding only).</p></li>
 from all the processes in the group after collective.</p></li>
 <li><p><strong>unbucketize_permute_tensor</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – stores the permute order of
 KJT bucketize (for row-wise sharding only).</p></li>
+<li><p><strong>embedding_dim</strong> (<em>int</em>) – embedding dimension.</p></li>
 </ul>
 </dd>
 </dl>
