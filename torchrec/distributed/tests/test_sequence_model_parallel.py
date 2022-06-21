@@ -7,13 +7,14 @@
 
 
 import unittest
-from typing import List, Optional, Type
+from typing import Dict, List, Optional, Type
 
 import hypothesis.strategies as st
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.distributed.test_utils.test_sharding import sharding_single_rank_test
@@ -117,6 +118,40 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend="nccl",
         )
 
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_sharding_nccl_cw(self, sharding_type: str, kernel_type: str) -> None:
+        self._test_sharding(
+            sharders=[
+                TestEmbeddingCollectionSharder(
+                    sharding_type=sharding_type,
+                    kernel_type=kernel_type,
+                )
+            ],
+            backend="nccl",
+            constraints={
+                table.name: ParameterConstraints(min_partition=4)
+                for table in self.tables
+            },
+        )
+
     @seed_and_log
     def setUp(self) -> None:
         super().setUp()
@@ -142,6 +177,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
     ) -> None:
         self._run_multi_process_test(
@@ -154,4 +190,5 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             sharders=sharders,
             optim=EmbOptimType.EXACT_SGD,
             backend=backend,
+            constraints=constraints,
         )

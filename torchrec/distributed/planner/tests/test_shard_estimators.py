@@ -126,6 +126,9 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("fused", "table_wise"): [0.001880471390093715],
             ("fused_uvm", "table_wise"): [0.25958192114736517],
             ("fused_uvm_caching", "table_wise"): [0.060433813055248066],
+            ("fused", "column_wise"): [0.001880471390093715],
+            ("fused_uvm", "column_wise"): [0.25958192114736517],
+            ("fused_uvm_caching", "column_wise"): [0.060433813055248066],
             ("fused", "row_wise"): [
                 0.0007915177871551004,
                 0.0007915177871551004,
