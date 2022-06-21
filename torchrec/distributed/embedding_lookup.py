@@ -288,9 +288,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
-                    and isinstance(
-                        self._feature_processor, GroupedPositionWeightedModule
-                    )
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
@@ -301,9 +299,17 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     self._id_score_list_feature_splits,
                 )
             )
-            for emb_op, features in zip(
-                self._score_emb_modules, id_score_list_features_by_group
+            for config, emb_op, features in zip(
+                self.grouped_score_configs,
+                self._score_emb_modules,
+                id_score_list_features_by_group,
             ):
+                if (
+                    config.has_feature_processor
+                    and self._feature_processor is not None
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
+                ):
+                    features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
 
         if len(embeddings) == 0:
@@ -563,9 +569,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
-                    and isinstance(
-                        self._feature_processor, GroupedPositionWeightedModule
-                    )
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
