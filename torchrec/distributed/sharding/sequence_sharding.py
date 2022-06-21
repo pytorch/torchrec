@@ -20,8 +20,8 @@ from torchrec.streamable import Multistreamable
 @dataclass
 class SequenceShardingContext(Multistreamable):
     """
-    Stores KJTAllToAll context and reuses it in SequenceEmbeddingAllToAll.
-    SequenceEmbeddingAllToAll has the same comm pattern as KJTAllToAll.
+    Stores KJTAllToAll context and reuses it in SequenceEmbeddingsAllToAll.
+    SequenceEmbeddingsAllToAll has the same comm pattern as KJTAllToAll.
 
     Attributes:
         features_before_input_dist (Optional[KeyedJaggedTensor]): stores the original
@@ -56,8 +56,8 @@ T = TypeVar("T")
 
 class BaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
     """
-    Base class for converting output of Sequence EmbeddingLookup from model-parallel to
-    data-parallel.
+    Base class for converting output of the sequence embedding lookup from
+    model-parallel to data-parallel.
     """
 
     @abc.abstractmethod
