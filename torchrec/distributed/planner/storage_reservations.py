@@ -34,9 +34,7 @@ class FixedPercentageReservation(StorageReservation):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Topology:
         reserved_topology = copy.deepcopy(topology)
-        for device in reserved_topology.devices:
-            device.storage.hbm = int((1 - self._percentage) * device.storage.hbm)
-            device.storage.ddr = int((1 - self._percentage) * device.storage.ddr)
+        _reserve_storage_percentage(reserved_topology, self._percentage)
         return reserved_topology
 
 
@@ -90,13 +88,13 @@ class HeuristicalStorageReservation(StorageReservation):
                 ]
             )
 
+        _reserve_storage_percentage(reserved_topology, self._percentage)
+
         _reserve_unshardable_tensors_storage(
             reserved_topology, module, shardable_parameters
         )
 
         _reserve_kjt_storage(reserved_topology, all_input_lengths, BIGINT_DTYPE)
-
-        _reserve_storage_percentage(reserved_topology, self._percentage)
 
         return reserved_topology
 
