@@ -120,7 +120,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         performance_model: Optional[PerfModel] = None,
         stats: Optional[Stats] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
-        debug: bool = False,
+        debug: bool = True,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
@@ -278,6 +278,8 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
             self._stats.log(
                 sharding_plan=sharding_plan,
                 topology=self._topology,
+                storage_constraint=storage_constraint,
+                storage_reservation=self._storage_reservation,
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,
                 run_time=end_time - start_time,
