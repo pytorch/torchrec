@@ -33,6 +33,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         tables: List[EmbeddingBagConfig],
         features: KeyedJaggedTensor,
         quant_type: torch.dtype = torch.qint8,
+        output_type: torch.dtype = torch.float,
     ) -> None:
         ebc = EmbeddingBagCollection(tables=tables)
 
@@ -42,13 +43,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=quant_type
+                dtype=output_type
             ),
-            weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
         )
 
         qebc = QuantEmbeddingBagCollection.from_float(ebc)
         quantized_embeddings = qebc(features)
+
+        self.assertEqual(quantized_embeddings.values().dtype, output_type)
 
         self.assertEqual(embeddings.keys(), quantized_embeddings.keys())
         for key in embeddings.keys():
@@ -76,13 +79,21 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                torch.half,
+                # torch.half,
                 torch.qint8,
             ]
         ),
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
-    def test_ebc(self, data_type: DataType, quant_type: torch.dtype) -> None:
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_ebc(
+        self, data_type: DataType, quant_type: torch.dtype, output_type: torch.dtype
+    ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
             embedding_dim=16,
@@ -102,7 +113,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             values=torch.as_tensor([0, 1]),
             lengths=torch.as_tensor([1, 1]),
         )
-        self._test_ebc([eb1_config, eb2_config], features, quant_type)
+        self._test_ebc([eb1_config, eb2_config], features, quant_type, output_type)
 
     def test_shared_tables(self) -> None:
         eb_config = EmbeddingBagConfig(

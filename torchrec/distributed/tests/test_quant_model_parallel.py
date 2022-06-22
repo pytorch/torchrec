@@ -8,7 +8,9 @@
 import unittest
 from typing import Any, cast, Dict, List, Optional
 
+import hypothesis.strategies as st
 import torch
+from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
@@ -49,9 +51,11 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         return None
 
 
-def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
+def _quantize(
+    module: nn.Module, inplace: bool, output_type: torch.dtype = torch.float
+) -> nn.Module:
     qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver,
+        activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
     )
     return quant.quantize_dynamic(
@@ -164,12 +168,21 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             else:
                 self._recursive_device_check(child, child_copy, device, device_copy)
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_quant_pred(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_quant_pred(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -179,7 +192,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(model, inplace=True, output_type=output_type)
         dmp = DistributedModelParallel(
             quant_model,
             sharders=[

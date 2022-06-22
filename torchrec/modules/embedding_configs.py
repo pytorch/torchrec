@@ -46,7 +46,9 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
 
 
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:
-    if dtype == torch.float16 or dtype == torch.half:
+    if dtype == torch.float:
+        return DataType.FP32
+    elif dtype == torch.float16 or dtype == torch.half:
         return DataType.FP16
     elif dtype == torch.quint8 or dtype == torch.qint8 or dtype == torch.int8:
         return DataType.INT8
