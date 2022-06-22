@@ -133,6 +133,8 @@ class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
         self._emb_names: List[str] = []
         self._embedding_tables = embedding_tables
 
+        self._split_embedding_weights: Optional[List[torch.Tensor]] = None
+
         for idx, table in enumerate(embedding_tables):
             self._rows.append(table.num_embeddings)
             self._weight_init_mins.append(table.get_weight_init_min())
@@ -208,7 +210,9 @@ class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
             )
 
     def split_embedding_weights(self) -> List[torch.Tensor]:
-        return self._emb_module.split_embedding_weights()
+        if self._split_embedding_weights is None:
+            self._split_embedding_weights = self._emb_module.split_embedding_weights()
+        return self._split_embedding_weights
 
     @property
     def fused_optimizer(self) -> FusedOptimizer:
