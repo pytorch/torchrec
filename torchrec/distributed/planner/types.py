@@ -410,6 +410,8 @@ class Stats(abc.ABC):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        storage_constraint: Topology,
+        storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,
         run_time: float,

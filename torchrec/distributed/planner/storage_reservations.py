@@ -52,6 +52,8 @@ class HeuristicalStorageReservation(StorageReservation):
     def __init__(self, percentage: float) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
+        self._dense_storage: Optional[Storage] = None
+        self._kjt_storage: Optional[Storage] = None
 
     def reserve(
         self,
@@ -90,18 +92,20 @@ class HeuristicalStorageReservation(StorageReservation):
 
         _reserve_storage_percentage(reserved_topology, self._percentage)
 
-        _reserve_unshardable_tensors_storage(
+        self._dense_storage = _reserve_dense_storage(
             reserved_topology, module, shardable_parameters
         )
 
-        _reserve_kjt_storage(reserved_topology, all_input_lengths, BIGINT_DTYPE)
+        self._kjt_storage = _reserve_kjt_storage(
+            reserved_topology, all_input_lengths, BIGINT_DTYPE
+        )
 
         return reserved_topology
 
 
-def _reserve_unshardable_tensors_storage(
+def _reserve_dense_storage(
     topology: Topology, module: nn.Module, shardable_parameters: Set[nn.Parameter]
-) -> None:
+) -> Storage:
     unshardable_parameters = set(module.parameters()) - shardable_parameters
 
     unshardable_parameters_size = sum(
@@ -130,18 +134,19 @@ def _reserve_unshardable_tensors_storage(
     for device in topology.devices:
         device.storage -= unshardable_tensors_storage
 
+    return unshardable_tensors_storage
+
 
 def _reserve_kjt_storage(
     topology: Topology,
     all_input_lengths: List[float],
     input_data_type_size: int,
-) -> None:
+) -> Storage:
     kjt_size = (
         math.ceil(
-            topology.batch_size
-            # pyre-ignore[58]
+            float(topology.batch_size)
             * sum(all_input_lengths)
-            * input_data_type_size
+            * float(input_data_type_size)
         )
         * 20  # 2 pipelined batches each with 10 internal copies
     )
@@ -153,6 +158,8 @@ def _reserve_kjt_storage(
 
     for device in topology.devices:
         device.storage -= kjt_storage
+
+    return kjt_storage
 
 
 def _reserve_storage_percentage(topology: Topology, percent: float) -> None:
