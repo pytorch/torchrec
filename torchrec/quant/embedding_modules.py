@@ -20,7 +20,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
 from torch import Tensor
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
-    data_type_to_dtype,
     data_type_to_sparse_type,
     DataType,
     dtype_to_data_type,
@@ -181,12 +180,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         embedding_configs: List[EmbeddingBagConfig],
         is_weighted: bool,
         device: torch.device,
+        output_dtype: torch.dtype = torch.float,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
         self.embedding_bags: nn.ModuleList = nn.ModuleList()
         self._lengths_per_embedding: List[int] = []
+        self._output_dtype = output_dtype
         table_names = set()
         for emb_config in self._embedding_bag_configs:
             if emb_config.name in table_names:
@@ -207,6 +208,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 pooling_mode=pooling_type_to_pooling_mode(emb_config.pooling),
                 weight_lists=[table_name_to_quantized_weights[emb_config.name]],
                 device=device,
+                output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=16,
             )
             self.embedding_bags.append(emb_module)
@@ -241,7 +243,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                         indices=values.int(),
                         offsets=offsets.int(),
                         per_sample_weights=f.weights() if self._is_weighted else None,
-                    ).float()
+                    )
                 )
 
                 length_per_key.append(emb_config.embedding_dim)
@@ -304,6 +306,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             embedding_bag_configs,
             module.is_weighted,
             device=device,
+            # pyre-ignore [16]
+            output_dtype=module.qconfig.activation().dtype,
         )
 
     @property
@@ -315,6 +319,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     @property
     def is_weighted(self) -> bool:
         return self._is_weighted
+
+    @property
+    def output_dtype(self) -> torch.dtype:
+        return self._output_dtype
 
 
 class EmbeddingCollection(EmbeddingCollectionInterface):
@@ -378,12 +386,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         tables: List[EmbeddingConfig],
         device: torch.device,
         need_indices: bool = False,
+        output_dtype: torch.dtype = torch.float,
     ) -> None:
         super().__init__()
         self.embeddings: nn.ModuleList = nn.ModuleList()
         self._embedding_configs = tables
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
+        self._output_dtype = output_dtype
         table_names = set()
         for config in tables:
             if config.name in table_names:
@@ -412,7 +422,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                     pooling_mode=PoolingMode.NONE,
                     weight_lists=[table_name_to_quantized_weights[config.name]],
                     device=device,
-                    output_dtype=SparseType.FP32,
+                    output_dtype=data_type_to_sparse_type(
+                        dtype_to_data_type(output_dtype)
+                    ),
                     row_alignment=16,
                 )
             )
@@ -527,3 +539,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
     @property
     def embedding_names_by_table(self) -> List[List[str]]:
         return self._embedding_names_by_table
+
+    @property
+    def output_dtype(self) -> torch.dtype:
+        return self._output_dtype

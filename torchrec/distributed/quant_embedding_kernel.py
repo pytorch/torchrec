@@ -141,7 +141,6 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
-                output_dtype=SparseType.FP32,
                 row_alignment=16,
                 **(fused_params or {}),
             )
@@ -239,7 +238,6 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
                 device=device,
                 pooling_mode=PoolingMode.NONE,
                 feature_table_map=self._feature_table_map,
-                output_dtype=SparseType.FP32,
                 row_alignment=16,
                 **(fused_params or {}),
             )

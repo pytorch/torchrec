@@ -42,6 +42,10 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 from torchrec.distributed.utils import filter_state_dict
+from torchrec.modules.embedding_configs import (
+    data_type_to_sparse_type,
+    dtype_to_data_type,
+)
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
 )
@@ -283,7 +287,11 @@ class QuantEmbeddingCollectionSharder(
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingCollection:
-        return ShardedQuantEmbeddingCollection(module, params, env, self.fused_params)
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(module.output_dtype)
+        )
+        return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
 
     def shardable_parameters(
         self, module: QuantEmbeddingCollection
