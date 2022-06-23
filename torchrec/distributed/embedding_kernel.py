@@ -63,7 +63,6 @@ def get_state_dict(
         List[Union[nn.Module, torch.Tensor]],
         List[torch.Tensor],
     ],
-    # pyre-fixme[11]
     pg: Optional[dist.ProcessGroup] = None,
     destination: Optional[Dict[str, Any]] = None,
     prefix: str = "",
@@ -133,7 +132,6 @@ class GroupedEmbedding(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._sparse = sparse
@@ -229,7 +227,6 @@ class GroupedEmbeddingBag(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._sparse = sparse

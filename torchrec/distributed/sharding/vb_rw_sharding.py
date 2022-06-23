@@ -56,7 +56,6 @@ class VariableBatchRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def __init__(
         self,
-        # pyre-fixme[11]
         pg: dist.ProcessGroup,
         num_id_list_features: int,
         num_id_score_list_features: int,
@@ -216,6 +215,8 @@ class VariableBatchRwPooledEmbeddingSharding(
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return VariableBatchRwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,
@@ -244,4 +245,6 @@ class VariableBatchRwPooledEmbeddingSharding(
         self,
         device: Optional[torch.device] = None,
     ) -> BaseVariableBatchEmbeddingDist[torch.Tensor]:
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
         return VariableBatchRwPooledEmbeddingDist(self._pg)

@@ -59,7 +59,6 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
     ) -> None:
         super().__init__()
         self._env = env
-        # pyre-ignore[11]
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
@@ -503,6 +502,8 @@ class TwRwPooledEmbeddingSharding(
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return TwRwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             id_list_features_per_rank=id_list_features_per_rank,

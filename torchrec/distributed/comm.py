@@ -15,7 +15,6 @@ import torch.distributed as dist
 logger: logging.Logger = logging.getLogger(__name__)
 
 # Global, only should be accessed via intra_and_cross_node_pg()
-# pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
 _INTRA_PG: Optional[dist.ProcessGroup] = None
 _CROSS_PG: Optional[dist.ProcessGroup] = None
 

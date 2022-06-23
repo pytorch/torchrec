@@ -54,7 +54,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
     ) -> None:
         super().__init__()
         self._env = env
-        # pyre-ignore[11]
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
@@ -358,6 +357,8 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return RwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,
@@ -387,4 +388,6 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         self,
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[torch.Tensor]:
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
         return RwPooledEmbeddingDist(self._pg)

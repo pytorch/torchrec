@@ -275,7 +275,6 @@ class SparseFeaturesAllToAll(nn.Module):
 
     def __init__(
         self,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],

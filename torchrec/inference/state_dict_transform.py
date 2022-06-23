@@ -36,7 +36,6 @@ def state_dict_gather(
 
 def state_dict_all_gather_keys(
     state_dict: Dict[str, Union[torch.Tensor, ShardedTensor]],
-    # pyre-ignore[11]
     pg: ProcessGroup,
 ) -> List[str]:
     """

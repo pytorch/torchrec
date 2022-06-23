@@ -156,7 +156,6 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
 
     def __init__(
         self,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         input: KeyedJaggedTensor,
         lengths: torch.Tensor,
@@ -655,7 +654,6 @@ class PooledEmbeddingsAllToAll(nn.Module):
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._callbacks: List[Callable[[torch.Tensor], torch.Tensor]] = []
         if callbacks is not None:
@@ -795,7 +793,6 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         pg: dist.ProcessGroup,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
@@ -894,7 +891,6 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         forward_recat = []

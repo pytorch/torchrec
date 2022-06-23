@@ -88,15 +88,12 @@ def skip_if_asan_class(cls: TReturn) -> Optional[TReturn]:
 
 
 def init_distributed_single_host(
-    rank: int,
-    world_size: int,
-    backend: str,
-    local_size: Optional[int] = None
-    # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
+    rank: int, world_size: int, backend: str, local_size: Optional[int] = None
 ) -> dist.ProcessGroup:
     os.environ["LOCAL_WORLD_SIZE"] = str(local_size if local_size else world_size)
     os.environ["LOCAL_RANK"] = str(rank % local_size if local_size else rank)
     dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+    # pyre-fixme[7]: Expected `ProcessGroup` but got `Optional[ProcessGroup]`.
     return dist.group.WORLD
 
 

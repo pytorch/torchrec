@@ -254,7 +254,6 @@ def _generate_rec_metrics(
     world_size: int,
     my_rank: int,
     batch_size: int,
-    # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
     process_group: Optional[dist.ProcessGroup] = None,
 ) -> RecMetricList:
     rec_metrics = []
