@@ -44,7 +44,6 @@ class EmbeddingStats(Stats):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
-        storage_constraint: Topology,
         storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,
@@ -84,6 +83,27 @@ class EmbeddingStats(Stats):
         used_sharding_types = set()
         compute_kernels_to_count = defaultdict(int)
 
+        reserved_percent = (
+            storage_reservation._percentage
+            if isinstance(
+                storage_reservation,
+                (FixedPercentageReservation, HeuristicalStorageReservation),
+            )
+            else 0.0
+        )
+        dense_storage = (
+            storage_reservation._dense_storage
+            if isinstance(storage_reservation, HeuristicalStorageReservation)
+            and storage_reservation._dense_storage
+            else Storage(0, 0)
+        )
+        kjt_storage = (
+            storage_reservation._kjt_storage
+            if isinstance(storage_reservation, HeuristicalStorageReservation)
+            and storage_reservation._kjt_storage
+            else Storage(0, 0)
+        )
+
         for sharding_option in best_plan:
             fqn = sharding_option.fqn
 
@@ -112,11 +132,14 @@ class EmbeddingStats(Stats):
         perf = [0.0] * topology.world_size
         for sharding_option in best_plan:
             for shard in sharding_option.shards:
-                storage = cast(Storage, shard.storage)
+                shard_storage = cast(Storage, shard.storage)
                 rank = cast(int, shard.rank)
-                used_hbm[rank] += storage.hbm
-                used_ddr[rank] += storage.ddr
+                used_hbm[rank] += shard_storage.hbm
+                used_ddr[rank] += shard_storage.ddr
                 perf[rank] += cast(float, shard.perf)
+
+        used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in used_hbm]
+        used_ddr = [ddr + dense_storage.ddr + kjt_storage.ddr for ddr in used_ddr]
 
         table: List[List[Union[str, int]]] = [
             [
@@ -139,15 +162,17 @@ class EmbeddingStats(Stats):
             ],
         ]
 
-        for rank, device in enumerate(storage_constraint.devices):
+        for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
             used_hbm_ratio = (
-                used_hbm[rank] / device.storage.hbm
+                used_hbm[rank] / ((1 - reserved_percent) * device.storage.hbm)
                 if topology.compute_device == "cuda"
                 else 0
             )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
-            used_ddr_ratio = used_ddr[rank] / device.storage.ddr
+            used_ddr_ratio = used_ddr[rank] / (
+                (1 - reserved_percent) * device.storage.ddr
+            )
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
                     stats[rank]["type"][sharding_type] = 0
@@ -241,7 +266,7 @@ class EmbeddingStats(Stats):
             self._stats_table.append(f"# {row: <{self._width-3}}#")
 
         legend = "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
-        hbm_info = "HBM: est. peak memory usage for shards - parameter, comms, optimizer, and gradients"
+        hbm_info = "HBM: estimated peak memory usage for shards, dense tensors, and features (KJT)"
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {legend: <{self._width-3}}#")
         self._stats_table.append(f"# {hbm_info: <{self._width-3}}#")
@@ -260,7 +285,13 @@ class EmbeddingStats(Stats):
 
         if debug:
             self._log_max_perf_and_max_hbm(perf, used_hbm)
-            self._log_storage_reservation_stats(storage_reservation, topology)
+            self._log_storage_reservation_stats(
+                storage_reservation,
+                topology,
+                reserved_percent,
+                dense_storage,
+                kjt_storage,
+            )
 
         self._stats_table.append("#" * self._width)
 
@@ -360,48 +391,42 @@ class EmbeddingStats(Stats):
         self,
         storage_reservation: StorageReservation,
         topology: Topology,
+        reserved_percent: float,
+        dense_storage: Storage,
+        kjt_storage: Storage,
     ) -> None:
-        if isinstance(
-            storage_reservation,
-            (FixedPercentageReservation, HeuristicalStorageReservation),
-        ):
-            percentage = storage_reservation._percentage
-            device_storage = topology.devices[0].storage
-            usable_hbm = round(
-                bytes_to_gb(int((1 - percentage) * device_storage.hbm)), 3
-            )
-            usable_ddr = round(
-                bytes_to_gb(int((1 - percentage) * device_storage.ddr)), 3
-            )
-            usable_memory = f"HBM: {usable_hbm} GB, DDR: {usable_ddr} GB"
-            usable_percentage = f"Percent of Total: {(1 - percentage):.0%}"
+        device_storage = topology.devices[0].storage
+        usable_hbm = round(
+            bytes_to_gb(int((1 - reserved_percent) * device_storage.hbm)), 3
+        )
+        usable_ddr = round(
+            bytes_to_gb(int((1 - reserved_percent) * device_storage.ddr)), 3
+        )
+        usable_memory = f"HBM: {usable_hbm} GB, DDR: {usable_ddr} GB"
+        usable_percentage = f"Percent of Total: {(1 - reserved_percent):.0%}"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {'Usable Memory:' : <{self._width-3}}#")
+        self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
+        self._stats_table.append(f"#    {usable_percentage : <{self._width-6}}#")
+
+        if isinstance(storage_reservation, HeuristicalStorageReservation):
+            dense_hbm = round(bytes_to_gb(dense_storage.hbm), 3)
+            dense_ddr = round(bytes_to_gb(dense_storage.ddr), 3)
+            dense_storage_text = f"HBM: {dense_hbm} GB, DDR: {dense_ddr} GB"
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-            self._stats_table.append(f"# {'Usable Memory:' : <{self._width-3}}#")
-            self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
-            self._stats_table.append(f"#    {usable_percentage : <{self._width-6}}#")
+            self._stats_table.append(
+                f"# {'Dense Storage (per rank): ' : <{self._width-3}}#"
+            )
+            self._stats_table.append(f"#    {dense_storage_text : <{self._width-6}}#")
 
-            if isinstance(storage_reservation, HeuristicalStorageReservation):
-                assert storage_reservation._dense_storage is not None
-                dense_storage = storage_reservation._dense_storage
-                dense_hbm = round(bytes_to_gb(dense_storage.hbm), 3)
-                dense_ddr = round(bytes_to_gb(dense_storage.ddr), 3)
-                dense_storage = f"HBM: {dense_hbm} GB, DDR: {dense_ddr} GB"
-                self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-                self._stats_table.append(
-                    f"# {'Dense Storage (per rank): ' : <{self._width-3}}#"
-                )
-                self._stats_table.append(f"#    {dense_storage : <{self._width-6}}#")
-
-                assert storage_reservation._kjt_storage is not None
-                kjt_storage = storage_reservation._kjt_storage
-                kjt_hbm = round(bytes_to_gb(kjt_storage.hbm), 3)
-                kjt_ddr = round(bytes_to_gb(kjt_storage.ddr), 3)
-                kjt_storage = f"HBM: {kjt_hbm} GB, DDR: {kjt_ddr} GB"
-                self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-                self._stats_table.append(
-                    f"# {'KJT Storage (per rank): ' : <{self._width-3}}#"
-                )
-                self._stats_table.append(f"#    {kjt_storage : <{self._width-6}}#")
+            kjt_hbm = round(bytes_to_gb(kjt_storage.hbm), 3)
+            kjt_ddr = round(bytes_to_gb(kjt_storage.ddr), 3)
+            kjt_storage_text = f"HBM: {kjt_hbm} GB, DDR: {kjt_ddr} GB"
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'KJT Storage (per rank): ' : <{self._width-3}}#"
+            )
+            self._stats_table.append(f"#    {kjt_storage_text : <{self._width-6}}#")
 
     def _log_compute_kernel_stats(
         self, compute_kernels_to_count: Dict[str, int]

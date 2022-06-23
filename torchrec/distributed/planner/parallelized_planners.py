@@ -278,7 +278,6 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
             self._stats.log(
                 sharding_plan=sharding_plan,
                 topology=self._topology,
-                storage_constraint=storage_constraint,
                 storage_reservation=self._storage_reservation,
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,
