@@ -56,7 +56,6 @@ class Request(Awaitable[W]):
         pg (dist.ProcessGroup): The process group the request is for.
     """
 
-    # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
     def __init__(self, pg: dist.ProcessGroup) -> None:
         super().__init__()
         self.pg: dist.ProcessGroup = pg

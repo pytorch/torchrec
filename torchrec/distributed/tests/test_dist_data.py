@@ -275,6 +275,8 @@ class KJTAllToAllTest(DistDataTestCase):
         output = output.to(device=device)
         pg = dist.group.WORLD
         lengths_a2a = KJTAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=pg,
             splits=splits,
             device=device,
@@ -349,6 +351,8 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         _input = _input.to(device=device)
         output = output.to(device=device)
         a2a = PooledEmbeddingsAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=pg,
             dim_sum_per_rank=dim_sum_per_rank,
             device=device,
@@ -447,6 +451,8 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
         pg = dist.group.WORLD
         input = input.cuda(rank)
         input.requires_grad = True
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
         rs = PooledEmbeddingsReduceScatter(pg).cuda(rank)
         actual_output = rs(input).wait()
         s = torch.sum(actual_output)

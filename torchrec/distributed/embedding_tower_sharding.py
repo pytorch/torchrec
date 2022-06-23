@@ -115,7 +115,6 @@ class ShardedEmbeddingTower(
     ) -> None:
         super().__init__()
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
-        # pyre-ignore [11]
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._device = device
@@ -218,6 +217,8 @@ class ShardedEmbeddingTower(
             for node in range(node_count)
         ]
         self._cross_dist = SparseFeaturesAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._cross_pg,
             kjt_features_per_node,
             wkjt_features_per_node,
@@ -326,6 +327,8 @@ class ShardedEmbeddingTower(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._cross_pg,
             # pyre-fixme[6]: For 2nd param expected `List[int]` but got
             #  `List[Union[bool, float, int]]`.
@@ -608,6 +611,8 @@ class ShardedEmbeddingTowerCollection(
                 ),
             )
         self._cross_dist = SparseFeaturesAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._cross_pg,
             self._kjt_num_features_per_pt,
             self._wkjt_num_features_per_pt,
@@ -737,6 +742,8 @@ class ShardedEmbeddingTowerCollection(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._cross_pg,
             # pyre-fixme[6]: For 2nd param expected `List[int]` but got
             #  `List[Union[bool, float, int]]`.

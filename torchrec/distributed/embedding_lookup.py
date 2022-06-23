@@ -88,7 +88,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
-        # pyre-fixme[11]
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,

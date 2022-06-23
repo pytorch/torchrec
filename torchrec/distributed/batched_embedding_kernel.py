@@ -52,11 +52,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self,
         config: GroupedEmbeddingConfig,
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         @dataclass
@@ -291,7 +289,6 @@ class BaseBatchedEmbedding(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         self._local_rows: List[int] = []
@@ -502,7 +499,6 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         self._pooling: PoolingMode = pooling_type_to_pooling_mode(config.pooling)

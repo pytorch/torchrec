@@ -46,7 +46,6 @@ class MultiProcessContext:
         if torch.cuda.is_available():
             torch.backends.cudnn.allow_tf32 = False
             torch.backends.cuda.matmul.allow_tf32 = False
-        # pyre-ignore
         self.pg: Optional[dist.ProcessGroup] = None
 
     # pyre-ignore

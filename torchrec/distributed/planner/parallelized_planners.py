@@ -166,7 +166,6 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         self,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
     ) -> ShardingPlan:
         """

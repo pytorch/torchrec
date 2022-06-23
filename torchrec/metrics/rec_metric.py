@@ -127,7 +127,6 @@ class RecMetricComputation(Metric, abc.ABC):
         window_size: int,
         compute_on_all_ranks: bool = False,
         should_validate_update: bool = False,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         process_group: Optional[dist.ProcessGroup] = None,
         *args: Any,
         **kwargs: Any,

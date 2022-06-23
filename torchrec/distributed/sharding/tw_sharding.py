@@ -60,7 +60,6 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         super().__init__()
         self._env = env
         self._device = device
-        # pyre-ignore[11]
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
@@ -316,6 +315,8 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
         return TwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             self._id_score_list_features_per_rank(),
@@ -342,6 +343,8 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[torch.Tensor]:
         return TwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,

@@ -161,8 +161,11 @@ class sharded_model_copy:
 
         torch.Tensor.__deepcopy__ = _copy_or_not
         torch.nn.Parameter.__deepcopy__ = _param_copy
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.ProcessGroupNCCL.__deepcopy__ = _no_copy
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.ProcessGroupGloo.__deepcopy__ = _no_copy
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.Work.__deepcopy__ = _no_copy
         # pyre-ignore [16]
         torch.cuda.streams.Stream.__deepcopy__ = _no_copy
@@ -173,8 +176,11 @@ class sharded_model_copy:
         torch.Tensor.__deepcopy__ = self.t_copy_save_
         # pyre-ignore [16]
         torch.nn.Parameter.__deepcopy__ = self.p_copy_save_
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.ProcessGroupNCCL.__deepcopy__ = None
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.ProcessGroupGloo.__deepcopy__ = None
+        # pyre-fixme[16]: `Type` has no attribute `__deepcopy__`.
         torch._C._distributed_c10d.Work.__deepcopy__ = None
         # pyre-ignore [16]
         torch.cuda.streams.Stream.__deepcopy__ = None

@@ -122,6 +122,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
         self,
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
+        # pyre-fixme[16]: `Optional` has no attribute `size`.
         world_size = self._pg.size()
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
@@ -192,6 +193,8 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
         return TwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             self._id_score_list_features_per_rank(),
@@ -230,5 +233,10 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
             ).to(device=device)
             callbacks = [embedding_permute_op]
         return TwPooledEmbeddingDist(
-            self._pg, self._dim_sum_per_rank(), device, callbacks
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._pg,
+            self._dim_sum_per_rank(),
+            device,
+            callbacks,
         )
