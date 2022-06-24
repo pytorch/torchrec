@@ -291,6 +291,7 @@ def _generate_rec_metrics(
                 window_size=metric_def.window_size,
                 fused_update_limit=metrics_config.fused_update_limit,
                 compute_on_all_ranks=metrics_config.compute_on_all_ranks,
+                should_validate_update=metrics_config.should_validate_update,
                 process_group=process_group,
                 **kwargs,
             )
