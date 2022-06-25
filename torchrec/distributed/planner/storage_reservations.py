@@ -69,7 +69,7 @@ class HeuristicalStorageReservation(StorageReservation):
         }
 
         all_input_lengths: List[float] = []
-        shardable_modules = []
+        shardable_modules: List[nn.Module] = []
 
         for child_module in module.modules():
             sharder_key = sharder_name(type(child_module))
@@ -115,7 +115,7 @@ def _get_tensor_size(module: nn.Module) -> int:
 
 
 def _reserve_dense_storage(
-    topology: Topology, module: nn.Module, shardable_modules: Set[nn.Module]
+    topology: Topology, module: nn.Module, shardable_modules: List[nn.Module]
 ) -> Storage:
 
     unshardable_tensors_size = _get_tensor_size(module) - sum(
