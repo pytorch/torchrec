@@ -103,6 +103,9 @@ class MetricsConfig:
             will be enabled.
         compute_on_all_ranks (bool): whether to compute rec metrics on all ranks.
             If False, only compute on rank 0.
+        should_validate_update (bool): whether to check the inputs of update() and skip
+            update if the inputs are invalid. Invalid inputs include the case where all
+            examples have 0 weights for a batch.
     """
 
     rec_tasks: List[RecTaskInfo] = field(default_factory=list)
@@ -117,6 +120,7 @@ class MetricsConfig:
     # ``compute()``.
     compute_interval_steps: int = 100
     compute_on_all_ranks: bool = False
+    should_validate_update: bool = False
 
 
 DefaultTaskInfo = RecTaskInfo(
