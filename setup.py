@@ -63,7 +63,8 @@ def main(argv: List[str]) -> None:
     version = get_nightly_version() if is_nightly else get_version()
 
     if not is_nightly:
-        install_requires.remove("fbgemm-gpu-nightly")
+        if "fbgemm-gpu-nightly" in install_requires:
+            install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu")
 
     if is_test:
