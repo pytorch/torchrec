@@ -7,7 +7,7 @@ Cython
 distro
 docker
 docstring-parser
-fbgemm_gpu-nightly
+fbgemm-gpu-nightly
 filelock
 fsspec
 hypothesis
