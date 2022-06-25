@@ -67,8 +67,9 @@ class HeuristicalStorageReservation(StorageReservation):
         sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
-        shardable_parameters: Set[nn.Parameter] = set()
+
         all_input_lengths: List[float] = []
+        shardable_modules = []
 
         for child_module in module.modules():
             sharder_key = sharder_name(type(child_module))
@@ -77,9 +78,7 @@ class HeuristicalStorageReservation(StorageReservation):
                 continue
 
             names = sharder.shardable_parameters(child_module).keys()
-            parameters = sharder.shardable_parameters(child_module).values()
-
-            shardable_parameters.update(parameters)
+            shardable_modules.append(child_module)
 
             all_input_lengths.extend(
                 [
@@ -93,7 +92,7 @@ class HeuristicalStorageReservation(StorageReservation):
         _reserve_storage_percentage(reserved_topology, self._percentage)
 
         self._dense_storage = _reserve_dense_storage(
-            reserved_topology, module, shardable_parameters
+            reserved_topology, module, shardable_modules
         )
 
         self._kjt_storage = _reserve_kjt_storage(
@@ -103,28 +102,25 @@ class HeuristicalStorageReservation(StorageReservation):
         return reserved_topology
 
 
-def _reserve_dense_storage(
-    topology: Topology, module: nn.Module, shardable_parameters: Set[nn.Parameter]
-) -> Storage:
-    unshardable_parameters = set(module.parameters()) - shardable_parameters
-
-    unshardable_parameters_size = sum(
-        [
+def _get_tensor_size(module: nn.Module) -> int:
+    tensor_size = 0
+    for key, tensor in module.state_dict().items():
+        if tensor.requires_grad:
             # heuristic: 6 * dense parameter size (https://fburl.com/q8qcxvgx)
             # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
-            6 * parameter.element_size() * parameter.nelement()
-            for parameter in unshardable_parameters
-        ]
-    )
+            tensor_size += 6 * tensor.element_size() * tensor.nelement()
+        else:
+            tensor_size += tensor.element_size() * tensor.nelement()
+    return tensor_size
 
-    buffers_size = sum(
-        [
-            buffer.element_size() * buffer.nelement()
-            for _, buffer in module.named_buffers()
-        ]
-    )
 
-    unshardable_tensors_size = unshardable_parameters_size + buffers_size
+def _reserve_dense_storage(
+    topology: Topology, module: nn.Module, shardable_modules: Set[nn.Module]
+) -> Storage:
+
+    unshardable_tensors_size = _get_tensor_size(module) - sum(
+        [_get_tensor_size(shardable_module) for shardable_module in shardable_modules]
+    )
 
     unshardable_tensors_storage = Storage(
         hbm=unshardable_tensors_size if topology.compute_device == "cuda" else 0,
