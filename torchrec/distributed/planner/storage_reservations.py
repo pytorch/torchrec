@@ -101,6 +101,7 @@ class HeuristicalStorageReservation(StorageReservation):
 
         return reserved_topology
 
+
 def _get_tensor_size(module: nn.Module) -> int:
     tensor_size = 0
     for key, tensor in module.state_dict().items():
@@ -112,11 +113,14 @@ def _get_tensor_size(module: nn.Module) -> int:
             tensor_size += tensor.element_size() * tensor.nelement()
     return tensor_size
 
+
 def _reserve_dense_storage(
     topology: Topology, module: nn.Module, shardable_modules: Set[nn.Module]
 ) -> Storage:
 
-    unshardable_tensors_size = _get_tensor_size(module) - sum([_get_tensor_size(shardable_module) for shardable_module in shardable_modules])
+    unshardable_tensors_size = _get_tensor_size(module) - sum(
+        [_get_tensor_size(shardable_module) for shardable_module in shardable_modules]
+    )
 
     unshardable_tensors_storage = Storage(
         hbm=unshardable_tensors_size if topology.compute_device == "cuda" else 0,
