@@ -91,7 +91,7 @@ class HeuristicalStorageReservation(StorageReservation):
 
         _reserve_storage_percentage(reserved_topology, self._percentage)
 
-        self._dense_storage = _reserve_dense_storage(
+        self._dense_storage = _reserve_unshardable_storage(
             reserved_topology, module, shardable_modules
         )
 
@@ -102,24 +102,29 @@ class HeuristicalStorageReservation(StorageReservation):
         return reserved_topology
 
 
-def _get_tensor_size(module: nn.Module) -> int:
-    tensor_size = 0
-    for key, tensor in module.state_dict().items():
-        if tensor.requires_grad:
+def _get_module_size(module: nn.Module) -> int:
+    parameters_size = sum(
+        [
             # heuristic: 6 * dense parameter size (https://fburl.com/q8qcxvgx)
             # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
-            tensor_size += 6 * tensor.element_size() * tensor.nelement()
-        else:
-            tensor_size += tensor.element_size() * tensor.nelement()
-    return tensor_size
+            6 * parameter.element_size() * parameter.nelement()
+            for parameter in module.parameters()
+        ]
+    )
+
+    buffers_size = sum(
+        [buffer.element_size() * buffer.nelement() for buffer in module.buffers()]
+    )
+
+    return parameters_size + buffers_size
 
 
-def _reserve_dense_storage(
+def _reserve_unshardable_storage(
     topology: Topology, module: nn.Module, shardable_modules: List[nn.Module]
 ) -> Storage:
 
-    unshardable_tensors_size = _get_tensor_size(module) - sum(
-        [_get_tensor_size(shardable_module) for shardable_module in shardable_modules]
+    unshardable_tensors_size = _get_module_size(module) - sum(
+        [_get_module_size(shardable_module) for shardable_module in shardable_modules]
     )
 
     unshardable_tensors_storage = Storage(
