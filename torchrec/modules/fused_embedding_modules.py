@@ -419,7 +419,7 @@ class FusedEmbeddingBagCollection(
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
         self._embedding_names = list(
-            itertools.chain(*get_embedding_names_by_table(tables))
+            itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
         )
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
@@ -466,6 +466,7 @@ class FusedEmbeddingBagCollection(
             )
 
         embeddings = torch.cat(embeddings, dim=1)
+
         return KeyedTensor(
             keys=self._embedding_names,
             values=embeddings,
