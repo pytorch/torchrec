@@ -351,13 +351,13 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_extern_modules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PackageExporter</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_extern_modules</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator indicating abstract classmethods.</p>
-<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead:</p>
+<p>Similar to abstractmethod.</p>
+<p>Usage:</p>
 <blockquote>
 <div><dl>
-<dt>class C(ABC):</dt><dd><p>&#64;classmethod
-&#64;abstractmethod
+<dt>class C(metaclass=ABCMeta):</dt><dd><p>&#64;abstractclassmethod
 def my_abstract_classmethod(cls, …):</p>
 <blockquote>
 <div><p>…</p>
@@ -365,17 +365,19 @@ def my_abstract_classmethod(cls, …):</p>
 </dd>
 </dl>
 </div></blockquote>
+<p>‘abstractclassmethod’ is deprecated. Use ‘classmethod’ with
+‘abstractmethod’ instead.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_mocked_modules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PackageExporter</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_mocked_modules</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator indicating abstract classmethods.</p>
-<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead:</p>
+<p>Similar to abstractmethod.</p>
+<p>Usage:</p>
 <blockquote>
 <div><dl>
-<dt>class C(ABC):</dt><dd><p>&#64;classmethod
-&#64;abstractmethod
+<dt>class C(metaclass=ABCMeta):</dt><dd><p>&#64;abstractclassmethod
 def my_abstract_classmethod(cls, …):</p>
 <blockquote>
 <div><p>…</p>
@@ -383,6 +385,8 @@ def my_abstract_classmethod(cls, …):</p>
 </dd>
 </dl>
 </div></blockquote>
+<p>‘abstractclassmethod’ is deprecated. Use ‘classmethod’ with
+‘abstractmethod’ instead.</p>
 </dd></dl>
 
 </dd></dl>
