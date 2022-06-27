@@ -12,24 +12,13 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.9
+           python-version: 3.7
     steps:
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
-      with:
-        submodules: true
     # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
