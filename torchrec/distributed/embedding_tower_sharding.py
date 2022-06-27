@@ -931,10 +931,10 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
 
         weighted = False
         if isinstance(embedding, EmbeddingBagCollection):
-            configs = embedding.embedding_bag_configs
-            weighted = embedding.is_weighted
+            configs = embedding.embedding_bag_configs()
+            weighted = embedding.is_weighted()
         elif isinstance(embedding, EmbeddingCollection):
-            configs = embedding.embedding_configs
+            configs = embedding.embedding_configs()
 
         for config in configs:
             if getattr(config, "weighted", weighted):

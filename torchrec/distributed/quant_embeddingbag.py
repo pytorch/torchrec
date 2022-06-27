@@ -87,7 +87,7 @@ class ShardedQuantEmbeddingBagCollection(
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
-        self._is_weighted: bool = module.is_weighted
+        self._is_weighted: bool = module.is_weighted()
         self._input_dists: nn.ModuleList = nn.ModuleList()
         self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups(fused_params)
@@ -270,7 +270,7 @@ class QuantEmbeddingBagCollectionSharder(
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
-            dtype_to_data_type(module.output_dtype)
+            dtype_to_data_type(module.output_dtype())
         )
         return ShardedQuantEmbeddingBagCollection(module, params, env, fused_params)
 

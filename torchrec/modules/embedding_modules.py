@@ -31,13 +31,13 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     ) -> KeyedTensor:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def embedding_bag_configs(
         self,
     ) -> List[EmbeddingBagConfig]:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def is_weighted(self) -> bool:
         pass
 
@@ -165,6 +165,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             for embeddings in get_embedding_names_by_table(tables)
             for embedding in embeddings
         ]
+        self._feature_names: List[List[str]] = [table.feature_names for table in tables]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
@@ -178,10 +179,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         pooled_embeddings: List[torch.Tensor] = []
 
         feature_dict = features.to_dict()
-        for embedding_config, embedding_bag in zip(
-            self._embedding_bag_configs, self.embedding_bags.values()
-        ):
-            for feature_name in embedding_config.feature_names:
+        for i, embedding_bag in enumerate(self.embedding_bags.values()):
+            for feature_name in self._feature_names[i]:
                 f = feature_dict[feature_name]
                 res = embedding_bag(
                     input=f.values(),
@@ -196,13 +195,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             length_per_key=self._lengths_per_embedding,
         )
 
-    @property
-    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
-        return self._embedding_bag_configs
-
-    @property
     def is_weighted(self) -> bool:
         return self._is_weighted
+
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        return self._embedding_bag_configs
 
 
 class EmbeddingCollectionInterface(abc.ABC, nn.Module):
@@ -217,21 +214,21 @@ class EmbeddingCollectionInterface(abc.ABC, nn.Module):
     ) -> Dict[str, JaggedTensor]:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def embedding_configs(
         self,
     ) -> List[EmbeddingConfig]:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def need_indices(self) -> bool:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def embedding_dim(self) -> int:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def embedding_names_by_table(self) -> List[List[str]]:
         pass
 
@@ -330,6 +327,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
             tables
         )
+        self._feature_names: List[List[str]] = [table.feature_names for table in tables]
 
     def forward(
         self,
@@ -345,14 +343,11 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
         jt_dict: Dict[str, JaggedTensor] = features.to_dict()
-        for config, embedding_names, emb_module in zip(
-            self._embedding_configs,
-            self._embedding_names_by_table,
-            self.embeddings.values(),
-        ):
-            for feature_name, embedding_name in zip(
-                config.feature_names, embedding_names
-            ):
+        for i, emb_module in enumerate(self.embeddings.values()):
+            feature_names = self._feature_names[i]
+            embedding_names = self._embedding_names_by_table[i]
+            for j, embedding_name in enumerate(embedding_names):
+                feature_name = feature_names[j]
                 f = jt_dict[feature_name]
                 lookup = emb_module(
                     input=f.values(),
@@ -364,18 +359,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 )
         return feature_embeddings
 
-    @property
     def need_indices(self) -> bool:
         return self._need_indices
 
-    @property
     def embedding_dim(self) -> int:
         return self._embedding_dim
 
-    @property
     def embedding_configs(self) -> List[EmbeddingConfig]:
         return self._embedding_configs
 
-    @property
     def embedding_names_by_table(self) -> List[List[str]]:
         return self._embedding_names_by_table

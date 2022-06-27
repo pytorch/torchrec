@@ -113,7 +113,7 @@ def create_sharding_infos_by_sharding(
     prefix: str,
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
     shared_feature: Dict[str, bool] = {}
-    for embedding_config in module.embedding_bag_configs:
+    for embedding_config in module.embedding_bag_configs():
         if not embedding_config.feature_names:
             embedding_config.feature_names = [embedding_config.name]
         for feature_name in embedding_config.feature_names:
@@ -124,7 +124,7 @@ def create_sharding_infos_by_sharding(
 
     sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = {}
     state_dict = module.state_dict()
-    for config in module.embedding_bag_configs:
+    for config in module.embedding_bag_configs():
         table_name = config.name
         assert table_name in table_name_to_parameter_sharding
         parameter_sharding = table_name_to_parameter_sharding[table_name]
@@ -156,7 +156,7 @@ def create_sharding_infos_by_sharding(
                     data_type=config.data_type,
                     feature_names=copy.deepcopy(config.feature_names),
                     pooling=config.pooling,
-                    is_weighted=module.is_weighted,
+                    is_weighted=module.is_weighted(),
                     has_feature_processor=False,
                     embedding_names=embedding_names,
                     weight_init_max=config.weight_init_max,
@@ -225,7 +225,7 @@ class ShardedEmbeddingBagCollection(
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
-        self._is_weighted: bool = module.is_weighted
+        self._is_weighted: bool = module.is_weighted()
         self._device = device
         self._input_dists = nn.ModuleList()
         self._lookups: nn.ModuleList = nn.ModuleList()

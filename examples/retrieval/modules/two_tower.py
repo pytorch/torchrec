@@ -59,22 +59,24 @@ class TwoTower(nn.Module):
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
+        # If running this example on Torcherc < v0.2.0,
+        # please use embedding_bag_configs as a property, not a function
         assert (
-            len(embedding_bag_collection.embedding_bag_configs) == 2
+            len(embedding_bag_collection.embedding_bag_configs()) == 2
         ), "Expected two EmbeddingBags in the two tower model"
         assert (
-            embedding_bag_collection.embedding_bag_configs[0].embedding_dim
-            == embedding_bag_collection.embedding_bag_configs[1].embedding_dim
+            embedding_bag_collection.embedding_bag_configs()[0].embedding_dim
+            == embedding_bag_collection.embedding_bag_configs()[1].embedding_dim
         ), "Both EmbeddingBagConfigs must have the same dimension"
-        embedding_dim: int = embedding_bag_collection.embedding_bag_configs[
+        embedding_dim: int = embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
         self._feature_names_query: List[
             str
-        ] = embedding_bag_collection.embedding_bag_configs[0].feature_names
+        ] = embedding_bag_collection.embedding_bag_configs()[0].feature_names
         self._candidate_feature_names: List[
             str
-        ] = embedding_bag_collection.embedding_bag_configs[1].feature_names
+        ] = embedding_bag_collection.embedding_bag_configs()[1].feature_names
         self.ebc = embedding_bag_collection
         self.query_proj = MLP(
             in_size=embedding_dim, layer_sizes=layer_sizes, device=device
@@ -174,11 +176,11 @@ class TwoTowerRetrieval(nn.Module):
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self.embedding_dim: int = query_ebc.embedding_bag_configs[0].embedding_dim
+        self.embedding_dim: int = query_ebc.embedding_bag_configs()[0].embedding_dim
         assert (
-            candidate_ebc.embedding_bag_configs[0].embedding_dim == self.embedding_dim
+            candidate_ebc.embedding_bag_configs()[0].embedding_dim == self.embedding_dim
         ), "Both EmbeddingBagCollections must have the same dimension"
-        self.candidate_feature_names: List[str] = candidate_ebc.embedding_bag_configs[
+        self.candidate_feature_names: List[str] = candidate_ebc.embedding_bag_configs()[
             0
         ].feature_names
         self.query_ebc = query_ebc

@@ -35,8 +35,8 @@ class ShardedFusedEmbeddingBagCollection(
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> None:
-        optimizer_type = module.optimizer_type
-        optimizer_kwargs = module.optimizer_kwargs
+        optimizer_type = module.optimizer_type()
+        optimizer_kwargs = module.optimizer_kwargs()
 
         fused_params = {}
         emb_opt_type_and_kwargs = convert_optimizer_type_and_kwargs(

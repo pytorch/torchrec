@@ -111,7 +111,7 @@ def create_sharding_infos_by_sharding(
     for (
         config,
         embedding_names,
-    ) in zip(module.embedding_configs, module.embedding_names_by_table):
+    ) in zip(module.embedding_configs(), module.embedding_names_by_table()):
         table_name = config.name
         assert table_name in table_name_to_parameter_sharding
 
@@ -294,7 +294,7 @@ class ShardedEmbeddingCollection(
                     m.fused_optimizer.params = params
                     optims.append(("", m.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
-        self._embedding_dim: int = module.embedding_dim
+        self._embedding_dim: int = module.embedding_dim()
         self._local_embedding_dim: int = self._embedding_dim
         self._features_to_permute_indices: Dict[str, List[int]] = {}
         if ShardingType.COLUMN_WISE.value in self._sharding_type_to_sharding:
@@ -304,9 +304,9 @@ class ShardedEmbeddingCollection(
                 ShardMetadata, sharding.embedding_shard_metadata()[0]
             ).shard_sizes[1]
             self._generate_permute_indices_per_feature(
-                module.embedding_configs, table_name_to_parameter_sharding
+                module.embedding_configs(), table_name_to_parameter_sharding
             )
-        self._need_indices: bool = module.need_indices
+        self._need_indices: bool = module.need_indices()
 
     def _generate_permute_indices_per_feature(
         self,
