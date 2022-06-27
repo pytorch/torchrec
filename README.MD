@@ -23,31 +23,34 @@ Torchrec requires Python >= 3.7 and CUDA >= 11.0 (CUDA is highly recommended for
 
 Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pip wheels
 
-### CUDA
+### Installations
 ```
+TO use the library without cuda, use the *-cpu fbgemm installations. However, this will be much slower than the CUDA variant.
+
 Nightly
 
 conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
-pip install --pre torchrec_nightly -f https://download.pytorch.org/whl/nightly/torchrec_nightly/index.html
+pip install torchrec_nightly
 
 Stable
 
 conda install pytorch cudatoolkit=11.3 -c pytorch
-pip install --pre torchrec -f https://download.pytorch.org/whl/torchrec/index.html
-```
+pip install torchrec
 
-### CPU Only
-```
+If you have no CUDA device:
+
 Nightly
 
-conda install pytorch cpuonly -c pytorch-nightly
-pip install --pre torchrec_nightly_cpu -f https://download.pytorch.org/whl/nightly/torchrec_nightly_cpu/index.html
+pip uninstall fbgemm-gpu-nightly -y
+pip install fbgem-gpu-cpu-nightly
 
 Stable
 
-conda install pytorch cpuonly -c pytorch
-pip install --pre torchrec_cpu -f https://download.pytorch.org/whl/torchrec_cpu/index.html
+pip uninstall fbgemm-gpu -y
+pip install fbgem-gpu-cpu
+
 ```
+
 
 ### Colab example: introduction + install
 See our colab notebook for an introduction to torchrec which includes runnable installation.
