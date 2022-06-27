@@ -69,7 +69,7 @@ class HeuristicalStorageReservation(StorageReservation):
         }
 
         all_input_lengths: List[float] = []
-        shardable_modules: Set[nn.Module] = []
+        shardable_modules: Set[nn.Module] = set()
 
         for child_module in module.modules():
             sharder_key = sharder_name(type(child_module))
