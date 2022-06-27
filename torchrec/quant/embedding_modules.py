@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
@@ -295,7 +294,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         # pyre-ignore [16]
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
-        embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs)
+        embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs())
         for config in embedding_bag_configs:
             config.data_type = data_type
 
@@ -304,23 +303,20 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         return cls(
             table_name_to_quantized_weights,
             embedding_bag_configs,
-            module.is_weighted,
+            module.is_weighted(),
             device=device,
             # pyre-ignore [16]
             output_dtype=module.qconfig.activation().dtype,
         )
 
-    @property
     def embedding_bag_configs(
         self,
     ) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
 
-    @property
     def is_weighted(self) -> bool:
         return self._is_weighted
 
-    @property
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
 
@@ -483,7 +479,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
         for emb_config, emb_module in zip(
-            self.embedding_configs,
+            self._embedding_configs,
             self.embeddings,
         ):
             (weight, _) = emb_module.split_embedding_weights(split_scale_shifts=False)[
@@ -500,7 +496,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
         # pyre-ignore [16]
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
-        tables = copy.deepcopy(module.embedding_configs)
+        tables = copy.deepcopy(module.embedding_configs())
         for config in tables:
             config.data_type = data_type
 
@@ -511,7 +507,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             table_name_to_quantized_weights,
             tables,
             device=device,
-            need_indices=module.need_indices,
+            need_indices=module.need_indices(),
         )
 
     def named_buffers(
@@ -524,22 +520,17 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
     def _get_name(self) -> str:
         return "QuantizedEmbeddingCollection"
 
-    @property
     def need_indices(self) -> bool:
         return self._need_indices
 
-    @property
     def embedding_dim(self) -> int:
         return self._embedding_dim
 
-    @property
     def embedding_configs(self) -> List[EmbeddingConfig]:
         return self._embedding_configs
 
-    @property
     def embedding_names_by_table(self) -> List[List[str]]:
         return self._embedding_names_by_table
 
-    @property
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype

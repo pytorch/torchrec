@@ -210,7 +210,6 @@ class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
     def split_embedding_weights(self) -> List[torch.Tensor]:
         return self._emb_module.split_embedding_weights()
 
-    @property
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
@@ -412,11 +411,11 @@ class FusedEmbeddingBagCollection(
             )
             self._emb_modules.append(emb_module)
             params: Dict[str, torch.Tensor] = {}
-            for param_key, weight in emb_module.fused_optimizer.params.items():
+            for param_key, weight in emb_module.fused_optimizer().params.items():
                 # pyre-fixme[6]: For 2nd param expected `Tensor` but got
                 #  `Union[Tensor, ShardedTensor]`.
                 params[f"embedding_bags.{param_key}"] = weight
-            optims.append(("", emb_module.fused_optimizer))
+            optims.append(("", emb_module.fused_optimizer()))
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
         self._embedding_names = list(
@@ -527,19 +526,15 @@ class FusedEmbeddingBagCollection(
     def _get_name(self) -> str:
         return "FusedEmeddingBagCollection"
 
-    @property
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
 
-    @property
     def is_weighted(self) -> bool:
         return self._is_weighted
 
-    @property
     def optimizer_type(self) -> Type[torch.optim.Optimizer]:
         return self._optimizer_type
 
-    @property
     def optimizer_kwargs(self) -> Dict[str, Any]:
         return self._optimizer_kwargs
 
@@ -555,7 +550,6 @@ class FusedEmbeddingBagCollection(
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
 
-    @property
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
 
@@ -597,7 +591,7 @@ def fuse_embedding_optimizer(
     # check if top-level module is EBC/EC
     if isinstance(model, EmbeddingBagCollection):
         return FusedEmbeddingBagCollection(
-            model.embedding_bag_configs,
+            model.embedding_bag_configs(),
             optimizer_type=optimizer_type,
             optimizer_kwargs=optimizer_kwargs,
             device=device,
@@ -611,7 +605,7 @@ def fuse_embedding_optimizer(
                     _model,
                     child_name,
                     FusedEmbeddingBagCollection(
-                        tables=child.embedding_bag_configs,
+                        tables=child.embedding_bag_configs(),
                         optimizer_type=optimizer_type,
                         optimizer_kwargs=optimizer_kwargs,
                         device=device,

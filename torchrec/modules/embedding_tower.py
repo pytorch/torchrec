@@ -29,7 +29,7 @@ def tower_input_params(module: nn.Module) -> Tuple[bool, bool]:
     if isinstance(module, EmbeddingCollection):
         return True, False
     elif isinstance(module, EmbeddingBagCollection):
-        return not module.is_weighted, module.is_weighted
+        return not module.is_weighted(), module.is_weighted()
     # default to assuming both kjt and weight_kjt required
     return True, True
 

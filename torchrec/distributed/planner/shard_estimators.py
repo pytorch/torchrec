@@ -15,11 +15,9 @@ from torchrec.distributed.planner.constants import (
     BATCHED_COPY_PERF_FACTOR,
     BIGINT_DTYPE,
     BWD_COMPUTE_MULTIPLIER,
-    CROSS_NODE_BANDWIDTH,
     DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
-    INTRA_NODE_BANDWIDTH,
     kernel_bw_lookup,
     QUARTER_BLOCK_PENALTY,
     UVM_CACHING_RATIO,
@@ -35,6 +33,8 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
+
+from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 
 
 class EmbeddingPerfEstimator(ShardEstimator):
@@ -82,6 +82,18 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 == len(batch_sizes)
             ), "Provided `pooling_factors`, `num_poolings`, and `batch_sizes` constraints must match."
 
+            module = sharding_option.module[1]
+
+            # TODO remove this hack once feature processor is disaggregated
+            has_feature_processor = (
+                True if getattr(module, "feature_processor", None) else False
+            )
+
+            if isinstance(module, EmbeddingBagCollectionInterface):
+                is_weighted = module.is_weighted()
+            else:
+                is_weighted = False
+
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
@@ -94,19 +106,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 input_data_type_size=BIGINT_DTYPE,
                 output_data_type_size=sharding_option.tensor.element_size(),
                 num_poolings=num_poolings,
-                bw_intra_host=getattr(
-                    self._topology, "intra_host_bw", INTRA_NODE_BANDWIDTH
-                ),
-                bw_inter_host=getattr(
-                    self._topology, "inter_host_bw", CROSS_NODE_BANDWIDTH
-                ),
+                bw_intra_host=self._topology.intra_host_bw,
+                bw_inter_host=self._topology.inter_host_bw,
                 is_pooled=sharding_option.is_pooled,
-                is_weighted=True
-                if getattr(sharding_option.module[1], "is_weighted", False)
-                else False,
-                has_feature_processor=True
-                if getattr(sharding_option.module[1], "feature_processor", None)
-                else False,
+                is_weighted=is_weighted,
+                has_feature_processor=has_feature_processor,
                 caching_ratio=caching_ratio,
             )
 

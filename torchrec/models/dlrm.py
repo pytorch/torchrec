@@ -72,12 +72,12 @@ class SparseArch(nn.Module):
         assert (
             self.embedding_bag_collection.embedding_bag_configs
         ), "Embedding bag collection cannot be empty!"
-        self.D: int = self.embedding_bag_collection.embedding_bag_configs[
+        self.D: int = self.embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
         self._sparse_feature_names: List[str] = [
             name
-            for conf in embedding_bag_collection.embedding_bag_configs
+            for conf in embedding_bag_collection.embedding_bag_configs()
             for name in conf.feature_names
         ]
 
@@ -447,15 +447,15 @@ class DLRM(nn.Module):
     ) -> None:
         super().__init__()
         assert (
-            len(embedding_bag_collection.embedding_bag_configs) > 0
+            len(embedding_bag_collection.embedding_bag_configs()) > 0
         ), "At least one embedding bag is required"
-        for i in range(1, len(embedding_bag_collection.embedding_bag_configs)):
-            conf_prev = embedding_bag_collection.embedding_bag_configs[i - 1]
-            conf = embedding_bag_collection.embedding_bag_configs[i]
+        for i in range(1, len(embedding_bag_collection.embedding_bag_configs())):
+            conf_prev = embedding_bag_collection.embedding_bag_configs()[i - 1]
+            conf = embedding_bag_collection.embedding_bag_configs()[i]
             assert (
                 conf_prev.embedding_dim == conf.embedding_dim
             ), "All EmbeddingBagConfigs must have the same dimension"
-        embedding_dim: int = embedding_bag_collection.embedding_bag_configs[
+        embedding_dim: int = embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
         if dense_arch_layer_sizes[-1] != embedding_dim:
@@ -604,7 +604,7 @@ class DLRMV2(DLRM):
             dense_device,
         )
 
-        embedding_dim: int = embedding_bag_collection.embedding_bag_configs[
+        embedding_dim: int = embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
         num_sparse_features: int = len(self.sparse_arch.sparse_feature_names)

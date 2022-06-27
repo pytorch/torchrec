@@ -487,7 +487,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             fused_ebc.state_dict()["embedding_bags.table_0.weight"],
         )
 
-        fused_optimizer = fused_ebc.fused_optimizer
+        fused_optimizer = fused_ebc.fused_optimizer()
         fused_optimizer.load_state_dict(fused_optimizer.state_dict())
 
     def unweighted_replacement(

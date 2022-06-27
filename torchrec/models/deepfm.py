@@ -290,22 +290,22 @@ class SimpleDeepFMNN(nn.Module):
     ) -> None:
         super().__init__()
         assert (
-            len(embedding_bag_collection.embedding_bag_configs) > 0
+            len(embedding_bag_collection.embedding_bag_configs()) > 0
         ), "At least one embedding bag is required"
-        for i in range(1, len(embedding_bag_collection.embedding_bag_configs)):
-            conf_prev = embedding_bag_collection.embedding_bag_configs[i - 1]
-            conf = embedding_bag_collection.embedding_bag_configs[i]
+        for i in range(1, len(embedding_bag_collection.embedding_bag_configs())):
+            conf_prev = embedding_bag_collection.embedding_bag_configs()[i - 1]
+            conf = embedding_bag_collection.embedding_bag_configs()[i]
             assert (
                 conf_prev.embedding_dim == conf.embedding_dim
             ), "All EmbeddingBagConfigs must have the same dimension"
-        embedding_dim: int = embedding_bag_collection.embedding_bag_configs[
+        embedding_dim: int = embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
 
         feature_names = []
 
         fm_in_features = embedding_dim
-        for conf in embedding_bag_collection.embedding_bag_configs:
+        for conf in embedding_bag_collection.embedding_bag_configs():
             for feat in conf.feature_names:
                 feature_names.append(feat)
                 fm_in_features += conf.embedding_dim

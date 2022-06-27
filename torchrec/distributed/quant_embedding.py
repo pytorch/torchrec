@@ -110,8 +110,8 @@ class ShardedQuantEmbeddingCollection(
         self._has_uninitialized_input_dist: bool = True
         self._has_uninitialized_output_dist: bool = True
 
-        self._embedding_dim: int = module.embedding_dim
-        self._need_indices: bool = module.need_indices
+        self._embedding_dim: int = module.embedding_dim()
+        self._need_indices: bool = module.need_indices()
 
     def _create_input_dist(
         self,
@@ -289,7 +289,7 @@ class QuantEmbeddingCollectionSharder(
     ) -> ShardedQuantEmbeddingCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
-            dtype_to_data_type(module.output_dtype)
+            dtype_to_data_type(module.output_dtype())
         )
         return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
 

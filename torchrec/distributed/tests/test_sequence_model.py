@@ -41,7 +41,7 @@ class TestSequenceSparseArch(nn.Module):
             tables=tables, device=device, need_indices=True
         )
         self.embedding_names = embedding_names
-        self.embedding_dim: int = self.ec.embedding_dim
+        self.embedding_dim: int = self.ec.embedding_dim()
 
     def forward(
         self,
