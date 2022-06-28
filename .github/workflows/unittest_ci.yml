@@ -16,6 +16,7 @@ on:
       - "third_party/*"
       - .gitignore
       - "*.md"
+    workflow_dispatch:
 
 jobs:
   # build on cpu hosts and upload to GHA
