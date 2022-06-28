@@ -17,6 +17,7 @@ import torch.fx
 import torchrec
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from hypothesis import given, settings
+from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import (
@@ -83,6 +84,80 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         torch.testing.assert_close(
             pooled_embeddings["f3"][2], torch.zeros(4).to(device)
         )
+
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_unweighted_batchsize_1_shared(
+        self,
+        device: torch.device,
+    ) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1", "f2"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f3"]
+        )
+
+        ebc = FusedEmbeddingBagCollection(
+            tables=[eb1_config, eb2_config],
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        #     0
+        # f1   [0,1]
+        # f2   [3]
+        # f3   [4,5]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 3, 4, 5]),
+            lengths=torch.tensor([2, 1, 2]),
+        ).to(device)
+
+        pooled_embeddings = ebc(features)
+
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f2", "f3"])
+        self.assertEqual(pooled_embeddings["f1"].shape, (features.stride(), 4))
+        self.assertEqual(pooled_embeddings["f2"].shape, (features.stride(), 4))
+        self.assertEqual(pooled_embeddings["f3"].shape, (features.stride(), 4))
+
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from(devices))
+    def test_unweighted_batchsize_1_one_table(
+        self,
+        device: torch.device,
+    ) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1", "f2"]
+        )
+        ebc = FusedEmbeddingBagCollection(
+            tables=[eb1_config],
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        #     0
+        # f1   [0,1]
+        # f2   [3]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 3]),
+            lengths=torch.tensor([2, 1]),
+        ).to(device)
+
+        pooled_embeddings = ebc(features)
+
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f2"])
+        self.assertEqual(pooled_embeddings["f1"].shape, (features.stride(), 4))
+        self.assertEqual(pooled_embeddings["f2"].shape, (features.stride(), 4))
 
     @settings(deadline=None)
     # pyre-ignore
@@ -622,3 +697,32 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             lengths=torch.tensor([2, 0, 1, 1, 1, 3, 0, 1, 0]),
         ).to(device)
         test_model(features)
+
+    def test_fx(self) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config], is_weighted=True)
+
+        gm = symbolic_trace(ebc)
+        torch.jit.script(gm)
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 3, 4, 7]),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 12]),
+            weights=torch.tensor(
+                [0.1, 0.2, 0.4, 0.5, 0.4, 0.3, 0.2, 0.9, 0.1, 0.3, 0.4, 0.7]
+            ),
+        )
+
+        pooled_embeddings = gm(features)
+        self.assertEqual(pooled_embeddings.values().size(), (2, 10))
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
+        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
