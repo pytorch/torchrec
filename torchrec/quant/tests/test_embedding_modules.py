@@ -24,10 +24,30 @@ from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 class EmbeddingBagCollectionTest(unittest.TestCase):
+    def _asserting_same_embeddings(
+        self,
+        pooled_embeddings_1: KeyedTensor,
+        pooled_embeddings_2: KeyedTensor,
+        atol: float = 1e-08,
+    ) -> None:
+
+        self.assertEqual(pooled_embeddings_1.keys(), pooled_embeddings_2.keys())
+        for key in pooled_embeddings_1.keys():
+            self.assertEqual(
+                pooled_embeddings_1[key].shape, pooled_embeddings_2[key].shape
+            )
+            self.assertTrue(
+                torch.allclose(
+                    pooled_embeddings_1[key].cpu().float(),
+                    pooled_embeddings_2[key].cpu().float(),
+                    atol=atol,
+                )
+            )
+
     def _test_ebc(
         self,
         tables: List[EmbeddingBagConfig],
@@ -53,16 +73,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         self.assertEqual(quantized_embeddings.values().dtype, output_type)
 
-        self.assertEqual(embeddings.keys(), quantized_embeddings.keys())
-        for key in embeddings.keys():
-            self.assertEqual(embeddings[key].shape, quantized_embeddings[key].shape)
-            self.assertTrue(
-                torch.allclose(
-                    embeddings[key].cpu().float(),
-                    quantized_embeddings[key].cpu().float(),
-                    atol=1,
-                )
-            )
+        self._asserting_same_embeddings(embeddings, quantized_embeddings, atol=1.0)
 
         # test state dict
         state_dict = ebc.state_dict()
@@ -89,10 +100,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
                 torch.float,
             ]
         ),
+        permute_order=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_ebc(
-        self, data_type: DataType, quant_type: torch.dtype, output_type: torch.dtype
+        self,
+        data_type: DataType,
+        quant_type: torch.dtype,
+        output_type: torch.dtype,
+        permute_order: bool,
     ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
@@ -108,10 +124,18 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             feature_names=["f2"],
             data_type=data_type,
         )
-        features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.as_tensor([0, 1]),
-            lengths=torch.as_tensor([1, 1]),
+        features = (
+            KeyedJaggedTensor(
+                keys=["f1", "f2"],
+                values=torch.as_tensor([0, 1]),
+                lengths=torch.as_tensor([1, 1]),
+            )
+            if not permute_order
+            else KeyedJaggedTensor(
+                keys=["f2", "f1"],
+                values=torch.as_tensor([1, 0]),
+                lengths=torch.as_tensor([1, 1]),
+            )
         )
         self._test_ebc([eb1_config, eb2_config], features, quant_type, output_type)
 
@@ -140,6 +164,90 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self._test_ebc([eb1_config, eb2_config], features)
 
+    # pyre-ignore
+    @given(
+        data_type=st.sampled_from(
+            [
+                DataType.FP32,
+                DataType.FP16,
+            ]
+        ),
+        quant_type=st.sampled_from(
+            [
+                # torch.half,
+                torch.qint8,
+            ]
+        ),
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_save_load_state_dict(
+        self,
+        data_type: DataType,
+        quant_type: torch.dtype,
+        output_type: torch.dtype,
+    ) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+        tables = [eb1_config, eb2_config]
+
+        ebc = EmbeddingBagCollection(tables=tables)
+
+        # test forward
+        # pyre-ignore [16]
+        ebc.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qebc = QuantEmbeddingBagCollection.from_float(ebc)
+        qebc_state_dict = qebc.state_dict()
+
+        ebc_2 = EmbeddingBagCollection(tables=tables)
+        ebc_2.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qebc_2 = QuantEmbeddingBagCollection.from_float(ebc_2)
+        # pyre-ignore
+        qebc_2.load_state_dict(qebc_state_dict)
+        qebc_2_state_dict = qebc_2.state_dict()
+
+        for key in qebc_state_dict:
+            torch.testing.assert_close(qebc_state_dict[key], qebc_2_state_dict[key])
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.as_tensor([0, 1]),
+            lengths=torch.as_tensor([1, 1]),
+        )
+
+        embeddings = qebc(features)
+        embeddings_2 = qebc_2(features)
+        self._asserting_same_embeddings(embeddings, embeddings_2)
+
 
 class EmbeddingCollectionTest(unittest.TestCase):
     def _test_ec(
@@ -153,7 +261,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         # pyre-ignore [16]
         eb.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=torch.qint8
+                dtype=torch.qint8,
             ),
             weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
         )
