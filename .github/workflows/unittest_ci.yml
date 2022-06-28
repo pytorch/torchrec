@@ -16,7 +16,7 @@ on:
       - "third_party/*"
       - .gitignore
       - "*.md"
-    workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   # build on cpu hosts and upload to GHA
@@ -183,6 +183,10 @@ jobs:
         sudo yum install -y cuda-11-3
         sudo yum install -y cuda-drivers
         sudo yum install -y libcudnn8-devel
+    - name: Install nvidia driver, nvidia-docker runtime, set GPU_FLAG
+      run: |
+        bash .github/workflows/install_nvidia_utils_linux.sh
+        echo "GPU_FLAG=--gpus all" >> "${GITHUB_ENV}"
     - name: setup Path
       run: |
         echo /usr/local/cuda-11.3/bin >> $GITHUB_PATH
@@ -213,6 +217,9 @@ jobs:
     - name: Test with pytest
       run: |
         conda run -n build_binary \
-          python -m pip install pytest
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+          torchx run -s local_cwd dist.ddp -j 1x2 --script test_installation.py
+      # until we have 8 gpus, GPU unit tests are mostly skipped - Use smoke test from above to get some GPU signal.
+      # conda run -n build_binary \
+      #   python -m pip install pytest
+      # conda run -n build_binary \
+      #   python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
