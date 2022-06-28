@@ -8,11 +8,12 @@
 import argparse
 import os
 import shutil
+import subprocess
 import time
 
 import numpy as np
 import nvtabular as nvt
-from torchrec.datasets.criteo import DAYS, DEFAULT_COLUMN_NAMES, DEFAULT_LABEL_NAME
+from utils.criteo_constant import DAYS, DEFAULT_COLUMN_NAMES, DEFAULT_LABEL_NAME
 from utils.dask import setup_dask
 
 dtypes = {c: np.int32 for c in DEFAULT_COLUMN_NAMES[:14] + [DEFAULT_LABEL_NAME]}
@@ -23,9 +24,9 @@ def convert_tsv_to_parquet(input_path: str, output_base_path: str):
     config = {
         "engine": "csv",
         "names": DEFAULT_COLUMN_NAMES,
-        "part_memory_fraction": 1,
         "sep": "\t",
         "dtypes": dtypes,
+        "part_size": "128MB",
     }
 
     output_path = os.path.join(output_base_path, "criteo_parquet")
@@ -33,9 +34,44 @@ def convert_tsv_to_parquet(input_path: str, output_base_path: str):
         shutil.rmtree(output_path)
     os.makedirs(output_path)
 
-    input_paths = [os.path.join(input_path, f"day_{day}") for day in range(DAYS)]
+    # split last day into two parts
+    number_of_lines = int(
+        subprocess.check_output(
+            (f'wc -l {os.path.join(input_path, "day_23")}').split()
+        ).split()[0]
+    )
+    valid_set_size = number_of_lines // 2
+    test_set_size = number_of_lines - valid_set_size
+
+    start_time = time.time()
+    with open(os.path.join(input_path, "day_23.part0"), "w") as f:
+        subprocess.run(
+            ["head", "-n", str(test_set_size), str(os.path.join(input_path, "day_23"))],
+            stdout=f,
+        )
+
+    with open(os.path.join(input_path, "day_23.part1"), "w") as f:
+        subprocess.run(
+            [
+                "tail",
+                "-n",
+                str(valid_set_size),
+                str(os.path.join(input_path, "day_23")),
+            ],
+            stdout=f,
+        )
+
+    print(f"finished splitting the last day, took {time.time() - start_time}")
+
+    input_paths = [
+        os.path.join(input_path, f"day_{day}") for day in range(DAYS - 1)
+    ] + [os.path.join(input_path, f"day_23.part{i}") for i in range(2)]
+
+    print(f"handling the input paths: {input_paths}")
 
     tsv_dataset = nvt.Dataset(input_paths, **config)
+
+    print("finished loading the tsv dataset")
 
     tsv_dataset.to_parquet(
         output_path,

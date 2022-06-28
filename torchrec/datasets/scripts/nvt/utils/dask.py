@@ -19,8 +19,8 @@ def setup_dask(dask_workdir):
         shutil.rmtree(dask_workdir)
     os.makedirs(dask_workdir)
 
-    device_limit_frac = 0.7  # Spill GPU-Worker memory to host at this limit.
-    device_pool_frac = 0.8
+    device_limit_frac = 0.8  # Spill GPU-Worker memory to host at this limit.
+    device_pool_frac = 0.7
 
     # Use total device size to calculate device limit and pool_size
     device_size = device_mem_size(kind="total")
