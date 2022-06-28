@@ -12,22 +12,14 @@ import time
 
 import numpy as np
 import nvtabular as nvt
-from torchrec.datasets.criteo import DAYS, DEFAULT_COLUMN_NAMES, DEFAULT_LABEL_NAME
+from torchrec.datasets.criteo import DAYS, DEFAULT_COLUMN_NAMES, DEFAULT_LABEL_NAME, DEFAULT_INT_NAMES, DEFAULT_CAT_NAMES
 from utils.dask import setup_dask
 
-dtypes = {c: np.int32 for c in DEFAULT_COLUMN_NAMES[:14] + [DEFAULT_LABEL_NAME]}
-dtypes.update({c: "hex" for c in DEFAULT_COLUMN_NAMES[14:]})
+dtypes = {c: np.int32 for c in DEFAULT_INT_NAMES + [DEFAULT_LABEL_NAME]}
+dtypes.update({c: "hex" for c in DEFAULT_CAT_NAMES})
 
 
 def convert_tsv_to_parquet(input_path: str, output_base_path: str):
-    config = {
-        "engine": "csv",
-        "names": DEFAULT_COLUMN_NAMES,
-        "part_memory_fraction": 1,
-        "sep": "\t",
-        "dtypes": dtypes,
-    }
-
     output_path = os.path.join(output_base_path, "criteo_parquet")
     if os.path.exists(output_path):
         shutil.rmtree(output_path)
@@ -35,7 +27,14 @@ def convert_tsv_to_parquet(input_path: str, output_base_path: str):
 
     input_paths = [os.path.join(input_path, f"day_{day}") for day in range(DAYS)]
 
-    tsv_dataset = nvt.Dataset(input_paths, **config)
+    tsv_dataset = nvt.Dataset(
+        input_paths, 
+        engine="csv",
+        names=DEFAULT_COLUMN_NAMES,
+        part_memory_fraction= 0.1,
+        sep="\t",
+        dtypes=dtypes,
+    )
 
     tsv_dataset.to_parquet(
         output_path,
