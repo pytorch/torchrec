@@ -51,6 +51,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        need_pos: bool = False,
     ) -> None:
         super().__init__()
         self._env = env
@@ -61,6 +62,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
             device = torch.device("cpu")
         self._device = device
         sharded_tables_per_rank = self._shard(sharding_infos)
+        self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
@@ -222,6 +224,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
         has_feature_processor: bool = False,
+        need_pos: bool = False,
     ) -> None:
         super().__init__()
         self._world_size: int = pg.size()
@@ -260,6 +263,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
+        self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
     def forward(
@@ -300,7 +304,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
                 num_buckets=self._world_size,
                 block_sizes=self._id_score_list_feature_block_sizes_tensor,
                 output_permute=False,
-                bucketize_pos=False,
+                bucketize_pos=self._need_pos,
             )
         else:
             id_score_list_features = None
@@ -367,6 +371,7 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
             device=device if device is not None else self._device,
             is_sequence=False,
             has_feature_processor=self._has_feature_processor,
+            need_pos=self._need_pos,
         )
 
     def create_lookup(

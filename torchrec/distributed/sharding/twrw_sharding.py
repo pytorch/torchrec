@@ -56,6 +56,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        need_pos: bool = False,
     ) -> None:
         super().__init__()
         self._env = env
@@ -63,6 +64,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         self._device = device
+        self._need_pos = need_pos
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
@@ -306,6 +308,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         id_score_list_feature_hash_sizes: List[int],
         device: Optional[torch.device] = None,
         has_feature_processor: bool = False,
+        need_pos: bool = False,
     ) -> None:
         super().__init__()
         assert (
@@ -370,6 +373,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             stagger=self._num_cross_nodes,
         )
         self._has_feature_processor = has_feature_processor
+        self._need_pos = need_pos
 
     def forward(
         self,
@@ -406,7 +410,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
                 num_buckets=self._local_size,
                 block_sizes=self._id_score_list_feature_block_sizes_tensor,
                 output_permute=False,
-                bucketize_pos=False,
+                bucketize_pos=self._need_pos,
             )[0].permute(
                 self._id_score_list_sf_staggered_shuffle,
                 self._id_score_list_sf_staggered_shuffle_tensor,
@@ -512,6 +516,7 @@ class TwRwPooledEmbeddingSharding(
             id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
             device=device if device is not None else self._device,
             has_feature_processor=self._has_feature_processor,
+            need_pos=self._need_pos,
         )
 
     def create_lookup(

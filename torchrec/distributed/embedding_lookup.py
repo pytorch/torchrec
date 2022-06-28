@@ -284,6 +284,9 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             for config, emb_op, features in zip(
                 self.grouped_configs, self._emb_modules, id_list_features_by_group
             ):
+                # keep this to avoid break ads code using feature_processor, for ebc
+                # the has_feature_processor will always be false. Remove this block when
+                # finishing the migration
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
