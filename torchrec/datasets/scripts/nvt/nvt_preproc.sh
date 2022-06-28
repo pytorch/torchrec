@@ -9,7 +9,15 @@ set -e
 
 INPUT_PATH="$1"
 BASE_OUTPUT_PATH="$2"
+BATCH_SIZE="$3"
+TEMP_PATH=""$BASE_OUTPUT_PATH"temp/"
+SRC_DIR=""$BASE_OUTPUT_PATH"criteo_preproc/"
+BINARY_OUTPUT_PATH=""$BASE_OUTPUT_PATH"criteo_binary/"
+FINAL_OUTPUT_PATH=""$BINARY_OUTPUT_PATH"split"
 
-python 01_nvt_preproc.py -i "$INPUT_PATH" -o "$BASE_OUTPUT_PATH"
-python 02_nvt_preproc.py -b "$BASE_OUTPUT_PATH"
-python 03_nvt_preproc.py -b "$BASE_OUTPUT_PATH"
+python convert_tsv_to_parquet.py -i "$INPUT_PATH" -o "$BASE_OUTPUT_PATH"
+python process_criteo_parquet.py -b "$BASE_OUTPUT_PATH"
+python convert_parquet_to_binary.py --src_dir "$SRC_DIR" \
+                                --intermediate_dir  "$TEMP_PATH" \
+                                --dst_dir "$BINARY_OUTPUT_PATH"
+python split_binary_dataset.py --input_path "$BINARY_OUTPUT_PATH" --output_path "$FINAL_OUTPUT_PATH" --batch_size "$BATCH_SIZE"
