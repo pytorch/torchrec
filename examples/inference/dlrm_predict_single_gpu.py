@@ -12,10 +12,9 @@ import torch
 from dlrm_predict import DLRMModelConfig, DLRMPredictModule
 
 from torchrec.inference.model_packager import load_pickle_config
-from torchrec.inference.modules import PredictFactory
+from torchrec.inference.modules import PredictFactory, quantize_embeddings
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -70,13 +69,8 @@ class DLRMPredictSingleGPUFactory(PredictFactory):
             id_list_features_keys=self.model_config.id_list_features_keys,
             dense_device=device,
         )
-        module = fuse_embedding_optimizer(
-            module,
-            optimizer_type=torch.optim.SGD,
-            optimizer_kwargs={"lr": 0.0},
-            device=torch.device("cuda"),
-        )
 
+        module = quantize_embeddings(module, dtype=torch.qint8, inplace=True)
         # TensorRT Lowering - Use torch_tensorrt.fx (https://github.com/pytorch/TensorRT) for lowering dense module
 
         # Follow https://github.com/pytorch/TensorRT/blob/master/py/torch_tensorrt/fx/example/fx2trt_example.py
