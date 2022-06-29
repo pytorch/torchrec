@@ -39,7 +39,6 @@ from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 
-
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec dlrm example trainer")
     parser.add_argument(
@@ -267,11 +266,7 @@ def main(argv: List[str]):
         [non_fused_optimizer, model.fused_optimizer]
     )
 
-    train_pipeline = TrainPipelineSparseDist(
-        model,
-        opt,
-        device,
-    )
+    train_pipeline = TrainPipelineSparseDist(model, opt, device, enable_amp=True)
 
     throughput = ThroughputMetric(
         batch_size=args.batch_size,
@@ -283,77 +278,94 @@ def main(argv: List[str]):
     changing_point_steps = (
         TOTAL_TRAINING_SAMPLES * args.lr_change_point // args.batch_size // world_size
     )
-    for epoch in range(args.epochs):
-        print(f"starting the {epoch} epoch now")
-        start_time = time.time()
-        it = iter(train_loader)
-        step = 0
-        losses = []
-        while True:
-            try:
-                train_pipeline._model.train()
-                loss, _logits, _labels = train_pipeline.progress(it)
 
-                if args.change_lr and step == changing_point_steps:
-                    print(f"Changing learning rate to: {args.lr_after_change_point}")
-                    optimizer = train_pipeline._optimizer
-                    lr = args.lr_after_change_point
-                    for g in optimizer.param_groups:
-                        g["lr"] = lr
+    with torch.profiler.profile(
+        schedule=torch.profiler.schedule(wait=10, warmup=10, active=100, repeat=1),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(dir_name="profiler"),
+        with_stack=True,
+    ) as prof:
+        for epoch in range(args.epochs):
+            print(f"starting the {epoch} epoch now")
+            start_time = time.time()
+            it = iter(train_loader)
+            step = 0
+            losses = []
+            while True:
+                try:
+                    train_pipeline._model.train()
+                    loss, _logits, _labels = train_pipeline.progress(it)
 
-                throughput.update()
-                losses.append(loss)
-
-                if step % args.throughput_check_freq_within_epoch == 0 and step != 0:
-                    # infra calculation
-                    throughput_val = throughput.compute()
-                    if rank == 0:
-                        print("step", step)
-                        print("throughput", throughput_val)
-                    losses = []
-                if step % args.validation_freq_within_epoch == 0 and step != 0:
-                    # metrics calculation
-                    validation_it = iter(val_loader)
-                    auroc_result, accuracy_result, bce_loss = _eval(
-                        train_pipeline, validation_it
-                    )
-                    if rank == 0:
-                        print(f"AUROC over validation set: {auroc_result}.")
-                        print(f"Accuracy over validation set: {accuracy_result}.")
+                    if args.change_lr and step == changing_point_steps:
                         print(
-                            "binary cross entropy loss",
-                            bce_loss / (args.batch_size),
+                            f"Changing learning rate to: {args.lr_after_change_point}"
                         )
-                step += 1
+                        optimizer = train_pipeline._optimizer
+                        lr = args.lr_after_change_point
+                        for g in optimizer.param_groups:
+                            g["lr"] = lr
 
-            except StopIteration:
-                print("Reached stop iteration")
-                break
-        train_time = time.time()
-        if rank == 0:
-            print(f"this epoch training takes {train_time - start_time}")
+                    throughput.update()
+                    losses.append(loss)
+                    prof.step()
 
-        # eval
-        val_it = iter(val_loader)
-        auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, val_it)
-        if rank == 0:
-            print(f"AUROC over validation set: {auroc_result}.")
-            print(f"Accuracy over validation set: {accuracy_result}.")
-            print(
-                "binary cross entropy loss over validation set",
-                bce_loss / (args.batch_size),
-            )
-        # test
-        test_it = iter(test_loader)
-        auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, test_it)
-        if rank == 0:
-            print(f"AUROC over test set: {auroc_result}.")
-            print(f"Accuracy over test set: {accuracy_result}.")
-            print(
-                "binary cross entropy loss over test set",
-                bce_loss / (args.batch_size),
-            )
+                    if step == 200:
+                        raise StopIteration
 
+                    if (
+                        step % args.throughput_check_freq_within_epoch == 0
+                        and step != 0
+                    ):
+                        # infra calculation
+                        throughput_val = throughput.compute()
+                        if rank == 0:
+                            print("step", step)
+                            print("throughput", throughput_val)
+                        if step >= 100:
+                            raise StopIteration
+                        losses = []
+                    if step % args.validation_freq_within_epoch == 0 and step != 0:
+                        # metrics calculation
+                        validation_it = iter(val_loader)
+                        auroc_result, accuracy_result, bce_loss = _eval(
+                            train_pipeline, validation_it
+                        )
+                        if rank == 0:
+                            print(f"AUROC over validation set: {auroc_result}.")
+                            print(f"Accuracy over validation set: {accuracy_result}.")
+                            print(
+                                "binary cross entropy loss",
+                                bce_loss / (args.batch_size),
+                            )
+                    step += 1
+
+                except StopIteration:
+                    print("Reached stop iteration")
+                    break
+
+            # train_time = time.time()
+            # if rank == 0:
+            #    print(f"this epoch training takes {train_time - start_time}")
+
+            ## eval
+            # val_it = iter(val_loader)
+            # auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, val_it)
+            # if rank == 0:
+            #    print(f"AUROC over validation set: {auroc_result}.")
+            #    print(f"Accuracy over validation set: {accuracy_result}.")
+            #    print(
+            #        "binary cross entropy loss over validation set",
+            #        bce_loss / (args.batch_size),
+            #    )
+            ## test
+            # test_it = iter(test_loader)
+            # auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, test_it)
+            # if rank == 0:
+            #    print(f"AUROC over test set: {auroc_result}.")
+            #    print(f"Accuracy over test set: {accuracy_result}.")
+            #    print(
+            #        "binary cross entropy loss over test set",
+            #        bce_loss / (args.batch_size),
+            #    )
 
 if __name__ == "__main__":
     main(sys.argv[1:])
