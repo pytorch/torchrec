@@ -126,6 +126,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=10000,
         help="Frequency at which validation will be run within an epoch.",
     )
+    parser.add_argument(
+        "--profiler_suffix",
+        type=str,
+        default="",
+        help="profiler to save to",
+    )
     return parser.parse_args(argv)
 
 
@@ -280,8 +286,8 @@ def main(argv: List[str]):
     )
 
     with torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=10, warmup=10, active=100, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(dir_name="profiler"),
+        schedule=torch.profiler.schedule(wait=10, warmup=10, active=10, repeat=1),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(dir_name=f"profiler_{args.profiler_suffix}"),
         with_stack=True,
     ) as prof:
         for epoch in range(args.epochs):
