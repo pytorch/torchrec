@@ -440,7 +440,7 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor">BaseFeatureProcessor (class in torchrec.modules.feature_processor)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.distributed.embedding_types)</a>
+      <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.modules.feature_processor)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder">BaseQuantEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
 </li>
@@ -954,6 +954,8 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.feature_names">feature_names() (torchrec.distributed.embedding_types.GroupedEmbeddingConfig method)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.feature_processor_forwards">feature_processor_forwards (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.feedback">feedback() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
       <ul>
@@ -1020,8 +1022,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll.forward">(torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.forward">(torchrec.distributed.embedding_types.BaseEmbeddingLookup method)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor.forward">(torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.grouped_position_weighted.GroupedPositionWeightedModule.forward">(torchrec.distributed.grouped_position_weighted.GroupedPositionWeightedModule method)</a>
 </li>
@@ -1099,7 +1099,11 @@
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor.forward">(torchrec.modules.feature_processor.BaseFeatureProcessor method)</a>
 </li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.forward">(torchrec.modules.feature_processor.BaseGroupedFeatureProcessor method)</a>
+</li>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedModule.forward">(torchrec.modules.feature_processor.PositionWeightedModule method)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.forward">(torchrec.modules.feature_processor.PositionWeightedProcessor method)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.mlp.MLP.forward">(torchrec.modules.mlp.MLP method)</a>
 </li>
@@ -1784,6 +1788,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.named_buffers">(torchrec.distributed.model_parallel.DistributedModelParallel method)</a>
 </li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.named_buffers">(torchrec.modules.feature_processor.PositionWeightedProcessor method)</a>
+</li>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingBagCollection.named_buffers">(torchrec.quant.embedding_modules.EmbeddingBagCollection method)</a>
 </li>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.named_buffers">(torchrec.quant.embedding_modules.EmbeddingCollection method)</a>
@@ -1829,6 +1835,8 @@
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.need_indices">(torchrec.quant.embedding_modules.EmbeddingCollection method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.need_pos">need_pos (torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.PoolingType.NONE">NONE (torchrec.modules.embedding_configs.PoolingType attribute)</a>
 
       <ul>
@@ -2035,6 +2043,8 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedModule">PositionWeightedModule (class in torchrec.modules.feature_processor)</a>
 </li>
+      <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor">PositionWeightedProcessor (class in torchrec.modules.feature_processor)</a>
+</li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.post_load_state_dict">post_load_state_dict() (torchrec.optim.keyed.CombinedOptimizer method)</a>
 
       <ul>
@@ -2158,6 +2168,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo">ReduceScatterInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup">regroup() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict">regroup_as_dict() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.replace_placement_with_meta_device">replace_placement_with_meta_device() (in module torchrec.distributed.embeddingbag)</a>
 </li>
@@ -2325,10 +2337,10 @@
 </li>
       <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMV2.sparse_arch">sparse_arch (torchrec.models.dlrm.DLRMV2 attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.sparse_feature_names">sparse_feature_names (torchrec.models.dlrm.SparseArch property)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.sparse_features">sparse_features (torchrec.datasets.utils.Batch attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.sparse_grad_parameter_names">sparse_grad_parameter_names() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
@@ -2340,8 +2352,6 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.sparse_grad_parameter_names">(torchrec.distributed.embedding_types.BaseEmbeddingLookup method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor.sparse_grad_parameter_names">(torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor method)</a>
-</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.sparse_grad_parameter_names">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.sparse_grad_parameter_names">(torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection method)</a>
@@ -2351,6 +2361,10 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.sparse_grad_parameter_names">(torchrec.distributed.model_parallel.DistributedModelParallel method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.sparse_grad_parameter_names">(torchrec.distributed.types.ShardedModule method)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.sparse_grad_parameter_names">(torchrec.modules.feature_processor.BaseGroupedFeatureProcessor method)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.sparse_grad_parameter_names">(torchrec.modules.feature_processor.PositionWeightedProcessor method)</a>
 </li>
       </ul></li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous">sparse_to_contiguous() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
@@ -2405,6 +2419,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.state_dict">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
 </li>
         <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictModule.state_dict">(torchrec.inference.modules.PredictModule method)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.state_dict">(torchrec.modules.feature_processor.PositionWeightedProcessor method)</a>
 </li>
         <li><a href="torchrec.optim.html#torchrec.optim.keyed.KeyedOptimizer.state_dict">(torchrec.optim.keyed.KeyedOptimizer method)</a>
 </li>
@@ -3038,8 +3054,6 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.training">(torchrec.distributed.embedding_types.BaseEmbeddingLookup attribute)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor.training">(torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor attribute)</a>
-</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.training">(torchrec.distributed.embeddingbag.ShardedEmbeddingBag attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.training">(torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection attribute)</a>
@@ -3124,7 +3138,11 @@
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor.training">(torchrec.modules.feature_processor.BaseFeatureProcessor attribute)</a>
 </li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.training">(torchrec.modules.feature_processor.BaseGroupedFeatureProcessor attribute)</a>
+</li>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedModule.training">(torchrec.modules.feature_processor.PositionWeightedModule attribute)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.training">(torchrec.modules.feature_processor.PositionWeightedProcessor attribute)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.mlp.MLP.training">(torchrec.modules.mlp.MLP attribute)</a>
 </li>
