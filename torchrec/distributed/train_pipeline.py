@@ -472,10 +472,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        enable_amp: bool
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
+        self._enable_amp = False
         # use two data streams to support two concurrent batches
         if device.type == "cuda":
             self._memcpy_stream: Optional[
@@ -484,9 +486,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._data_dist_stream: Optional[
                 torch.cuda.streams.Stream
             ] = torch.cuda.Stream()
+            self._enable_amp = enable_amp
         else:
             self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
             self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
+            if enable_amp:
+                logger.warning("AMP is only available on device=CUDA. It is not enabled")
+                self._enable_amp = False
+                
         self._batch_i: Optional[In] = None
         self._batch_ip1: Optional[In] = None
         self._batch_ip2: Optional[In] = None
@@ -552,8 +559,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             # before starting forward pass
             if self._data_dist_stream:
                 event = torch.cuda.current_stream().record_event()
-            (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
-
+            if self._enable_amp:
+                with torch.cuda.amp.autocast():
+                    (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
+                    loss = torch.sum(losses, dim=0)
+            else:
+                (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
+                loss = torch.sum(losses, dim=0)
         # Data Distribution
         with record_function("## sparse_data_dist ##"):
             with torch.cuda.stream(self._data_dist_stream):
@@ -568,8 +580,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if self._model.training:
             # Backward
             with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
+                loss.backward()
             # Update
             with record_function("## optimizer ##"):
                 self._optimizer.step()
