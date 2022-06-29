@@ -6,7 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from collections import OrderedDict
+import itertools
+from collections import defaultdict, OrderedDict
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
@@ -17,6 +18,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     PoolingMode,
 )
 from torch import Tensor
+from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
@@ -25,6 +27,7 @@ from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
     EmbeddingConfig,
     pooling_type_to_pooling_mode,
+    PoolingType,
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection as OriginalEmbeddingBagCollection,
@@ -34,7 +37,6 @@ from torchrec.modules.embedding_modules import (
     get_embedding_names_by_table,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
-
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -115,7 +117,8 @@ def quantize_state_dict(
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
-    This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops
+    This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
+    table batching.
 
     It processes sparse data in the form of KeyedJaggedTensor
     with values of the form [F X B X L]
@@ -184,73 +187,115 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         super().__init__()
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
-        self.embedding_bags: nn.ModuleList = nn.ModuleList()
-        self._lengths_per_embedding: List[int] = []
+        self._key_to_tables: Dict[
+            Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
+        ] = defaultdict(list)
+        self._length_per_key: List[int] = []
+        self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._output_dtype = output_dtype
+
         table_names = set()
-        for emb_config in self._embedding_bag_configs:
-            if emb_config.name in table_names:
-                raise ValueError(f"Duplicate table name {emb_config.name}")
-            table_names.add(emb_config.name)
-            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
+        for table in self._embedding_bag_configs:
+            if table.name in table_names:
+                raise ValueError(f"Duplicate table name {table.name}")
+            table_names.add(table.name)
+            self._length_per_key.extend(
+                [table.embedding_dim] * len(table.feature_names)
+            )
+            key = (table.pooling, table.data_type)
+            self._key_to_tables[key].append(table)
+
+        self._sum_length_per_key: int = sum(self._length_per_key)
+
+        location = (
+            EmbeddingLocation.HOST if device.type == "cpu" else EmbeddingLocation.DEVICE
+        )
+
+        for key, emb_configs in self._key_to_tables.items():
+            (pooling, data_type) = key
+            embedding_specs = []
+            weight_lists = []
+            for table in emb_configs:
+                embedding_specs.append(
                     (
-                        "",
-                        emb_config.num_embeddings,
-                        emb_config.embedding_dim,
-                        data_type_to_sparse_type(emb_config.data_type),
-                        EmbeddingLocation.HOST
-                        if device.type == "cpu"
-                        else EmbeddingLocation.DEVICE,
+                        table.name,
+                        table.num_embeddings,
+                        table.embedding_dim,
+                        data_type_to_sparse_type(data_type),
+                        location,
                     )
-                ],
-                pooling_mode=pooling_type_to_pooling_mode(emb_config.pooling),
-                weight_lists=[table_name_to_quantized_weights[emb_config.name]],
+                )
+                weight_lists.append(table_name_to_quantized_weights[table.name])
+
+            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=embedding_specs,
+                pooling_mode=pooling_type_to_pooling_mode(pooling),
+                weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=16,
             )
-            self.embedding_bags.append(emb_module)
-            if not emb_config.feature_names:
-                emb_config.feature_names = [emb_config.name]
-            self._lengths_per_embedding.extend(
-                len(emb_config.feature_names) * [emb_config.embedding_dim]
-            )
+            self._emb_modules.append(emb_module)
 
-        self._embedding_names: List[str] = [
-            embedding
-            for embeddings in get_embedding_names_by_table(embedding_configs)
-            for embedding in embeddings
-        ]
+        self._embedding_names: List[str] = list(
+            itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
+        )
 
     def forward(
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedTensor:
-        pooled_embeddings: List[Tensor] = []
-        length_per_key: List[int] = []
-        feature_dict = features.to_dict()
-        for emb_config, emb_module in zip(
-            self._embedding_bag_configs, self.embedding_bags
-        ):
-            for feature_name in emb_config.feature_names:
-                f = feature_dict[feature_name]
-                values = f.values()
-                offsets = f.offsets()
-                pooled_embeddings.append(
-                    emb_module(
-                        indices=values.int(),
-                        offsets=offsets.int(),
-                        per_sample_weights=f.weights() if self._is_weighted else None,
-                    )
-                )
+        """
+        Args:
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
 
-                length_per_key.append(emb_config.embedding_dim)
+        Returns:
+            KeyedTensor
+        """
+
+        feature_dict = features.to_dict()
+        embeddings = []
+
+        # TODO ideally we can accept KJTs with any feature order. However, this will require an order check + permute, which will break torch.script.
+        # Once torchsccript is no longer a requirement, we should revisit this.
+
+        for emb_op, (_key, tables) in zip(
+            self._emb_modules, self._key_to_tables.items()
+        ):
+            indices = []
+            lengths = []
+            offsets = []
+            weights = []
+
+            for table in tables:
+                for feature in table.feature_names:
+                    f = feature_dict[feature]
+                    indices.append(f.values())
+                    lengths.append(f.lengths())
+                    if self._is_weighted:
+                        weights.append(f.weights())
+
+            indices = torch.cat(indices)
+            lengths = torch.cat(lengths)
+
+            offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
+            if self._is_weighted:
+                weights = torch.cat(weights)
+
+            embeddings.append(
+                emb_op(
+                    indices=indices.int(),
+                    offsets=offsets.int(),
+                    per_sample_weights=weights if self._is_weighted else None,
+                )
+            )
+
+        embeddings = torch.stack(embeddings).reshape(-1, self._sum_length_per_key)
 
         return KeyedTensor(
             keys=self._embedding_names,
-            values=torch.cat(pooled_embeddings, dim=1),
-            length_per_key=self._lengths_per_embedding,
+            values=embeddings,
+            length_per_key=self._length_per_key,
         )
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
@@ -264,15 +309,47 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             destination = OrderedDict()
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
-        for emb_config, emb_module in zip(
-            self._embedding_bag_configs,
-            self.embedding_bags,
+        for emb_op, (_key, tables) in zip(
+            self._emb_modules, self._key_to_tables.items()
         ):
-            (weight, _) = emb_module.split_embedding_weights(split_scale_shifts=False)[
-                0
-            ]
-            destination[prefix + f"embedding_bags.{emb_config.name}.weight"] = weight
+            for table, (weight, _) in zip(
+                tables, emb_op.split_embedding_weights(split_scale_shifts=False)
+            ):
+                destination[prefix + f"embedding_bags.{table.name}.weight"] = weight
         return destination
+
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module` inconsistently.
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+
+        missing_keys = []
+        unexpected_keys = []
+
+        current_state_dict = self.state_dict()
+        for key in current_state_dict.keys():
+            if key not in state_dict:
+                missing_keys.append(key)
+        for key in state_dict.keys():
+            if key not in current_state_dict.keys():
+                unexpected_keys.append(key)
+
+        if missing_keys or unexpected_keys:
+            return _IncompatibleKeys(
+                missing_keys=missing_keys, unexpected_keys=unexpected_keys
+            )
+
+        for (_key, tables) in self._key_to_tables.items():
+            for table in tables:
+                current_state_dict[
+                    f"embedding_bags.{table.name}.weight"
+                ].detach().copy_(state_dict[f"embedding_bags.{table.name}.weight"])
+
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
+        )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
