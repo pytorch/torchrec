@@ -8,6 +8,7 @@
 import copy
 import itertools
 import logging
+from decimal import Decimal
 from typing import cast, Dict, List, Optional, Set, Tuple
 
 from torchrec.distributed.planner.types import Proposer, ShardingOption
@@ -186,7 +187,7 @@ class GridSearchProposer(Proposer):
         )
         if total_proposals > self._max_proposals:
             total_proposals = (
-                "{:.2e}".format(total_proposals)
+                "{:.2e}".format(Decimal(total_proposals))
                 if total_proposals > 1e6
                 else total_proposals
             )
