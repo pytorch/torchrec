@@ -84,17 +84,18 @@ def create_embedding_bag_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
+    need_pos: bool = False,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwPooledEmbeddingSharding(sharding_infos, env, device)
+        return RwPooledEmbeddingSharding(sharding_infos, env, device, need_pos)
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return TwRwPooledEmbeddingSharding(sharding_infos, env, device)
+        return TwRwPooledEmbeddingSharding(sharding_infos, env, device, need_pos)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwPooledEmbeddingSharding(
             sharding_infos, env, device, permute_embeddings=permute_embeddings
@@ -169,6 +170,13 @@ def create_sharding_infos_by_sharding(
     return sharding_type_to_sharding_infos
 
 
+def _check_need_pos(module: EmbeddingBagCollectionInterface) -> bool:
+    for config in module.embedding_bag_configs():
+        if config.need_pos:
+            return True
+    return False
+
+
 class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
@@ -216,11 +224,17 @@ class ShardedEmbeddingBagCollection(
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
+        need_pos = _check_need_pos(module)
         self._sharding_type_to_sharding: Dict[
             str, EmbeddingSharding[SparseFeatures, torch.Tensor]
         ] = {
             sharding_type: create_embedding_bag_sharding(
-                sharding_type, embedding_confings, env, device, permute_embeddings=True
+                sharding_type,
+                embedding_confings,
+                env,
+                device,
+                permute_embeddings=True,
+                need_pos=need_pos,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }

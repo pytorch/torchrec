@@ -418,6 +418,7 @@ def group_tables(
         for data_type in DataType:
             for pooling in PoolingType:
                 for is_weighted in [True, False]:
+                    # remove this when finishing migration
                     for has_feature_processor in [False, True]:
                         for compute_kernel in [
                             EmbeddingComputeKernel.DENSE,

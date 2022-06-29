@@ -102,6 +102,7 @@ class RwSequenceEmbeddingSharding(
             device=device if device is not None else self._device,
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
+            need_pos=False,
         )
 
     def create_lookup(

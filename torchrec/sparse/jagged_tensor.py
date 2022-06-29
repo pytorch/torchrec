@@ -101,19 +101,15 @@ def _regroup_keyed_tensors(
             key_to_idx[key] = i
 
     # Rearrange values based on groups with a single torch.cat operation.
-    cat_input: List[torch.Tensor] = []
-    for group in groups:
-        for name in group:
-            cat_input.append(embedding_dicts[key_to_idx[name]][name])
-    rearranged_values = torch.cat(cat_input, key_dim)
-
-    # Provide views over the rearranged values with a single torch.split operation.
     split_lengths: List[int] = []
+    cat_input: List[torch.Tensor] = []
     for group in groups:
         group_length = 0
         for name in group:
+            cat_input.append(embedding_dicts[key_to_idx[name]][name])
             group_length += lengths[key_to_idx[name]][indices[key_to_idx[name]][name]]
         split_lengths.append(group_length)
+    rearranged_values = torch.cat(cat_input, key_dim)
 
     return list(rearranged_values.split(split_lengths, dim=key_dim))
 
@@ -1249,6 +1245,17 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
     ) -> List[torch.Tensor]:
         return _regroup_keyed_tensors(keyed_tensors, groups)
+
+    @staticmethod
+    def regroup_as_dict(
+        keyed_tensors: List["KeyedTensor"], groups: List[List[str]], keys: List[str]
+    ) -> Dict[str, torch.Tensor]:
+        assert len(groups) == len(keys), "Groups and keys should have same length"
+        embeddings_list = _regroup_keyed_tensors(keyed_tensors, groups)
+        embeddings_dict: Dict[str, torch.Tensor] = {}
+        for i, key in enumerate(keys):
+            embeddings_dict[key] = embeddings_list[i]
+        return embeddings_dict
 
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:

@@ -113,6 +113,9 @@ class BaseEmbeddingConfig:
     feature_names: List[str] = field(default_factory=list)
     weight_init_max: Optional[float] = None
     weight_init_min: Optional[float] = None
+    # when the position_weighted feature is in this table config,
+    # enable this flag to support rw_sharding
+    need_pos: bool = False
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:
@@ -130,6 +133,9 @@ class BaseEmbeddingConfig:
         return len(self.feature_names)
 
 
+# this class will be deprecated after migration
+# and all the following code in sharding itself
+# which contains has_feature_processor
 @dataclass
 class EmbeddingTableConfig(BaseEmbeddingConfig):
     pooling: PoolingType = PoolingType.SUM

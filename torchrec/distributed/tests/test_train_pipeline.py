@@ -27,6 +27,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
     TestSparseNN,
 )
+from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
     TrainPipelineSparseDist,
@@ -41,6 +42,7 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
@@ -70,7 +72,7 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return [
-            ShardingType.TABLE_WISE.value,
+            ShardingType.ROW_WISE.value,
         ]
 
     def compute_kernels(
@@ -185,6 +187,99 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
     def tearDown(self) -> None:
         super().tearDown()
         dist.destroy_process_group(self.pg)
+
+    def _test_feature_processor_helper(
+        self,
+        unsharded_model: TestSparseNN,
+        distributed_model: DistributedModelParallel,
+        fp_tables: List[EmbeddingBagConfig],
+    ) -> None:
+        copy_state_dict(unsharded_model.state_dict(), distributed_model.state_dict())
+        optimizer_cpu = optim.SGD(unsharded_model.parameters(), lr=0.1)
+        optimizer_distributed = KeyedOptimizerWrapper(
+            dict(distributed_model.named_parameters()),
+            lambda params: optim.SGD(params, lr=0.1),
+        )
+        pipeline = TrainPipelineSparseDist(
+            distributed_model, optimizer_distributed, self.device
+        )
+
+        data = [
+            ModelInput.generate(
+                tables=self.tables + fp_tables,
+                weighted_tables=self.weighted_tables,
+                batch_size=1,
+                world_size=1,
+                num_float_features=10,
+            )[0]
+            for i in range(5)
+        ]
+        dataloader = iter(data)
+
+        for example in data[:-2]:
+            optimizer_cpu.zero_grad()
+            loss, pred = unsharded_model(example)
+            example.idlist_features._jt_dict = None
+            example.idscore_features._jt_dict = None
+            loss.backward()
+            optimizer_cpu.step()
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.cpu().size(), pred.size())
+            torch.testing.assert_close(pred_gpu.cpu(), pred)
+            self.assertEqual(len(pipeline._pipelined_modules), 3)
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_position_weighted_feature_processor(self) -> None:
+        max_feature_length = 100
+        table_num = 2
+        fp_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 100,
+                embedding_dim=(i + 1) * 4,
+                name="fp_table_" + str(i),
+                feature_names=["fp_feature_" + str(i)],
+                need_pos=True,
+            )
+            for i in range(table_num)
+        ]
+        # chained feature_processors, the output is only 1 feature
+        max_feature_lengths_list = [
+            {
+                name: max_feature_length
+                for table in reversed(fp_tables)
+                for name in table.feature_names
+            }
+            for i in range(table_num)
+        ]
+
+        unsharded_model = TestSparseNN(
+            tables=self.tables + fp_tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+            max_feature_lengths_list=max_feature_lengths_list,
+        )
+        distributed_model = DistributedModelParallel(
+            unsharded_model,
+            env=ShardingEnv.from_process_group(self.pg),
+            init_data_parallel=True,
+            device=self.device,
+            sharders=[cast(ModuleSharder[nn.Module], TestCustomEBCSharder())],
+        )
+        test_unsharded_model = TestSparseNN(
+            tables=self.tables + fp_tables,
+            weighted_tables=self.weighted_tables,
+            max_feature_lengths_list=max_feature_lengths_list,
+        )
+        self._test_feature_processor_helper(
+            test_unsharded_model, distributed_model, fp_tables
+        )
 
     def _test_move_cpu_gpu_helper(
         self, distributed_model: DistributedModelParallel
