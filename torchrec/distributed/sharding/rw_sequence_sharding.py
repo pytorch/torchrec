@@ -19,6 +19,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     SparseFeatures,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     RwSparseFeaturesDist,
@@ -45,6 +46,7 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         pg: dist.ProcessGroup,
         num_features: int,
         device: Optional[torch.device] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._dist = SequenceEmbeddingsAllToAll(pg, [num_features] * pg.size(), device)
@@ -128,4 +130,5 @@ class RwSequenceEmbeddingSharding(
             self._pg,
             self._get_id_list_features_num(),
             device if device is not None else self._device,
+            self._qcomms_config,
         )

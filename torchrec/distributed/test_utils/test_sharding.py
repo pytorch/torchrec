@@ -19,6 +19,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.test_utils.multi_process import MultiProcessContext
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
@@ -51,6 +52,7 @@ def create_test_sharder(
     sharding_type: str,
     kernel_type: str,
     fused_params: Optional[Dict[str, Any]] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
@@ -59,7 +61,7 @@ def create_test_sharder(
     if sharder_type == SharderType.EMBEDDING_BAG.value:
         return TestEBSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(sharding_type, kernel_type, fused_params)
+        return TestEBCSharder(sharding_type, kernel_type, fused_params, qcomms_config)
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
@@ -160,6 +162,7 @@ def sharding_single_rank_test(
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
+    using_quantized_comms: bool = False,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -258,7 +261,14 @@ def sharding_single_rank_test(
         )
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        if not using_quantized_comms:
+            torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        else:
+            # With quantized comms, we can relax constraints a bit
+            atol, rtol = 0.003, 0.004
+            torch.testing.assert_allclose(
+                global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
+            )
 
 
 def gen_full_pred_after_one_step(
