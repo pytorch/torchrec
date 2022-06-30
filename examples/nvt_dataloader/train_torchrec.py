@@ -122,6 +122,11 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         " across all epochs), the learning rate will change.",
     )
     parser.add_argument(
+        "--lr_scheduler_steps",
+        type=int,
+        default=4
+    )
+    parser.add_argument(
         "--lr_after_change_point",
         type=float,
         default=3.0,
@@ -300,8 +305,8 @@ def main(argv: List[str]):
         [non_fused_optimizer]
     )
 
-    sparse_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(model.fused_optimizer, gamma=0.6)
-    dense_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(non_fused_optimizer._optimizer, gamma=0.6)
+    sparse_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(model.fused_optimizer, gamma=0.9)
+    dense_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(non_fused_optimizer._optimizer, gamma=0.9)
 
     train_pipeline = TrainPipelineSparseDist(model, opt, device, enable_amp=True)
 
@@ -313,7 +318,7 @@ def main(argv: List[str]):
     )
 
     changing_point_steps = (
-        TOTAL_TRAINING_SAMPLES * args.lr_change_point // args.batch_size // world_size
+        TOTAL_TRAINING_SAMPLES // args.batch_size // world_size
     )
 
     with torch.profiler.profile(
@@ -336,10 +341,10 @@ def main(argv: List[str]):
                     loss, _logits, _labels = train_pipeline.progress(it)
                     model.fused_optimizer.step()
 
-                    if step % changing_point_steps//3 == 0:
+                    if step % (changing_point_steps//args.lr_scheduler_steps) == 0:
                         sparse_lr_scheduler.step()
                         dense_lr_scheduler.step()
-                        print("Learning rate scheduler step")
+                        print("Learning rate scheduler step, learning rate is now ", sparse_lr_scheduler.get_lr())
 
                     # if args.change_lr and step == changing_point_steps:
                     #     print(
