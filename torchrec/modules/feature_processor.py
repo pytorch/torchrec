@@ -11,7 +11,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from torch.fx._symbolic_trace import is_fx_tracing
+
+from torchrec.fx.tracer import is_fx_tracing
 
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 

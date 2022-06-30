@@ -8,8 +8,16 @@
 from typing import Any, Callable, Dict, Optional, Union
 
 import torch
+from torch.fx._compatibility import compatibility
+from torch.fx.graph import Graph
 from torch.fx.node import Argument
 from torchrec.distributed.types import NoWait
+
+_is_fx_tracing_flag = False
+
+
+def is_fx_tracing() -> bool:
+    return _is_fx_tracing_flag
 
 
 class Tracer(torch.fx.Tracer):
@@ -25,6 +33,48 @@ class Tracer(torch.fx.Tracer):
 
     def __init__(self) -> None:
         super().__init__()
+
+    @compatibility(is_backward_compatible=True)
+    def trace(
+        self,
+        # pyre-ignore[2]: Missing parameter annotation [2]: Parameter `root` must have a type that does not contain `Any`
+        root: Union[torch.nn.Module, Callable[..., Any]],
+        concrete_args: Optional[Dict[str, Any]] = None,
+    ) -> Graph:
+        """
+        Trace ``root`` and return the corresponding FX ``Graph`` representation. ``root``
+        can either be an ``nn.Module`` instance or a Python callable.
+
+        Note that after this call, ``self.root`` may be different from the ``root`` passed
+        in here. For example, when a free function is passed to ``trace()``, we will
+        create an ``nn.Module`` instance to use as the root and add embedded constants
+        to.
+
+
+        Args:
+
+            root (Union[Module, Callable]): Either a ``Module`` or a function to be
+                traced through. Backwards-compatibility for this parameter is
+                guaranteed.
+            concrete_args (Optional[Dict[str, any]]): Concrete arguments that should
+                not be treated as Proxies. This parameter is experimental and
+                its backwards-compatibility is *NOT* guaranteed.
+
+        Returns:
+
+            A ``Graph`` representing the semantics of the passed-in ``root``.
+        """
+        global _is_fx_tracing_flag
+        old_is_fx_tracing_flag = _is_fx_tracing_flag
+        _is_fx_tracing_flag = True
+        try:
+            graph = super().trace(
+                root,
+                concrete_args,
+            )
+        finally:
+            _is_fx_tracing_flag = old_is_fx_tracing_flag
+        return graph
 
     # pyre-ignore[2]
     def create_arg(self, a: Any) -> Argument:
@@ -72,7 +122,12 @@ def symbolic_trace(
     Returns:
         GraphModule: a Module created from the recorded operations from ``root``.
     """
-
-    tracer = Tracer()
-    graph = tracer.trace(root, concrete_args)
+    global _is_fx_tracing_flag
+    old_is_fx_tracing_flag = _is_fx_tracing_flag
+    _is_fx_tracing_flag = True
+    try:
+        tracer = Tracer()
+        graph = tracer.trace(root, concrete_args)
+    finally:
+        _is_fx_tracing_flag = old_is_fx_tracing_flag
     return torch.fx.GraphModule(root, graph)
