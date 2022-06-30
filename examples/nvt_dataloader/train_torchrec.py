@@ -39,6 +39,11 @@ from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
+from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
+from torchrec.distributed.quantized_comms.types import QCommsConfig, CommType
+
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec dlrm example trainer")
     parser.add_argument(
@@ -227,16 +232,25 @@ def main(argv: List[str]):
         ),
     )
 
-    # Enable optimizer fusion
-    fused_params = {
-        "learning_rate": args.learning_rate,
-        "optimizer": OptimType.EXACT_SGD,
-    }
+    train_model = fuse_embedding_optimizer(
+        train_model,
+        optimizer_type=torch.optim.SGD,
+        optimizer_kwargs={
+            "lr": args.learning_rate,
+            "eps": 0.002,
+        },
+        device=torch.device("meta"),
+    )
 
     sharders = cast(
         List[ModuleSharder[nn.Module]],
         [
-            EmbeddingBagCollectionSharder(fused_params=fused_params),
+            FusedEmbeddingBagCollectionSharder(
+                qcomms_config=QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                )
+            )
         ],
     )
 
@@ -287,7 +301,9 @@ def main(argv: List[str]):
 
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=10, warmup=10, active=10, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(dir_name=f"profiler_{args.profiler_suffix}"),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(
+            dir_name=f"profiler_{args.profiler_suffix}"
+        ),
         with_stack=True,
     ) as prof:
         for epoch in range(args.epochs):
@@ -370,6 +386,7 @@ def main(argv: List[str]):
             #        "binary cross entropy loss over test set",
             #        bce_loss / (args.batch_size),
             #    )
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
