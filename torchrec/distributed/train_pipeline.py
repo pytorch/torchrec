@@ -501,6 +501,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
 
+        self._scaler = torch.cuda.amp.GradScaler(enabled=self._enable_amp, growth_interval=int(1e9))
+
     def _replace_fp_forward(self, model: torch.nn.Module) -> None:
         for _, m in model.named_modules():
             if isinstance(m, BaseGroupedFeatureProcessor):
@@ -559,11 +561,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             # before starting forward pass
             if self._data_dist_stream:
                 event = torch.cuda.current_stream().record_event()
-            if self._enable_amp:
-                with torch.cuda.amp.autocast():
-                    (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
-                    loss = torch.sum(losses, dim=0)
-            else:
+            with torch.cuda.amp.autocast(enabled=self._enable_amp):
                 (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
                 loss = torch.sum(losses, dim=0)
         # Data Distribution
@@ -580,12 +578,20 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if self._model.training:
             # Backward
             with record_function("## backward ##"):
-                loss.backward()
+                if self._enable_amp:
+                    self._scaler.scale(loss).backward()
+                else:
+                    loss.backward()
             # Update
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                if self._enable_amp:
+                    self._scaler.step(self._optimizer)
+                    self._scaler.update()
+                else:
+                    self._optimizer.step()
 
         self._batch_i = batch_ip1
         self._batch_ip1 = batch_ip2
 
         return output
+

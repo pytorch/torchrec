@@ -33,7 +33,7 @@ from torchrec.datasets.utils import Batch
 from torchrec.distributed import TrainPipelineSparseDist
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.types import ModuleSharder
+from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -42,6 +42,14 @@ from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 from torchrec.distributed.quantized_comms.types import QCommsConfig, CommType
+
+from apex import amp, parallel, optimizers as apex_optim
+
+
+import logging
+# create logger
+logger = logging.getLogger('simple_example')
+logger.setLevel(logging.INFO)
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -237,7 +245,6 @@ def main(argv: List[str]):
         optimizer_type=torch.optim.SGD,
         optimizer_kwargs={
             "lr": args.learning_rate,
-            "eps": 0.002,
         },
         device=torch.device("meta"),
     )
@@ -255,6 +262,13 @@ def main(argv: List[str]):
     )
 
     pg = dist.GroupMember.WORLD
+
+    from collections import defaultdict
+    constraints = defaultdict(lambda: trec_dist.planner.ParameterConstraints())
+    for embedding_bag_config in eb_configs:
+        constraints[embedding_bag_config.name].sharding_types = [ShardingType.ROW_WISE.value,]
+
+
 
     hbm_cap = torch.cuda.get_device_properties(device).total_memory
     local_world_size = trec_dist.comm.get_local_size(world_size)
@@ -279,12 +293,15 @@ def main(argv: List[str]):
 
     non_fused_optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
-        lambda params: torch.optim.SGD(params, lr=args.learning_rate),
+        lambda params: apex_optim.FusedSGD(params, lr=args.learning_rate),
     )
 
     opt = trec_optim.keyed.CombinedOptimizer(
-        [non_fused_optimizer, model.fused_optimizer]
+        [non_fused_optimizer]
     )
+
+    sparse_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(model.fused_optimizer, gamma=0.6)
+    dense_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(non_fused_optimizer._optimizer, gamma=0.6)
 
     train_pipeline = TrainPipelineSparseDist(model, opt, device, enable_amp=True)
 
@@ -300,9 +317,10 @@ def main(argv: List[str]):
     )
 
     with torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=10, warmup=10, active=10, repeat=1),
+        schedule=torch.profiler.schedule(skip_first=10, wait=1000, warmup=10, active=10, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler(
-            dir_name=f"profiler_{args.profiler_suffix}"
+            dir_name=f"profiler_{args.profiler_suffix}",
+            worker_name=f"rank_{rank}"
         ),
         with_stack=True,
     ) as prof:
@@ -310,28 +328,31 @@ def main(argv: List[str]):
             print(f"starting the {epoch} epoch now")
             start_time = time.time()
             it = iter(train_loader)
-            step = 0
+            step = 1
             losses = []
             while True:
                 try:
                     train_pipeline._model.train()
                     loss, _logits, _labels = train_pipeline.progress(it)
+                    model.fused_optimizer.step()
 
-                    if args.change_lr and step == changing_point_steps:
-                        print(
-                            f"Changing learning rate to: {args.lr_after_change_point}"
-                        )
-                        optimizer = train_pipeline._optimizer
-                        lr = args.lr_after_change_point
-                        for g in optimizer.param_groups:
-                            g["lr"] = lr
+                    if step % changing_point_steps//3 == 0:
+                        sparse_lr_scheduler.step()
+                        dense_lr_scheduler.step()
+                        print("Learning rate scheduler step")
+
+                    # if args.change_lr and step == changing_point_steps:
+                    #     print(
+                    #         f"Changing learning rate to: {args.lr_after_change_point}"
+                    #     )
+                    #     optimizer = train_pipeline._optimizer
+                    #     lr = args.lr_after_change_point
+                    #     for g in optimizer.param_groups:
+                    #         g["lr"] = lr
 
                     throughput.update()
                     losses.append(loss)
                     prof.step()
-
-                    if step == 600:
-                        raise StopIteration
 
                     if (
                         step % args.throughput_check_freq_within_epoch == 0
@@ -343,7 +364,8 @@ def main(argv: List[str]):
                             print("step", step)
                             print("throughput", throughput_val)
                         losses = []
-                    if step % args.validation_freq_within_epoch == 0 and step != 0:
+
+                    if step % args.validation_freq_within_epoch == 0:
                         # metrics calculation
                         validation_it = iter(val_loader)
                         auroc_result, accuracy_result, bce_loss = _eval(
@@ -356,27 +378,28 @@ def main(argv: List[str]):
                                 "binary cross entropy loss",
                                 bce_loss / (args.batch_size),
                             )
+                        # raise StopIteration
                     step += 1
 
                 except StopIteration:
                     print("Reached stop iteration")
                     break
 
-            # train_time = time.time()
-            # if rank == 0:
-            #    print(f"this epoch training takes {train_time - start_time}")
+            train_time = time.time()
+            if rank == 0:
+               print(f"this epoch training takes {train_time - start_time}")
 
-            ## eval
-            # val_it = iter(val_loader)
-            # auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, val_it)
-            # if rank == 0:
-            #    print(f"AUROC over validation set: {auroc_result}.")
-            #    print(f"Accuracy over validation set: {accuracy_result}.")
-            #    print(
-            #        "binary cross entropy loss over validation set",
-            #        bce_loss / (args.batch_size),
-            #    )
-            ## test
+            # eval
+            val_it = iter(val_loader)
+            auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, val_it)
+            if rank == 0:
+               print(f"AUROC over validation set: {auroc_result}.")
+               print(f"Accuracy over validation set: {accuracy_result}.")
+               print(
+                   "binary cross entropy loss over validation set",
+                   bce_loss / (args.batch_size),
+               )
+            # # test
             # test_it = iter(test_loader)
             # auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, test_it)
             # if rank == 0:
