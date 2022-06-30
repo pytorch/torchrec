@@ -17,6 +17,15 @@ from torchrec.distributed.comm_ops import (
     alltoall_sequence,
     reduce_scatter_pooled,
 )
+from torchrec.distributed.quantized_comms.all2all_codec import QuantizationAll2AllCodec
+from torchrec.distributed.quantized_comms.reduce_scatter_codec import (
+    QuantizationReduceScatterCodec,
+)
+
+from torchrec.distributed.quantized_comms.types import (
+    QuantizationCodec,
+    QuantizedCommsConfig,
+)
 from torchrec.distributed.types import Awaitable, NoWait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -630,6 +639,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         device (Optional[torch.device]): device on which buffers will be allocated.
         callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]]): callback
             functions.
+        quantized_comms_config: Optional[QuantizedCommsConfig]: quantization configs.
 
     Example::
 
@@ -652,6 +662,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -670,6 +681,19 @@ class PooledEmbeddingsAllToAll(nn.Module):
             torch.tensor(cumsum_dim_sum_per_rank, device=device, dtype=torch.int),
         )
 
+        self._quantized_comms_config: Optional[
+            QuantizedCommsConfig
+        ] = quantized_comms_config
+
+        self._quantization_codec: Optional[QuantizationCodec] = None
+        if self._quantized_comms_config is not None:
+            self._quantization_codec = QuantizationAll2AllCodec(
+                fwd_comm_precision=self._quantized_comms_config.forward_precision,
+                bwd_comm_precision=self._quantized_comms_config.backward_precision,
+                loss_scale=self._quantized_comms_config.loss_scale,
+                measure_quant_error=self._quantized_comms_config.measure_quant_error,
+            )
+
     def forward(
         self, local_embs: torch.Tensor, batch_size_per_rank: Optional[List[int]] = None
     ) -> PooledEmbeddingsAwaitable:
@@ -684,6 +708,10 @@ class PooledEmbeddingsAllToAll(nn.Module):
         Returns:
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings.
         """
+
+        if self._quantization_codec is not None:
+            # pyre-ignore
+            local_embs = self._quantization_codec.encoder.apply(local_embs)
 
         if local_embs.numel() == 0:
             local_embs.view(local_embs.size(0) * self._pg.size(), 0)
@@ -704,8 +732,12 @@ class PooledEmbeddingsAllToAll(nn.Module):
         )
 
         pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable
+            tensor_awaitable=tensor_awaitable,
         )
+        if self._quantization_codec is not None:
+            pooled_embedding_awaitable.callbacks.insert(
+                0, self._quantization_codec.decoder.apply
+            )
         pooled_embedding_awaitable.callbacks.extend(self._callbacks)
 
         return pooled_embedding_awaitable
@@ -791,9 +823,19 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
+        self._quantized_comms_config = quantized_comms_config
+        self._quantization_codec: Optional[QuantizationCodec] = None
+        if self._quantized_comms_config is not None:
+            self._quantization_codec = QuantizationReduceScatterCodec(
+                fwd_comm_precision=self._quantized_comms_config.forward_precision,
+                bwd_comm_precision=self._quantized_comms_config.backward_precision,
+                loss_scale=self._quantized_comms_config.loss_scale,
+                measure_quant_error=self._quantized_comms_config.measure_quant_error,
+            )
 
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
         """
@@ -806,10 +848,21 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
+        if self._quantization_codec is not None:
+            # pyre-ignore
+            local_embs = self._quantization_codec.encoder.apply(local_embs)
+
         tensor_awaitable = reduce_scatter_pooled(
             list(torch.chunk(local_embs, self._pg.size(), dim=0)), self._pg
         )
-        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+        pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
+            tensor_awaitable=tensor_awaitable
+        )
+        if self._quantization_codec is not None:
+            pooled_embedding_awaitable.callbacks.insert(
+                0, self._quantization_codec.decoder.apply
+            )
+        return pooled_embedding_awaitable
 
 
 class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
@@ -889,6 +942,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -909,6 +963,15 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             "_backward_recat_tensor",
             torch.tensor(backward_recat, device=device, dtype=torch.int),
         )
+
+        self._quantization_codec: Optional[QuantizationCodec] = None
+        if quantized_comms_config is not None:
+            self._quantization_codec = QuantizationAll2AllCodec(
+                fwd_comm_precision=quantized_comms_config.forward_precision,
+                bwd_comm_precision=quantized_comms_config.backward_precision,
+                loss_scale=quantized_comms_config.loss_scale,
+                measure_quant_error=quantized_comms_config.measure_quant_error,
+            )
 
     def forward(
         self,
@@ -933,6 +996,10 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
         """
 
+        if self._quantization_codec is not None:
+            # pyre-ignore
+            local_embs = self._quantization_codec.encoder.apply(local_embs)
+
         tensor_awaitable = alltoall_sequence(
             a2a_sequence_embs_tensor=local_embs,
             forward_recat_tensor=self._forward_recat_tensor,
@@ -942,8 +1009,14 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             output_splits=output_splits,
             group=self._pg,
         )
-        return SequenceEmbeddingsAwaitable(
+        sequence_awaitable = SequenceEmbeddingsAwaitable(
             tensor_awaitable=tensor_awaitable,
             unbucketize_permute_tensor=unbucketize_permute_tensor,
             embedding_dim=local_embs.shape[1],
         )
+
+        if self._quantization_codec is not None:
+            sequence_awaitable.callbacks.insert(
+                0, self._quantization_codec.decoder.apply
+            )
+        return sequence_awaitable
