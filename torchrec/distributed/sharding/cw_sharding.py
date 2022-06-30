@@ -25,6 +25,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     SparseFeatures,
 )
+from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
     TwPooledEmbeddingDist,
@@ -48,12 +49,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
-        super().__init__(
-            sharding_infos,
-            env,
-            device,
-        )
+        super().__init__(sharding_infos, env, device, quantized_comms_config)
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
             self._init_combined_embeddings()
@@ -232,6 +230,7 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
                 self._embedding_order,
             ).to(device=device)
             callbacks = [embedding_permute_op]
+
         return TwPooledEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
@@ -239,4 +238,5 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
             self._dim_sum_per_rank(),
             device,
             callbacks,
+            quantized_comms_config=self._quantized_comms_config,
         )

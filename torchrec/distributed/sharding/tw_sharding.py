@@ -32,6 +32,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
+from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
 from torchrec.distributed.types import (
     Awaitable,
     NoWait,
@@ -56,6 +57,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._env = env
@@ -80,6 +82,8 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
         ] = self._score_grouped_embedding_configs_per_rank[self._rank]
+
+        self._quantized_comms_config = quantized_comms_config
 
     def _shard(
         self,
@@ -283,9 +287,12 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
+        self._dist = PooledEmbeddingsAllToAll(
+            pg, dim_sum_per_rank, device, callbacks, quantized_comms_config
+        )
 
     def forward(
         self,
@@ -348,6 +355,7 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,
+            quantized_comms_config=self._quantized_comms_config,
         )
 
 
