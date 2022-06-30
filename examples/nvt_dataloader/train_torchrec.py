@@ -314,7 +314,7 @@ def main(argv: List[str]):
                     losses.append(loss)
                     prof.step()
 
-                    if step == 200:
+                    if step == 600:
                         raise StopIteration
 
                     if (
@@ -326,8 +326,6 @@ def main(argv: List[str]):
                         if rank == 0:
                             print("step", step)
                             print("throughput", throughput_val)
-                        if step >= 100:
-                            raise StopIteration
                         losses = []
                     if step % args.validation_freq_within_epoch == 0 and step != 0:
                         # metrics calculation
