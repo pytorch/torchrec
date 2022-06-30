@@ -25,7 +25,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     SparseFeatures,
 )
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
     TwPooledEmbeddingDist,
@@ -49,9 +49,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
-        super().__init__(sharding_infos, env, device, quantized_comms_config)
+        super().__init__(sharding_infos, env, device, qcomms_config)
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
             self._init_combined_embeddings()
@@ -238,5 +238,5 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
             self._dim_sum_per_rank(),
             device,
             callbacks,
-            quantized_comms_config=self._quantized_comms_config,
+            qcomms_config=self._qcomms_config,
         )

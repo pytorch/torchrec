@@ -48,7 +48,7 @@ class QuantizationCodec(ABC):
 
 
 @dataclass
-class QuantizedCommsConfig:
+class QCommsConfig:
     """
     Quantization configs for the AllToAll and ReduceScatter communication modules used in sharding.
     """

@@ -16,7 +16,7 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
 )
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.types import ParameterSharding, ShardingEnv, ShardingType
 from torchrec.distributed.utils import append_prefix
@@ -35,7 +35,7 @@ class ShardedFusedEmbeddingBagCollection(
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         optimizer_type = module.optimizer_type()
         optimizer_kwargs = module.optimizer_kwargs()
@@ -56,7 +56,7 @@ class ShardedFusedEmbeddingBagCollection(
             fused_params=fused_params,
             env=env,
             device=device,
-            quantized_comms_config=quantized_comms_config,
+            qcomms_config=qcomms_config,
         )
 
         for index, (sharding, lookup) in enumerate(
@@ -106,7 +106,7 @@ class FusedEmbeddingBagCollectionSharder(
             params,
             env,
             device,
-            quantized_comms_config=self._quantized_comms_config,
+            qcomms_config=self._qcomms_config,
         )
 
     def shardable_parameters(

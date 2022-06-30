@@ -19,7 +19,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.test_utils.multi_process import MultiProcessContext
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
@@ -52,7 +52,7 @@ def create_test_sharder(
     sharding_type: str,
     kernel_type: str,
     fused_params: Optional[Dict[str, Any]] = None,
-    quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
@@ -61,9 +61,7 @@ def create_test_sharder(
     if sharder_type == SharderType.EMBEDDING_BAG.value:
         return TestEBSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(
-            sharding_type, kernel_type, fused_params, quantized_comms_config
-        )
+        return TestEBCSharder(sharding_type, kernel_type, fused_params, qcomms_config)
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(sharding_type, kernel_type, fused_params)
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:

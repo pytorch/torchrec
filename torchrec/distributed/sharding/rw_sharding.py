@@ -28,7 +28,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     SparseFeatures,
 )
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.types import (
     Awaitable,
     ShardedTensorMetadata,
@@ -53,7 +53,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         need_pos: bool = False,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._env = env
@@ -87,7 +87,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
 
-        self._quantized_comms_config = quantized_comms_config
+        self._qcomms_config = qcomms_config
 
     def _shard(
         self,
@@ -332,14 +332,11 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
 
-        self._dist = PooledEmbeddingsReduceScatter(
-            pg,
-            quantized_comms_config=quantized_comms_config,
-        )
+        self._dist = PooledEmbeddingsReduceScatter(pg, qcomms_config=qcomms_config)
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
         """
@@ -406,5 +403,6 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._quantized_comms_config,
+            self._qcomms_config,
         )
+        return RwPooledEmbeddingDist(self._pg, self._qcomms_config)

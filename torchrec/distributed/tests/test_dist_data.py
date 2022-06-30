@@ -23,7 +23,7 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
 )
-from torchrec.distributed.quantized_comms.types import CommType, QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import CommType, QCommsConfig
 
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -304,7 +304,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
         backend: str,
         dim_sum_per_rank: List[int],
         batch_size_per_rank: List[int],
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.group.WORLD
@@ -321,7 +321,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
             pg=pg,
             dim_sum_per_rank=dim_sum_per_rank,
             device=device,
-            quantized_comms_config=quantized_comms_config,
+            qcomms_config=qcomms_config,
         )
         _input.requires_grad = True
         if len(set(batch_size_per_rank)) > 1:
@@ -332,11 +332,11 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
         res.backward(res)
 
         atol, rtol = None, None
-        if quantized_comms_config is not None:
+        if qcomms_config is not None:
             atol, rtol = 0.003, 0.004
         torch.testing.assert_close(res, output, rtol=rtol, atol=atol)
 
-        if quantized_comms_config is None:
+        if qcomms_config is None:
             assert_array_equal(
                 _input.cpu().detach().div_(world_size),
                 # pyre-ignore
@@ -354,10 +354,10 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
         features=st.integers(min_value=3, max_value=4),
         is_reversed=st.booleans(),
         variable_batch_size=st.booleans(),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.BF16,
                     backward_precision=CommType.BF16,
                 ),
@@ -372,7 +372,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
         features: int,
         is_reversed: bool,
         variable_batch_size: bool,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         world_size = 2
         keys = [f"F{feature}" for feature in range(features)]
@@ -404,7 +404,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
                     "backend": backend,
                     "dim_sum_per_rank": dim_sum_per_rank,
                     "batch_size_per_rank": batch_size_per_rank,
-                    "quantized_comms_config": quantized_comms_config,
+                    "qcomms_config": qcomms_config,
                 }
             )
         self._run_multi_process_test_per_rank(
@@ -422,7 +422,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
         world_size: int,
         input: torch.Tensor,
         expected_output: torch.Tensor,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         dist.init_process_group(rank=rank, world_size=2, backend="nccl")
         pg = dist.group.WORLD
@@ -431,14 +431,14 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
         rs = PooledEmbeddingsReduceScatter(
             # pyre-ignore
             pg,
-            quantized_comms_config=quantized_comms_config,
+            qcomms_config=qcomms_config,
         ).cuda(rank)
         actual_output = rs(input).wait()
         s = torch.sum(actual_output)
         s.backward()
 
         atol, rtol = None, None
-        if quantized_comms_config is not None:
+        if qcomms_config is not None:
             atol, rtol = 0.003, 0.004
         torch.testing.assert_close(
             actual_output.cpu().detach(),
@@ -446,7 +446,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
             rtol=rtol,
             atol=atol,
         )
-        if quantized_comms_config is None:
+        if qcomms_config is None:
             assert_array_equal(
                 # pyre-ignore
                 input.grad.cpu().detach(),
@@ -460,10 +460,10 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
     @settings(deadline=30000)
     # pyre-ignore
     @given(
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.BF16,
                     backward_precision=CommType.BF16,
                 ),
@@ -471,7 +471,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
         ),
     )
     def test_pooled_embedding_reduce_scatter(
-        self, quantized_comms_config: Optional[QuantizedCommsConfig]
+        self, qcomms_config: Optional[QCommsConfig]
     ) -> None:
         world_size = 2
         embeddding_dim = 10
@@ -489,7 +489,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
                 {
                     "input": embeddings_by_rank[rank],
                     "expected_output": expect_results[rank],
-                    "quantized_comms_config": quantized_comms_config,
+                    "qcomms_config": qcomms_config,
                 }
             )
 

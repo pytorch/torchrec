@@ -12,7 +12,7 @@ import torch
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
-from torchrec.distributed.quantized_comms.types import CommType, QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import CommType, QCommsConfig
 from torchrec.distributed.test_utils.test_model import (
     TestTowerCollectionSparseNN,
     TestTowerSparseNN,
@@ -55,10 +55,10 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             ]
         ),
         local_size=st.sampled_from([2]),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.FP16
                 ),
             ]
@@ -71,7 +71,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         local_size: int,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -80,13 +80,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 ),
             ],
             backend="nccl",
             world_size=4,
             local_size=local_size,
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
         )
 
     @unittest.skipIf(
@@ -113,10 +113,10 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             ]
         ),
         local_size=st.sampled_from([2]),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.FP16
                 ),
             ]
@@ -129,7 +129,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         local_size: int,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -139,7 +139,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 )
             ],
             backend="nccl",
@@ -149,7 +149,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
         )
 
     @unittest.skipIf(

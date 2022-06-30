@@ -35,7 +35,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.quantized_comms.types import CommType, QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import CommType, QCommsConfig
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
 from torchrec.distributed.test_utils.test_sharding import (
@@ -79,10 +79,10 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
             ]
@@ -94,7 +94,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             sharders=[
@@ -104,11 +104,11 @@ class ModelParallelTest(ModelParallelTestShared):
                         sharder_type,
                         sharding_type,
                         kernel_type,
-                        quantized_comms_config=quantized_comms_config,
+                        qcomms_config=qcomms_config,
                     ),
                 ),
             ],
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
             backend="nccl",
         )
 
@@ -170,10 +170,10 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
             ]
@@ -185,7 +185,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -194,11 +194,11 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 ),
             ],
             backend="nccl",
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
             constraints={
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
@@ -228,10 +228,10 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
             ]
@@ -243,7 +243,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -252,11 +252,11 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 ),
             ],
             backend="nccl",
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
         )
 
     # pyre-fixme[56]
@@ -279,10 +279,10 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
             ]
@@ -294,7 +294,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -303,10 +303,10 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 ),
             ],
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
             backend="gloo",
         )
 
@@ -330,10 +330,10 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
             ]
@@ -345,7 +345,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -355,10 +355,10 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 ),
             ],
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
             backend="gloo",
             world_size=world_size,
             constraints={

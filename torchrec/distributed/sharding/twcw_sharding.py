@@ -9,7 +9,7 @@ from typing import List, Optional
 
 import torch
 from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.types import ShardingEnv
 
@@ -27,12 +27,12 @@ class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__(
             sharding_infos,
             env,
             device,
             permute_embeddings=permute_embeddings,
-            quantized_comms_config=quantized_comms_config,
+            qcomms_config=qcomms_config,
         )

@@ -20,7 +20,7 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagSharder,
 )
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
@@ -734,11 +734,11 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         sharding_type: str,
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         if fused_params is None:
             fused_params = {}
-        super().__init__(fused_params, quantized_comms_config=quantized_comms_config)
+        super().__init__(fused_params, qcomms_config=qcomms_config)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
