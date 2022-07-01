@@ -8,8 +8,16 @@
 from typing import Any, Callable, Dict, Optional, Union
 
 import torch
+from torch.fx._compatibility import compatibility
+from torch.fx.graph import Graph
 from torch.fx.node import Argument
 from torchrec.distributed.types import NoWait
+
+_is_fx_tracing_flag = False
+
+
+def is_fx_tracing() -> bool:
+    return _is_fx_tracing_flag
 
 
 class Tracer(torch.fx.Tracer):
@@ -25,6 +33,25 @@ class Tracer(torch.fx.Tracer):
 
     def __init__(self) -> None:
         super().__init__()
+
+    @compatibility(is_backward_compatible=True)
+    def trace(
+        self,
+        # pyre-ignore[2]: Missing parameter annotation [2]: Parameter `root` must have a type that does not contain `Any`
+        root: Union[torch.nn.Module, Callable[..., Any]],
+        concrete_args: Optional[Dict[str, Any]] = None,
+    ) -> Graph:
+        global _is_fx_tracing_flag
+        old_is_fx_tracing_flag = _is_fx_tracing_flag
+        _is_fx_tracing_flag = True
+        try:
+            graph = super().trace(
+                root,
+                concrete_args,
+            )
+        finally:
+            _is_fx_tracing_flag = old_is_fx_tracing_flag
+        return graph
 
     # pyre-ignore[2]
     def create_arg(self, a: Any) -> Argument:
@@ -72,7 +99,6 @@ def symbolic_trace(
     Returns:
         GraphModule: a Module created from the recorded operations from ``root``.
     """
-
     tracer = Tracer()
     graph = tracer.trace(root, concrete_args)
     return torch.fx.GraphModule(root, graph)
