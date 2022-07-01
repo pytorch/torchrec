@@ -607,6 +607,10 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         managed: List[EmbeddingLocation] = []
         compute_devices: List[ComputeDevice] = []
         for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
             if device is not None and device.type == "cuda":
                 compute_devices.append(ComputeDevice.CUDA)
                 managed.append(
