@@ -504,12 +504,24 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.module, prefix, recurse)
+        gen = self._named_parameters(self.module, prefix, recurse)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     def bare_named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.module, prefix, recurse, False)
+        gen = self._named_parameters(self.module, prefix, recurse, False)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
@@ -538,7 +550,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from self._named_buffers(self.module, prefix, recurse)
+        gen = self._named_buffers(self.module, prefix, recurse)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
