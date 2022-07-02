@@ -25,7 +25,6 @@ from torchrec.modules.embedding_configs import (
     EmbeddingTableConfig,
     PoolingType,
 )
-from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor  # noqa[F401]
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -300,6 +299,25 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 storage_map[compute_device_type].value: tensor.element_size()
                 * tensor.nelement()
             }
+
+
+class BaseGroupedFeatureProcessor(nn.Module):
+    """
+    Abstract base class for grouped feature processor
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> KeyedJaggedTensor:
+        pass
+
+    def sparse_grad_parameter_names(
+        self, destination: Optional[List[str]] = None, prefix: str = ""
+    ) -> List[str]:
+        destination = [] if destination is None else destination
+        return destination
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):

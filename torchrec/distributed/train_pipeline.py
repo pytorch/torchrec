@@ -24,9 +24,9 @@ from typing import (
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
-from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
+from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
