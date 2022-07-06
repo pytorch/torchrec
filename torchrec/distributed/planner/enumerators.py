@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -28,6 +29,9 @@ from torchrec.distributed.planner.types import (
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
+
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EmbeddingEnumerator(Enumerator):
@@ -151,6 +155,11 @@ class EmbeddingEnumerator(Enumerator):
                                 dependency=dependency,
                             )
                         )
+                if not sharding_options:
+                    raise RuntimeError(
+                        "No available sharding type and compute kernel combination "
+                        f"after applying user provided constraints for {name}"
+                    )
 
         for estimator in self._estimators:
             estimator.estimate(sharding_options, sharder_map)
@@ -168,7 +177,7 @@ class EmbeddingEnumerator(Enumerator):
         sharding_types = list(set(constrained_sharding_types) & set(sharding_types))
 
         if not sharding_types:
-            raise RuntimeError(
+            logger.warn(
                 f"No available sharding types after applying user provided constraints for {name}"
             )
         return sharding_types
@@ -198,7 +207,7 @@ class EmbeddingEnumerator(Enumerator):
                 filtered_compute_kernels.remove(EmbeddingComputeKernel.DENSE.value)
 
         if not filtered_compute_kernels:
-            raise RuntimeError(
+            logger.warn(
                 f"No available compute kernels after applying user provided constraints for {name}"
             )
         return filtered_compute_kernels
