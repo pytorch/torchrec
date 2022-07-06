@@ -22,10 +22,7 @@ from torchrec.distributed.quantized_comms.reduce_scatter_codec import (
     QuantizationReduceScatterCodec,
 )
 
-from torchrec.distributed.quantized_comms.types import (
-    QuantizationCodec,
-    QuantizedCommsConfig,
-)
+from torchrec.distributed.quantized_comms.types import QCommsConfig, QuantizationCodec
 from torchrec.distributed.types import Awaitable, NoWait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -662,7 +659,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -681,17 +678,15 @@ class PooledEmbeddingsAllToAll(nn.Module):
             torch.tensor(cumsum_dim_sum_per_rank, device=device, dtype=torch.int),
         )
 
-        self._quantized_comms_config: Optional[
-            QuantizedCommsConfig
-        ] = quantized_comms_config
+        self._qcomms_config: Optional[QCommsConfig] = qcomms_config
 
         self._quantization_codec: Optional[QuantizationCodec] = None
-        if self._quantized_comms_config is not None:
+        if self._qcomms_config is not None:
             self._quantization_codec = QuantizationAll2AllCodec(
-                fwd_comm_precision=self._quantized_comms_config.forward_precision,
-                bwd_comm_precision=self._quantized_comms_config.backward_precision,
-                loss_scale=self._quantized_comms_config.loss_scale,
-                measure_quant_error=self._quantized_comms_config.measure_quant_error,
+                fwd_comm_precision=self._qcomms_config.forward_precision,
+                bwd_comm_precision=self._qcomms_config.backward_precision,
+                loss_scale=self._qcomms_config.loss_scale,
+                measure_quant_error=self._qcomms_config.measure_quant_error,
             )
 
     def forward(
@@ -823,18 +818,18 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     def __init__(
         self,
         pg: dist.ProcessGroup,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
-        self._quantized_comms_config = quantized_comms_config
+        self._qcomms_config = qcomms_config
         self._quantization_codec: Optional[QuantizationCodec] = None
-        if self._quantized_comms_config is not None:
+        if self._qcomms_config is not None:
             self._quantization_codec = QuantizationReduceScatterCodec(
-                fwd_comm_precision=self._quantized_comms_config.forward_precision,
-                bwd_comm_precision=self._quantized_comms_config.backward_precision,
-                loss_scale=self._quantized_comms_config.loss_scale,
-                measure_quant_error=self._quantized_comms_config.measure_quant_error,
+                fwd_comm_precision=self._qcomms_config.forward_precision,
+                bwd_comm_precision=self._qcomms_config.backward_precision,
+                loss_scale=self._qcomms_config.loss_scale,
+                measure_quant_error=self._qcomms_config.measure_quant_error,
             )
 
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
@@ -942,7 +937,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -965,12 +960,12 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         )
 
         self._quantization_codec: Optional[QuantizationCodec] = None
-        if quantized_comms_config is not None:
+        if qcomms_config is not None:
             self._quantization_codec = QuantizationAll2AllCodec(
-                fwd_comm_precision=quantized_comms_config.forward_precision,
-                bwd_comm_precision=quantized_comms_config.backward_precision,
-                loss_scale=quantized_comms_config.loss_scale,
-                measure_quant_error=quantized_comms_config.measure_quant_error,
+                fwd_comm_precision=qcomms_config.forward_precision,
+                bwd_comm_precision=qcomms_config.backward_precision,
+                loss_scale=qcomms_config.loss_scale,
+                measure_quant_error=qcomms_config.measure_quant_error,
             )
 
     def forward(

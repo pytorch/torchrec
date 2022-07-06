@@ -15,7 +15,7 @@ from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
-from torchrec.distributed.quantized_comms.types import CommType, QuantizedCommsConfig
+from torchrec.distributed.quantized_comms.types import CommType, QCommsConfig
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
 from torchrec.distributed.test_utils.test_sharding import sharding_single_rank_test
@@ -47,10 +47,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.FP16
                 ),
             ]
@@ -61,18 +61,18 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 )
             ],
             backend="nccl",
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
         )
 
     @unittest.skipIf(
@@ -121,10 +121,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        quantized_comms_config=st.sampled_from(
+        qcomms_config=st.sampled_from(
             [
                 None,
-                QuantizedCommsConfig(
+                QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.FP16
                 ),
             ]
@@ -135,18 +135,18 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
         kernel_type: str,
-        quantized_comms_config: Optional[QuantizedCommsConfig],
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
-                    quantized_comms_config=quantized_comms_config,
+                    qcomms_config=qcomms_config,
                 )
             ],
             backend="nccl",
-            using_quantized_comms=quantized_comms_config is not None,
+            using_quantized_comms=qcomms_config is not None,
         )
 
     @unittest.skipIf(

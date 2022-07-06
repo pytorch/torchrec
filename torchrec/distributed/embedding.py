@@ -39,10 +39,10 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     CwSequenceEmbeddingSharding,
 )
-from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
 from torchrec.distributed.sharding.dp_sequence_sharding import (
     DpSequenceEmbeddingSharding,
 )
@@ -90,15 +90,15 @@ def create_embedding_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
-    quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwSequenceEmbeddingSharding(
-            sharding_infos, env, device, quantized_comms_config=quantized_comms_config
+            sharding_infos, env, device, qcomms_config=qcomms_config
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
         return RwSequenceEmbeddingSharding(
-            sharding_infos, env, device, quantized_comms_config=quantized_comms_config
+            sharding_infos, env, device, qcomms_config=qcomms_config
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpSequenceEmbeddingSharding(sharding_infos, env, device)
@@ -262,7 +262,7 @@ class ShardedEmbeddingCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
-        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
@@ -276,7 +276,7 @@ class ShardedEmbeddingCollection(
                 embedding_confings,
                 env,
                 device,
-                quantized_comms_config=quantized_comms_config,
+                qcomms_config=qcomms_config,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
@@ -629,7 +629,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
             env,
             self.fused_params,
             device,
-            quantized_comms_config=self._quantized_comms_config,
+            qcomms_config=self._qcomms_config,
         )
 
     def shardable_parameters(
