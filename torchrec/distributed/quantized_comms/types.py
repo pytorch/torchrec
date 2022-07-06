@@ -6,9 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from abc import ABC, abstractproperty
+
+from dataclasses import dataclass
 from enum import Enum, unique
 
-from typing import Tuple, Type
+from typing import Optional, Tuple, Type
 
 import torch
 
@@ -43,3 +45,21 @@ class QuantizationCodec(ABC):
     @abstractproperty
     def decoder(self) -> Type[torch.autograd.Function]:
         ...
+
+
+@dataclass
+class QuantizedCommsConfig:
+    """
+    Quantization configs for the AllToAll and ReduceScatter communication modules used in sharding.
+    """
+
+    # Quantization of comm modules in the forward pass
+    forward_precision: CommType
+    # Quantization of comm modules in the backward pass
+    backward_precision: CommType
+    # Before encoding multiply the comm'd tensor by loss_scale. After decoding, divide the comm'd tensor by loss_scale.
+    # We do not recommend setting this value - is experimental, and we don't have good setting guidelines.
+    loss_scale: Optional[float] = None
+    # Print loss value between the quantized tensor and original tensor. Enabling this will significantly impact throughput.
+    # Typically used for debugging.
+    measure_quant_error: bool = False
