@@ -237,11 +237,6 @@ M = TypeVar("M", bound=nn.Module)
 
 
 class BaseEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
-
-        self._fused_params = fused_params
-
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
             ShardingType.DATA_PARALLEL.value,
@@ -273,10 +268,6 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         return ret
-
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return self._fused_params
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
@@ -321,10 +312,6 @@ class BaseGroupedFeatureProcessor(nn.Module):
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
-        self._fused_params = fused_params
-
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
             ShardingType.TABLE_WISE.value,
@@ -344,10 +331,6 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
                 EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
             ]
         return ret
-
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return self._fused_params
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str

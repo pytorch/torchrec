@@ -231,7 +231,7 @@ def main(argv: List[str]):
     sharders = cast(
         List[ModuleSharder[nn.Module]],
         [
-            EmbeddingBagCollectionSharder(fused_params=fused_params),
+            EmbeddingBagCollectionSharder(),
         ],
     )
 
@@ -256,6 +256,7 @@ def main(argv: List[str]):
             ),
         ).collective_plan(train_model, sharders, pg),
         sharders=sharders,
+        fused_params=fused_params,
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(

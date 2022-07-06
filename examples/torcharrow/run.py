@@ -89,8 +89,9 @@ def main(
         module=model,
         device=device,
         sharders=[
-            EmbeddingBagCollectionSharder(fused_params=fused_params),
+            EmbeddingBagCollectionSharder(),
         ],
+        fused_params=fused_params,
     )
 
     optimizer = KeyedOptimizerWrapper(

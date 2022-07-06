@@ -8,7 +8,7 @@
 import os
 import unittest
 from dataclasses import dataclass
-from typing import cast, Dict, List, Optional, Tuple
+from typing import Any, cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -64,10 +64,11 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
         module: EmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> TestShardedEmbeddingBagCollection:
         return TestShardedEmbeddingBagCollection(
-            module, params, env, self.fused_params, device
+            module, params, env, fused_params, device
         )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:

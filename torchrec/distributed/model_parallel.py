@@ -7,6 +7,7 @@
 
 import abc
 import copy
+import logging
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
@@ -192,6 +193,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self,
         module: nn.Module,
         env: Optional[ShardingEnv] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         plan: Optional[ShardingPlan] = None,
         sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
@@ -211,6 +213,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             assert pg is not None, "Process group is not initialized"
             env = ShardingEnv.from_process_group(pg)
         self._env: ShardingEnv = env
+
+        if fused_params is None:
+            logging.warning(
+                "fused_params is None, may use default optimizer for sharded embeddings"
+            )
+        self.fused_params = fused_params
 
         if device is None:
             device = torch.device("cpu")
@@ -355,6 +363,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 module,
                 sharded_params,
                 self._env,
+                self.fused_params,
                 self.device,
             )
             if path:

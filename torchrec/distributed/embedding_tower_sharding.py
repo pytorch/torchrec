@@ -161,6 +161,7 @@ class ShardedEmbeddingTower(
                 module.embedding,
                 table_name_to_parameter_sharding,
                 intra_env,
+                fused_params,
                 device,
             )
             # Hierarchical DDP
@@ -563,6 +564,7 @@ class ShardedEmbeddingTowerCollection(
                     tower.embedding,
                     table_name_to_parameter_sharding,
                     intra_env,
+                    fused_params,
                     device,
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
@@ -868,6 +870,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         module: EmbeddingTower,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingTower:
         kjt_features, wkjt_features = self.embedding_feature_names(module)
@@ -879,7 +882,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
             kjt_features=kjt_features,
             wkjt_features=wkjt_features,
             env=env,
-            fused_params=self.fused_params,
+            fused_params=fused_params,
             device=device,
         )
 
@@ -908,10 +911,10 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         embedding: nn.Module = module.embedding
         if isinstance(embedding, EmbeddingBagCollection):
             # pyre-ignore [7]
-            return EmbeddingBagCollectionSharder(self.fused_params)
+            return EmbeddingBagCollectionSharder()
         elif isinstance(embedding, EmbeddingCollection):
             # pyre-ignore [7]
-            return EmbeddingCollectionSharder(self.fused_params)
+            return EmbeddingCollectionSharder()
         else:
             raise RuntimeError(f"Unsupported embedding type: {type(module)}")
 
@@ -945,15 +948,16 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
 
 
 class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollection]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._tower_sharder = EmbeddingTowerSharder(self.fused_params)
+        self._tower_sharder = EmbeddingTowerSharder()
 
     def shard(
         self,
         module: EmbeddingTowerCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingTowerCollection:
 
@@ -962,7 +966,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
             table_name_to_parameter_sharding=params,
             tower_sharder=self._tower_sharder,
             env=env,
-            fused_params=self.fused_params,
+            fused_params=fused_params,
             device=device,
         )
 

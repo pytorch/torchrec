@@ -99,13 +99,14 @@ def train(
         "optimizer": OptimType.EXACT_ROWWISE_ADAGRAD,
     }
     sharders = [
-        EmbeddingBagCollectionSharder(fused_params=fused_params),
+        EmbeddingBagCollectionSharder(),
     ]
     # Distribute model across devices
     model = DistributedModelParallel(
         module=train_model,
         device=device,
         sharders=cast(List[ModuleSharder[nn.Module]], sharders),
+        fused_params=fused_params,
     )
 
     # Overlap comm/compute/device transfer during training through train_pipeline

@@ -145,7 +145,7 @@ def train(
     }
     sharders = cast(
         List[ModuleSharder[nn.Module]],
-        [EmbeddingBagCollectionSharder(fused_params=fused_params)],
+        [EmbeddingBagCollectionSharder()],
     )
 
     # TODO: move pg to the EmbeddingShardingPlanner (out of collective_plan) and make optional
@@ -164,6 +164,7 @@ def train(
         module=two_tower_train_task,
         device=device,
         plan=plan,
+        fused_params=fused_params,
     )
 
     optimizer = KeyedOptimizerWrapper(

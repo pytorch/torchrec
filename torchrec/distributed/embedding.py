@@ -610,11 +610,10 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
         module: EmbeddingCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingCollection:
-        return ShardedEmbeddingCollection(
-            module, params, env, self.fused_params, device
-        )
+        return ShardedEmbeddingCollection(module, params, env, fused_params, device)
 
     def shardable_parameters(
         self, module: EmbeddingCollection

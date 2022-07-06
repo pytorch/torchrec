@@ -266,9 +266,10 @@ class QuantEmbeddingBagCollectionSharder(
         module: QuantEmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
-        fused_params = self.fused_params if self.fused_params else {}
+        fused_params = fused_params if fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
         )

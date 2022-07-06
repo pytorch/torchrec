@@ -461,6 +461,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         module: M,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedModule[Any, Any, Any]:
         """

@@ -479,11 +479,10 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
         module: EmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
-        return ShardedEmbeddingBagCollection(
-            module, params, env, self.fused_params, device
-        )
+        return ShardedEmbeddingBagCollection(module, params, env, fused_params, device)
 
     def shardable_parameters(
         self, module: EmbeddingBagCollection
@@ -733,9 +732,10 @@ class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
         module: nn.EmbeddingBag,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBag:
-        return ShardedEmbeddingBag(module, params, env, self.fused_params, device)
+        return ShardedEmbeddingBag(module, params, env, fused_params, device)
 
     def shardable_parameters(self, module: nn.EmbeddingBag) -> Dict[str, nn.Parameter]:
         return {name: param for name, param in module.named_parameters()}

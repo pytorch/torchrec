@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, Iterator, List, Optional, Type
+from typing import Any, Dict, Iterator, List, Optional, Type
 
 import torch
 from torch import nn
@@ -95,10 +95,13 @@ class FusedEmbeddingBagCollectionSharder(
         module: FusedEmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
 
-        return ShardedFusedEmbeddingBagCollection(module, params, env, device)
+        return ShardedFusedEmbeddingBagCollection(
+            module, params, env, fused_params, device
+        )
 
     def shardable_parameters(
         self, module: FusedEmbeddingBagCollection

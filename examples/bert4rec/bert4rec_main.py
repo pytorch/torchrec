@@ -494,9 +494,8 @@ def main(argv: List[str]) -> None:
         model = DMP(
             module=model_bert4rec,
             device=device,
-            sharders=[
-                cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder(fused_params))
-            ],
+            sharders=[cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder())],
+            fused_params=fused_params,
         )
         dense_optimizer = KeyedOptimizerWrapper(
             dict(model.named_parameters()),
@@ -518,7 +517,7 @@ def main(argv: List[str]) -> None:
                 "item_embedding"
             ] = torchrec.distributed.planner.ParameterConstraints(sharding_types=sharding_types)
             sharders = [
-                cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder(fused_params))
+                cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder())
             ]
             pg = dist.GroupMember.WORLD
             model = DMP(
@@ -529,7 +528,8 @@ def main(argv: List[str]) -> None:
                     world_size=world_size,
                     compute_device=device.type,
                 ),
-                constraints=constraints
+                constraints=constraints,
+                fused_params=fused_params,
             ).collective_plan(model_bert4rec, sharders, pg),
                 sharders=sharders,
             )
