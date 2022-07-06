@@ -1,5 +1,6 @@
 # Examples
 
+Note - please use torchrec_nightly >= 2022.6.30 for quant embedding_bag_collection optimizations
 
 ## Package DLRM Model for inference
 
