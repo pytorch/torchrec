@@ -13,6 +13,7 @@ from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torch import nn
+from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
@@ -237,10 +238,15 @@ M = TypeVar("M", bound=nn.Module)
 
 
 class BaseEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
+    ) -> None:
         super().__init__()
 
         self._fused_params = fused_params
+        self._quantized_comms_config = quantized_comms_config
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
@@ -277,6 +283,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
+
+    @property
+    def quantized_comms_config(self) -> Optional[QuantizedCommsConfig]:
+        return self._quantized_comms_config
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str

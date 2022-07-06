@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     SparseFeatures,
 )
+from torchrec.distributed.quantized_comms.types import QuantizedCommsConfig
 from torchrec.distributed.types import (
     Awaitable,
     ShardedTensorMetadata,
@@ -52,6 +53,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         need_pos: bool = False,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._env = env
@@ -84,6 +86,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         for group_config in self._grouped_embedding_configs:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
+
+        self._quantized_comms_config = quantized_comms_config
 
     def _shard(
         self,
@@ -328,9 +332,14 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        quantized_comms_config: Optional[QuantizedCommsConfig] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsReduceScatter(pg)
+
+        self._dist = PooledEmbeddingsReduceScatter(
+            pg,
+            quantized_comms_config=quantized_comms_config,
+        )
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
         """
@@ -393,6 +402,9 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         self,
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[torch.Tensor]:
-        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-        #  `Optional[ProcessGroup]`.
-        return RwPooledEmbeddingDist(self._pg)
+        return RwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._pg,
+            self._quantized_comms_config,
+        )

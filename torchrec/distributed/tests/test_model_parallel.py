@@ -35,6 +35,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
+from torchrec.distributed.quantized_comms.types import CommType, QuantizedCommsConfig
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
 from torchrec.distributed.test_utils.test_sharding import (
@@ -78,6 +79,14 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        quantized_comms_config=st.sampled_from(
+            [
+                None,
+                QuantizedCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -85,14 +94,21 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        quantized_comms_config: Optional[QuantizedCommsConfig],
     ) -> None:
         self._test_sharding(
             sharders=[
                 cast(
                     ModuleSharder[nn.Module],
-                    create_test_sharder(sharder_type, sharding_type, kernel_type),
+                    create_test_sharder(
+                        sharder_type,
+                        sharding_type,
+                        kernel_type,
+                        quantized_comms_config=quantized_comms_config,
+                    ),
                 ),
             ],
+            using_quantized_comms=quantized_comms_config is not None,
             backend="nccl",
         )
 
@@ -154,10 +170,22 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        quantized_comms_config=st.sampled_from(
+            [
+                None,
+                QuantizedCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        quantized_comms_config: Optional[QuantizedCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -166,9 +194,11 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
+                    quantized_comms_config=quantized_comms_config,
                 ),
             ],
             backend="nccl",
+            using_quantized_comms=quantized_comms_config is not None,
             constraints={
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
@@ -198,17 +228,35 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        quantized_comms_config=st.sampled_from(
+            [
+                None,
+                QuantizedCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        quantized_comms_config: Optional[QuantizedCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    quantized_comms_config=quantized_comms_config,
+                ),
             ],
             backend="nccl",
+            using_quantized_comms=quantized_comms_config is not None,
         )
 
     # pyre-fixme[56]
@@ -231,6 +279,14 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        quantized_comms_config=st.sampled_from(
+            [
+                None,
+                QuantizedCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_tw(
@@ -238,12 +294,19 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        quantized_comms_config: Optional[QuantizedCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    quantized_comms_config=quantized_comms_config,
+                ),
             ],
+            using_quantized_comms=quantized_comms_config is not None,
             backend="gloo",
         )
 
@@ -267,6 +330,14 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        quantized_comms_config=st.sampled_from(
+            [
+                None,
+                QuantizedCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_cw(
@@ -274,6 +345,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        quantized_comms_config: Optional[QuantizedCommsConfig],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -283,8 +355,10 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
+                    quantized_comms_config=quantized_comms_config,
                 ),
             ],
+            using_quantized_comms=quantized_comms_config is not None,
             backend="gloo",
             world_size=world_size,
             constraints={

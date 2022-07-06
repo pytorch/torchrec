@@ -58,6 +58,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         local_size: Optional[int] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSparseNN,
+        using_quantized_comms: bool = False,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -71,4 +72,5 @@ class ModelParallelTestShared(MultiProcessTestBase):
             backend=backend,
             optim=EmbOptimType.EXACT_SGD,
             constraints=constraints,
+            using_quantized_comms=using_quantized_comms,
         )
