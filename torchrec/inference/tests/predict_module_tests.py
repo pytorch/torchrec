@@ -10,7 +10,7 @@ from typing import Dict
 
 import torch
 import torch.nn as nn
-from torchrec.inference.modules import PredictModule
+from torchrec.inference.modules import PredictModule, quantize_dense
 
 
 class TestModule(nn.Module):
@@ -41,3 +41,10 @@ class PredictModulesTest(unittest.TestCase):
             module_state_dict.values(), predict_module_state_dict.values()
         ):
             self.assertTrue(torch.equal(tensor0, tensor1))
+
+    def test_dense_lowering(self) -> None:
+        module = TestModule()
+        predict_module = TestPredictModule(module)
+        predict_module = quantize_dense(predict_module, torch.half)
+        for param in predict_module.parameters():
+            self.assertEqual(param.dtype, torch.half)

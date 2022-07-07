@@ -8,13 +8,31 @@
 import abc
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollectionInterface,
+    EmbeddingCollectionInterface,
+)
+
+
+def quantize_feature(
+    module: torch.nn.Module, inputs: Tuple[torch.Tensor, ...]
+) -> Tuple[torch.Tensor, ...]:
+    return tuple(
+        [
+            input.half()
+            if isinstance(input, torch.Tensor)
+            and input.dtype in [torch.float32, torch.float64]
+            else input
+            for input in inputs
+        ]
+    )
 
 
 def quantize_embeddings(
@@ -153,3 +171,33 @@ class PredictModule(nn.Module):
     ) -> Dict[str, Any]:
         # pyre-fixme[19]: Expected 0 positional arguments.
         return self._module.state_dict(destination, prefix, keep_vars)
+
+
+def quantize_dense(
+    predict_module: PredictModule,
+    dtype: torch.dtype,
+    additional_embedding_module_type: List[Type[nn.Module]] = [],
+) -> nn.Module:
+    module = predict_module.predict_module
+    reassign = {}
+
+    for name, mod in module.named_children():
+        # both fused modules and observed custom modules are
+        # swapped as one unit
+        if not (
+            isinstance(mod, EmbeddingBagCollectionInterface)
+            or isinstance(mod, EmbeddingCollectionInterface)
+            or any([type(mod) is clazz for clazz in additional_embedding_module_type])
+        ):
+            if dtype == torch.half:
+                new_mod = mod.half()
+                # pyre-ignore [6]
+                new_mod.register_forward_pre_hook(quantize_feature)
+                reassign[name] = new_mod
+            else:
+                raise NotImplementedError(
+                    "only fp16 is supported for non-embedding module lowering"
+                )
+    for key, value in reassign.items():
+        module._modules[key] = value
+    return predict_module
