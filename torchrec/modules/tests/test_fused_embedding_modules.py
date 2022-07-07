@@ -31,6 +31,24 @@ if torch.cuda.device_count() > 1:
     devices.append(torch.device("cuda"))
 
 
+class TestModel(torch.nn.Module):
+    def __init__(self, ebc: EmbeddingBagCollection) -> None:
+        super().__init__()
+        self.ebc = ebc
+        self.over_arch = torch.nn.Linear(
+            4,
+            1,
+        )
+
+    def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
+        ebc_output = self.ebc.forward(kjt).to_dict()
+        sparse_features = []
+        for key in kjt.keys():
+            sparse_features.append(ebc_output[key])
+        sparse_features = torch.cat(sparse_features, dim=0)
+        return self.over_arch(sparse_features)
+
+
 class FusedEmbeddingBagCollectionTest(unittest.TestCase):
     @settings(deadline=None)
     # pyre-ignore
@@ -221,7 +239,6 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             device=device,
         )
 
-        # pyre-ignore
         ebc.load_state_dict(ebc.state_dict())
 
     @settings(deadline=None)
@@ -644,23 +661,6 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
     # pyre-ignore
     @given(device=st.sampled_from(devices))
     def test_ebc_model_replacement(self, device: torch.device) -> None:
-        class TestModel(torch.nn.Module):
-            def __init__(self, ebc: EmbeddingBagCollection):
-                super().__init__()
-                self.ebc = ebc
-                self.over_arch = torch.nn.Linear(
-                    4,
-                    1,
-                )
-
-            def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
-                ebc_output = self.ebc.forward(kjt).to_dict()
-                sparse_features = []
-                for key in kjt.keys():
-                    sparse_features.append(ebc_output[key])
-                sparse_features = torch.cat(sparse_features, dim=0)
-                return self.over_arch(sparse_features)
-
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
         )
@@ -726,3 +726,54 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.values().size(), (2, 10))
         self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
+
+    def test_composability(self) -> None:
+        device = torch.device("cpu")
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+        eb3_config = EmbeddingBagConfig(
+            name="t3", embedding_dim=4, num_embeddings=10, feature_names=["f3"]
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[eb1_config, eb2_config, eb3_config],
+        )
+        test_model = TestModel(ebc).to(device)
+        original_named_buffers = dict(test_model.named_buffers())
+        original_named_modules = dict(test_model.named_modules())
+        original_named_parameters = dict(test_model.named_parameters())
+
+        fuse_embedding_optimizer(
+            test_model,
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        fused_named_buffers = dict(test_model.named_buffers())
+        fused_named_modules = dict(test_model.named_modules())
+        fused_named_parameters = dict(test_model.named_parameters())
+
+        self.assertEqual(original_named_buffers.keys(), fused_named_buffers.keys())
+        for buffer_key in original_named_buffers.keys():
+            original_buffer, fused_buffer = (
+                original_named_buffers[buffer_key],
+                fused_named_buffers[buffer_key],
+            )
+            self.assertEqual(original_buffer.shape, fused_buffer.shape)
+
+        self.assertEqual(original_named_modules.keys(), fused_named_modules.keys())
+
+        self.assertEqual(
+            original_named_parameters.keys(), fused_named_parameters.keys()
+        )
+        for param_key in original_named_parameters.keys():
+            original_param, fused_param = (
+                original_named_parameters[param_key],
+                fused_named_parameters[param_key],
+            )
+            self.assertEqual(original_param.shape, fused_param.shape)

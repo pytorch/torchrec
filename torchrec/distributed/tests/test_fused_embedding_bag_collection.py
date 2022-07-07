@@ -76,8 +76,13 @@ def sharding_single_rank(
         # Load model state from the global model.
         copy_state_dict(sharded_model.state_dict(), unsharded_model.state_dict())
 
-        unsharded_model_pred = unsharded_model(kjt_input).values().detach().clone()
-        sharded_pred = sharded_model(kjt_input).values().detach().clone()
+        # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
+        # in normal author modelling code this won't be an issue because each rank would individually create
+        # their model. output from sharded_pred is correctly on the correct device.
+        unsharded_model_pred = (
+            unsharded_model(kjt_input).values().detach().clone().cpu()
+        )
+        sharded_pred = sharded_model(kjt_input).values().detach().clone().cpu()
 
         # Compare predictions of sharded vs unsharded models.
         torch.testing.assert_allclose(sharded_pred, unsharded_model_pred)
