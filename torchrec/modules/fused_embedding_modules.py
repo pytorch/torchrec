@@ -9,8 +9,8 @@
 
 import copy
 import itertools
-from collections import defaultdict, OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, Union
+from collections import defaultdict
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
@@ -21,7 +21,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     SplitTableBatchedEmbeddingBagsCodegen,
 )
-from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -379,7 +378,10 @@ class FusedEmbeddingBagCollection(
 
         self._is_weighted = is_weighted
         self._embedding_bag_configs = tables
-        self._emb_modules: nn.ModuleList = nn.ModuleList()
+
+        # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
+        # Their states will be modified via self.embedding_bags
+        self._emb_modules: List[nn.Module] = []
 
         self._key_to_tables: Dict[
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
@@ -421,6 +423,21 @@ class FusedEmbeddingBagCollection(
         self._embedding_names = list(
             itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
         )
+
+        # We map over the parameters from FBGEMM backed kernels to the canonical nn.EmbeddingBag
+        # representation. This provides consistency between this class and the EmbeddingBagCollection's
+        # nn.Module API calls (state_dict, named_modules, etc)
+        self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
+        for (_key, tables), emb_module in zip(
+            self._key_to_tables.items(), self._emb_modules
+        ):
+            for embedding_config, weight in zip(
+                tables, emb_module.split_embedding_weights()
+            ):
+                self.embedding_bags[embedding_config.name] = torch.nn.Module()
+                self.embedding_bags[embedding_config.name].register_parameter(
+                    "weight", torch.nn.Parameter(weight)
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
@@ -473,57 +490,6 @@ class FusedEmbeddingBagCollection(
             length_per_key=self._length_per_key,
         )
 
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-        for emb_op, (_key, tables) in zip(
-            self._emb_modules, self._key_to_tables.items()
-        ):
-            for table, weight in zip(tables, emb_op.split_embedding_weights()):
-                destination[prefix + f"embedding_bags.{table.name}.weight"] = weight
-        return destination
-
-    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module` inconsistently.
-    def load_state_dict(
-        self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
-        strict: bool = True,
-    ) -> _IncompatibleKeys:
-
-        missing_keys = []
-        unexpected_keys = []
-
-        current_state_dict = self.state_dict()
-        for key in current_state_dict.keys():
-            if key not in state_dict:
-                missing_keys.append(key)
-        for key in state_dict.keys():
-            if key not in current_state_dict.keys():
-                unexpected_keys.append(key)
-
-        if missing_keys or unexpected_keys:
-            return _IncompatibleKeys(
-                missing_keys=missing_keys, unexpected_keys=unexpected_keys
-            )
-
-        for (_key, tables) in self._key_to_tables.items():
-            for table in tables:
-                current_state_dict[
-                    f"embedding_bags.{table.name}.weight"
-                ].detach().copy_(state_dict[f"embedding_bags.{table.name}.weight"])
-
-        return _IncompatibleKeys(
-            missing_keys=missing_keys, unexpected_keys=unexpected_keys
-        )
-
     def _get_name(self) -> str:
         return "FusedEmeddingBagCollection"
 
@@ -538,18 +504,6 @@ class FusedEmbeddingBagCollection(
 
     def optimizer_kwargs(self) -> Dict[str, Any]:
         return self._optimizer_kwargs
-
-    def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
-        for emb_module in self._emb_modules:
-            yield from emb_module.named_parameters(prefix, recurse)
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for emb_module in self._emb_modules:
-            yield from emb_module.named_buffers(prefix, recurse)
 
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
