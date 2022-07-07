@@ -10,7 +10,7 @@
 import multiprocessing
 import os
 import unittest
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
@@ -120,6 +120,34 @@ class MultiProcessTestBase(unittest.TestCase):
         for rank in range(world_size):
             kwargs["rank"] = rank
             kwargs["world_size"] = world_size
+            p = ctx.Process(
+                target=callable,
+                kwargs=kwargs,
+            )
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+            self.assertEqual(0, p.exitcode)
+
+    def _run_multi_process_test_per_rank(
+        self,
+        *,
+        callable: Callable[
+            ...,
+            None,
+        ],
+        world_size: int,
+        kwargs_per_rank: List[Dict[str, Any]],
+    ) -> None:
+        ctx = multiprocessing.get_context("forkserver")
+        processes = []
+        for rank in range(world_size):
+            kwargs = {}
+            kwargs["rank"] = rank
+            kwargs["world_size"] = world_size
+            kwargs.update(kwargs_per_rank[rank])
             p = ctx.Process(
                 target=callable,
                 kwargs=kwargs,

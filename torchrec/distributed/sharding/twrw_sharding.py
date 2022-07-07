@@ -34,6 +34,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
     SparseFeatures,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.types import (
     Awaitable,
     ShardedTensorMetadata,
@@ -57,6 +58,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         need_pos: bool = False,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         self._env = env
@@ -105,6 +107,8 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         ]:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
+
+        self._qcomms_config = qcomms_config
 
     def _shard(
         self,
@@ -463,13 +467,17 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         intra_pg: dist.ProcessGroup,
         dim_sum_per_node: List[int],
         device: Optional[torch.device] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
-        self._intra_dist = PooledEmbeddingsReduceScatter(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatter(
+            intra_pg, qcomms_config=qcomms_config
+        )
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,
             device,
+            qcomms_config=qcomms_config,
         )
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
@@ -545,4 +553,5 @@ class TwRwPooledEmbeddingSharding(
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
             device=device if device is not None else self._device,
+            qcomms_config=self._qcomms_config,
         )

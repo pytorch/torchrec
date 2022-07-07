@@ -39,6 +39,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     CwSequenceEmbeddingSharding,
 )
@@ -89,11 +90,16 @@ def create_embedding_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwSequenceEmbeddingSharding(sharding_infos, env, device)
+        return TwSequenceEmbeddingSharding(
+            sharding_infos, env, device, qcomms_config=qcomms_config
+        )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwSequenceEmbeddingSharding(sharding_infos, env, device)
+        return RwSequenceEmbeddingSharding(
+            sharding_infos, env, device, qcomms_config=qcomms_config
+        )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
@@ -256,6 +262,7 @@ class ShardedEmbeddingCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
@@ -265,7 +272,11 @@ class ShardedEmbeddingCollection(
             str, EmbeddingSharding[SparseFeatures, torch.Tensor]
         ] = {
             sharding_type: create_embedding_sharding(
-                sharding_type, embedding_confings, env, device
+                sharding_type,
+                embedding_confings,
+                env,
+                device,
+                qcomms_config=qcomms_config,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
@@ -613,7 +624,12 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingCollection:
         return ShardedEmbeddingCollection(
-            module, params, env, self.fused_params, device
+            module,
+            params,
+            env,
+            self.fused_params,
+            device,
+            qcomms_config=self._qcomms_config,
         )
 
     def shardable_parameters(

@@ -27,6 +27,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
+from torchrec.distributed.quantized_comms.types import QCommsConfig
 from torchrec.distributed.sharding.sequence_sharding import (
     BaseSequenceEmbeddingDist,
     SequenceShardingContext,
@@ -92,9 +93,12 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingsAllToAll(pg, features_per_rank, device)
+        self._dist = SequenceEmbeddingsAllToAll(
+            pg, features_per_rank, device, qcomms_config=qcomms_config
+        )
 
     def forward(
         self,
@@ -167,6 +171,7 @@ class TwSequenceEmbeddingSharding(
             self._pg,
             self._id_list_features_per_rank(),
             device if device is not None else self._device,
+            qcomms_config=self._qcomms_config,
         )
 
 
