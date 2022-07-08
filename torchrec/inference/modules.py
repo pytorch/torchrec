@@ -74,6 +74,9 @@ class BatchingMetadata:
     type: str
     # cpu or cuda
     device: str
+    # list of tensor suffixes to deserialize to pinned memory (e.g. "lengths")
+    # use "" (empty string) to pin without suffix
+    pinned: List[str]
 
 
 class PredictFactory(abc.ABC):

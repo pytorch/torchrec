@@ -18,6 +18,7 @@
 #include <ATen/core/ivalue.h>
 #include <ATen/cuda/CUDAEvent.h>
 #include <folly/ExceptionWrapper.h>
+#include <folly/container/F14Set.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
 
@@ -68,6 +69,7 @@ using Event = std::
 struct BatchingMetadata {
   std::string type;
   std::string device;
+  folly::F14FastSet<std::string> pinned;
 };
 
 } // namespace torchrec
