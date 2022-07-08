@@ -322,6 +322,7 @@ class EmbeddingStats(Stats):
         input_data_type_size = BIGINT_DTYPE
         pooling_factor = float(sum(sharding_option.input_lengths))
         output_data_type_size = sharding_option.tensor.element_size()
+        # TODO update to support variable batch size and num poolings
         num_outputs = float(
             len(sharding_option.input_lengths)
             if sharding_option.is_pooled
