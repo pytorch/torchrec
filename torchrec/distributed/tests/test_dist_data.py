@@ -5,13 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import abc
 import itertools
-import multiprocessing
-import os
 import random
 import unittest
-from typing import Any, Generator, List, Tuple, TypeVar, Union
+from typing import Generator, List, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
 import torch
@@ -26,8 +23,9 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
 )
+
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import get_free_port, seed_and_log
 
 
 T = TypeVar("T", int, float)
@@ -168,55 +166,7 @@ def _generate_pooled_embedding_batch(
     return in_tensor, out_tensor
 
 
-class DistDataTestCase(abc.ABC, unittest.TestCase):
-    @seed_and_log
-    def setUp(self) -> None:
-        torch.use_deterministic_algorithms(True)
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
-        self.WORLD_SIZE = 2
-
-    def tearDown(self) -> None:
-        del os.environ["GLOO_DEVICE_TRANSPORT"]
-        del os.environ["NCCL_SOCKET_IFNAME"]
-        # pyre-fixme[16]
-        super().tearDown()
-
-    def _run_multi_process_test(
-        self,
-        _input: Union[List[KeyedJaggedTensor], List[torch.Tensor]],
-        output: Union[List[KeyedJaggedTensor], List[torch.Tensor]],
-        **kwargs: Any,
-    ) -> None:
-        processes = []
-        ctx = multiprocessing.get_context("spawn")
-        for rank in range(self.WORLD_SIZE):
-            p = ctx.Process(
-                target=self._run_test_dist,
-                args=(
-                    rank,
-                    self.WORLD_SIZE,
-                    _input[rank],
-                    output[rank],
-                ),
-                kwargs=kwargs,
-            )
-            p.start()
-            processes.append(p)
-
-        for p in processes:
-            p.join()
-            self.assertEqual(0, p.exitcode)
-
-    @classmethod
-    @abc.abstractmethod
-    def _run_test_dist(cls) -> None:
-        pass
-
-
-class KJTAllToAllTest(DistDataTestCase):
+class KJTAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
@@ -309,6 +259,7 @@ class KJTAllToAllTest(DistDataTestCase):
         keys = [f"F{feature}" for feature in range(features)]
         rank0_split = random.randint(0, features)
         splits = [rank0_split, features - rank0_split]
+        world_size = 2
 
         if variable_batch_size:
             batch_size_per_rank = [random.randint(B, B + 4), random.randint(B, B + 4)]
@@ -321,16 +272,27 @@ class KJTAllToAllTest(DistDataTestCase):
             batch_size_per_rank=batch_size_per_rank,
             is_weighted=is_weighted,
         )
-        self._run_multi_process_test(
-            _input=_input,
-            output=output,
-            backend=backend,
-            splits=splits,
-            batch_size_per_rank=batch_size_per_rank,
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "backend": backend,
+                    "splits": splits,
+                    "batch_size_per_rank": batch_size_per_rank,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
 
 
-class PooledEmbeddingsAllToAllTest(DistDataTestCase):
+class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _run_test_dist(
         cls,
@@ -395,6 +357,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         is_reversed: bool,
         variable_batch_size: bool,
     ) -> None:
+        world_size = 2
         keys = [f"F{feature}" for feature in range(features)]
         dims = random.sample([8, 16, 32] * features, features)
         rank0_split = random.randint(1, features - 1)
@@ -414,16 +377,26 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             splits=splits,
             batch_size_per_rank=batch_size_per_rank,
         )
-        self._run_multi_process_test(
-            _input=_input,
-            output=output,
-            backend=backend,
-            dim_sum_per_rank=dim_sum_per_rank,
-            batch_size_per_rank=batch_size_per_rank,
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "backend": backend,
+                    "dim_sum_per_rank": dim_sum_per_rank,
+                    "batch_size_per_rank": batch_size_per_rank,
+                }
+            )
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
 
 
-class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
+class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
@@ -465,16 +438,27 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_pooled_embedding_reduce_scatter(self) -> None:
+        world_size = 2
         embeddding_dim = 10
         batch_size = 2
-        embeddings = torch.rand((batch_size * 2, embeddding_dim))
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
         embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
         expect_results = torch.chunk(
             torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
             2,
             dim=0,
         )
-        self._run_multi_process_test(
-            embeddings_by_rank,
-            expect_results,
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "expected_output": expect_results[rank],
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
