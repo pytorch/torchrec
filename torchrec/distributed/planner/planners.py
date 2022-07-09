@@ -150,6 +150,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
+        self._best_plan: Optional[List[ShardingOption]] = None
 
     def collective_plan(
         self,
@@ -254,6 +255,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 proposal = proposer.propose()
 
         if best_plan:
+            self._best_plan = best_plan
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
             end_time = perf_counter()
