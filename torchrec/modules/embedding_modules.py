@@ -153,6 +153,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 device=device,
                 include_last_offset=True,
                 dtype=dtype,
+                sparse=embedding_config.sparse,
             )
             if not embedding_config.feature_names:
                 embedding_config.feature_names = [embedding_config.name]
