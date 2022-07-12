@@ -49,8 +49,8 @@ def _flatten(iterable: List[T]) -> Generator[T, None, None]:
                 iterator = new_iterator
 
 
-def _to_tensor(iterator: List[T], device_id: int, dtype: torch.dtype) -> torch.Tensor:
-    return torch.tensor(list(_flatten(iterator)), dtype=dtype).cuda(device_id)
+def _to_tensor(iterator: List[T], dtype: torch.dtype) -> torch.Tensor:
+    return torch.tensor(list(_flatten(iterator)), dtype=dtype)
 
 
 def _generate_sparse_features_batch(
@@ -87,9 +87,9 @@ def _generate_sparse_features_batch(
         in_jagged.append(
             KeyedJaggedTensor.from_lengths_sync(
                 keys=keys,
-                lengths=_to_tensor([lengths[key][i] for key in keys], i, torch.int),
-                values=_to_tensor([values[key][i] for key in keys], i, torch.int),
-                weights=_to_tensor([weights[key][i] for key in keys], i, torch.float)
+                lengths=_to_tensor([lengths[key][i] for key in keys], torch.int),
+                values=_to_tensor([values[key][i] for key in keys], torch.int),
+                weights=_to_tensor([weights[key][i] for key in keys], torch.float)
                 if weights
                 else None,
             )
@@ -104,17 +104,14 @@ def _generate_sparse_features_batch(
                 keys=out_keys,
                 lengths=_to_tensor(
                     [lengths[key][j] for key, j in key_index],
-                    i,
                     torch.int,
                 ),
                 values=_to_tensor(
                     [values[key][j] for key, j in key_index],
-                    i,
                     torch.int,
                 ),
                 weights=_to_tensor(
                     [weights[key][j] for key, j in key_index],
-                    i,
                     torch.float,
                 )
                 if weights
@@ -145,11 +142,10 @@ def _generate_pooled_embedding_batch(
         in_tensor.append(
             _to_tensor(
                 [local_emb[key][b] for b in range(B_global) for key in in_keys],
-                i,
                 torch.float,
             ).view(B_global, -1)
             if in_keys
-            else torch.empty(B_global, 0, dtype=torch.float).cuda(i)
+            else torch.empty(B_global, 0, dtype=torch.float)
         )
         out_tensor.append(
             _to_tensor(
@@ -158,7 +154,6 @@ def _generate_pooled_embedding_batch(
                     for b in range(B_offsets[i], B_offsets[i + 1])
                     for key in keys
                 ],
-                i,
                 torch.float,
             ).view(batch_size_per_rank[i], -1)
         )
