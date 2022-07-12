@@ -15,7 +15,7 @@ from torch.autograd.profiler import record_function
 from torchrec.distributed.comm_ops import (
     alltoall_pooled,
     alltoall_sequence,
-    reduce_scatter_pooled,
+    reduce_scatter_base_pooled,
 )
 from torchrec.distributed.types import Awaitable, NoWait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -806,9 +806,7 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
-        tensor_awaitable = reduce_scatter_pooled(
-            list(torch.chunk(local_embs, self._pg.size(), dim=0)), self._pg
-        )
+        tensor_awaitable = reduce_scatter_base_pooled(local_embs, self._pg)
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
 
