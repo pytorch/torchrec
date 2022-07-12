@@ -1036,8 +1036,120 @@ if they are intended to be used for in <code class="docutils literal notranslate
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBaseInfo">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">ReduceScatterBaseInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>The data class that collects the attributes when calling the <cite>reduce_scatter_base_pooled</cite>
+operation.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes">
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes" title="Permalink to this definition">¶</a></dt>
+<dd><p>the sizes of the input flatten tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id16">
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Size</span></em><a class="headerlink" href="#id16" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Req">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">ReduceScatterBase_Req</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Function</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Req.backward">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">backward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">unused</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.backward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines a formula for differentiating the operation with backward mode
+automatic differentiation (alias to the vjp function).</p>
+<p>This function is to be overridden by all subclasses.</p>
+<p>It must accept a context <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx</span></code> as the first argument, followed by
+as many outputs as the <a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> returned (None will be passed in
+for non tensor outputs of the forward function),
+and it should return as many tensors, as there were inputs to
+<a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a>. Each argument is the gradient w.r.t the given output,
+and each returned value should be the gradient w.r.t. the
+corresponding input. If an input is not a Tensor or is a Tensor not
+requiring grads, you can just pass None as a gradient for that input.</p>
+<p>The context can be used to retrieve tensors saved during the forward
+pass. It also has an attribute <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx.needs_input_grad</span></code> as a tuple
+of booleans representing whether each input needs gradient. E.g.,
+<a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.backward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Req.backward"><code class="xref py py-func docutils literal notranslate"><span class="pre">backward()</span></code></a> will have <code class="docutils literal notranslate"><span class="pre">ctx.needs_input_grad[0]</span> <span class="pre">=</span> <span class="pre">True</span></code> if the
+first input to <a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> needs gradient computated w.r.t. the
+output.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rsi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo" title="torchrec.distributed.comm_ops.ReduceScatterBaseInfo"><span class="pre">ReduceScatterBaseInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs the operation.</p>
+<p>This function is to be overridden by all subclasses.</p>
+<p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p>
+<p>The context can be used to store arbitrary data that can be then
+retrieved during the backward pass. Tensors should not be stored
+directly on <cite>ctx</cite> (though this is not currently enforced for
+backward compatibility). Instead, tensors should be saved either with
+<code class="xref py py-func docutils literal notranslate"><span class="pre">ctx.save_for_backward()</span></code> if they are intended to be used in
+<code class="docutils literal notranslate"><span class="pre">backward</span></code> (equivalently, <code class="docutils literal notranslate"><span class="pre">vjp</span></code>) or <code class="xref py py-func docutils literal notranslate"><span class="pre">ctx.save_for_forward()</span></code>
+if they are intended to be used for in <code class="docutils literal notranslate"><span class="pre">jvp</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Wait">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">ReduceScatterBase_Wait</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Function</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.backward">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">backward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.backward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines a formula for differentiating the operation with backward mode
+automatic differentiation (alias to the vjp function).</p>
+<p>This function is to be overridden by all subclasses.</p>
+<p>It must accept a context <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx</span></code> as the first argument, followed by
+as many outputs as the <a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> returned (None will be passed in
+for non tensor outputs of the forward function),
+and it should return as many tensors, as there were inputs to
+<a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a>. Each argument is the gradient w.r.t the given output,
+and each returned value should be the gradient w.r.t. the
+corresponding input. If an input is not a Tensor or is a Tensor not
+requiring grads, you can just pass None as a gradient for that input.</p>
+<p>The context can be used to retrieve tensors saved during the forward
+pass. It also has an attribute <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx.needs_input_grad</span></code> as a tuple
+of booleans representing whether each input needs gradient. E.g.,
+<a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.backward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.backward"><code class="xref py py-func docutils literal notranslate"><span class="pre">backward()</span></code></a> will have <code class="docutils literal notranslate"><span class="pre">ctx.needs_input_grad[0]</span> <span class="pre">=</span> <span class="pre">True</span></code> if the
+first input to <a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward" title="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> needs gradient computated w.r.t. the
+output.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs the operation.</p>
+<p>This function is to be overridden by all subclasses.</p>
+<p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p>
+<p>The context can be used to store arbitrary data that can be then
+retrieved during the backward pass. Tensors should not be stored
+directly on <cite>ctx</cite> (though this is not currently enforced for
+backward compatibility). Instead, tensors should be saved either with
+<code class="xref py py-func docutils literal notranslate"><span class="pre">ctx.save_for_backward()</span></code> if they are intended to be used in
+<code class="docutils literal notranslate"><span class="pre">backward</span></code> (equivalently, <code class="docutils literal notranslate"><span class="pre">vjp</span></code>) or <code class="xref py py-func docutils literal notranslate"><span class="pre">ctx.save_for_forward()</span></code>
+if they are intended to be used for in <code class="docutils literal notranslate"><span class="pre">jvp</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterInfo">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">ReduceScatterInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterInfo" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">ReduceScatterInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterInfo" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The data class that collects the attributes when calling the <cite>reduce_scatter_pooled</cite>
 operation.</p>
@@ -1055,8 +1167,8 @@ gradient.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id16">
-<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id16" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id17">
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id17" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1275,12 +1387,37 @@ default process group will be used.</p></li>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.reduce_scatter_base_pooled">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">reduce_scatter_base_pooled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.reduce_scatter_base_pooled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reduces then scatters a flattened pooled embeddings tensor to all processes in a group.
+Input tensor is of size output tensor size times world size.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inputs</strong> (<em>Tensor</em>) – flattened tensor to scatter, .</p></li>
+<li><p><strong>group</strong> (<em>Optional</em><em>[</em><em>dist.ProcessGroup</em><em>]</em>) – The process group to work on. If None, the
+default process group will be used.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>async work handle (Awaitable), which can be <cite>wait()</cite> later to get the resulting tensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[Tensor]</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><cite>reduce_scatter_base_pooled</cite> is experimental and subject to change.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.reduce_scatter_pooled">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">reduce_scatter_pooled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.reduce_scatter_pooled" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs reduce-scatter operation for a pooled embeddings tensor split into world
 size number of chunks. The result of the reduce operation gets scattered to all
-processes in the group. Then concatenates the received tensors from all processes in
-the group and returns a single output tensor.</p>
+processes in the group.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1293,7 +1430,7 @@ default process group will be used.</p></li>
 <dd class="field-even"><p>async work handle (Awaitable), which can be <cite>wait()</cite> later to get the resulting tensor.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[List[Tensor]]</p>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[Tensor]</p>
 </dd>
 </dl>
 <div class="admonition warning">
@@ -5233,8 +5370,8 @@ dict of parameter sharding specs keyed by parameter name.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id17">
-<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id17" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id18">
+<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id18" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>

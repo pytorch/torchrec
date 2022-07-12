@@ -419,6 +419,10 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait.backward">(torchrec.distributed.comm_ops.ReduceScatter_Wait static method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req.backward">(torchrec.distributed.comm_ops.ReduceScatterBase_Req static method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.backward">(torchrec.distributed.comm_ops.ReduceScatterBase_Wait static method)</a>
+</li>
       </ul></li>
       <li><a href="torchrec.distributed.html#id4">backward_recat_tensor (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.backward_recat_tensor">[1]</a>
 </li>
@@ -434,10 +438,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup">BaseEmbeddingLookup (class in torchrec.distributed.embedding_types)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder">BaseEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder">BaseEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor">BaseFeatureProcessor (class in torchrec.modules.feature_processor)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.distributed.embedding_types)</a>
@@ -995,6 +999,10 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait.forward">(torchrec.distributed.comm_ops.ReduceScatter_Wait static method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward">(torchrec.distributed.comm_ops.ReduceScatterBase_Req static method)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward">(torchrec.distributed.comm_ops.ReduceScatterBase_Wait static method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward">(torchrec.distributed.dist_data.EmbeddingsAllToOne method)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward">[1]</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll.forward">(torchrec.distributed.dist_data.KJTAllToAll method)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAll.forward">[1]</a>
@@ -1350,8 +1358,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_shape">input_shape (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
 </li>
-      <li><a href="torchrec.distributed.html#id16">input_sizes (torchrec.distributed.comm_ops.ReduceScatterInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo.input_sizes">[1]</a>
+      <li><a href="torchrec.distributed.html#id16">input_sizes (torchrec.distributed.comm_ops.ReduceScatterBaseInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes">[1]</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#id17">(torchrec.distributed.comm_ops.ReduceScatterInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo.input_sizes">[1]</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#id14">input_split_sizes (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.input_split_sizes">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_splits">input_splits (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
@@ -2014,7 +2026,7 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.plan">plan (torchrec.distributed.model_parallel.DistributedModelParallel property)</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#id17">(torchrec.distributed.types.ShardingPlan attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.plan">[1]</a>
+        <li><a href="torchrec.distributed.html#id18">(torchrec.distributed.types.ShardingPlan attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.plan">[1]</a>
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan">plan() (torchrec.distributed.planner.planners.EmbeddingShardingPlanner method)</a>
@@ -2173,13 +2185,21 @@
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.record_stream">(torchrec.sparse.jagged_tensor.KeyedTensor method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_base_pooled">reduce_scatter_base_pooled() (in module torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_pooled">reduce_scatter_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait">ReduceScatter_Wait (class in torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo">ReduceScatterBaseInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo">ReduceScatterInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
