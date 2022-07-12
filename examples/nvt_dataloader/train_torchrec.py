@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import glob
 import os
 import sys
 import time
@@ -16,11 +17,15 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torchmetrics as metrics
+
+os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["LOCAL_RANK"]
+
 import torchrec.distributed as trec_dist
 import torchrec.optim as trec_optim
-
 from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from nvt_binary_dataloader import NvtBinaryDataloader
+
+from nvt_criteo_dataloader import NvtCriteoDataloader
 from pyre_extensions import none_throws
 from torchrec import EmbeddingBagCollection
 
@@ -86,7 +91,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=15.0,
+        default=0.0005,
         help="Learning rate.",
     )
     parser.add_argument(
@@ -112,7 +117,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--lr_after_change_point",
         type=float,
-        default=3.0,
+        default=0.20,
         help="Learning rate after change point in first epoch.",
     )
     parser.add_argument(
@@ -128,35 +133,6 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Frequency at which validation will be run within an epoch.",
     )
     return parser.parse_args(argv)
-
-
-def _eval(
-    train_pipeline: TrainPipelineSparseDist, it: Iterator[Batch]
-) -> Tuple[float, float, float]:
-    train_pipeline._model.eval()
-
-    device = train_pipeline._device
-    auroc = metrics.AUROC(compute_on_step=False).to(device)
-    accuracy = metrics.Accuracy(compute_on_step=False).to(device)
-    val_losses = []
-    step = 0
-    with torch.no_grad():
-        while True:
-            try:
-                loss, logits, labels = train_pipeline.progress(it)
-                val_losses.append(loss)
-                preds = torch.sigmoid(logits)
-
-                labels = labels.to(torch.int32)
-                auroc(preds, labels)
-                accuracy(preds, labels)
-                step += 1
-            except StopIteration:
-                break
-    auroc_result = auroc.compute().item()
-    accuracy_result = accuracy.compute().item()
-    bce_loss = torch.mean(torch.stack(val_losses))
-    return (auroc_result, accuracy_result, bce_loss)
 
 
 def main(argv: List[str]):
@@ -177,24 +153,12 @@ def main(argv: List[str]):
 
     rank = dist.get_rank()
     world_size = dist.get_world_size()
+
     num_embeddings_per_feature = None
     if args.num_embeddings_per_feature is not None:
         num_embeddings_per_feature = list(
             map(int, args.num_embeddings_per_feature.split(","))
         )
-    train_loader = NvtBinaryDataloader(
-        binary_file_path=os.path.join(args.binary_path, "train"),
-        batch_size=args.batch_size,
-    ).get_dataloader(rank=rank, world_size=world_size)
-    val_loader = NvtBinaryDataloader(
-        binary_file_path=os.path.join(args.binary_path, "validation"),
-        batch_size=args.batch_size,
-    ).get_dataloader(rank=rank, world_size=world_size)
-
-    test_loader = NvtBinaryDataloader(
-        binary_file_path=os.path.join(args.binary_path, "test"),
-        batch_size=args.batch_size,
-    ).get_dataloader(rank=rank, world_size=world_size)
 
     eb_configs = [
         EmbeddingBagConfig(
@@ -237,7 +201,7 @@ def main(argv: List[str]):
 
     pg = dist.GroupMember.WORLD
 
-    hbm_cap = torch.cuda.get_device_properties(device).total_memory
+    hbm_cap = torch.cuda.get_device_properties(device).total_memory * 0.2
     local_world_size = trec_dist.comm.get_local_size(world_size)
     model = DistributedModelParallel(
         module=train_model,
@@ -273,86 +237,25 @@ def main(argv: List[str]):
         device,
     )
 
-    throughput = ThroughputMetric(
+    # dataloader part
+    train_paths = sorted(glob.glob(os.path.join(args.binary_path, "*.parquet")))
+    train_loader = NvtCriteoDataloader(
+        paths=train_paths,
         batch_size=args.batch_size,
         world_size=world_size,
-        window_seconds=30,
-        warmup_steps=10,
-    )
+        rank=rank,
+    ).get_nvt_criteo_dataloader()
 
-    changing_point_steps = (
-        TOTAL_TRAINING_SAMPLES * args.lr_change_point // args.batch_size // world_size
-    )
-    for epoch in range(args.epochs):
-        print(f"starting the {epoch} epoch now")
-        start_time = time.time()
-        it = iter(train_loader)
-        step = 0
-        losses = []
-        while True:
-            try:
-                train_pipeline._model.train()
-                loss, _logits, _labels = train_pipeline.progress(it)
-
-                if args.change_lr and step == changing_point_steps:
-                    print(f"Changing learning rate to: {args.lr_after_change_point}")
-                    optimizer = train_pipeline._optimizer
-                    lr = args.lr_after_change_point
-                    for g in optimizer.param_groups:
-                        g["lr"] = lr
-
-                throughput.update()
-                losses.append(loss)
-
-                if step % args.throughput_check_freq_within_epoch == 0 and step != 0:
-                    # infra calculation
-                    throughput_val = throughput.compute()
-                    if rank == 0:
-                        print("step", step)
-                        print("throughput", throughput_val)
-                    losses = []
-                if step % args.validation_freq_within_epoch == 0 and step != 0:
-                    # metrics calculation
-                    validation_it = iter(val_loader)
-                    auroc_result, accuracy_result, bce_loss = _eval(
-                        train_pipeline, validation_it
-                    )
-                    if rank == 0:
-                        print(f"AUROC over validation set: {auroc_result}.")
-                        print(f"Accuracy over validation set: {accuracy_result}.")
-                        print(
-                            "binary cross entropy loss",
-                            bce_loss / (args.batch_size),
-                        )
-                step += 1
-
-            except StopIteration:
-                print("Reached stop iteration")
-                break
-        train_time = time.time()
-        if rank == 0:
-            print(f"this epoch training takes {train_time - start_time}")
-
-        # eval
-        val_it = iter(val_loader)
-        auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, val_it)
-        if rank == 0:
-            print(f"AUROC over validation set: {auroc_result}.")
-            print(f"Accuracy over validation set: {accuracy_result}.")
-            print(
-                "binary cross entropy loss over validation set",
-                bce_loss / (args.batch_size),
-            )
-        # test
-        test_it = iter(test_loader)
-        auroc_result, accuracy_result, bce_loss = _eval(train_pipeline, test_it)
-        if rank == 0:
-            print(f"AUROC over test set: {auroc_result}.")
-            print(f"Accuracy over test set: {accuracy_result}.")
-            print(
-                "binary cross entropy loss over test set",
-                bce_loss / (args.batch_size),
-            )
+    it = iter(train_loader)
+    step = 0
+    while True:
+        try:
+            batch = next(it)
+            if rank == 0 and step % 10 == 0:
+                print(step)
+            step += 1
+        except StopIteration:
+            break
 
 
 if __name__ == "__main__":

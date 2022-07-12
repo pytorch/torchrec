@@ -49,7 +49,7 @@ if __name__ == "__main__":
     assert os.path.exists(
         input_path
     ), f"Criteo parquet path {input_path} does not exist"
-
+    DAYS = 2
     input_train = [
         os.path.join(input_path, f"day_{day}.parquet") for day in range(DAYS - 1)
     ]

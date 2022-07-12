@@ -62,7 +62,7 @@ def convert_tsv_to_parquet(input_path: str, output_base_path: str):
         )
 
     print(f"finished splitting the last day, took {time.time() - start_time}")
-
+    DAYS = 2
     input_paths = [
         os.path.join(input_path, f"day_{day}") for day in range(DAYS - 1)
     ] + [os.path.join(input_path, f"day_23.part{i}") for i in range(2)]
