@@ -170,7 +170,20 @@ class ReduceScatterInfo(object):
             gradient.
     """
 
-    input_sizes: List[int]
+    input_sizes: List[torch.Size]
+
+
+@dataclass
+class ReduceScatterBaseInfo(object):
+    """
+    The data class that collects the attributes when calling the `reduce_scatter_base_pooled`
+    operation.
+
+    Attributes:
+        input_sizes (int): the sizes of the input flatten tensor.
+    """
+
+    input_sizes: torch.Size
 
 
 @dataclass
@@ -385,8 +398,7 @@ def reduce_scatter_pooled(
     """
     Performs reduce-scatter operation for a pooled embeddings tensor split into world
     size number of chunks. The result of the reduce operation gets scattered to all
-    processes in the group. Then concatenates the received tensors from all processes in
-    the group and returns a single output tensor.
+    processes in the group.
 
     Args:
         inputs (List[Tensor]): list of tensors to scatter, one per rank.
@@ -394,7 +406,7 @@ def reduce_scatter_pooled(
             default process group will be used.
 
     Returns:
-        Awaitable[List[Tensor]]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
+        Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
 
     .. warning::
         `reduce_scatter_pooled` is experimental and subject to change.
@@ -407,10 +419,42 @@ def reduce_scatter_pooled(
         return NoWait(inputs[dist.get_rank(group)])
 
     myreq = Request(group)
-    # pyre-fixme[6]: For 1st param expected `List[int]` but got `List[Size]`.
     rsi = ReduceScatterInfo(input_sizes=[tensor.size() for tensor in inputs])
-    # pyre-fixme[16]: `ReduceScatter_Req` has no attribute `apply`.
+    # pyre-fixme[16]
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)
+    return myreq
+
+
+def reduce_scatter_base_pooled(
+    inputs: Tensor,
+    group: Optional[dist.ProcessGroup] = None,
+) -> Awaitable[Tensor]:
+    """
+    Reduces then scatters a flattened pooled embeddings tensor to all processes in a group.
+    Input tensor is of size output tensor size times world size.
+
+    Args:
+        inputs (Tensor): flattened tensor to scatter, .
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+
+    Returns:
+        Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
+
+    .. warning::
+        `reduce_scatter_base_pooled` is experimental and subject to change.
+    """
+
+    if group is None:
+        group = dist.distributed_c10d._get_default_group()
+
+    if dist.get_world_size(group) <= 1:
+        return NoWait(inputs)
+
+    myreq = Request(group)
+    rsi = ReduceScatterBaseInfo(input_sizes=inputs.size())
+    # pyre-fixme[16]
+    ReduceScatterBase_Req.apply(group, myreq, rsi, inputs)
     return myreq
 
 
@@ -920,6 +964,80 @@ class ReduceScatter_Wait(Function):
         ]
         with record_function("## reduce_scatter_bw (all_gather) ##"):
             req = dist.all_gather(
+                grad_inputs,
+                grad_output.contiguous(),
+                group=ctx.pg,
+                async_op=True,
+            )
+        myreq.req = req
+        myreq.tensor = grad_inputs
+        return (None, None, grad_output)
+
+
+class ReduceScatterBase_Req(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        rsi: ReduceScatterBaseInfo,
+        inputs: Tensor,
+    ) -> Tensor:
+        my_size = dist.get_world_size(pg)
+        assert inputs.size(0) % my_size == 0
+        output = inputs.new_empty((inputs.size(0) // my_size, inputs.size(1)))
+        with record_function("## reduce_scatter_base ##"):
+            req = dist._reduce_scatter_base(output, inputs, group=pg, async_op=True)
+        myreq.req = req
+        myreq.tensor = output
+        myreq.wait_function = ReduceScatterBase_Wait
+        myreq.rsi = rsi
+        ctx.myreq = myreq
+        ctx.pg = pg
+        return output
+
+    @staticmethod
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
+        myreq = ctx.myreq
+        myreq.req.wait()
+        myreq.req = None
+        grad_inputs = myreq.tensor
+        # Make it equivalent to running on a single rank.
+        if GRADIENT_DIVISION:
+            grad_inputs.div_(dist.get_world_size(ctx.pg))
+        myreq.tensor = None
+        return (None, None, None, grad_inputs)
+
+
+class ReduceScatterBase_Wait(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        output: Tensor,
+    ) -> Tensor:
+        myreq.req.wait()
+        myreq.req = None
+        myreq.tensor = None
+        ctx.myreq = myreq
+        ctx.pg = pg
+        return output
+
+    @staticmethod
+    # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
+        myreq = ctx.myreq
+        rsi = myreq.rsi
+        grad_inputs = grad_output.new_empty(rsi.input_sizes)
+        with record_function("## reduce_scatter_base_bw (all_gather) ##"):
+            req = dist._all_gather_base(
                 grad_inputs,
                 grad_output.contiguous(),
                 group=ctx.pg,
