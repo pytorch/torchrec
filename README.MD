@@ -42,7 +42,7 @@ If you have no CUDA device:
 Nightly
 
 pip uninstall fbgemm-gpu-nightly -y
-pip install fbgemm-gpu-cpu-nightly
+pip install fbgemm-gpu-nightly-cpu
 
 Stable
 
