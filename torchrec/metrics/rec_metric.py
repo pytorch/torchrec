@@ -162,6 +162,23 @@ class RecMetricComputation(Metric, abc.ABC):
     def _add_state(
         self, name: str, default: DefaultValueT, add_window_state: bool, **kwargs: Any
     ) -> None:
+        """
+        name(str): the name of this state. The state will be accessible
+            with `self.THE_NAME_YOU_DEFINE`.
+        default(DefaultValueT): the initial value of this state. The most common
+            initial value is `torch.zeros(self._n_tasks, dtype=torch.float)` but
+            users need to check the math formula to decide what is the correct
+            initial value for the metric. Note the `self._n_tasks` in the above
+            code. As a metric may handle multiple tasks at the same time, the
+            highest dimension of a state should be `self._n_tasks`.
+        add_window_state(bool): when this is True, a `window_{name}` state will
+            be created to record the window state information for this state.
+        dist_reduce_fx(str): the reduction function when aggregating the local
+            state. For example, tower_qps uses “sum” to aggregate the total
+            trained examples.
+        persistent(bool): set this to True if you want to save/checkpoint the
+            metric and this state is required to compute the checkpointed metric.
+        """
         # pyre-fixme[6]: Expected `Union[List[typing.Any], torch.Tensor]` for 2nd
         #  param but got `DefaultValueT`.
         super().add_state(name, default, **kwargs)
