@@ -43,6 +43,9 @@ class ModelInput(Pipelineable):
         tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
+        dedup_tables: Optional[
+            Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
+        ] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch

@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, cast, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, cast, Dict, List, Optional, Protocol, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -35,7 +35,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig
+from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 
 
@@ -68,18 +68,37 @@ def create_test_sharder(
         raise ValueError(f"Sharder not supported {sharder_type}")
 
 
+class ModelInputCallable(Protocol):
+    def __call__(
+        self,
+        batch_size: int,
+        world_size: int,
+        num_float_features: int,
+        tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        pooling_avg: int = 10,
+        dedup_tables: Optional[
+            Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
+        ] = None,
+    ) -> Tuple["ModelInput", List["ModelInput"]]:
+        ...
+
+
 def generate_inputs(
     world_size: int,
     tables: List[EmbeddingTableConfig],
+    dedup_tables: List[EmbeddingTableConfig],
+    generate: ModelInputCallable = ModelInput.generate,
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     batch_size: int = 4,
     num_float_features: int = 16,
 ) -> Tuple[ModelInput, List[ModelInput]]:
-    return ModelInput.generate(
+    return generate(
         batch_size=batch_size,
         world_size=world_size,
         num_float_features=num_float_features,
         tables=tables,
+        dedup_tables=dedup_tables,
         weighted_tables=weighted_tables or [],
     )
 
@@ -89,25 +108,47 @@ def gen_model_and_input(
     tables: List[EmbeddingTableConfig],
     embedding_groups: Dict[str, List[str]],
     world_size: int,
+    generate: ModelInputCallable = ModelInput.generate,
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     num_float_features: int = 16,
     dense_device: Optional[torch.device] = None,
     sparse_device: Optional[torch.device] = None,
+    dedup_feature_names: Optional[List[str]] = None,
+    dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
-
-    model = model_class(
-        tables=cast(List[BaseEmbeddingConfig], tables),
-        num_float_features=num_float_features,
-        weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
-        embedding_groups=embedding_groups,
-        dense_device=dense_device,
-        sparse_device=sparse_device,
-    )
+    if dedup_feature_names:
+        model = model_class(
+            tables=cast(
+                List[BaseEmbeddingConfig],
+                tables + dedup_tables if dedup_tables else tables,
+            ),
+            num_float_features=num_float_features,
+            dedup_feature_names=dedup_feature_names,
+            weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+    else:
+        model = model_class(
+            tables=cast(
+                List[BaseEmbeddingConfig],
+                tables,
+            ),
+            num_float_features=num_float_features,
+            weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
     inputs = [
         generate_inputs(
             world_size=world_size,
             tables=tables,
+            # pyre-ignore [6]
+            dedup_tables=dedup_tables,
+            generate=generate,
             weighted_tables=weighted_tables,
             num_float_features=num_float_features,
         )

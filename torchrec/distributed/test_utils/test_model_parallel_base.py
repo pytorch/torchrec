@@ -20,11 +20,13 @@ from torchrec.distributed.planner import (
 )
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
+    ModelInput,
     TestSparseNNBase,
 )
 from torchrec.distributed.test_utils.test_sharding import (
     copy_state_dict,
     gen_model_and_input,
+    ModelInputCallable,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
@@ -54,8 +56,11 @@ class InferenceModelParallelTestBase(unittest.TestCase):
         tables: List[EmbeddingTableConfig],
         sharders: List[ModuleSharder[nn.Module]],
         quantize_callable: Callable[[nn.Module], nn.Module],
+        dedup_features_names: Optional[List[str]] = None,
+        dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        generate: ModelInputCallable = ModelInput.generate,
     ) -> None:
         default_rank = 0
         cuda_device = torch.device(f"cuda:{default_rank}")
@@ -66,24 +71,44 @@ class InferenceModelParallelTestBase(unittest.TestCase):
             model_class=model_class,
             tables=tables,
             weighted_tables=weighted_tables,
+            dedup_tables=dedup_tables,
+            dedup_feature_names=dedup_features_names,
             embedding_groups=embedding_groups,
             world_size=1,  # generate only one copy of feature for inference
             num_float_features=16,
             dense_device=cuda_device,
             sparse_device=cuda_device,
+            generate=generate,
         )
         global_model = quantize_callable(global_model)
         local_input = _inputs[0][1][default_rank].to(cuda_device)
 
         # Shard model.
-        local_model = model_class(
-            tables=cast(List[BaseEmbeddingConfig], tables),
-            weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
-            embedding_groups=embedding_groups,
-            dense_device=cuda_device,
-            sparse_device=torch.device("meta"),
-            num_float_features=16,
-        )
+        if dedup_features_names:
+            local_model = model_class(
+                tables=cast(
+                    List[BaseEmbeddingConfig],
+                    tables + dedup_tables if dedup_tables else tables,
+                ),
+                weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+                dedup_feature_names=dedup_features_names,
+                embedding_groups=embedding_groups,
+                dense_device=cuda_device,
+                sparse_device=torch.device("meta"),
+                num_float_features=16,
+            )
+        else:
+            local_model = model_class(
+                tables=cast(
+                    List[BaseEmbeddingConfig],
+                    tables,
+                ),
+                weighted_tables=cast(List[BaseEmbeddingConfig], weighted_tables),
+                embedding_groups=embedding_groups,
+                dense_device=cuda_device,
+                sparse_device=torch.device("meta"),
+                num_float_features=16,
+            )
         local_model = quantize_callable(local_model)
 
         planner = EmbeddingShardingPlanner(
