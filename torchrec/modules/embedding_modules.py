@@ -111,13 +111,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.6149,  0.0000, -0.3176],
-        [-0.8876,  0.0000, -1.5606],
-        [ 1.6805,  0.0000,  0.6810],
-        [-1.4206, -1.0409,  0.2249],
-        [ 0.1823, -0.4697,  1.3823],
-        [-0.2767, -0.9965, -0.1797],
-        [ 0.8864,  0.1315, -2.0724]], grad_fn=<TransposeBackward0>)
+        tensor([[-0.8899, -0.1342, -1.9060, -0.0905, -0.2814, -0.9369, -0.7783],
+            [ 0.0000,  0.0000,  0.0000,  0.1598,  0.0695,  1.3265, -0.1011],
+            [-0.4256, -1.1846, -2.1648, -1.0893,  0.3590, -1.9784, -0.7681]],
+            grad_fn=<CatBackward0>)
         print(pooled_embeddings.keys())
         ['f1', 'f2']
         print(pooled_embeddings.offset_per_key())
