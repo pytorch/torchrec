@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, Callable, cast, Dict, List, Optional, Protocol, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -37,6 +37,7 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from typing_extensions import Protocol
 
 
 class SharderType(Enum):
