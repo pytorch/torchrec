@@ -41,9 +41,10 @@ def quantize_embeddings(
     inplace: bool,
     additional_qconfig_spec_keys: Optional[List[Type[nn.Module]]] = None,
     additional_mapping: Optional[Dict[Type[nn.Module], Type[nn.Module]]] = None,
+    output_dtype: torch.dtype = torch.float,
 ) -> nn.Module:
     qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver,
+        activation=quant.PlaceholderObserver.with_args(dtype=output_dtype),
         weight=quant.PlaceholderObserver.with_args(dtype=dtype),
     )
     qconfig_spec: Dict[Type[nn.Module], quant.QConfig] = {
