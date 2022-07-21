@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import dataclasses
 import logging
 import os
@@ -61,6 +62,8 @@ class TestMetricModule(RecMetricModule):
         throughput_metric: Optional[ThroughputMetric] = None,
         state_metrics: Optional[Dict[str, StateMetric]] = None,
         compute_interval_steps: int = 100,
+        min_compute_interval: float = 0.0,
+        max_compute_interval: float = float("inf"),
         memory_usage_limit_mb: float = 512,
     ) -> None:
         super().__init__(
@@ -71,6 +74,8 @@ class TestMetricModule(RecMetricModule):
             throughput_metric=throughput_metric,
             state_metrics=state_metrics,
             compute_interval_steps=compute_interval_steps,
+            min_compute_interval=min_compute_interval,
+            max_compute_interval=max_compute_interval,
             memory_usage_limit_mb=memory_usage_limit_mb,
         )
 
@@ -485,3 +490,169 @@ class MetricModuleTest(unittest.TestCase):
         self.assertFalse(metric_module.should_compute())
         metric_module.trained_batches = metric_module.compute_interval_steps
         self.assertTrue(metric_module.should_compute())
+
+    @staticmethod
+    @patch("torchrec.metrics.metric_module.RecMetricList")
+    @patch("torchrec.metrics.metric_module.time")
+    def _test_adjust_compute_interval(
+        batch_time: float,
+        min_interval: float,
+        max_interval: float,
+        mock_time: MagicMock,
+        mock_recmetric_list: MagicMock,
+    ) -> None:
+        init_by_me = False
+        if not dist.is_initialized():
+            init_by_me = True
+            world_size = int(os.environ["WORLD_SIZE"])
+            rank = int(os.environ["RANK"])
+            dist.init_process_group(
+                backend="gloo",
+                world_size=world_size,
+                rank=rank,
+            )
+        mock_time.time = MagicMock(return_value=0.0)
+
+        def _train(metric_module: RecMetricModule) -> float:
+            for _ in range(metric_module.compute_interval_steps):
+                metric_module.update(batch)
+            elapsed_time = metric_module.compute_interval_steps * batch_time
+            mock_time.time.return_value += elapsed_time
+            return elapsed_time
+
+        config = copy.deepcopy(DefaultMetricsConfig)
+        config.min_compute_interval = min_interval
+        config.max_compute_interval = max_interval
+        metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=config,
+            batch_size=128,
+            world_size=1,
+            my_rank=0,
+            state_metrics_mapping={},
+            device=torch.device("cpu"),
+        )
+        batch = MagicMock()
+
+        tc = unittest.TestCase()
+        compute_interval_steps = metric_module.compute_interval_steps
+        # First compute
+        elapsed_time = _train(metric_module)
+        tc.assertTrue(metric_module.should_compute())
+        metric_module.compute()
+        # Second compute
+        tc.assertEqual(compute_interval_steps, metric_module.compute_interval_steps)
+        elapsed_time = _train(metric_module)
+        tc.assertTrue(metric_module.should_compute())
+        metric_module.compute()
+
+        tc.assertEqual(
+            (-1.0, -1.0),
+            (metric_module.min_compute_interval, metric_module.max_compute_interval),
+        )
+
+        max_interval = (
+            float("inf") if min_interval > 0 and max_interval <= 0 else max_interval
+        )
+        if min_interval <= 0 and max_interval <= 0:
+            tc.assertEqual(compute_interval_steps, metric_module.compute_interval_steps)
+        elif max_interval >= elapsed_time >= min_interval:
+            tc.assertEqual(compute_interval_steps, metric_module.compute_interval_steps)
+        else:
+            tc.assertNotEqual(
+                compute_interval_steps, metric_module.compute_interval_steps
+            )
+            elapsed_time = _train(metric_module)
+            tc.assertTrue(elapsed_time >= min_interval)
+            tc.assertTrue(elapsed_time <= max_interval)
+        if init_by_me:
+            dist.destroy_process_group()
+
+    def _test_adjust_compute_interval_launcher(
+        self,
+        batch_time: float,
+        min_interval: float = 0.0,
+        max_interval: float = float("inf"),
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lc = get_launch_config(
+                world_size=2, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
+            )
+            pet.elastic_launch(lc, entrypoint=self._test_adjust_compute_interval)(
+                batch_time, min_interval, max_interval
+            )
+
+    def test_adjust_compute_interval_not_set(self) -> None:
+        self._test_adjust_compute_interval_launcher(
+            batch_time=0.1,
+        )
+
+    def test_adjust_compute_interval_0_30(self) -> None:
+        self._test_adjust_compute_interval_launcher(
+            batch_time=1,
+            min_interval=0.0,
+            max_interval=30.0,
+        )
+
+        # This is to ensure the test coverage is correct.
+        with tempfile.NamedTemporaryFile(delete=True) as backend:
+            dist.init_process_group(
+                backend="gloo",
+                init_method=f"file://{backend.name}",
+                world_size=1,
+                rank=0,
+            )
+
+            self._test_adjust_compute_interval(1, 0.0, 30.0)
+        # Needed to destroy the process group as _test_adjust_compute_interval
+        # won't since we initialize the process group for it.
+        dist.destroy_process_group()
+
+    def test_adjust_compute_interval_15_inf(self) -> None:
+        self._test_adjust_compute_interval_launcher(
+            batch_time=0.1,
+            min_interval=15.0,
+            max_interval=float("inf"),
+        )
+
+        # This is to ensure the test coverage is correct.
+        with tempfile.NamedTemporaryFile(delete=True) as backend:
+            dist.init_process_group(
+                backend="gloo",
+                init_method=f"file://{backend.name}",
+                world_size=1,
+                rank=0,
+            )
+
+            self._test_adjust_compute_interval(0.1, 15.0, float("inf"))
+        # Needed to destroy the process group as _test_adjust_compute_interval
+        # won't since we initialize the process group for it.
+        dist.destroy_process_group()
+
+    def test_adjust_compute_interval_15_30(self) -> None:
+        self._test_adjust_compute_interval_launcher(
+            batch_time=1,
+            min_interval=15.0,
+            max_interval=30.0,
+        )
+
+        # This is to ensure the test coverage is correct.
+        with tempfile.NamedTemporaryFile(delete=True) as backend:
+            dist.init_process_group(
+                backend="gloo",
+                init_method=f"file://{backend.name}",
+                world_size=1,
+                rank=0,
+            )
+
+            self._test_adjust_compute_interval(1, 15.0, 30.0)
+        # Needed to destroy the process group as _test_adjust_compute_interval
+        # won't since we initialize the process group for it.
+        dist.destroy_process_group()
+
+    def test_adjust_compute_interval_1_30(self) -> None:
+        self._test_adjust_compute_interval_launcher(
+            batch_time=1,
+            min_interval=1.0,
+            max_interval=30.0,
+        )
