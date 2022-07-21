@@ -9,6 +9,7 @@
 
 import abc
 import logging
+import time
 from typing import Any, Dict, List, Optional, Type, Union
 
 import torch
@@ -123,7 +124,9 @@ class RecMetricModule(nn.Module):
     memory_usage_mb_avg: float
     oom_count: int
     compute_count: int
+    last_compute_time: float
 
+    # TODO(chienchin): Reorganize the argument to directly accept a MetricsConfig.
     def __init__(
         self,
         batch_size: int,
@@ -133,6 +136,8 @@ class RecMetricModule(nn.Module):
         throughput_metric: Optional[ThroughputMetric] = None,
         state_metrics: Optional[Dict[str, StateMetric]] = None,
         compute_interval_steps: int = 100,
+        min_compute_interval: float = 0.0,
+        max_compute_interval: float = float("inf"),
         memory_usage_limit_mb: float = 512,
     ) -> None:
         super().__init__()
@@ -147,7 +152,26 @@ class RecMetricModule(nn.Module):
         self.memory_usage_mb_avg = 0.0
         self.oom_count = 0
         self.compute_count = 0
+
         self.compute_interval_steps = compute_interval_steps
+        self.min_compute_interval = min_compute_interval
+        self.max_compute_interval = max_compute_interval
+        if self.min_compute_interval == 0.0 and self.max_compute_interval == float(
+            "inf"
+        ):
+            self.min_compute_interval = -1.0
+            self.max_compute_interval = -1.0
+        else:
+            if self.max_compute_interval <= 0.0:
+                raise ValueError("Max compute interval should not be smaller than 0.0.")
+            if self.min_compute_interval < 0.0:
+                raise ValueError("Min compute interval should not be smaller than 0.0.")
+        self.register_buffer(
+            "_compute_interval_steps",
+            torch.zeros(1, dtype=torch.int32),
+            persistent=False,
+        )
+        self.last_compute_time = -1.0
 
     def get_memory_usage(self) -> int:
         r"""Total memory of unique RecMetric tensors in bytes"""
@@ -205,6 +229,56 @@ class RecMetricModule(nn.Module):
             self.throughput_metric.update()
         self.trained_batches += 1
 
+    def _adjust_compute_interval(self) -> None:
+        """
+        Adjust the compute interval (in batches) based on the first two time
+        elapsed between the first two compute().
+        """
+        if self.last_compute_time > 0 and self.min_compute_interval >= 0:
+            now = time.time()
+            interval = now - self.last_compute_time
+            if not (self.max_compute_interval >= interval >= self.min_compute_interval):
+                per_step_time = interval / self.compute_interval_steps
+
+                assert (
+                    self.max_compute_interval != float("inf")
+                    or self.min_compute_interval != 0.0
+                ), (
+                    "The compute time interval is "
+                    f"[{self.max_compute_interval}, {self.min_compute_interval}]. "
+                    "Something is not correct of this range. __init__() should have "
+                    "captured this earlier."
+                )
+                if self.max_compute_interval == float("inf"):
+                    # The `per_step_time` is not perfectly measured -- each
+                    # step training time can vary. Since max_compute_interval
+                    # is set to infinite, adding 1.0 to the `min_compute_interval`
+                    # increase the chance that the final compute interval is
+                    # indeed larger than `min_compute_interval`.
+                    self._compute_interval_steps[0] = int(
+                        (self.min_compute_interval + 1.0) / per_step_time
+                    )
+                elif self.min_compute_interval == 0.0:
+                    # Similar to the above if, subtracting 1.0 from
+                    # `max_compute_interval` to compute `_compute_interval_steps`
+                    # can increase the chance that the final compute interval
+                    # is indeed smaller than `max_compute_interval`
+                    offset = 0.0 if self.max_compute_interval <= 1.0 else 1.0
+                    self._compute_interval_steps[0] = int(
+                        (self.max_compute_interval - offset) / per_step_time
+                    )
+                else:
+                    self._compute_interval_steps[0] = int(
+                        (self.max_compute_interval + self.min_compute_interval)
+                        / 2
+                        / per_step_time
+                    )
+                dist.all_reduce(self._compute_interval_steps, op=dist.ReduceOp.MAX)
+            self.compute_interval_steps = int(self._compute_interval_steps.item())
+            self.min_compute_interval = -1.0
+            self.max_compute_interval = -1.0
+        self.last_compute_time = time.time()
+
     def should_compute(self) -> bool:
         return self.trained_batches % self.compute_interval_steps == 0
 
@@ -217,6 +291,7 @@ class RecMetricModule(nn.Module):
 
         ret: Dict[str, MetricValue] = {}
         if self.rec_metrics:
+            self._adjust_compute_interval()
             ret.update(self.rec_metrics.compute())
         if self.throughput_metric:
             ret.update(self.throughput_metric.compute())
@@ -353,6 +428,8 @@ def generate_metric_module(
         throughput_metric=throughput_metric,
         state_metrics=state_metrics,
         compute_interval_steps=metrics_config.compute_interval_steps,
+        min_compute_interval=metrics_config.min_compute_interval,
+        max_compute_interval=metrics_config.max_compute_interval,
     )
     metrics.to(device)
     return metrics
