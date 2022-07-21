@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import torch
 import torch.fx
@@ -152,9 +152,46 @@ def _jagged_values_string(
     )
 
 
+@torch.jit.ignore
+class TensorMetadata(NamedTuple):
+    # TensorMetadata is a structure containing pertinent information
+    # about a tensor within a PyTorch program.
+
+    # General Tensor metadata
+    shape: List[int]
+    dtype: torch.dtype
+    requires_grad: bool
+    stride: Tuple[int]
+
+
+@torch.jit.ignore
+class JaggedTensorMetadata(NamedTuple):
+    # TensorMetadata is a structure containing pertinent information
+    # about a JaggedTensor or KeyedJaggedTensor within a PyTorch program.
+
+    # General JaggedTensor metadata
+    values: TensorMetadata
+    weights: Optional[TensorMetadata]
+    lengths: Optional[TensorMetadata]
+    offsets: Optional[TensorMetadata]
+
+
 # pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
     pass
+
+
+@torch.jit.ignore
+def _extract_tensor_metadata(result: torch.Tensor) -> TensorMetadata:
+    """
+    Extract a TensorMetadata NamedTuple describing `result`.
+    """
+    shape = list(result.shape)
+    dtype = result.dtype
+    requires_grad = result.requires_grad
+    stride = result.stride()
+
+    return TensorMetadata(shape, dtype, requires_grad, stride)
 
 
 class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
@@ -279,6 +316,27 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=weights,
             lengths=lengths,
         )
+
+    @torch.jit.ignore(drop=True)
+    def get_tensor_metadata(self) -> JaggedTensorMetadata:
+
+        values = _extract_tensor_metadata(self._values)
+        weights = (
+            _extract_tensor_metadata(self._weights)
+            if self._weights is not None
+            else None
+        )
+        offsets = (
+            _extract_tensor_metadata(self._offsets)
+            if self._offsets is not None
+            else None
+        )
+        lengths = (
+            _extract_tensor_metadata(self._lengths)
+            if self._lengths is not None
+            else None
+        )
+        return JaggedTensorMetadata(values, weights, offsets, lengths)
 
     def to_dense(self) -> List[torch.Tensor]:
         """
@@ -803,6 +861,27 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets=None,
             stride=kjt.stride(),
         )
+
+    @torch.jit.ignore(drop=True)
+    def get_tensor_metadata(self) -> JaggedTensorMetadata:
+
+        values = _extract_tensor_metadata(self._values)
+        weights = (
+            _extract_tensor_metadata(self._weights)
+            if self._weights is not None
+            else None
+        )
+        offsets = (
+            _extract_tensor_metadata(self._offsets)
+            if self._offsets is not None
+            else None
+        )
+        lengths = (
+            _extract_tensor_metadata(self._lengths)
+            if self._lengths is not None
+            else None
+        )
+        return JaggedTensorMetadata(values, weights, offsets, lengths)
 
     def sync(self) -> "KeyedJaggedTensor":
         self.length_per_key()
