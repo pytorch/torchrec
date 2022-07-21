@@ -24,13 +24,17 @@ WEIGHTED_NUM_SAMPES = "weighted_num_samples"
 def compute_mse(
     error_sum: torch.Tensor, weighted_num_samples: torch.Tensor
 ) -> torch.Tensor:
-    return error_sum / weighted_num_samples
+    return torch.where(
+        weighted_num_samples == 0.0, 0.0, error_sum / weighted_num_samples
+    ).double()
 
 
 def compute_rmse(
     error_sum: torch.Tensor, weighted_num_samples: torch.Tensor
 ) -> torch.Tensor:
-    return torch.sqrt(error_sum / weighted_num_samples)
+    return torch.where(
+        weighted_num_samples == 0.0, 0.0, torch.sqrt(error_sum / weighted_num_samples)
+    ).double()
 
 
 def compute_error_sum(
