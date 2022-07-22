@@ -1,0 +1,7 @@
+add_library(tde_cpp MODULE id_transformer.cpp bind.cpp)
+target_include_directories(tde_cpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
+target_link_libraries(tde_cpp PUBLIC ${TORCH_LIBRARIES})
+target_include_directories(tde_cpp PUBLIC ${TORCH_INCLUDE_DIRS})
+set_property(TARGET tde_cpp PROPERTY CXX_STANDARD 17)
+set_target_properties(tde_cpp PROPERTIES PREFIX "")
+INSTALL(TARGETS tde_cpp DESTINATION torchrec_dynamic_embedding)
