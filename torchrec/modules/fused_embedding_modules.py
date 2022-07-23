@@ -10,7 +10,7 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
+from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import torch
 import torch.nn as nn
@@ -22,8 +22,10 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
     DataType,
     EmbeddingBagConfig,
+    EmbeddingConfig,
     pooling_type_to_pooling_mode,
     PoolingType,
 )
@@ -31,12 +33,13 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
     EmbeddingCollection,
+    EmbeddingCollectionInterface,
     get_embedding_names_by_table,
 )
 
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
@@ -46,15 +49,15 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
     and updating learning rates.
 
     Args:
-        tables (List[EmbeddingBagConfig]): list of embedding tables.
+        tables (List[BaseEmbeddingConfig]): list of embedding tables.
         emb_module (SplitTableBatchedEmbeddingBagsCodeGen): Fbgemm module whose optimizer state we want to expose
     Example:
-        See usage in _BatchedFusedEmbeddingBag
+        See usage in _BatchedFusedEmbeddingLookups
     """
 
     def __init__(  # noqa C901
         self,
-        tables: List[EmbeddingBagConfig],
+        tables: List[BaseEmbeddingConfig],
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
     ) -> None:
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
@@ -100,20 +103,21 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
-class _BatchedFusedEmbeddingBag(nn.Module, FusedOptimizerModule):
+# lint-ignore
+class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
     """
-    _BatchedFusedEmbeddingBag is a thin wrapper we have around SplitTableBatchedEmbeddingBagsCodegen.
-    This is not meant to be directly used. Instead use FusedEmbeddingBagCollection (which in turn utilizes this).
+    _BatchedFusedEmbeddingLookups is a thin wrapper we have around SplitTableBatchedEmbeddingBagsCodegen.
+    This is not meant to be directly used. Instead use FusedEmbeddingBagCollection/FusedEmbeddingCollection (which in turn utilizes this).
 
     Example
     -------
-    >>> See usage in FusedEmbeddingBagcCollection
+    >>> See usage in FusedEmbeddingBagCollection and FusedEmbeddingCollection
 
     """
 
     def __init__(
         self,
-        embedding_tables: List[EmbeddingBagConfig],
+        embedding_tables: List[BaseEmbeddingConfig],
         data_type: DataType,
         pooling: PoolingType,
         optimizer_type: EmbOptimType,
@@ -387,8 +391,6 @@ class FusedEmbeddingBagCollection(
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
         ] = defaultdict(list)
 
-        self._embedding_names: List[str] = []
-
         self._length_per_key: List[int] = []
 
         for table in tables:
@@ -402,8 +404,8 @@ class FusedEmbeddingBagCollection(
         optims = []
         for key, tables in self._key_to_tables.items():
             (pooling, data_type) = key
-            emb_module = _BatchedFusedEmbeddingBag(
-                tables,
+            emb_module = _BatchedFusedEmbeddingLookups(
+                cast(List[BaseEmbeddingConfig], tables),
                 data_type=data_type,
                 pooling=pooling,
                 optimizer_type=emb_optim_type,
@@ -420,7 +422,7 @@ class FusedEmbeddingBagCollection(
             optims.append(("", emb_module.fused_optimizer()))
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
-        self._embedding_names = list(
+        self._embedding_names: List[str] = list(
             itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
         )
 
@@ -491,7 +493,7 @@ class FusedEmbeddingBagCollection(
         )
 
     def _get_name(self) -> str:
-        return "FusedEmeddingBagCollection"
+        return "FusedEmbeddingBagCollection"
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
@@ -509,8 +511,265 @@ class FusedEmbeddingBagCollection(
         return self._optim
 
 
-class FusedEmbeddingCollection(EmbeddingCollection, FusedOptimizerModule):
-    pass
+class FusedEmbeddingCollection(EmbeddingCollectionInterface, FusedOptimizerModule):
+    """
+    EmbeddingCollection represents a unsharded collection of non-pooled embeddings. The semantics
+    of this module is that during the backwards pass, the registered optimizer will be called.
+
+    It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
+    where:
+
+    * F: features (keys)
+    * B: batch size
+    * L: length of sparse features (variable)
+
+    and outputs `Dict[feature (key), JaggedTensor]`.
+    Each `JaggedTensor` contains values of the form (B * L) X D
+    where:
+
+    * B: batch size
+    * L: length of sparse features (jagged)
+    * D: each feature's (key's) embedding dimension and lengths are of the form L
+
+    Args:
+        tables (List[EmbeddingConfig]): list of embedding tables.
+        device (Optional[torch.device]): default compute device.
+        need_indices (bool): if we need to pass indices to the final lookup dict.
+
+    Example::
+
+        e1_config = EmbeddingConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        e2_config = EmbeddingConfig(
+            name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
+        )
+
+        ec = EmbeddingCollection(tables=[e1_config, e2_config])
+
+        #     0       1        2  <-- batch
+        # 0   [0,1] None    [2]
+        # 1   [3]    [4]    [5,6,7]
+        # ^
+        # feature
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+        feature_embeddings = ec(features)
+        print(feature_embeddings['f2'].values())
+        tensor([[-0.2050,  0.5478,  0.6054],
+        [ 0.7352,  0.3210, -3.0399],
+        [ 0.1279, -0.1756, -0.4130],
+        [ 0.7519, -0.4341, -0.0499],
+        [ 0.9329, -1.0697, -0.8095]], grad_fn=<EmbeddingBackward>)
+    """
+
+    # noqa lint
+    def __init__(
+        self,
+        tables: List[EmbeddingConfig],
+        optimizer_type: Type[torch.optim.Optimizer],
+        optimizer_kwargs: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        need_indices: bool = False,
+        location: Optional[EmbeddingLocation] = None,
+    ) -> None:
+        super().__init__()
+
+        self._optimizer_type = optimizer_type
+        self._optimizer_kwargs = optimizer_kwargs
+
+        emb_optim_and_kwargs = convert_optimizer_type_and_kwargs(
+            optimizer_type, optimizer_kwargs
+        )
+        if emb_optim_and_kwargs is None:
+            raise ValueError(
+                f"Cannot fuse optimizer_type={optimizer_type} with kwargs {optimizer_kwargs}"
+            )
+        (emb_optim_type, emb_opt_kwargs) = emb_optim_and_kwargs
+
+        if location in [
+            EmbeddingLocation.DEVICE,
+            EmbeddingLocation.MANAGED,
+            EmbeddingLocation.MANAGED_CACHING,
+        ]:
+            assert device is not None and device.type in [
+                "cuda",
+                "meta",
+            ], f"Using location={location} requires device=cuda or meta"
+
+        if device is None:
+            device = torch.device("cpu")
+
+        assert device.type in [
+            "cuda",
+            "meta",
+        ], "FusedEmbeddingCollection is only supported for device in [CUDA, meta] currently. There are plans to support device=CPU."
+
+        if location is None:
+            if device.type in ["cpu", "meta"]:
+                location = EmbeddingLocation.HOST
+            elif device.type == "cuda":
+                location = EmbeddingLocation.DEVICE
+            else:
+                raise ValueError("EmbeddingLocation could not be set")
+
+        self._embedding_configs = tables
+        self._need_indices: bool = need_indices
+        self._embedding_dim: int = -1
+
+        # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
+        # Their states will be modified via self.embedding_bags
+        self._emb_modules: List[nn.Module] = []
+
+        self._key_to_tables: Dict[DataType, List[EmbeddingConfig]] = defaultdict(list)
+
+        seen_features = set()
+        self._shared_features: Set[str] = set()
+        for table in tables:
+            key = table.data_type
+            self._key_to_tables[key].append(table)
+
+            if self._embedding_dim == -1:
+                self._embedding_dim = table.embedding_dim
+            elif self._embedding_dim != table.embedding_dim:
+                raise ValueError(
+                    "All tables in a EmbeddingCollection are required to have same embedding dimension."
+                )
+            for feature in table.feature_names:
+                if feature in seen_features:
+                    self._shared_features.add(feature)
+                else:
+                    seen_features.add(feature)
+
+        optims = []
+        for key, tables in self._key_to_tables.items():
+            data_type = key
+            emb_module = _BatchedFusedEmbeddingLookups(
+                cast(List[BaseEmbeddingConfig], tables),
+                data_type=data_type,
+                pooling=PoolingType.NONE,
+                optimizer_type=emb_optim_type,
+                optimizer_kwargs=emb_opt_kwargs,
+                device=device,
+                embedding_location=location,
+            )
+            self._emb_modules.append(emb_module)
+            params: Dict[str, torch.Tensor] = {}
+            for param_key, weight in emb_module.fused_optimizer().params.items():
+                # pyre-fixme[6]: For 2nd param expected `Tensor` but got
+                #  `Union[Tensor, ShardedTensor]`.
+                params[f"embeddings.{param_key}"] = weight
+            optims.append(("", emb_module.fused_optimizer()))
+
+        self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+        self._embedding_names: List[str] = list(
+            itertools.chain(*get_embedding_names_by_table(self._embedding_configs))
+        )
+
+        self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
+            self._embedding_configs,
+        )
+
+        # We map over the parameters from FBGEMM backed kernels to the canonical nn.EmbeddingBag
+        # representation. This provides consistency between this class and the EmbeddingBagCollection's
+        # nn.Module API calls (state_dict, named_modules, etc)
+        self.embeddings: nn.ModuleDict = nn.ModuleDict()
+        for (_key, tables), emb_module in zip(
+            self._key_to_tables.items(), self._emb_modules
+        ):
+            for embedding_config, weight in zip(
+                tables, emb_module.split_embedding_weights()
+            ):
+                self.embeddings[embedding_config.name] = torch.nn.Module()
+                self.embeddings[embedding_config.name].register_parameter(
+                    "weight", torch.nn.Parameter(weight)
+                )
+
+    def forward(self, features: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+        """
+        Args:
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
+
+        Returns:
+            Dict[str, JaggedTensor]
+        """
+        assert features is not None
+        feature_dict = features.to_dict()
+
+        feature_embeddings: Dict[str, JaggedTensor] = {}
+
+        for emb_op, (_key, tables) in zip(
+            self._emb_modules, self._key_to_tables.items()
+        ):
+            indicies = []
+            lengths = []
+            offsets = []
+
+            feature_names = []
+            feature_lengths = []
+            feature_values = []
+            splits = []
+
+            for table in tables:
+                for feature in table.feature_names:
+                    f = feature_dict[feature]
+                    indicies.append(f.values())
+                    lengths.append(f.lengths())
+
+                    if feature in self._shared_features:
+                        feature = f"{feature}@{table.name}"
+
+                    feature_names.append(feature)
+                    feature_values.append(f.values())
+                    feature_lengths.append(f.lengths())
+                    splits.append(torch.sum(feature_lengths[-1]))
+
+            indicies = torch.cat(indicies)
+            lengths = torch.cat(lengths)
+            offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
+
+            lookups = emb_op(indicies.int(), offsets.int(), weights=None)
+            lookups = torch.split(lookups, split_size_or_sections=splits)
+
+            for feature, lookup, feature_length, values in zip(
+                feature_names, lookups, feature_lengths, feature_values
+            ):
+                feature_embeddings[feature] = JaggedTensor(
+                    values=lookup,
+                    lengths=feature_length,
+                    # hack to return kJT positional indicies in return type.
+                    weights=values if self.need_indices() else None,
+                )
+
+        return feature_embeddings
+
+    def _get_name(self) -> str:
+        return "FusedEmbeddingCollection"
+
+    def embedding_configs(self) -> List[EmbeddingConfig]:
+        return self._embedding_configs
+
+    def embedding_names_by_table(self) -> List[List[str]]:
+        return self._embedding_names_by_table
+
+    def embedding_dim(self) -> int:
+        return self._embedding_dim
+
+    def optimizer_type(self) -> Type[torch.optim.Optimizer]:
+        return self._optimizer_type
+
+    def optimizer_kwargs(self) -> Dict[str, Any]:
+        return self._optimizer_kwargs
+
+    def fused_optimizer(self) -> KeyedOptimizer:
+        return self._optim
+
+    def need_indices(self) -> bool:
+        return self._need_indices
 
 
 def fuse_embedding_optimizer(
@@ -552,6 +811,14 @@ def fuse_embedding_optimizer(
             device=device,
             location=location,
         )
+    if isinstance(model, EmbeddingCollection):
+        return FusedEmbeddingCollection(
+            model.embedding_configs(),
+            optimizer_type=optimizer_type,
+            optimizer_kwargs=optimizer_kwargs,
+            device=device,
+            location=location,
+        )
 
     def replace(_model: nn.Module) -> None:
         for child_name, child in _model.named_children():
@@ -561,6 +828,18 @@ def fuse_embedding_optimizer(
                     child_name,
                     FusedEmbeddingBagCollection(
                         tables=child.embedding_bag_configs(),
+                        optimizer_type=optimizer_type,
+                        optimizer_kwargs=optimizer_kwargs,
+                        device=device,
+                        location=location,
+                    ),
+                )
+            elif isinstance(child, EmbeddingCollection):
+                setattr(
+                    _model,
+                    child_name,
+                    FusedEmbeddingCollection(
+                        tables=child.embedding_configs(),
                         optimizer_type=optimizer_type,
                         optimizer_kwargs=optimizer_kwargs,
                         device=device,
