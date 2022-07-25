@@ -242,6 +242,7 @@ class ShardedEmbeddingCollection(
         List[torch.Tensor],
         Dict[str, JaggedTensor],
     ],
+    # TODO remove after compute_kernel X sharding decoupling
     FusedOptimizerModule,
 ):
     """

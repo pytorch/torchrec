@@ -240,6 +240,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
     def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
         super().__init__()
 
+        # TODO remove after decoupling
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -258,7 +259,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         return types
 
     def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
+        # TODO remove after decoupling
+        self,
+        sharding_type: str,
+        compute_device_type: str,
     ) -> List[str]:
         ret = [
             EmbeddingComputeKernel.DENSE.value,

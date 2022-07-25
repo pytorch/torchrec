@@ -23,84 +23,89 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessTestBase,
 )
 
-from torchrec.distributed.test_utils.test_model import TestFusedEBCSharder
-from torchrec.distributed.test_utils.test_sharding import copy_state_dict, SharderType
+from torchrec.distributed.test_utils.test_model import TestFusedECSharder
+from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingEnv,
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_configs import EmbeddingConfig
+from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.modules.fused_embedding_modules import (
     fuse_embedding_optimizer,
-    FusedEmbeddingBagCollection,
+    FusedEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
 
 
-def sharding_single_rank(
-    rank: int,
-    world_size: int,
-    unsharded_model: nn.Module,
-    kjt_input: KeyedJaggedTensor,
-    sharders: List[ModuleSharder[nn.Module]],
-    backend: str,
-    constraints: Optional[Dict[str, ParameterConstraints]] = None,
-    local_size: Optional[int] = None,
-) -> None:
-
-    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-        kjt_input = kjt_input.to(ctx.device)
-        unsharded_model = unsharded_model.to(ctx.device)
-
-        # Shard model.
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                world_size, ctx.device.type, local_world_size=ctx.local_size
-            ),
-            constraints=constraints,
-        )
-        plan: ShardingPlan = planner.collective_plan(unsharded_model, sharders, ctx.pg)
-
-        sharded_model = DistributedModelParallel(
-            unsharded_model,
-            env=ShardingEnv.from_process_group(ctx.pg),
-            plan=plan,
-            sharders=sharders,
-            device=ctx.device,
-        )
-
-        # Load model state from the global model.
-        copy_state_dict(sharded_model.state_dict(), unsharded_model.state_dict())
-
-        # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
-        # in normal author modelling code this won't be an issue because each rank would individually create
-        # their model. output from sharded_pred is correctly on the correct device.
-        unsharded_model_pred = (
-            unsharded_model(kjt_input).values().detach().clone().cpu()
-        )
-        sharded_pred = sharded_model(kjt_input).values().detach().clone().cpu()
-
-        # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(sharded_pred, unsharded_model_pred)
-
-
 @skip_if_asan_class
 class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
+    @classmethod
+    def sharding_single_rank(
+        cls,
+        rank: int,
+        world_size: int,
+        unsharded_model: nn.Module,
+        kjt_input: KeyedJaggedTensor,
+        sharders: List[ModuleSharder[nn.Module]],
+        backend: str,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        local_size: Optional[int] = None,
+    ) -> None:
+        with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+            kjt_input = kjt_input.to(ctx.device)
+            unsharded_model = unsharded_model.to(ctx.device)
+
+            # Shard model.
+            planner = EmbeddingShardingPlanner(
+                topology=Topology(
+                    world_size, ctx.device.type, local_world_size=ctx.local_size
+                ),
+                constraints=constraints,
+            )
+            plan: ShardingPlan = planner.collective_plan(
+                unsharded_model, sharders, ctx.pg
+            )
+
+            sharded_model = DistributedModelParallel(
+                unsharded_model,
+                env=ShardingEnv.from_process_group(ctx.pg),
+                plan=plan,
+                sharders=sharders,
+                device=ctx.device,
+            )
+
+            # Load model state from the global model.
+            copy_state_dict(sharded_model.state_dict(), unsharded_model.state_dict())
+
+            # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
+            # in normal author modelling code this won't be an issue because each rank would individually create
+            # their model. output from sharded_pred is correctly on the correct device.
+            unsharded_model_pred = unsharded_model(kjt_input)
+            sharded_pred = sharded_model(kjt_input)
+
+            assert set(unsharded_model_pred.keys()) == set(sharded_pred.keys())
+
+            for feature_name in unsharded_model_pred.keys():
+                unsharded_jt = unsharded_model_pred[feature_name]
+                sharded_jt = sharded_pred[feature_name]
+
+                torch.testing.assert_close(
+                    unsharded_jt.values().cpu(), sharded_jt.values().cpu()
+                )
+                torch.testing.assert_close(
+                    unsharded_jt.lengths().cpu(), sharded_jt.lengths().cpu()
+                )
+
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-fixme[56]
     @given(
-        sharder_type=st.sampled_from(
-            [
-                SharderType.EMBEDDING_BAG_COLLECTION.value,
-            ]
-        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
@@ -112,15 +117,14 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_fused_ebc(
+    def test_sharding_fused_ec(
         self,
-        sharder_type: str,
         sharding_type: str,
     ) -> None:
 
-        fused_ebc = FusedEmbeddingBagCollection(
+        fused_ec = FusedEmbeddingCollection(
             tables=[
-                EmbeddingBagConfig(
+                EmbeddingConfig(
                     name="table_0",
                     feature_names=["feature_0", "feature_1"],
                     embedding_dim=8,
@@ -144,11 +148,11 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         )
 
         self._run_multi_process_test(
-            callable=sharding_single_rank,
+            callable=self.sharding_single_rank,
             world_size=2,
-            unsharded_model=fused_ebc,
+            unsharded_model=fused_ec,
             kjt_input=kjt_input,
-            sharders=[TestFusedEBCSharder(sharding_type=sharding_type)],
+            sharders=[TestFusedECSharder(sharding_type=sharding_type)],
             backend="nccl",
         )
 
@@ -174,9 +178,9 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharding_type: str,
     ) -> None:
 
-        ebc = EmbeddingBagCollection(
+        ec = EmbeddingCollection(
             tables=[
-                EmbeddingBagConfig(
+                EmbeddingConfig(
                     name="table_0",
                     feature_names=["feature_0", "feature_1"],
                     embedding_dim=8,
@@ -185,8 +189,8 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             ],
         )
 
-        fused_ebc = fuse_embedding_optimizer(
-            ebc,
+        fused_ec = fuse_embedding_optimizer(
+            ec,
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
             device=torch.device("cuda"),
@@ -204,10 +208,10 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         )
 
         self._run_multi_process_test(
-            callable=sharding_single_rank,
+            callable=self.sharding_single_rank,
             world_size=2,
-            unsharded_model=fused_ebc,
+            unsharded_model=fused_ec,
             kjt_input=kjt_input,
-            sharders=[TestFusedEBCSharder(sharding_type=sharding_type)],
+            sharders=[TestFusedECSharder(sharding_type=sharding_type)],
             backend="nccl",
         )
