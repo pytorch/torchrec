@@ -65,6 +65,8 @@ def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
         return PoolingMode.SUM
     elif pooling_type == PoolingType.MEAN:
         return PoolingMode.MEAN
+    elif pooling_type == PoolingType.NONE:
+        return PoolingMode.NONE
     else:
         raise Exception(f"Invalid pooling type {pooling_type}")
 
