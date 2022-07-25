@@ -16,12 +16,15 @@ from torchrec.models.dlrm import (
     choose,
     DenseArch,
     DLRM,
+    DLRM_DCN,
+    DLRM_Projection,
     DLRMTrain,
-    DLRMV2,
     InteractionArch,
-    InteractionV2Arch,
+    InteractionDCNArch,
+    InteractionProjectionArch,
     SparseArch,
 )
+from torchrec.modules.crossnet import LowRankCrossNet
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -566,7 +569,7 @@ class DLRMTrainTest(unittest.TestCase):
         self.assertEqual(logits.size(), (B,))
 
 
-class InteractionV2ArchTest(unittest.TestCase):
+class InteractionProjectionArchTest(unittest.TestCase):
     def test_basic(self) -> None:
         D = 3
         B = 10
@@ -582,7 +585,7 @@ class InteractionV2ArchTest(unittest.TestCase):
             in_features=2 * D + D,
             layer_sizes=[2 * D, F2 * D],
         )
-        inter_arch = InteractionV2Arch(
+        inter_arch = InteractionProjectionArch(
             num_sparse_features=F,
             interaction_branch1=I1,
             interaction_branch2=I2,
@@ -610,7 +613,7 @@ class InteractionV2ArchTest(unittest.TestCase):
             in_features=4 * D + D,
             layer_sizes=[4 * D, F2 * D],  # F2 = 4
         )
-        inter_arch = InteractionV2Arch(
+        inter_arch = InteractionProjectionArch(
             num_sparse_features=F,
             interaction_branch1=I1,
             interaction_branch2=I2,
@@ -637,7 +640,7 @@ class InteractionV2ArchTest(unittest.TestCase):
         F2 = 5
         I1 = nn.Identity()
         I2 = nn.Identity()
-        inter_arch = InteractionV2Arch(
+        inter_arch = InteractionProjectionArch(
             num_sparse_features=F,
             interaction_branch1=I1,
             interaction_branch2=I2,
@@ -759,7 +762,7 @@ class InteractionV2ArchTest(unittest.TestCase):
         )
 
 
-class DLRMV2Test(unittest.TestCase):
+class DLRM_ProjectionTest(unittest.TestCase):
     def test_basic(self) -> None:
         torch.manual_seed(0)
         B = 2
@@ -777,7 +780,7 @@ class DLRMV2Test(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
-        sparse_nn = DLRMV2(
+        sparse_nn = DLRM_Projection(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],
@@ -785,7 +788,7 @@ class DLRMV2Test(unittest.TestCase):
             interaction_branch2_layer_sizes=[3 * D + D, 4 * D],
             over_arch_layer_sizes=[5, 1],
         )
-        self.assertTrue(isinstance(sparse_nn.inter_arch, InteractionV2Arch))
+        self.assertTrue(isinstance(sparse_nn.inter_arch, InteractionProjectionArch))
 
         features = torch.rand((B, dense_in_features))
         sparse_features = KeyedJaggedTensor.from_offsets_sync(
@@ -827,7 +830,7 @@ class DLRMV2Test(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
         with self.assertRaises(ValueError):
-            sparse_nn = DLRMV2(  # noqa
+            sparse_nn = DLRM_Projection(  # noqa
                 embedding_bag_collection=ebc,
                 dense_in_features=dense_in_features,
                 dense_arch_layer_sizes=[20, D + 1],
@@ -853,7 +856,7 @@ class DLRMV2Test(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
         with self.assertRaises(ValueError):
-            sparse_nn = DLRMV2(
+            sparse_nn = DLRM_Projection(
                 embedding_bag_collection=ebc,
                 dense_in_features=dense_in_features,
                 dense_arch_layer_sizes=[20, D],
@@ -863,7 +866,7 @@ class DLRMV2Test(unittest.TestCase):
             )
 
         with self.assertRaises(ValueError):
-            sparse_nn = DLRMV2(  # noqa
+            sparse_nn = DLRM_Projection(  # noqa
                 embedding_bag_collection=ebc,
                 dense_in_features=dense_in_features,
                 dense_arch_layer_sizes=[20, D],
@@ -873,7 +876,7 @@ class DLRMV2Test(unittest.TestCase):
             )
 
 
-class DLRMV2TrainTest(unittest.TestCase):
+class DLRM_ProjectionTrainTest(unittest.TestCase):
     def test_basic(self) -> None:
         B = 2
         D = 8
@@ -887,7 +890,7 @@ class DLRMV2TrainTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config])
-        dlrmv2_module = DLRMV2(
+        dlrm_module = DLRM_Projection(
             embedding_bag_collection=ebc,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=[20, D],
@@ -895,7 +898,267 @@ class DLRMV2TrainTest(unittest.TestCase):
             interaction_branch1_layer_sizes=[80, 40],
             interaction_branch2_layer_sizes=[80, 48],
         )
-        dlrm = DLRMTrain(dlrmv2_module)
+        dlrm = DLRMTrain(dlrm_module)
+
+        features = torch.rand((B, dense_in_features))
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f2"],
+            values=torch.tensor(range(3)),
+            offsets=torch.tensor([0, 2, 3]),
+        )
+        batch = Batch(
+            dense_features=features,
+            sparse_features=sparse_features,
+            labels=torch.randint(2, (B,)),
+        )
+
+        _, (_, logits, _) = dlrm(batch)
+        self.assertEqual(logits.size(), (B,))
+
+
+class InteractionDCNArchTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        D = 3
+        B = 10
+        keys = ["f1", "f2"]
+        F = len(keys)
+        DCN = LowRankCrossNet(in_features=F * D + D, num_layers=1, low_rank=D)
+        inter_arch = InteractionDCNArch(
+            num_sparse_features=F,
+            crossnet=DCN,
+        )
+
+        dense_features = torch.rand((B, D))
+
+        sparse_features = torch.rand((B, F, D))
+        concat_dense = inter_arch(dense_features, sparse_features)
+        #  B X (F*D + D)
+        self.assertEqual(concat_dense.size(), (B, F * D + D))
+
+    def test_larger(self) -> None:
+        D = 8
+        B = 20
+        keys = ["f1", "f2", "f3", "f4"]
+        F = len(keys)
+        DCN = LowRankCrossNet(in_features=F * D + D, num_layers=2, low_rank=D)
+        inter_arch = InteractionDCNArch(
+            num_sparse_features=F,
+            crossnet=DCN,
+        )
+
+        dense_features = torch.rand((B, D))
+        sparse_features = torch.rand((B, F, D))
+
+        concat_dense = inter_arch(dense_features, sparse_features)
+        #  B X (F*D+D)
+        self.assertEqual(concat_dense.size(), (B, D * F + D))
+
+    def test_correctness(self) -> None:
+        D = 4
+        B = 3
+        keys = [
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+        ]
+        F = len(keys)
+        DCN = nn.Identity()
+        inter_arch = InteractionDCNArch(
+            num_sparse_features=F,
+            crossnet=DCN,
+        )
+        torch.manual_seed(0)
+
+        dense_features = torch.rand((B, D))
+        sparse_features = torch.rand((B, F, D))
+
+        concat_dense = inter_arch(dense_features, sparse_features)
+        #  B X (F*D + D)
+        self.assertEqual(concat_dense.size(), (B, F * D + D))
+
+        expected = torch.tensor(
+            [
+                [
+                    0.4963,
+                    0.7682,
+                    0.0885,
+                    0.1320,
+                    0.0223,
+                    0.1689,
+                    0.2939,
+                    0.5185,
+                    0.6977,
+                    0.8000,
+                    0.1610,
+                    0.2823,
+                    0.6816,
+                    0.9152,
+                    0.3971,
+                    0.8742,
+                    0.4194,
+                    0.5529,
+                    0.9527,
+                    0.0362,
+                ],
+                [
+                    0.3074,
+                    0.6341,
+                    0.4901,
+                    0.8964,
+                    0.1852,
+                    0.3734,
+                    0.3051,
+                    0.9320,
+                    0.1759,
+                    0.2698,
+                    0.1507,
+                    0.0317,
+                    0.2081,
+                    0.9298,
+                    0.7231,
+                    0.7423,
+                    0.5263,
+                    0.2437,
+                    0.5846,
+                    0.0332,
+                ],
+                [
+                    0.4556,
+                    0.6323,
+                    0.3489,
+                    0.4017,
+                    0.1387,
+                    0.2422,
+                    0.8155,
+                    0.7932,
+                    0.2783,
+                    0.4820,
+                    0.8198,
+                    0.9971,
+                    0.6984,
+                    0.5675,
+                    0.8352,
+                    0.2056,
+                    0.5932,
+                    0.1123,
+                    0.1535,
+                    0.2417,
+                ],
+            ]
+        )
+
+        self.assertTrue(
+            torch.allclose(
+                concat_dense,
+                expected,
+                rtol=1e-4,
+                atol=1e-4,
+            )
+        )
+
+
+class DLRM_DCNTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        torch.manual_seed(0)
+        B = 2
+        D = 8
+        dense_in_features = 100
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        sparse_nn = DLRM_DCN(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            dcn_num_layers=2,
+            dcn_low_rank_dim=8,
+            over_arch_layer_sizes=[5, 1],
+        )
+        self.assertTrue(isinstance(sparse_nn.inter_arch, InteractionDCNArch))
+
+        features = torch.rand((B, dense_in_features))
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 11]),
+        )
+
+        logits = sparse_nn(
+            dense_features=features,
+            sparse_features=sparse_features,
+        )
+        self.assertEqual(logits.size(), (B, 1))
+
+        expected_logits = torch.tensor([[1.5232], [0.1726]])
+        self.assertTrue(
+            torch.allclose(
+                logits,
+                expected_logits,
+                rtol=1e-4,
+                atol=1e-4,
+            )
+        )
+
+    def test_dense_size(self) -> None:
+        torch.manual_seed(0)
+        D = 8
+        dense_in_features = 100
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        with self.assertRaises(ValueError):
+            sparse_nn = DLRM_DCN(  # noqa
+                embedding_bag_collection=ebc,
+                dense_in_features=dense_in_features,
+                dense_arch_layer_sizes=[20, D + 1],
+                dcn_num_layers=2,
+                dcn_low_rank_dim=8,
+                over_arch_layer_sizes=[5, 1],
+            )
+
+
+class DLRM_DCNTrainTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        B = 2
+        D = 8
+        dense_in_features = 100
+
+        eb1_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+        dlrm_dcn_module = DLRM_DCN(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+            dcn_num_layers=2,
+            dcn_low_rank_dim=8,
+        )
+        dlrm = DLRMTrain(dlrm_dcn_module)
 
         features = torch.rand((B, dense_in_features))
         sparse_features = KeyedJaggedTensor.from_offsets_sync(
