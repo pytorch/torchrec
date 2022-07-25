@@ -207,6 +207,7 @@ class ShardedEmbeddingBagCollection(
     ShardedModule[SparseFeaturesList, List[torch.Tensor], KeyedTensor],
     FusedOptimizerModule,
 ):
+    # TODO remove after compute_kernel X sharding decoupling
     """
     Sharded implementation of EmbeddingBagCollection.
     This is part of the public API to allow for manual data dist pipelining.
