@@ -415,6 +415,7 @@ class Stats(abc.ABC):
         num_plans: int,
         run_time: float,
         best_plan: List[ShardingOption],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = False,
     ) -> None:
         """
