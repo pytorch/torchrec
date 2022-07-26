@@ -53,7 +53,9 @@ template <typename Tag, typename T>
 inline NaiveIDTransformer<Tag, T>::NaiveIDTransformer(
     int64_t num_embedding,
     int64_t embedding_offset)
-    : embedding_offset_(embedding_offset), bitmap_(num_embedding) {}
+    : embedding_offset_(embedding_offset), bitmap_(num_embedding) {
+  global_id2cache_value_.reserve(num_embedding);
+}
 
 template <typename Tag, typename T>
 template <typename Filter, typename Update, typename Fetch>
