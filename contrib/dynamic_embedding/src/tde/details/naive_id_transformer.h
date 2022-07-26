@@ -67,6 +67,7 @@ class NaiveIDTransformer {
     int64_t cache_id_;
     Tag tag_;
   };
+
   const int64_t embedding_offset_;
   ska::flat_hash_map<int64_t, CacheValue> global_id2cache_value_;
   Bitmap<T> bitmap_;
