@@ -69,9 +69,7 @@ def quantize_state_dict(
             quant_weight = torch.empty(
                 (tensor.shape[0], (tensor.shape[1] * num_bits) // 8),
                 device="meta",
-                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                #  no attribute `weight`.
-                dtype=module.qconfig.weight().dtype,
+                dtype=torch.uint8,
             )
             if (
                 data_type == DataType.INT8
@@ -81,9 +79,7 @@ def quantize_state_dict(
                 scale_shift = torch.empty(
                     (tensor.shape[0], 4),
                     device="meta",
-                    # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                    #  no attribute `weight`.
-                    dtype=module.qconfig.weight().dtype,
+                    dtype=torch.uint8,
                 )
             else:
                 scale_shift = None
