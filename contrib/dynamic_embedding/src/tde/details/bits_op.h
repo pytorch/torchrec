@@ -1,0 +1,24 @@
+#pragma once
+#include <cstdint>
+#include <type_traits>
+
+namespace tde::details {
+
+namespace bits_impl {
+template <typename T>
+struct Clz {
+  int operator()(T v) const;
+};
+} // namespace bits_impl
+
+/**
+ * Returns the number of leading 0-bits in x, starting at the most significant
+ * bit position. If x is 0, the result is undefined.
+ */
+template <typename T>
+inline int Clz(T t) {
+  bits_impl::Clz<T> clz;
+  return clz(t);
+}
+
+} // namespace tde::details

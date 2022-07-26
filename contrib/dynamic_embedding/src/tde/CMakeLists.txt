@@ -1,6 +1,7 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
 add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_transformer.cpp
-        details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp)
+        details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
+        details/bits_op.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
@@ -31,4 +32,5 @@ if (TDE_WITH_TESTING)
 
     add_tde_test(move_only_function_test details/move_only_function_test.cpp)
     add_tde_test(thread_pool_test details/thread_pool_test.cpp)
+    add_tde_test(bits_op_test details/bits_op_test.cpp)
 endif ()
