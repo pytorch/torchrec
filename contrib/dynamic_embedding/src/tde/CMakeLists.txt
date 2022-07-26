@@ -1,12 +1,14 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
 add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_transformer.cpp
         details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
+        details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
         details/bits_op.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
 target_compile_features(tde_cpp_objs PUBLIC cxx_std_17)
 target_link_libraries(tde_cpp_objs PUBLIC tcb::span)
+target_compile_options(tde_cpp_objs PUBLIC -fPIC)
 
 # tde_cpp.so section
 add_library(tde_cpp MODULE bind.cpp)
@@ -35,5 +37,9 @@ if (TDE_WITH_TESTING)
 
     add_tde_test(move_only_function_test details/move_only_function_test.cpp)
     add_tde_test(thread_pool_test details/thread_pool_test.cpp)
+    add_tde_test(random_bits_generator_test details/random_bits_generator_test.cpp)
+    add_tde_test(mixed_lfu_lru_strategy_test details/mixed_lfu_lru_strategy_test.cpp)
     add_tde_test(bits_op_test details/bits_op_test.cpp)
+    add_tde_benchmark(mixed_lfu_lru_strategy_benchmark details/mixed_lfu_lru_strategy_benchmark.cpp)
+    add_tde_benchmark(random_bits_generator_benchmark details/random_bits_generator_benchmark.cpp)
 endif ()
