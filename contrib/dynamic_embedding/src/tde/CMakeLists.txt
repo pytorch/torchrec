@@ -30,6 +30,9 @@ if (TDE_WITH_TESTING)
     add_tde_test(multithreaded_id_transformer_test details/multithreaded_id_transformer_test.cpp)
     add_tde_benchmark(multithreaded_id_transformer_benchmark details/multithreaded_id_transformer_benchmark.cpp)
 
+    add_tde_test(naive_id_transformer_test details/naive_id_transformer_test.cpp)
+    add_tde_benchmark(naive_id_transformer_benchmark details/naive_id_transformer_benchmark.cpp)
+
     add_tde_test(move_only_function_test details/move_only_function_test.cpp)
     add_tde_test(thread_pool_test details/thread_pool_test.cpp)
     add_tde_test(bits_op_test details/bits_op_test.cpp)
