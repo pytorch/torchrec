@@ -7,14 +7,16 @@
 
 import logging
 from collections import defaultdict
-from typing import Any, cast, Dict, List, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
+from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
     FixedPercentageReservation,
     HeuristicalStorageReservation,
 )
 from torchrec.distributed.planner.types import (
+    ParameterConstraints,
     ShardingOption,
     Stats,
     Storage,
@@ -49,6 +51,7 @@ class EmbeddingStats(Stats):
         num_plans: int,
         run_time: float,
         best_plan: List[ShardingOption],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
     ) -> None:
         """
@@ -67,6 +70,8 @@ class EmbeddingStats(Stats):
             num_plans (int): number of proposals successfully partitioned.
             run_time (float): time taken to find plan (in seconds).
             best_plan (List[ShardingOption]): plan with expected performance.
+            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter
+                names to provided ParameterConstraints.
             debug (bool): whether to enable debug mode.
         """
 
@@ -115,7 +120,8 @@ class EmbeddingStats(Stats):
                 shard=shard,
                 sharding_option=sharding_option,
                 world_size=topology.world_size,
-                local_size=topology.local_world_size,
+                local_world_size=topology.local_world_size,
+                constraints=constraints,
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
@@ -303,7 +309,8 @@ class EmbeddingStats(Stats):
         shard: ParameterSharding,
         sharding_option: ShardingOption,
         world_size: int,
-        local_size: int,
+        local_world_size: int,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Tuple[List[int], List[float], List[float]]:
         """
         Gets ranks, input sizes, and output sizes per shard.
@@ -318,53 +325,40 @@ class EmbeddingStats(Stats):
         assert shard.ranks
         ranks = shard.ranks
 
-        batch_size = world_size * sharding_option.batch_size
+        num_poolings = (
+            cast(List[float], constraints[sharding_option.name].num_poolings)
+            if constraints
+            and constraints.get(sharding_option.name)
+            and constraints[sharding_option.name].num_poolings
+            else [1.0] * sharding_option.num_inputs
+        )
+        batch_sizes = (
+            cast(List[int], constraints[sharding_option.name].batch_sizes)
+            if constraints
+            and constraints.get(sharding_option.name)
+            and constraints[sharding_option.name].batch_sizes
+            else [sharding_option.batch_size] * sharding_option.num_inputs
+        )
         input_data_type_size = BIGINT_DTYPE
-        pooling_factor = float(sum(sharding_option.input_lengths))
         output_data_type_size = sharding_option.tensor.element_size()
-        # TODO update to support variable batch size and num poolings
-        num_outputs = float(
-            len(sharding_option.input_lengths)
-            if sharding_option.is_pooled
-            else sum(sharding_option.input_lengths)
+
+        input_sizes, output_sizes = _calculate_shard_io_sizes(
+            sharding_type=sharding_option.sharding_type,
+            batch_sizes=batch_sizes,
+            world_size=world_size,
+            local_world_size=local_world_size,
+            input_lengths=sharding_option.input_lengths,
+            emb_dim=sharding_option.tensor.shape[1],
+            shard_sizes=[shard.size for shard in sharding_option.shards],
+            input_data_type_size=input_data_type_size,
+            output_data_type_size=output_data_type_size,
+            num_poolings=num_poolings,
+            is_pooled=sharding_option.is_pooled,
         )
 
-        if shard.sharding_type == ShardingType.DATA_PARALLEL.value:
-            batch_size = sharding_option.batch_size
-        elif shard.sharding_type == ShardingType.ROW_WISE.value:
-            pooling_factor /= world_size
-            if sharding_option.is_pooled:
-                num_outputs /= world_size
-        elif shard.sharding_type == ShardingType.TABLE_ROW_WISE.value:
-            pooling_factor /= local_size
-            if sharding_option.is_pooled:
-                num_outputs /= local_size
+        input_sizes = [bytes_to_mb(input_size) for input_size in input_sizes]
+        output_sizes = [bytes_to_mb(output_size) for output_size in output_sizes]
 
-        input_sizes = [
-            bytes_to_mb(batch_size * pooling_factor * input_data_type_size)
-        ] * len(ranks)
-        output_sizes = (
-            [
-                bytes_to_mb(
-                    batch_size
-                    * sharding_option.tensor.shape[1]  # embedding dim
-                    * num_outputs
-                    * output_data_type_size
-                )
-            ]
-            * len(ranks)
-            if shard.sharding_type == ShardingType.DATA_PARALLEL.value
-            else [
-                bytes_to_mb(
-                    batch_size
-                    * int(shard.shard_sizes[1])  # embedding dim
-                    * num_outputs
-                    * output_data_type_size
-                )
-                # pyre-ignore [16]
-                for shard in shard.sharding_spec.shards
-            ]
-        )
         return ranks, input_sizes, output_sizes
 
     def _log_max_perf_and_max_hbm(self, perf: List[float], used_hbm: List[int]) -> None:
