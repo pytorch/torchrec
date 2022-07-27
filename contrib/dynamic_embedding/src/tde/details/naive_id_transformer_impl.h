@@ -47,19 +47,22 @@ inline bool Bitmap<T>::Full() const {
 }
 
 template <typename Tag, typename T>
-inline NaiveIDTransformer<Tag, T>::NaiveIDTransformer(
-    int64_t num_embedding,
-    int64_t embedding_offset)
-    : embedding_offset_(embedding_offset), bitmap_(num_embedding) {
+inline NaiveIDTransformer<Tag, T>::NaiveIDTransformer(int64_t num_embedding)
+    : bitmap_(num_embedding) {
   global_id2cache_value_.reserve(num_embedding);
 }
 
 template <typename Tag, typename T>
-template <typename Filter, typename Update, typename Fetch>
+template <
+    typename Filter,
+    typename CacheIDTransformer,
+    typename Update,
+    typename Fetch>
 inline int64_t NaiveIDTransformer<Tag, T>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Filter filter,
+    CacheIDTransformer cache_id_transformer,
     Update update,
     Fetch fetch) {
   int64_t num_transformed = 0;
@@ -73,19 +76,18 @@ inline int64_t NaiveIDTransformer<Tag, T>::Transform(
     int64_t cache_id;
     if (iter != global_id2cache_value_.end()) {
       cache_id = iter->second.cache_id_;
-      iter->second.tag_ =
-          update(iter->second.tag_, global_id, cache_id + embedding_offset_);
+      iter->second.lxu_record_ = update(iter->second.lxu_record_, global_id, cache_id);
     } else {
       // The transformer is full.
       if (C10_UNLIKELY(bitmap_.Full())) {
         break;
       }
-      cache_id = bitmap_.NextFreeBit();
-      Tag tag = update(std::nullopt, global_id, cache_id + embedding_offset_);
+      cache_id = cache_id_transformer(bitmap_.NextFreeBit());
+      Tag tag = update(std::nullopt, global_id, cache_id);
       global_id2cache_value_.emplace(global_id, CacheValue{cache_id, tag});
-      fetch(global_id, cache_id + embedding_offset_);
+      fetch(global_id, cache_id);
     }
-    cache_ids[i] = cache_id + embedding_offset_;
+    cache_ids[i] = cache_id;
     num_transformed++;
   }
   return num_transformed;
@@ -95,7 +97,7 @@ template <typename Tag, typename T>
 template <typename Callback>
 inline void NaiveIDTransformer<Tag, T>::ForEach(Callback callback) {
   for (auto&& [global_id, value] : global_id2cache_value_) {
-    callback(global_id, value.cache_id_, value.tag_);
+    callback(global_id, value.cache_id_, value.lxu_record_);
   }
 }
 
