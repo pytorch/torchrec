@@ -746,9 +746,11 @@
 </li>
       <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM">DLRM (class in torchrec.models.dlrm)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain">DLRMTrain (class in torchrec.models.dlrm)</a>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN">DLRM_DCN (class in torchrec.models.dlrm)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMV2">DLRMV2 (class in torchrec.models.dlrm)</a>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection">DLRM_Projection (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain">DLRMTrain (class in torchrec.models.dlrm)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.downstream_modules">downstream_modules (torchrec.distributed.planner.types.ShardingOption attribute)</a>
 </li>
@@ -1083,7 +1085,9 @@
 </li>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch.forward">(torchrec.models.dlrm.InteractionArch method)</a>
 </li>
-        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionV2Arch.forward">(torchrec.models.dlrm.InteractionV2Arch method)</a>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch.forward">(torchrec.models.dlrm.InteractionDCNArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch.forward">(torchrec.models.dlrm.InteractionProjectionArch method)</a>
 </li>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.OverArch.forward">(torchrec.models.dlrm.OverArch method)</a>
 </li>
@@ -1382,7 +1386,9 @@
 </li>
       <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch">InteractionArch (class in torchrec.models.dlrm)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionV2Arch">InteractionV2Arch (class in torchrec.models.dlrm)</a>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch">InteractionDCNArch (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch">InteractionProjectionArch (class in torchrec.models.dlrm)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.intra_and_cross_node_pg">intra_and_cross_node_pg() (in module torchrec.distributed.comm)</a>
 </li>
@@ -2371,14 +2377,18 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Shard.size">size (torchrec.distributed.planner.types.Shard attribute)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMV2.sparse_arch">sparse_arch (torchrec.models.dlrm.DLRMV2 attribute)</a>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN.sparse_arch">sparse_arch (torchrec.models.dlrm.DLRM_DCN attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection.sparse_arch">(torchrec.models.dlrm.DLRM_Projection attribute)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.sparse_feature_names">sparse_feature_names (torchrec.models.dlrm.SparseArch property)</a>
-</li>
-      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.sparse_features">sparse_features (torchrec.datasets.utils.Batch attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.sparse_features">sparse_features (torchrec.datasets.utils.Batch attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.sparse_grad_parameter_names">sparse_grad_parameter_names() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -2924,8 +2934,6 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.activation">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.crossnet
 
@@ -2933,6 +2941,8 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.crossnet">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.deepfm
 
@@ -3144,13 +3154,17 @@
 </li>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM.training">(torchrec.models.dlrm.DLRM attribute)</a>
 </li>
-        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain.training">(torchrec.models.dlrm.DLRMTrain attribute)</a>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN.training">(torchrec.models.dlrm.DLRM_DCN attribute)</a>
 </li>
-        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMV2.training">(torchrec.models.dlrm.DLRMV2 attribute)</a>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection.training">(torchrec.models.dlrm.DLRM_Projection attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain.training">(torchrec.models.dlrm.DLRMTrain attribute)</a>
 </li>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch.training">(torchrec.models.dlrm.InteractionArch attribute)</a>
 </li>
-        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionV2Arch.training">(torchrec.models.dlrm.InteractionV2Arch attribute)</a>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch.training">(torchrec.models.dlrm.InteractionDCNArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch.training">(torchrec.models.dlrm.InteractionProjectionArch attribute)</a>
 </li>
         <li><a href="torchrec.models.html#torchrec.models.dlrm.OverArch.training">(torchrec.models.dlrm.OverArch attribute)</a>
 </li>

@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -742,7 +742,10 @@ features.</p>
 (i.e, each EmbeddingBagConfig uses the same embedding_dim)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dlrm_module</strong> – DLRM module (DLRM or DLRMV2) to be used in training</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dlrm_module</strong> – DLRM module (DLRM or DLRM_Projection or DLRM_DCN) to be used in</p></li>
+<li><p><strong>training</strong> – </p></li>
+</ul>
 </dd>
 </dl>
 <p>Example:</p>
@@ -777,10 +780,99 @@ features.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRMV2">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">DLRMV2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_bag_collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">EmbeddingBagCollection</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">over_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch1_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch2_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.DLRMV2" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_DCN">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">DLRM_DCN</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_bag_collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">EmbeddingBagCollection</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">over_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dcn_num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dcn_low_rank_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.DLRM_DCN" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.models.dlrm.DLRM" title="torchrec.models.dlrm.DLRM"><code class="xref py py-class docutils literal notranslate"><span class="pre">DLRM</span></code></a></p>
-<p>Recsys model v2 modified from the original model from “Deep Learning Recommendation
+<p>Recsys model with DCN modified from the original model from “Deep Learning Recommendation
+Model for Personalization and Recommendation Systems”
+(<a class="reference external" href="https://arxiv.org/abs/1906.00091">https://arxiv.org/abs/1906.00091</a>). Similar to DLRM module but has
+DeepCrossNet <a class="reference external" href="https://arxiv.org/pdf/2008.13535.pdf">https://arxiv.org/pdf/2008.13535.pdf</a> as the interaction layer.</p>
+<p>The module assumes all sparse features have the same embedding dimension
+(i.e. each EmbeddingBagConfig uses the same embedding_dim).</p>
+<p>The following notation is used throughout the documentation for the models:</p>
+<ul class="simple">
+<li><p>F: number of sparse features</p></li>
+<li><p>D: embedding_dimension of sparse features</p></li>
+<li><p>B: batch size</p></li>
+<li><p>num_features: number of dense features</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embedding_bag_collection</strong> (<a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><em>EmbeddingBagCollection</em></a>) – collection of embedding bags
+used to define <cite>SparseArch</cite>.</p></li>
+<li><p><strong>dense_in_features</strong> (<em>int</em>) – the dimensionality of the dense input features.</p></li>
+<li><p><strong>dense_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>DenseArch</cite>.</p></li>
+<li><p><strong>over_arch_layer_sizes</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – the layer sizes for the <cite>OverArch</cite>.
+The output dimension of the <cite>InteractionArch</cite> should not be manually
+specified here.</p></li>
+<li><p><strong>dcn_num_layers</strong> (<em>int</em>) – the number of DCN layers in the interaction.</p></li>
+<li><p><strong>dcn_low_rank_dim</strong> (<em>int</em>) – the dimensionality of low rank approximation
+used in the dcn layers.</p></li>
+<li><p><strong>dense_device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – default compute device.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">B</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">8</span>
+
+<span class="n">eb1_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t1&quot;</span><span class="p">,</span> <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span> <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">eb2_config</span> <span class="o">=</span> <span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+   <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t2&quot;</span><span class="p">,</span>
+   <span class="n">embedding_dim</span><span class="o">=</span><span class="n">D</span><span class="p">,</span>
+   <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+   <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f2&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">DLRM_DCN</span><span class="p">(</span>
+   <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
+   <span class="n">dense_in_features</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+   <span class="n">dense_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">20</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
+   <span class="n">dcn_num_layers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+   <span class="n">dcn_low_rank_dim</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+   <span class="n">over_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1">#     0       1</span>
+<span class="c1"># 0   [1,2] [4,5]</span>
+<span class="c1"># 1   [4,3] [2,9]</span>
+<span class="c1"># ^</span>
+<span class="c1"># feature</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
+   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f3&quot;</span><span class="p">],</span>
+   <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span>
+   <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+<span class="p">)</span>
+
+<span class="n">logits</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+   <span class="n">dense_features</span><span class="o">=</span><span class="n">features</span><span class="p">,</span>
+   <span class="n">sparse_features</span><span class="o">=</span><span class="n">sparse_features</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_DCN.sparse_arch">
+<span class="sig-name descname"><span class="pre">sparse_arch</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.models.dlrm.SparseArch" title="torchrec.models.dlrm.SparseArch"><span class="pre">SparseArch</span></a></em><a class="headerlink" href="#torchrec.models.dlrm.DLRM_DCN.sparse_arch" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_DCN.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.DLRM_DCN.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_Projection">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">DLRM_Projection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_bag_collection</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection" title="torchrec.modules.embedding_modules.EmbeddingBagCollection"><span class="pre">EmbeddingBagCollection</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">over_arch_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch1_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch2_layer_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.DLRM_Projection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.models.dlrm.DLRM" title="torchrec.models.dlrm.DLRM"><code class="xref py py-class docutils literal notranslate"><span class="pre">DLRM</span></code></a></p>
+<p>Recsys model modified from the original model from “Deep Learning Recommendation
 Model for Personalization and Recommendation Systems”
 (<a class="reference external" href="https://arxiv.org/abs/1906.00091">https://arxiv.org/abs/1906.00091</a>). Similar to DLRM module but has
 additional MLPs in the interaction layer (along 2 branches).</p>
@@ -826,7 +918,7 @@ interaction layer. The output dimension must be a multiple of D.</p></li>
 <span class="p">)</span>
 
 <span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="p">[</span><span class="n">eb1_config</span><span class="p">,</span> <span class="n">eb2_config</span><span class="p">])</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">DLRMV2</span><span class="p">(</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">DLRM_Projection</span><span class="p">(</span>
    <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
    <span class="n">dense_in_features</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
    <span class="n">dense_arch_layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">20</span><span class="p">,</span> <span class="n">D</span><span class="p">],</span>
@@ -855,13 +947,13 @@ interaction layer. The output dimension must be a multiple of D.</p></li>
 </pre></div>
 </div>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRMV2.sparse_arch">
-<span class="sig-name descname"><span class="pre">sparse_arch</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.models.dlrm.SparseArch" title="torchrec.models.dlrm.SparseArch"><span class="pre">SparseArch</span></a></em><a class="headerlink" href="#torchrec.models.dlrm.DLRMV2.sparse_arch" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_Projection.sparse_arch">
+<span class="sig-name descname"><span class="pre">sparse_arch</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.models.dlrm.SparseArch" title="torchrec.models.dlrm.SparseArch"><span class="pre">SparseArch</span></a></em><a class="headerlink" href="#torchrec.models.dlrm.DLRM_Projection.sparse_arch" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRMV2.training">
-<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.DLRMV2.training" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.DLRM_Projection.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.DLRM_Projection.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -973,8 +1065,79 @@ can be computed.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionV2Arch">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionV2Arch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionV2Arch" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionDCNArch">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionDCNArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crossnet</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionDCNArch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
+(dense_features). Returns the output of a Deep Cross Net v2
+<a class="reference external" href="https://arxiv.org/pdf/2008.13535.pdf">https://arxiv.org/pdf/2008.13535.pdf</a> with a low rank approximation for the
+weight matrix. The input and output sizes are the same for this
+interaction layer (F*D + D).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The dimensionality of the <cite>dense_features</cite> (D) is expected to match the
+dimensionality of the <cite>sparse_features</cite> so that the dot products between them
+can be computed.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>num_sparse_features</strong> (<em>int</em>) – <ol class="upperalpha simple" start="6">
+<li></li>
+</ol>
+</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">D</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">]</span>
+<span class="n">F</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+<span class="n">DCN</span> <span class="o">=</span> <span class="n">LowRankCrossNet</span><span class="p">(</span>
+    <span class="n">in_features</span> <span class="o">=</span> <span class="n">F</span><span class="o">*</span><span class="n">D</span><span class="o">+</span><span class="n">D</span><span class="p">,</span>
+    <span class="n">dcn_num_layers</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">dnc_low_rank_dim</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionDCNArch</span><span class="p">(</span>
+    <span class="n">num_sparse_features</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span>
+    <span class="n">crossnet</span><span class="o">=</span><span class="n">DCN</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">dense_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
+<span class="n">sparse_features</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">B</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">D</span><span class="p">))</span>
+
+<span class="c1">#  B X (F*D + D)</span>
+<span class="n">concat_dense</span> <span class="o">=</span> <span class="n">inter_arch</span><span class="p">(</span><span class="n">dense_features</span><span class="p">,</span> <span class="n">sparse_features</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionDCNArch.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.InteractionDCNArch.forward" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dense_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X D.</p></li>
+<li><p><strong>sparse_features</strong> (<em>torch.Tensor</em>) – an input tensor of size B X F X D.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>an output tensor of size B X (F*D + D).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionDCNArch.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.InteractionDCNArch.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionProjectionArch">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.models.dlrm.</span></span><span class="sig-name descname"><span class="pre">InteractionProjectionArch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">interaction_branch2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.models.dlrm.InteractionProjectionArch" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
 <p>Processes the output of both <cite>SparseArch</cite> (sparse_features) and <cite>DenseArch</cite>
 (dense_features). Return Y*Z and the dense layer itself (all concatenated)
@@ -1018,7 +1181,7 @@ interaction layer</p></li>
     <span class="n">layer_sizes</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="o">*</span><span class="n">D</span><span class="p">,</span> <span class="mi">4</span><span class="o">*</span><span class="n">D</span><span class="p">],</span> <span class="c1"># F2 = 4</span>
     <span class="n">device</span><span class="o">=</span><span class="n">dense_device</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionV2Arch</span><span class="p">(</span>
+<span class="n">inter_arch</span> <span class="o">=</span> <span class="n">InteractionProjectionArch</span><span class="p">(</span>
                 <span class="n">num_sparse_features</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span>
                 <span class="n">interaction_branch1</span> <span class="o">=</span> <span class="n">I1</span><span class="p">,</span>
                 <span class="n">interaction_branch2</span> <span class="o">=</span> <span class="n">I2</span><span class="p">,</span>
@@ -1032,8 +1195,8 @@ interaction layer</p></li>
 </pre></div>
 </div>
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionV2Arch.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.InteractionV2Arch.forward" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionProjectionArch.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.models.dlrm.InteractionProjectionArch.forward" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1052,8 +1215,8 @@ F1*D and F2*D are the output dimensions of the 2 interaction MLPs.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionV2Arch.training">
-<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.InteractionV2Arch.training" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.models.dlrm.InteractionProjectionArch.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.models.dlrm.InteractionProjectionArch.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
