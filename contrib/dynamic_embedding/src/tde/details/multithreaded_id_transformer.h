@@ -39,7 +39,8 @@ class MultiThreadedIDTransformer {
  private:
   size_t num_threads_;
   ThreadPool thread_pool_;
-  std::vector<NaiveIDTransformer<Tag, uint32_t>> transformers_;
+  std::vector<NaiveIDTransformer<Tag>> transformers_;
+  std::vector<int64_t> embedding_offsets_;
 };
 
 } // namespace tde::details

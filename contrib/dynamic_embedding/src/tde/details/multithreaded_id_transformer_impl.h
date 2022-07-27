@@ -1,5 +1,5 @@
 #pragma once
-
+#include "torch/torch.h"
 namespace tde::details {
 
 template <typename Tag>
@@ -8,13 +8,14 @@ MultiThreadedIDTransformer<Tag>::MultiThreadedIDTransformer(
     size_t num_threads)
     : num_threads_(num_threads), thread_pool_(num_threads) {
   transformers_.reserve(num_threads);
+  embedding_offsets_.reserve(num_threads);
   int64_t embedding_per_transformer = num_embedding / num_threads;
   int64_t embedding_offset = 0;
   for (size_t i = 0; i < num_threads; i++) {
+    embedding_offsets_.emplace_back(embedding_offset);
     transformers_.emplace_back(
         i == num_threads - 1 ? num_embedding - embedding_offset
-                             : embedding_per_transformer,
-        embedding_offset);
+                             : embedding_per_transformer);
     embedding_offset += embedding_per_transformer;
   }
 }
@@ -36,6 +37,9 @@ int64_t MultiThreadedIDTransformer<Tag>::Transform(
           [n = num_threads_, i](int64_t global_ids) {
             return global_ids % static_cast<int64_t>(n) == i;
           },
+          [i, this](int64_t cache_id) {
+            return cache_id + embedding_offsets_[i];
+          },
           update,
           fetch);
     })));
@@ -44,6 +48,7 @@ int64_t MultiThreadedIDTransformer<Tag>::Transform(
   for (size_t i = 0; i < num_threads_; ++i) {
     num_transformed += futures[i].get();
   }
+
   return num_transformed;
 }
 
