@@ -90,6 +90,66 @@ class ComputeKernel(Enum):
     DEFAULT = "default"
 
 
+# Once we only support python3.8+ use
+# from typing import protocol.
+# We can't use from typing_extensions import Protocol due to torch.deploy restrictions.
+class QuantizedCommCodec:
+    """
+    Provide an implementation to quantized, or apply mixed precision, to the tensors used in collective calls (pooled_all_to_all, reduce_scatter, etc).
+    The dtype is the dtype of the tensor called from encode.
+
+    This makes the assumption that the input tensor has type torch.float32
+
+    >>>
+        quantized_tensor = quantized_comm_codec.encode(input_tensor)
+        quantized_tensor.dtype == quantized_comm_codec.quantized_dtype
+        collective_call(output_tensors, input_tensors=tensor)
+        output_tensor = decode(output_tensors)
+
+        torch.assert_close(input_tensors, output_tensor)
+
+    """
+
+    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def quantized_dtype(self) -> torch.dtype:
+        """
+        tensor.dtype of the resultant encode(input_tensor)
+        """
+        ...
+
+
+class NoOpQuantizedCommCodec:
+    """
+    Default No-Op implementation of QuantizedCommCodec
+    """
+
+    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        return input_tensor
+
+    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+        return input_grad
+
+    def quantized_dtype(self) -> torch.dtype:
+        return torch.float
+
+
+@dataclass
+class QuantizedCommCodecs:
+    """
+    The quantization codecs to use for the forward and backward pass respectively of a comm op (e.g. pooled_all_to_all, reduce_scatter, sequence_all_to_all).
+    """
+
+    # pyre-ignore
+    forward: QuantizedCommCodec = NoOpQuantizedCommCodec()
+    # pyre-ignore
+    backward: QuantizedCommCodec = NoOpQuantizedCommCodec()
+
+
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
 Out = TypeVar("Out")
