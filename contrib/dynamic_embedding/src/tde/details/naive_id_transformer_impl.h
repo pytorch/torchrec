@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <vector>
+#include "tde/details/bits_op.h"
 
 namespace tde::details {
 
@@ -25,11 +26,7 @@ inline int64_t Bitmap<T>::NextFreeBit() {
   }
   value = values_[offset];
   if (C10_LIKELY(value)) {
-    if constexpr (num_bits_per_value <= 32) {
-      next_free_bit_ = offset * num_bits_per_value + __builtin_ctz(value);
-    } else {
-      next_free_bit_ = offset * num_bits_per_value + __builtin_ctzll(value);
-    }
+    next_free_bit_ = offset * num_bits_per_value + Ctz(value);
   } else {
     next_free_bit_ = num_total_bits_;
   }
