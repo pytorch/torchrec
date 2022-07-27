@@ -36,7 +36,7 @@ from torchrec.distributed.sharding.tw_sharding import (
     InferTwSparseFeaturesDist,
     TwSparseFeaturesDist,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
 class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]):
@@ -92,9 +92,19 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingsAllToAll(pg, features_per_rank, device)
+        self._dist = SequenceEmbeddingsAllToAll(
+            pg,
+            features_per_rank,
+            device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -167,6 +177,7 @@ class TwSequenceEmbeddingSharding(
             self._pg,
             self._id_list_features_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
 

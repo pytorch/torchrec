@@ -57,6 +57,7 @@ from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
     ParameterSharding,
+    QuantizedCommCodecs,
     ShardedModule,
     ShardedModuleContext,
     ShardedTensor,
@@ -89,15 +90,31 @@ def create_embedding_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
+    qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwSequenceEmbeddingSharding(sharding_infos, env, device)
+        return TwSequenceEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwSequenceEmbeddingSharding(sharding_infos, env, device)
+        return RwSequenceEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return CwSequenceEmbeddingSharding(sharding_infos, env, device)
+        return CwSequenceEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
 
@@ -257,8 +274,9 @@ class ShardedEmbeddingCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding
         )
@@ -266,7 +284,11 @@ class ShardedEmbeddingCollection(
             str, EmbeddingSharding[SparseFeatures, torch.Tensor]
         ] = {
             sharding_type: create_embedding_sharding(
-                sharding_type, embedding_confings, env, device
+                sharding_type,
+                embedding_confings,
+                env,
+                device,
+                qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
@@ -614,7 +636,12 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingCollection:
         return ShardedEmbeddingCollection(
-            module, params, env, self.fused_params, device
+            module,
+            params,
+            env,
+            self.fused_params,
+            device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def shardable_parameters(

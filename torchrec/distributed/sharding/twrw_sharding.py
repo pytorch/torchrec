@@ -36,6 +36,8 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    CommOp,
+    QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
@@ -57,8 +59,9 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         need_pos: bool = False,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
@@ -463,13 +466,26 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         intra_pg: dist.ProcessGroup,
         dim_sum_per_node: List[int],
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._intra_dist = PooledEmbeddingsReduceScatter(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatter(
+            intra_pg,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,
             device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
         )
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
@@ -545,4 +561,5 @@ class TwRwPooledEmbeddingSharding(
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
             device=device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

@@ -34,6 +34,7 @@ from torchrec.distributed.types import (
     EnumerableShardingSpec,
     LazyAwaitable,
     ParameterSharding,
+    QuantizedCommCodecs,
     ShardedModule,
     ShardedModuleContext,
     ShardedTensor,
@@ -85,24 +86,50 @@ def create_embedding_bag_sharding(
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
     need_pos: bool = False,
+    qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
 ) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwPooledEmbeddingSharding(sharding_infos, env, device)
+        return TwPooledEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwPooledEmbeddingSharding(sharding_infos, env, device, need_pos)
+        return RwPooledEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            need_pos=need_pos,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpPooledEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return TwRwPooledEmbeddingSharding(sharding_infos, env, device, need_pos)
+        return TwRwPooledEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
+            need_pos=need_pos,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwPooledEmbeddingSharding(
-            sharding_infos, env, device, permute_embeddings=permute_embeddings
+            sharding_infos,
+            env,
+            device,
+            permute_embeddings=permute_embeddings,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
         return TwCwPooledEmbeddingSharding(
-            sharding_infos, env, device, permute_embeddings=permute_embeddings
+            sharding_infos,
+            env,
+            device,
+            permute_embeddings=permute_embeddings,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
@@ -220,8 +247,9 @@ class ShardedEmbeddingBagCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
@@ -236,6 +264,7 @@ class ShardedEmbeddingBagCollection(
                 device,
                 permute_embeddings=True,
                 need_pos=need_pos,
+                qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
@@ -483,7 +512,12 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
         return ShardedEmbeddingBagCollection(
-            module, params, env, self.fused_params, device
+            module,
+            params,
+            env,
+            self.fused_params,
+            device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def shardable_parameters(

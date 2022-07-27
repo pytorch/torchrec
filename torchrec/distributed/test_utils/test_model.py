@@ -21,6 +21,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
+from torchrec.distributed.types import QuantizedCommCodecs
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
@@ -737,12 +738,14 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         sharding_type: str,
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         if fused_params is None:
             fused_params = {}
-        super().__init__(fused_params)
+
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
+        super().__init__(fused_params, qcomm_codecs_registry)
 
     """
     Restricts sharding to single type only.
@@ -760,17 +763,14 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
     ) -> List[str]:
         return [self._kernel_type]
 
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return self._fused_params
-
 
 class TestFusedEBCSharder(FusedEmbeddingBagCollectionSharder):
     def __init__(
         self,
         sharding_type: str,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(fused_params={}, qcomm_codecs_registry=qcomm_codecs_registry)
         self._sharding_type = sharding_type
 
     """
@@ -799,9 +799,13 @@ class TestFusedECSharder(FusedEmbeddingCollectionSharder):
 
 class TestEBSharder(EmbeddingBagSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 

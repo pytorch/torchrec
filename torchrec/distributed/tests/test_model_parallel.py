@@ -24,6 +24,7 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagSharder,
     ShardedEmbeddingBagCollection,
 )
+from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.fused_embeddingbag import ShardedFusedEmbeddingBagCollection
 
 from torchrec.distributed.model_parallel import (
@@ -78,6 +79,14 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -85,14 +94,22 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             sharders=[
                 cast(
                     ModuleSharder[nn.Module],
-                    create_test_sharder(sharder_type, sharding_type, kernel_type),
+                    create_test_sharder(
+                        sharder_type,
+                        sharding_type,
+                        kernel_type,
+                        qcomms_config=qcomms_config,
+                        device=torch.device("cuda"),
+                    ),
                 ),
             ],
+            qcomms_config=qcomms_config,
             backend="nccl",
         )
 
@@ -154,10 +171,22 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -166,9 +195,12 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=torch.device("cuda"),
                 ),
             ],
             backend="nccl",
+            qcomms_config=qcomms_config,
             constraints={
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
@@ -198,17 +230,37 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                # None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=torch.device("cuda"),
+                ),
             ],
             backend="nccl",
+            qcomms_config=qcomms_config,
         )
 
     # pyre-fixme[56]
@@ -231,6 +283,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                # On gloo, BF16 is not supported as dtype.
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.FP16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_tw(
@@ -238,12 +299,20 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
-                create_test_sharder(sharder_type, sharding_type, kernel_type),
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=torch.device("cpu"),
+                ),
             ],
+            qcomms_config=qcomms_config,
             backend="gloo",
         )
 
@@ -267,6 +336,16 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                # On gloo, BF16 is not supported as dtype.
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_cw(
@@ -274,6 +353,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -283,8 +363,11 @@ class ModelParallelTest(ModelParallelTestShared):
                     sharder_type,
                     sharding_type,
                     kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=torch.device("cpu"),
                 ),
             ],
+            qcomms_config=qcomms_config,
             backend="gloo",
             world_size=world_size,
             constraints={

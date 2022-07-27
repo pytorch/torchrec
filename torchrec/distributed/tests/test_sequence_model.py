@@ -10,6 +10,10 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestDenseArch,
@@ -270,9 +274,23 @@ class TestSequenceSparseNN(TestSparseNNBase):
 
 
 class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
-    def __init__(self, sharding_type: str, kernel_type: str) -> None:
+    def __init__(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig] = None,
+    ) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
+
+        qcomm_codecs_registry = {}
+        if qcomms_config is not None:
+            qcomm_codecs_registry = get_qcomm_codecs_registry(qcomms_config)
+
+        fused_params = {"learning_rate": 0.1}
+        super().__init__(
+            fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
 
     """
     Restricts sharding to single type only.
@@ -289,7 +307,3 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         return [self._kernel_type]
-
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return {"learning_rate": 0.1}
