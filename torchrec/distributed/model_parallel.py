@@ -409,7 +409,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> List[str]:
         module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
-            module.sparse_grad_parameter_names(destination, prefix)
+            pass
         elif isinstance(module, nn.Embedding):
             if module.sparse:
                 destination.append(append_prefix(prefix, "weight"))
