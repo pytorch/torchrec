@@ -75,16 +75,19 @@ inline int64_t NaiveIDTransformer<Tag, T>::Transform(
     // cache_id is in [0, num_embedding)
     int64_t cache_id;
     if (iter != global_id2cache_value_.end()) {
-      cache_id = iter->second.cache_id_;
-      iter->second.lxu_record_ = update(iter->second.lxu_record_, global_id, cache_id);
+      cache_id = cache_id_transformer(iter->second.cache_id_);
+      iter->second.lxu_record_ =
+          update(iter->second.lxu_record_, global_id, cache_id);
     } else {
       // The transformer is full.
       if (C10_UNLIKELY(bitmap_.Full())) {
         break;
       }
-      cache_id = cache_id_transformer(bitmap_.NextFreeBit());
+      auto stored_cache_id = bitmap_.NextFreeBit();
+      cache_id = cache_id_transformer(stored_cache_id);
       Tag tag = update(std::nullopt, global_id, cache_id);
-      global_id2cache_value_.emplace(global_id, CacheValue{cache_id, tag});
+      global_id2cache_value_.emplace(
+          global_id, CacheValue{stored_cache_id, tag});
       fetch(global_id, cache_id);
     }
     cache_ids[i] = cache_id;
