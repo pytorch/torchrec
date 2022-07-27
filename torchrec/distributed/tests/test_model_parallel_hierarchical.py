@@ -172,12 +172,21 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_embedding_tower_nccl(
         self,
         sharding_type: str,
         kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -186,6 +195,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     SharderType.EMBEDDING_TOWER.value,
                     sharding_type,
                     kernel_type,
+                    qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
                 )
             ],
@@ -193,6 +203,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             world_size=4,
             local_size=2,
             model_class=TestTowerSparseNN,
+            qcomms_config=qcomms_config,
         )
 
     @unittest.skipIf(
@@ -213,12 +224,21 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_embedding_tower_collection_nccl(
         self,
         sharding_type: str,
         kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -227,6 +247,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     SharderType.EMBEDDING_TOWER_COLLECTION.value,
                     sharding_type,
                     kernel_type,
+                    qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
                 )
             ],
@@ -234,4 +255,5 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             world_size=4,
             local_size=2,
             model_class=TestTowerCollectionSparseNN,
+            qcomms_config=qcomms_config,
         )
