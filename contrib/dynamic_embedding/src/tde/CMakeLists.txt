@@ -2,7 +2,7 @@
 add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_transformer.cpp
         details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
-        details/bits_op.cpp)
+        details/clz_impl.cpp details/ctz_impl.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
