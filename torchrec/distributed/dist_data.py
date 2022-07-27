@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import itertools
+import logging
 from typing import Callable, List, Optional
 
 import torch
@@ -17,7 +18,8 @@ from torchrec.distributed.comm_ops import (
     alltoall_sequence,
     reduce_scatter_base_pooled,
 )
-from torchrec.distributed.types import Awaitable, NoWait
+
+from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
@@ -35,6 +37,8 @@ try:
     import fbgemm_gpu  # @manual  # noqa
 except ImportError:
     pass
+
+logger: logging.Logger = logging.getLogger()
 
 
 def _get_recat(
@@ -652,6 +656,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -660,6 +665,9 @@ class PooledEmbeddingsAllToAll(nn.Module):
             self._callbacks = callbacks
 
         self._dim_sum_per_rank = dim_sum_per_rank
+
+        self._codecs = codecs
+
         self.register_buffer(
             "_dim_sum_per_rank_tensor",
             torch.tensor(dim_sum_per_rank, device=device, dtype=torch.int),
@@ -701,10 +709,11 @@ class PooledEmbeddingsAllToAll(nn.Module):
             dim_sum_per_rank_tensor=self._dim_sum_per_rank_tensor,
             cumsum_dim_sum_per_rank_tensor=self._cumsum_dim_sum_per_rank_tensor,
             group=self._pg,
+            codecs=self._codecs,
         )
 
         pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable
+            tensor_awaitable=tensor_awaitable,
         )
         pooled_embedding_awaitable.callbacks.extend(self._callbacks)
 
@@ -791,9 +800,12 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
+
+        self._codecs = codecs
 
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
         """
@@ -806,7 +818,9 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
-        tensor_awaitable = reduce_scatter_base_pooled(local_embs, self._pg)
+        tensor_awaitable = reduce_scatter_base_pooled(
+            local_embs, self._pg, codecs=self._codecs
+        )
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
 
@@ -887,6 +901,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
         self._pg = pg
@@ -907,6 +922,8 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             "_backward_recat_tensor",
             torch.tensor(backward_recat, device=device, dtype=torch.int),
         )
+
+        self._codecs = codecs
 
     def forward(
         self,
@@ -939,9 +956,12 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             input_splits=input_splits,
             output_splits=output_splits,
             group=self._pg,
+            codecs=self._codecs,
         )
-        return SequenceEmbeddingsAwaitable(
+        sequence_awaitable = SequenceEmbeddingsAwaitable(
             tensor_awaitable=tensor_awaitable,
             unbucketize_permute_tensor=unbucketize_permute_tensor,
             embedding_dim=local_embs.shape[1],
         )
+
+        return sequence_awaitable
