@@ -231,7 +231,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         qebc_2 = QuantEmbeddingBagCollection.from_float(ebc_2)
-        # pyre-ignore
+
         qebc_2.load_state_dict(qebc_state_dict)
         qebc_2_state_dict = qebc_2.state_dict()
 
@@ -247,6 +247,87 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         embeddings = qebc(features)
         embeddings_2 = qebc_2(features)
         self._asserting_same_embeddings(embeddings, embeddings_2)
+
+    # pyre-ignore
+    @given(
+        data_type=st.sampled_from(
+            [
+                DataType.FP32,
+                DataType.FP16,
+            ]
+        ),
+        quant_type=st.sampled_from(
+            [
+                # torch.half,
+                torch.qint8,
+            ]
+        ),
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_composability(
+        self,
+        data_type: DataType,
+        quant_type: torch.dtype,
+        output_type: torch.dtype,
+    ) -> None:
+        class TestModel(torch.nn.Module):
+            def __init__(self, ebc: EmbeddingBagCollection) -> None:
+                super().__init__()
+                self.ebc = ebc
+                self.over_arch = torch.nn.Linear(
+                    16,
+                    1,
+                )
+
+            def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
+                ebc_output = self.ebc.forward(kjt).to_dict()
+                sparse_features = []
+                for key in kjt.keys():
+                    sparse_features.append(ebc_output[key])
+                sparse_features = torch.cat(sparse_features, dim=0)
+                return self.over_arch(sparse_features)
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+        tables = [eb1_config, eb2_config]
+
+        ebc = EmbeddingBagCollection(tables=tables)
+
+        # test forward
+        # pyre-ignore [16]
+        ebc.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        test_model = TestModel(ebc)
+
+        before_quant_state_dict = test_model.state_dict()
+        test_model.ebc = QuantEmbeddingBagCollection.from_float(ebc)
+
+        state_dict = test_model.state_dict()
+        self.assertEqual(state_dict.keys(), before_quant_state_dict.keys())
+        test_model.load_state_dict(state_dict)
 
 
 class EmbeddingCollectionTest(unittest.TestCase):
