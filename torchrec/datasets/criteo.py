@@ -498,6 +498,7 @@ class BinaryCriteoUtils:
         int_columns: int = INT_FEATURE_COUNT,
         sparse_columns: int = CAT_FEATURE_COUNT,
         path_manager_key: str = PATH_MANAGER_KEY,
+        random_seed: int = 0,
     ) -> None:
         """
         Shuffle the dataset. Expects the files to be in .npy format and the data
@@ -519,6 +520,7 @@ class BinaryCriteoUtils:
             int_columns (int): Number of columns with dense features.
             columns (int): Total number of columns.
             path_manager_key (str): Path manager key used to load from different filesystems.
+            random_seed (int): Random seed used for the random.shuffle operator.
         """
 
         total_rows = sum(rows_per_day.values())
@@ -574,7 +576,8 @@ class BinaryCriteoUtils:
                 print(f"Writing full set file: {full_output_file}")
                 np.save(fout, full_dataset)
 
-        print("Shuffling dataset")
+        print(f"Shuffling dataset with random_seed={random_seed}")
+        np.random.seed(random_seed)
         np.random.shuffle(full_dataset)
 
         # Slice and save each portion into dense, sparse and labels
