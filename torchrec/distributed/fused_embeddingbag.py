@@ -17,7 +17,12 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
-from torchrec.distributed.types import ParameterSharding, ShardingEnv, ShardingType
+from torchrec.distributed.types import (
+    ParameterSharding,
+    QuantizedCommCodecs,
+    ShardingEnv,
+    ShardingType,
+)
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.fused_embedding_modules import (
     convert_optimizer_type_and_kwargs,
@@ -34,6 +39,7 @@ class ShardedFusedEmbeddingBagCollection(
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         optimizer_type = module.optimizer_type()
         optimizer_kwargs = module.optimizer_kwargs()
@@ -54,6 +60,7 @@ class ShardedFusedEmbeddingBagCollection(
             fused_params=fused_params,
             env=env,
             device=device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )
 
         for index, (sharding, lookup) in enumerate(
@@ -98,7 +105,13 @@ class FusedEmbeddingBagCollectionSharder(
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
 
-        return ShardedFusedEmbeddingBagCollection(module, params, env, device)
+        return ShardedFusedEmbeddingBagCollection(
+            module,
+            params,
+            env,
+            device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )
 
     def shardable_parameters(
         self, module: FusedEmbeddingBagCollection

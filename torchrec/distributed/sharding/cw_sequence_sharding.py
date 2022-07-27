@@ -68,4 +68,5 @@ class CwSequenceEmbeddingSharding(
             self._pg,
             self._id_list_features_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
