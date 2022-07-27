@@ -5,7 +5,7 @@ namespace tde::details {
 
 TEST(tde, MultiThreadedIDTransformer) {
   using Tag = int32_t;
-  MultiThreadedIDTransformer<Tag> transformer(8, 2);
+  MultiThreadedIDTransformer<NaiveIDTransformer<Tag>> transformer(8, 2);
   const int64_t global_ids[6] = {100, 101, 100, 102, 101, 103};
   int64_t cache_ids[6];
   int64_t expected_cache_ids[6] = {0, 4, 0, 1, 4, 5};

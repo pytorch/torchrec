@@ -54,7 +54,16 @@ struct Bitmap {
 template <typename LXURecord, typename Bitmap = Bitmap<uint32_t>>
 class NaiveIDTransformer {
  public:
-  NaiveIDTransformer(int64_t num_embedding);
+  using lxu_record_t = LXURecord;
+  enum {
+    TransformUpdateNeedThreadSafe = 0,
+    TransformFetchNeedThreadSafe = 0,
+    TransformHasFilter = 1,
+    TransformerHasCacheIDTransformer = 1,
+    TransformCanContinue = 1,
+  };
+
+  explicit NaiveIDTransformer(int64_t num_embedding);
 
   /**
    * Transform global ids to cache ids
