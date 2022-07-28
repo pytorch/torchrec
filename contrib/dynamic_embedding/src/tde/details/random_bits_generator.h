@@ -15,6 +15,8 @@ namespace tde::details {
 class BitScanner {
  public:
   explicit BitScanner(size_t n);
+  BitScanner(const BitScanner&) = delete;
+  BitScanner(BitScanner&&) noexcept = default;
 
   /**
    * Reset array data
@@ -46,6 +48,8 @@ class RandomBitsGenerator {
  public:
   RandomBitsGenerator();
   ~RandomBitsGenerator();
+  RandomBitsGenerator(const RandomBitsGenerator&) = delete;
+  RandomBitsGenerator(RandomBitsGenerator&&) noexcept = default;
 
   /**
    * Is next N random bits are all zero or not.

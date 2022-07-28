@@ -1,8 +1,11 @@
 #pragma once
 #include <atomic>
 #include <optional>
+#include <string_view>
+#include "nlohmann/json.hpp"
 #include "tde/details/move_only_function.h"
 #include "tde/details/random_bits_generator.h"
+#include "tde/details/type_list.h"
 namespace tde::details {
 
 /**
@@ -27,7 +30,9 @@ namespace tde::details {
  */
 class MixedLFULRUStrategy {
  public:
-  using ExtendedValueType = uint32_t;
+  using lxu_record_t = uint32_t;
+
+  static constexpr std::string_view type_ = "mixed_lru_lfu";
 
   /**
    * @param min_used_freq_power min usage is 2^min_used_freq_power. Set this to
@@ -35,9 +40,31 @@ class MixedLFULRUStrategy {
    */
   explicit MixedLFULRUStrategy(uint16_t min_used_freq_power = 5);
 
+  static MixedLFULRUStrategy Create(const nlohmann::json& json) {
+    uint16_t min_used_freq_power = 5;
+    {
+      auto it = json.find("min_used_freq_power");
+      if (it != json.end()) {
+        min_used_freq_power = *it;
+      }
+    }
+
+    return MixedLFULRUStrategy(min_used_freq_power);
+  }
+
+  MixedLFULRUStrategy(const MixedLFULRUStrategy&) = delete;
+  MixedLFULRUStrategy(MixedLFULRUStrategy&& o) noexcept = default;
+
   void UpdateTime(uint32_t time);
 
-  ExtendedValueType Transform(std::optional<ExtendedValueType> val);
+  lxu_record_t Transform(std::optional<lxu_record_t> val);
+
+  lxu_record_t Update(
+      int64_t global_id,
+      int64_t cache_id,
+      std::optional<lxu_record_t> val) {
+    return Transform(val);
+  }
 
   /**
    * Analysis all ids and returns the num_elems that are most need to evict.
@@ -47,7 +74,7 @@ class MixedLFULRUStrategy {
    * @return
    */
   static std::vector<int64_t> Evict(
-      MoveOnlyFunction<std::optional<std::pair<int64_t, ExtendedValueType>>()>
+      MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()>
           id_visitor,
       uint64_t num_elems_to_evict);
 
@@ -58,11 +85,11 @@ class MixedLFULRUStrategy {
   };
 
  private:
-  static_assert(sizeof(Record) == sizeof(ExtendedValueType));
+  static_assert(sizeof(Record) == sizeof(lxu_record_t));
 
   RandomBitsGenerator generator_;
-  std::atomic<uint32_t> time_{};
   uint16_t min_lfu_power_;
+  std::unique_ptr<std::atomic<uint32_t>> time_;
 };
 
 } // namespace tde::details

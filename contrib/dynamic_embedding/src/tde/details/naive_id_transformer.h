@@ -2,6 +2,7 @@
 #include <c10/util/flat_hash_map.h>
 #include <memory>
 #include <optional>
+#include "nlohmann/json.hpp"
 #include "tcb/span.hpp"
 
 namespace tde::details {
@@ -31,6 +32,9 @@ inline int64_t Identity(int64_t cache_id) {
 template <typename T = uint32_t>
 struct Bitmap {
   explicit Bitmap(int64_t num_bits);
+  Bitmap(const Bitmap&) = delete;
+  Bitmap(Bitmap&&) noexcept = default;
+
   int64_t NextFreeBit();
   void FreeBit(int64_t offset);
   bool Full() const;
@@ -61,9 +65,20 @@ class NaiveIDTransformer {
     TransformHasFilter = 1,
     TransformerHasCacheIDTransformer = 1,
     TransformCanContinue = 1,
+    IsCompose = 0,
   };
+  static constexpr std::string_view type_ = "naive";
 
   explicit NaiveIDTransformer(int64_t num_embedding);
+  NaiveIDTransformer(const NaiveIDTransformer<LXURecord, Bitmap>&) = delete;
+  NaiveIDTransformer(NaiveIDTransformer<LXURecord, Bitmap>&&) noexcept =
+      default;
+
+  static NaiveIDTransformer<LXURecord, Bitmap> Create(
+      int64_t num_embedding,
+      const nlohmann::json& json) {
+    return NaiveIDTransformer<LXURecord, Bitmap>(num_embedding);
+  }
 
   /**
    * Transform global ids to cache ids

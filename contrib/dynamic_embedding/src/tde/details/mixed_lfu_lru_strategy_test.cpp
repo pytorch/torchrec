@@ -27,16 +27,16 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
   auto ids = MixedLFULRUStrategy::Evict(
       [&offset_, &records]()
           -> std::optional<
-              std::pair<int64_t, MixedLFULRUStrategy::ExtendedValueType>> {
+              std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>> {
         if (offset_ == records.size()) {
           return std::nullopt;
         }
         auto record = records[offset_++];
-        MixedLFULRUStrategy::ExtendedValueType ext_type =
-            *reinterpret_cast<MixedLFULRUStrategy::ExtendedValueType*>(
+        MixedLFULRUStrategy::lxu_record_t ext_type =
+            *reinterpret_cast<MixedLFULRUStrategy::lxu_record_t*>(
                 &record.second);
 
-        return std::pair<int64_t, MixedLFULRUStrategy::ExtendedValueType>{
+        return std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>{
             record.first, ext_type};
       },
       2);
@@ -49,7 +49,7 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
 TEST(TDE, MixedLFULRUStrategy_Transform) {
   MixedLFULRUStrategy strategy;
   strategy.UpdateTime(10);
-  MixedLFULRUStrategy::ExtendedValueType val;
+  MixedLFULRUStrategy::lxu_record_t val;
   {
     val = strategy.Transform(std::nullopt);
     auto record = reinterpret_cast<MixedLFULRUStrategy::Record*>(&val);

@@ -5,16 +5,16 @@
 
 namespace tde::details {
 MixedLFULRUStrategy::MixedLFULRUStrategy(uint16_t min_used_freq_power)
-    : min_lfu_power_(min_used_freq_power) {}
+    : min_lfu_power_(min_used_freq_power), time_(new std::atomic<uint32_t>()) {}
 
 void MixedLFULRUStrategy::UpdateTime(uint32_t time) {
-  time_.store(time);
+  time_->store(time);
 }
 
-MixedLFULRUStrategy::ExtendedValueType MixedLFULRUStrategy::Transform(
-    std::optional<ExtendedValueType> val) {
+MixedLFULRUStrategy::lxu_record_t MixedLFULRUStrategy::Transform(
+    std::optional<lxu_record_t> val) {
   Record r{};
-  r.time_ = time_.load();
+  r.time_ = time_->load();
 
   if (C10_UNLIKELY(!val.has_value())) {
     r.freq_power_ = min_lfu_power_;
@@ -26,7 +26,7 @@ MixedLFULRUStrategy::ExtendedValueType MixedLFULRUStrategy::Transform(
     }
     r.freq_power_ = freq_power;
   }
-  return *reinterpret_cast<ExtendedValueType*>(&r);
+  return *reinterpret_cast<lxu_record_t*>(&r);
 }
 
 struct SortItems {
@@ -47,8 +47,7 @@ struct SortItems {
 
 std::vector<int64_t> MixedLFULRUStrategy::Evict(
     MoveOnlyFunction<std::optional<
-        std::pair<int64_t, MixedLFULRUStrategy::ExtendedValueType>>()>
-        id_visitor,
+        std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>>()> id_visitor,
     uint64_t num_elems_to_evict) {
   std::priority_queue<SortItems> items;
   while (true) {

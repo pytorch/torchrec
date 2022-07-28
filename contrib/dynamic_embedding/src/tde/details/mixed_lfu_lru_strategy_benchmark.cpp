@@ -4,7 +4,7 @@
 namespace tde::details {
 void BM_MixedLFULRUStrategy(benchmark::State& state) {
   size_t num_ext_values = state.range(0);
-  std::vector<MixedLFULRUStrategy::ExtendedValueType> ext_values(
+  std::vector<MixedLFULRUStrategy::lxu_record_t> ext_values(
       num_ext_values);
 
   MixedLFULRUStrategy strategy;

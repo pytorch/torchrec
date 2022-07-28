@@ -32,3 +32,11 @@ FetchContent_Populate(tcb_span)
 add_library(tcb_span INTERFACE)
 target_include_directories(tcb_span INTERFACE ${tcb_span_SOURCE_DIR}/include)
 add_library(tcb::span ALIAS tcb_span)
+
+FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.10.5
+)
+
+FetchContent_MakeAvailable(nlohmann_json)

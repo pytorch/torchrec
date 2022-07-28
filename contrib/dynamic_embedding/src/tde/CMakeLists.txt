@@ -3,13 +3,15 @@ add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_tran
         details/fetcher.cpp
         details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
-        details/clz_impl.cpp details/ctz_impl.cpp)
+        details/clz_impl.cpp details/ctz_impl.cpp details/id_transformer_registry.cpp
+        details/id_transformer_variant.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
 target_compile_features(tde_cpp_objs PUBLIC cxx_std_17)
-target_link_libraries(tde_cpp_objs PUBLIC tcb::span)
+target_link_libraries(tde_cpp_objs PUBLIC tcb::span nlohmann_json)
 target_compile_options(tde_cpp_objs PUBLIC -fPIC)
+target_compile_definitions(tde_cpp_objs PUBLIC -DJSON_HAS_CPP_17)
 
 # tde_cpp.so section
 add_library(tde_cpp MODULE bind.cpp)
@@ -43,4 +45,6 @@ if (TDE_WITH_TESTING)
     add_tde_test(bits_op_test details/bits_op_test.cpp)
     add_tde_benchmark(mixed_lfu_lru_strategy_benchmark details/mixed_lfu_lru_strategy_benchmark.cpp)
     add_tde_benchmark(random_bits_generator_benchmark details/random_bits_generator_benchmark.cpp)
+    add_tde_test(id_transformer_registry_test details/id_transformer_registry_test.cpp)
+    add_tde_test(id_transformer_factory_test details/id_transformer_variant_test.cpp)
 endif ()

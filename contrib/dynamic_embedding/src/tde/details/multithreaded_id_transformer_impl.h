@@ -2,27 +2,29 @@
 #include "torch/torch.h"
 namespace tde::details {
 
-template <typename Tag>
-MultiThreadedIDTransformer<Tag>::MultiThreadedIDTransformer(
+template <typename UnderlyingTransformer>
+template <typename UnderlyingTransformerCreator>
+MultiThreadedIDTransformer<UnderlyingTransformer>::MultiThreadedIDTransformer(
     int64_t num_embedding,
-    size_t num_threads)
-    : num_threads_(num_threads), thread_pool_(num_threads) {
+    size_t num_threads,
+    UnderlyingTransformerCreator creator)
+    : num_threads_(num_threads), thread_pool_(new ThreadPool(num_threads)) {
   transformers_.reserve(num_threads);
   embedding_offsets_.reserve(num_threads);
   int64_t embedding_per_transformer = num_embedding / num_threads;
   int64_t embedding_offset = 0;
   for (size_t i = 0; i < num_threads; i++) {
     embedding_offsets_.emplace_back(embedding_offset);
-    transformers_.emplace_back(
+    transformers_.emplace_back(creator(
         i == num_threads - 1 ? num_embedding - embedding_offset
-                             : embedding_per_transformer);
+                             : embedding_per_transformer));
     embedding_offset += embedding_per_transformer;
   }
 }
 
-template <typename Tag>
+template <typename UnderlyingTransformer>
 template <typename Update, typename Fetch>
-int64_t MultiThreadedIDTransformer<Tag>::Transform(
+int64_t MultiThreadedIDTransformer<UnderlyingTransformer>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Update update,
@@ -30,7 +32,7 @@ int64_t MultiThreadedIDTransformer<Tag>::Transform(
   std::vector<std::future<int64_t>> futures;
   futures.reserve(num_threads_);
   for (size_t i = 0; i < num_threads_; ++i) {
-    futures.emplace_back(std::move(thread_pool_.Enqueue([&, this, i] {
+    futures.emplace_back(std::move(thread_pool_->Enqueue([&, this, i] {
       return transformers_[i].Transform(
           global_ids,
           cache_ids,
@@ -52,8 +54,8 @@ int64_t MultiThreadedIDTransformer<Tag>::Transform(
   return num_transformed;
 }
 
-template <typename Tag>
-void MultiThreadedIDTransformer<Tag>::Evict(
+template <typename UnderlyingTransformer>
+void MultiThreadedIDTransformer<UnderlyingTransformer>::Evict(
     tcb::span<const int64_t> global_ids) {
   for (size_t i = 0; i < num_threads_; ++i) {
     transformers_[i].Evict(global_ids);

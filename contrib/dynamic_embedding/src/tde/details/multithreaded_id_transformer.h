@@ -7,6 +7,12 @@
 
 namespace tde::details {
 
+namespace transform_default {
+template <typename Transformer>
+Transformer DefaultCreator(int64_t num_embedding) {
+  return Transformer(num_embedding);
+}
+} // namespace transform_default
 template <typename UnderlyingTransformer>
 class MultiThreadedIDTransformer {
  public:
@@ -19,9 +25,34 @@ class MultiThreadedIDTransformer {
     TransformHasFilter = 0,
     TransformerHasCacheIDTransformer = 0,
     TransformCanContinue = 0,
+    IsCompose = 1,
   };
+  static constexpr std::string_view type_ = "thread";
+  using underlying_t = UnderlyingTransformer;
 
-  MultiThreadedIDTransformer(int64_t num_embedding, size_t num_threads);
+  template <
+      typename UnderlyingTransformerCreator =
+          decltype(transform_default::DefaultCreator<UnderlyingTransformer>)>
+  MultiThreadedIDTransformer(
+      int64_t num_embedding,
+      size_t num_threads,
+      UnderlyingTransformerCreator creator =
+          transform_default::DefaultCreator<UnderlyingTransformer>);
+
+  MultiThreadedIDTransformer(
+      const MultiThreadedIDTransformer<UnderlyingTransformer>&) = delete;
+  MultiThreadedIDTransformer(
+      MultiThreadedIDTransformer<UnderlyingTransformer>&&) noexcept = default;
+
+  template <typename UnderlyingCreator>
+  static MultiThreadedIDTransformer<underlying_t> Create(
+      int64_t num_embedding,
+      const nlohmann::json& json,
+      UnderlyingCreator creator) {
+    auto num_threads = static_cast<size_t>(json["num_threads"]);
+    return MultiThreadedIDTransformer<underlying_t>(
+        num_embedding, num_threads, std::move(creator));
+  }
 
   /**
    * Transform GlobalIDs to CacheIDs.
@@ -50,7 +81,7 @@ class MultiThreadedIDTransformer {
 
  private:
   size_t num_threads_;
-  ThreadPool thread_pool_;
+  std::unique_ptr<ThreadPool> thread_pool_;
   std::vector<UnderlyingTransformer> transformers_;
   std::vector<int64_t> embedding_offsets_;
 };
