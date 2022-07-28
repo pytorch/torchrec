@@ -15,7 +15,7 @@ from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
 from torchrec.distributed.planner.constants import MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
+from torchrec.distributed.planner.partitioners import partition
 from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.proposers import (
     GreedyProposer,
@@ -129,9 +129,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             if storage_reservation
             else HeuristicalStorageReservation(percentage=0.15)
         )
-        self._partitioner: Partitioner = (
-            partitioner if partitioner else GreedyPerfPartitioner()
-        )
         if proposer:
             self._proposers: List[Proposer] = (
                 [proposer] if not isinstance(proposer, list) else proposer
@@ -222,10 +219,10 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
                 self._num_proposals += 1
                 try:
-                    plan = self._partitioner.partition(
+                    plan = partition(
                         proposal=proposal,
                         storage_constraint=storage_constraint,
-                    )
+                    )[0]
                     self._num_plans += 1
                     perf_rating = self._perf_model.rate(plan=plan)
                     if perf_rating < best_perf_rating:
