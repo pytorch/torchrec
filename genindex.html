@@ -534,6 +534,8 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer">CombinedOptimizer (class in torchrec.optim.keyed)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp">CommOp (class in torchrec.distributed.types)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.compute">compute() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -2065,11 +2067,15 @@
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerError">PlannerError</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.policy">policy (torchrec.optim.warmup.WarmupStage attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.POLY">POLY (torchrec.optim.warmup.WarmupPolicy attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL">POOLED_EMBEDDINGS_ALL_TO_ALL (torchrec.distributed.types.CommOp attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER">POOLED_EMBEDDINGS_REDUCE_SCATTER (torchrec.distributed.types.CommOp attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">PooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">[1]</a>
 </li>
@@ -2149,6 +2155,14 @@
 <h2 id="Q">Q</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingSharding.qcomm_codecs_registry">qcomm_codecs_registry (torchrec.distributed.embedding_sharding.EmbeddingSharding property)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.qcomm_codecs_registry">(torchrec.distributed.types.ModuleSharder property)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.qcomm_codecs_registry">(torchrec.distributed.types.ShardedModule property)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.QUANT">QUANT (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.QUANT_UVM">QUANT_UVM (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
@@ -2157,12 +2171,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder">QuantEmbeddingBagCollectionSharder (class in torchrec.distributed.quant_embeddingbag)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.quantize_dense">quantize_dense() (in module torchrec.inference.modules)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.quantize_embeddings">quantize_embeddings() (in module torchrec.inference.modules)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.quantize_feature">quantize_feature() (in module torchrec.inference.modules)</a>
 </li>
       <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.quantize_state_dict">quantize_state_dict() (in module torchrec.quant.embedding_modules)</a>
@@ -2291,6 +2305,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.scope">scope() (in module torchrec.distributed.types)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL">SEQUENCE_EMBEDDINGS_ALL_TO_ALL (torchrec.distributed.types.CommOp attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">SequenceEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">SequenceEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">[1]</a>
@@ -2415,10 +2431,10 @@
         <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection.sparse_arch">(torchrec.models.dlrm.DLRM_Projection attribute)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.sparse_feature_names">sparse_feature_names (torchrec.models.dlrm.SparseArch property)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.sparse_feature_names">sparse_feature_names (torchrec.models.dlrm.SparseArch property)</a>
+</li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.sparse_features">sparse_features (torchrec.datasets.utils.Batch attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.sparse_grad_parameter_names">sparse_grad_parameter_names() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
