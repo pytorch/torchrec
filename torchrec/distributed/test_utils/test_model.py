@@ -832,9 +832,13 @@ class TestEBSharder(EmbeddingBagSharder):
 
 class TestETSharder(EmbeddingTowerSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry=qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
@@ -861,9 +865,13 @@ class TestETSharder(EmbeddingTowerSharder):
 
 class TestETCSharder(EmbeddingTowerCollectionSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry=qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 

@@ -76,9 +76,13 @@ def create_test_sharder(
             sharding_type, kernel_type, fused_params, qcomm_codecs_registry
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
-        return TestETSharder(sharding_type, kernel_type, fused_params)
+        return TestETSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
-        return TestETCSharder(sharding_type, kernel_type, fused_params)
+        return TestETCSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     else:
         raise ValueError(f"Sharder not supported {sharder_type}")
 

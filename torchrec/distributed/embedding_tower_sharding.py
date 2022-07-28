@@ -31,8 +31,10 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     Awaitable,
+    CommOp,
     LazyAwaitable,
     ParameterSharding,
+    QuantizedCommCodecs,
     ShardedModule,
     ShardedModuleContext,
     ShardingEnv,
@@ -112,8 +114,9 @@ class ShardedEmbeddingTower(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
@@ -334,6 +337,11 @@ class ShardedEmbeddingTower(
             #  `List[Union[bool, float, int]]`.
             dim_sum_per_rank=dim_sum_per_rank,
             device=self._device,
+            codecs=self.qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if self.qcomm_codecs_registry
+            else None,
         )
 
     def output_dist(
@@ -454,8 +462,9 @@ class ShardedEmbeddingTowerCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
 
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
@@ -745,10 +754,14 @@ class ShardedEmbeddingTowerCollection(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             pg=self._cross_pg,
-            # pyre-fixme[6]: For 2nd param expected `List[int]` but got
-            #  `List[Union[bool, float, int]]`.
+            # pyre-ignore
             dim_sum_per_rank=dim_sum_per_rank,
             device=self._device,
+            codecs=self.qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if self.qcomm_codecs_registry
+            else None,
         )
 
     # pyre-ignore [14]
@@ -881,6 +894,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
             env=env,
             fused_params=self.fused_params,
             device=device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -908,10 +922,14 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         embedding: nn.Module = module.embedding
         if isinstance(embedding, EmbeddingBagCollection):
             # pyre-ignore [7]
-            return EmbeddingBagCollectionSharder(self.fused_params)
+            return EmbeddingBagCollectionSharder(
+                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         elif isinstance(embedding, EmbeddingCollection):
             # pyre-ignore [7]
-            return EmbeddingCollectionSharder(self.fused_params)
+            return EmbeddingCollectionSharder(
+                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         else:
             raise RuntimeError(f"Unsupported embedding type: {type(module)}")
 
@@ -945,9 +963,18 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
 
 
 class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollection]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
-        self._tower_sharder = EmbeddingTowerSharder(self.fused_params)
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+
+        super().__init__(
+            fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
+        self._tower_sharder = EmbeddingTowerSharder(
+            self.fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
 
     def shard(
         self,
@@ -964,6 +991,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
             env=env,
             fused_params=self.fused_params,
             device=device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
