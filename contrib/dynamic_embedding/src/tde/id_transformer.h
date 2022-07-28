@@ -13,7 +13,7 @@ class IDTransformer : public torch::CustomClassHolder {
   int64_t Transform(torch::Tensor global_ids, torch::Tensor cache_ids);
 
  private:
-  using LXURecord = details::MixedLFULRUStrategy::ExtendedValueType;
+  using LXURecord = details::MixedLFULRUStrategy::lxu_record_t;
 
   details::MultiThreadedIDTransformer<details::NaiveIDTransformer<LXURecord>>
       transformer_;
