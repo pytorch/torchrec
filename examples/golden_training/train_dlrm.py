@@ -113,7 +113,7 @@ def train(
         device=device,
         sharders=[
             FusedEmbeddingBagCollectionSharder(
-                # Enable quantized comms. This will encode all tensors forward pass collective 
+                # Enable quantized comms. This will encode all tensors forward pass collective
                 # calls as float16, and all tensors in the backward pass as bfloat16.
                 qcomm_codecs_registry=get_qcomm_codecs_registry(
                     qcomms_config=QCommsConfig(
