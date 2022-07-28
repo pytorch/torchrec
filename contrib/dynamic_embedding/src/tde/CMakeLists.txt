@@ -1,6 +1,6 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
 add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_transformer.cpp
-        details/io.cpp details/fetcher.cpp
+        details/io.cpp  details/io_registry.cpp
         details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
         details/clz_impl.cpp details/ctz_impl.cpp details/id_transformer_registry.cpp
@@ -12,6 +12,7 @@ target_compile_features(tde_cpp_objs PUBLIC cxx_std_17)
 target_link_libraries(tde_cpp_objs PUBLIC tcb::span nlohmann_json)
 target_compile_options(tde_cpp_objs PUBLIC -fPIC)
 target_compile_definitions(tde_cpp_objs PUBLIC -DJSON_HAS_CPP_17)
+target_link_libraries(tde_cpp_objs PUBLIC ${CMAKE_DL_LIBS})
 
 # tde_cpp.so section
 add_library(tde_cpp MODULE bind.cpp)

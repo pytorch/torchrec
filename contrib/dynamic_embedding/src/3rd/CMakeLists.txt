@@ -40,3 +40,17 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(nlohmann_json)
+
+FetchContent_Declare(
+        hiredis
+        GIT_REPOSITORY https://github.com/redis/hiredis.git
+        GIT_TAG v1.0.2
+)
+
+FetchContent_GetProperties(hiredis)
+if(NOT hiredis_POPULATED)
+    # Do not include hiredis in install targets
+    FetchContent_Populate(hiredis)
+    set(DISABLE_TESTS OFF CACHE BOOL "Disable tests for hiredis")
+    add_subdirectory(${hiredis_SOURCE_DIR} ${hiredis_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()

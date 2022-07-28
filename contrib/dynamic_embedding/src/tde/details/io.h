@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "tcb/span.hpp"
+#include "tde/details/io_registry.h"
 #include "tde/details/move_only_function.h"
 #include "torch/torch.h"
 
@@ -8,6 +9,14 @@ namespace tde::details {
 
 class IO {
  public:
+  explicit IO(const std::string& config);
+  ~IO();
+
+  IO(const IO&) = delete;
+  IO& operator=(const IO&) = delete;
+  IO(IO&&) noexcept = delete;
+  IO& operator=(IO&&) noexcept = delete;
+
   /**
    * Fetch parameter and optimizer states from ParamServer.
    * @param global_ids global ids to fetch
@@ -21,7 +30,7 @@ class IO {
    * shape of each global id can be different in some algorithm.
    */
   void Pull(
-      std::string table_name,
+      const std::string& table_name,
       tcb::span<const int64_t> col_ids,
       tcb::span<const int64_t> global_ids,
       uint32_t num_optimizer_states,
@@ -30,6 +39,10 @@ class IO {
 
   // TODO: Decide push interface
   void Push();
+
+ private:
+  IOProvider provider_{};
+  void* instance_{};
 };
 
 } // namespace tde::details
