@@ -55,10 +55,15 @@ class EmbeddingPerfEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        if not sharder_map:
+            raise ValueError("sharder map not provided for perf estimator")
+
         for sharding_option in sharding_options:
+            sharder_key = sharder_name(type(sharding_option.module[1]))
+            sharder = sharder_map[sharder_key]
             caching_ratio = (
-                self._constraints[sharding_option.name].caching_ratio
-                if self._constraints and self._constraints.get(sharding_option.name)
+                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )
             num_poolings = (
@@ -558,8 +563,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
             caching_ratio = (
-                self._constraints[sharding_option.name].caching_ratio
-                if self._constraints and self._constraints.get(sharding_option.name)
+                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )
             num_poolings = (
