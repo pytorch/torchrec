@@ -150,6 +150,14 @@ class QuantizedCommCodecs:
     backward: QuantizedCommCodec = NoOpQuantizedCommCodec()
 
 
+class CommOp(Enum):
+    # For detailed descriptions of each of these, see their doc strings in dist_data.
+    # These are commonly used inside of a QuantizedCommsRegistry
+    POOLED_EMBEDDINGS_ALL_TO_ALL = "pooled_embeddings_all_to_all"
+    POOLED_EMBEDDINGS_REDUCE_SCATTER = "pooled_embeddings_reduce_scatter"
+    SEQUENCE_EMBEDDINGS_ALL_TO_ALL = "sequence_embeddings_all_to_all"
+
+
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
 Out = TypeVar("Out")
@@ -431,18 +439,32 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
 
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
+
     NOTE:
         'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
         from data-parallel to model parallel and vise-versa.
     """
 
     @abc.abstractmethod
-    def __init__(self) -> None:
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
+
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
+        if qcomm_codecs_registry is None:
+            qcomm_codecs_registry = {}
+        self._qcomm_codecs_registry = qcomm_codecs_registry
+
     def create_context(self) -> ShardedModuleContext:
         return EmptyContext()
+
+    @property
+    def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
+        return self._qcomm_codecs_registry
 
     @abc.abstractmethod
     def input_dist(
@@ -509,10 +531,16 @@ class ModuleSharder(abc.ABC, Generic[M]):
     """
     `ModuleSharder` is per each module, which supports sharding,
     e.g. `EmbeddingBagCollection`.
+
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
+        self._qcomm_codecs_registry = qcomm_codecs_registry
 
     @abc.abstractclassmethod
     # pyre-ignore [3]
@@ -545,6 +573,10 @@ class ModuleSharder(abc.ABC, Generic[M]):
     @abc.abstractmethod
     def module_type(self) -> Type[M]:
         ...
+
+    @property
+    def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
+        return self._qcomm_codecs_registry
 
     def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
         """

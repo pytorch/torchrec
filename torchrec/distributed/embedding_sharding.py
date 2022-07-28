@@ -31,6 +31,7 @@ from torchrec.distributed.types import (
     Awaitable,
     NoWait,
     ParameterSharding,
+    QuantizedCommCodecs,
     ShardMetadata,
 )
 from torchrec.modules.embedding_configs import (
@@ -609,6 +610,16 @@ class EmbeddingSharding(abc.ABC, Generic[F, T]):
     Used to implement different sharding types for `EmbeddingBagCollection`, e.g.
     table_wise.
     """
+
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
+
+        self._qcomm_codecs_registry = qcomm_codecs_registry
+
+    @property
+    def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
+        return self._qcomm_codecs_registry
 
     @abc.abstractmethod
     def create_input_dist(

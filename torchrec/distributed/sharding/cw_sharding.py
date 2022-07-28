@@ -30,7 +30,12 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwPooledEmbeddingDist,
     TwSparseFeaturesDist,
 )
-from torchrec.distributed.types import ShardedTensorMetadata, ShardingEnv, ShardMetadata
+from torchrec.distributed.types import (
+    QuantizedCommCodecs,
+    ShardedTensorMetadata,
+    ShardingEnv,
+    ShardMetadata,
+)
 from torchrec.streamable import Multistreamable
 
 F = TypeVar("F", bound=Multistreamable)
@@ -48,11 +53,13 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(
             sharding_infos,
             env,
             device,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
@@ -232,6 +239,7 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
                 self._embedding_order,
             ).to(device=device)
             callbacks = [embedding_permute_op]
+
         return TwPooledEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
@@ -239,4 +247,5 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
             self._dim_sum_per_rank(),
             device,
             callbacks,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
