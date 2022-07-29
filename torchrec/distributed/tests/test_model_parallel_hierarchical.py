@@ -141,7 +141,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     sharding_type,
                     kernel_type,
                     qcomms_config=qcomms_config,
-                    device=torch.device("gloo"),
+                    device=torch.device("cuda"),
                 )
             ],
             backend="nccl",

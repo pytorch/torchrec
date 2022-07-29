@@ -134,11 +134,11 @@ def get_qcomm_codecs_registry(
                 )
                 qcomm_config_copy.forward_precision = CommType.FP16
 
-            if qcomm_config_copy.forward_precision == CommType.BF16:
+            if qcomm_config_copy.backward_precision == CommType.BF16:
                 logger.warning(
                     "BF16 is not for backward_precision is not supported on GLOO - falling back to FP16."
                 )
-                qcomm_config_copy.forward_precision = CommType.FP16
+                qcomm_config_copy.backward_precision = CommType.FP16
 
         qcomm_codecs_registry[comm_op.name] = get_qcomm_codecs(qcomm_config_copy)
 
