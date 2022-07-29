@@ -15,6 +15,13 @@ from torch.utils.data import IterableDataset
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.random import RandomRecDataset
 from torchrec.distributed import TrainPipelineSparseDist
+
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -104,6 +111,19 @@ def train(
     model = DistributedModelParallel(
         module=train_model,
         device=device,
+        sharders=[
+            FusedEmbeddingBagCollectionSharder(
+                # Enable quantized comms. This will encode all tensors forward pass collective
+                # calls as float16, and all tensors in the backward pass as bfloat16.
+                qcomm_codecs_registry=get_qcomm_codecs_registry(
+                    qcomms_config=QCommsConfig(
+                        forward_precision=CommType.FP16,
+                        backward_precision=CommType.BF16,
+                    ),
+                    device=device,
+                )
+            )
+        ],
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
