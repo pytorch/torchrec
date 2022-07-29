@@ -14,6 +14,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.autograd.profiler import record_function
 from torchrec.distributed.comm_ops import (
+    all_gather_base_pooled,
     alltoall_pooled,
     alltoall_sequence,
     reduce_scatter_base_pooled,
@@ -820,6 +821,58 @@ class PooledEmbeddingsReduceScatter(nn.Module):
 
         tensor_awaitable = reduce_scatter_base_pooled(
             local_embs, self._pg, codecs=self._codecs
+        )
+        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+
+
+class PooledEmbeddingsAllGather(nn.Module):
+    """
+    The module class that wraps all-gather communication primitive for pooled
+    embedding communication
+
+    We have a local input tensor with a layout of
+    [batch_size, dimension]. We need to gather input tensors from all ranks into a flatten output tensor.
+
+    The class returns the async `Awaitable` handle for pooled embeddings tensor.
+    The all-gather is only available for NCCL backend.
+
+    Args:
+        pg (dist.ProcessGroup): The process group that the all-gather communication
+            happens within.
+
+    Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        input = torch.randn(2, 2)
+        m = PooledEmbeddingsAllGather(pg)
+        output = m(input)
+        tensor = output.wait()
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ) -> None:
+        super().__init__()
+        self._pg = pg
+
+        self._codecs = codecs
+
+    def forward(self, local_emb: torch.Tensor) -> PooledEmbeddingsAwaitable:
+        """
+        Performs reduce scatter operation on pooled embeddings tensor.
+
+        Args:
+            local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
+
+        Returns:
+            PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
+        """
+
+        tensor_awaitable = all_gather_base_pooled(
+            local_emb, self._pg, codecs=self._codecs
         )
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 

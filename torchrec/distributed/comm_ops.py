@@ -63,6 +63,7 @@ class Request(Awaitable[W]):
         self.tensor: Optional[W] = None
         self.a2ai = None  # type: ignore
         self.rsi = None  # type: ignore
+        self.agi = None  # type: ignore
         self.wait_function = None  # type: ignore
 
         # This dummy tensor is used to build the autograd graph between
@@ -191,6 +192,20 @@ class ReduceScatterBaseInfo(object):
     """
 
     input_sizes: torch.Size
+    codecs: Optional[QuantizedCommCodecs]
+
+
+@dataclass
+class AllGatherBaseInfo(object):
+    """
+    The data class that collects the attributes when calling the `all_gatther_base_pooled`
+    operation.
+
+    Attributes:
+        input_size (int): the size of the input tensor.
+    """
+
+    input_size: torch.Size
     codecs: Optional[QuantizedCommCodecs]
 
 
@@ -472,6 +487,40 @@ def reduce_scatter_base_pooled(
     rsi = ReduceScatterBaseInfo(input_sizes=inputs.size(), codecs=codecs)
     # pyre-fixme[16]
     ReduceScatterBase_Req.apply(group, myreq, rsi, inputs)
+    return myreq
+
+
+def all_gather_base_pooled(
+    input: Tensor,
+    group: Optional[dist.ProcessGroup] = None,
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> Awaitable[Tensor]:
+    """
+    All-gathers tensors from all processes in a group to form a flattened pooled embeddings tensor.
+    Input tensor is of size output tensor size divided by world size.
+
+    Args:
+        input (Tensor): tensor to gather, .
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+
+    Returns:
+        Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
+
+    .. warning::
+        `all_gather_base_pooled` is experimental and subject to change.
+    """
+
+    if group is None:
+        group = dist.distributed_c10d._get_default_group()
+
+    if dist.get_world_size(group) <= 1:
+        return NoWait(input)
+
+    myreq = Request(group)
+    agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
+    # pyre-fixme[16]
+    AllGatherBase_Req.apply(group, myreq, agi, input)
     return myreq
 
 
@@ -1184,4 +1233,102 @@ class ReduceScatterBase_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = grad_inputs
+        return (None, None, myreq.dummy_tensor)
+
+
+class AllGatherBase_Req(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        agi: AllGatherBaseInfo,
+        input: Tensor,
+    ) -> Tensor:
+        my_size = dist.get_world_size(pg)
+
+        if agi.codecs is not None:
+            input = agi.codecs.forward.encode(input)
+        outputs = input.new_empty((input.size(0) * my_size, input.size(1)))
+
+        with record_function("## all_gather_base ##"):
+            req = dist._all_gather_base(outputs, input, group=pg, async_op=True)
+        myreq.req = req
+        myreq.tensor = outputs
+        myreq.wait_function = AllGatherBase_Wait
+        myreq.agi = agi
+        ctx.myreq = myreq
+        ctx.pg = pg
+
+        assert myreq.dummy_tensor is not None
+        return myreq.dummy_tensor
+
+    @staticmethod
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
+        myreq = ctx.myreq
+        myreq.req.wait()
+        myreq.req = None
+        grad_input = myreq.tensor
+
+        agi = myreq.agi
+        if agi.codecs is not None:
+            grad_input = agi.codecs.backward.decode(grad_input)
+
+        # Make it equivalent to running on a single rank.
+        if GRADIENT_DIVISION:
+            grad_input.div_(dist.get_world_size(ctx.pg))
+        myreq.tensor = None
+        myreq.dummy_tensor = None
+        return (None, None, None, grad_input)
+
+
+class AllGatherBase_Wait(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        # pyre-fixme[2]: Parameter must be annotated.
+        *dummy_tensor,
+    ) -> Tensor:
+        ctx.myreq = myreq
+        ctx.pg = pg
+
+        myreq.req.wait()
+        outputs = myreq.tensor
+
+        agi = myreq.agi
+        if agi.codecs is not None:
+            outputs = agi.codecs.forward.decode(outputs)
+
+        myreq.req = None
+        myreq.tensor = None
+
+        return outputs
+
+    @staticmethod
+    # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, grad_outputs: Tensor) -> Tuple[None, None, Tensor]:
+        myreq = ctx.myreq
+        agi = myreq.agi
+
+        if agi.codecs is not None:
+            grad_outputs = agi.codecs.backward.encode(grad_outputs)
+        grad_input = grad_outputs.new_empty(agi.input_size)
+
+        with record_function("## all_gather_base_bw (reduce_scatter) ##"):
+            req = dist._reduce_scatter_base(
+                grad_input,
+                grad_outputs.contiguous(),
+                group=ctx.pg,
+                async_op=True,
+            )
+        myreq.req = req
+        myreq.tensor = grad_input
         return (None, None, myreq.dummy_tensor)

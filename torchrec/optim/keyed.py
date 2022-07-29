@@ -220,10 +220,7 @@ class KeyedOptimizer(optim.Optimizer):
                     and key in sparse_grad_parameter_names
                 ):
                     t = t.to_sparse()
-                # pyre-fixme[8]: Attribute has type `Optional[Tensor]`; used as
-                #  `Variable`.
-                # pyre-fixme[19]: Expected 0 positional arguments.
-                # pyre-fixme[9]: grad has type `Optional[Tensor]`; used as `Variable`.
+                # pyre-fixme[8, 9, 19]
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 
