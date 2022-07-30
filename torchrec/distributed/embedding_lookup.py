@@ -22,11 +22,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
-from torchrec.distributed.embedding_kernel import (
-    BaseEmbedding,
-    GroupedEmbedding,
-    GroupedEmbeddingBag,
-)
+from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
@@ -35,7 +31,6 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
-from torchrec.distributed.grouped_position_weighted import GroupedPositionWeightedModule
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
@@ -193,14 +188,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for emb_module in self._emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        return destination
 
 
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
@@ -373,16 +360,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             yield from emb_module.named_buffers(prefix, recurse)
         for emb_module in self._score_emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for emb_module in self._emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        for emb_module in self._score_emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        return destination
 
 
 class MetaInferGroupedEmbeddingsLookup(
