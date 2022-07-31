@@ -20,6 +20,7 @@ from numpy.testing import assert_array_equal
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTAllToAllLengthsAwaitable,
+    PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
 )
@@ -554,6 +555,69 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
                     "input": embeddings_by_rank[rank],
                     "expected_output": expect_results[rank],
                     "qcomms_config": qcomms_config,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
+
+
+class PooledEmbeddingsAllGatherTest(MultiProcessTestBase):
+    @classmethod
+    def _validate(
+        cls,
+        actual_output: torch.Tensor,
+        expected_output: torch.Tensor,
+        input: torch.Tensor,
+        world_size: int,
+    ) -> None:
+        assert_array_equal(actual_output.cpu().detach(), expected_output.cpu().detach())
+        assert_array_equal(
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
+            input.grad.cpu().detach(),
+            torch.ones(input.size()),
+        )
+
+    @classmethod
+    def _run_test_dist(
+        cls,
+        rank: int,
+        world_size: int,
+        input: torch.Tensor,
+        expected_output: torch.Tensor,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=2, backend="nccl")
+        pg = dist.group.WORLD
+        input = input.cuda(rank)
+        input.requires_grad = True
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
+        ag = PooledEmbeddingsAllGather(pg).cuda(rank)
+        actual_output = ag(input).wait()
+        s = torch.sum(actual_output)
+        s.backward()
+        cls._validate(actual_output, expected_output, input, world_size)
+
+    # pyre-fixme[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_pooled_embedding_all_gather(self) -> None:
+        world_size = 2
+        embeddding_dim = 10
+        batch_size = 2
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
+        embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "expected_output": embeddings,
                 }
             )
 
