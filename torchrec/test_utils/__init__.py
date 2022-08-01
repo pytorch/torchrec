@@ -12,12 +12,13 @@ import socket
 import time
 from contextlib import closing
 from functools import wraps
-from typing import Callable, Optional, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 import numpy as np
 import torch
 import torch.distributed as dist
 from pyre_extensions import ParameterSpecification
+from torch import nn
 
 TParams = ParameterSpecification("TParams")
 TReturn = TypeVar("TReturn")
@@ -109,3 +110,11 @@ def seed_and_log(wrapped_func: Callable) -> Callable:
         return wrapped_func(*args, **kwargs)
 
     return _wrapper
+
+
+def get_model_characteristics(model: nn.Module) -> Dict[str, Any]:
+    return {
+        "state_dict": model.state_dict(),
+        "named_buffers": dict(model.named_buffers()),
+        "named_parameters": dict(model.named_parameters()),
+    }
