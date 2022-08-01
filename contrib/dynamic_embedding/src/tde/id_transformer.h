@@ -12,6 +12,8 @@ class IDTransformer : public torch::CustomClassHolder {
       torch::Tensor global_ids,
       torch::Tensor cache_ids);
 
+  torch::Tensor Evict(int64_t num_to_evict);
+
  private:
   nlohmann::json json_;
   details::IDTransformer transformer_;
