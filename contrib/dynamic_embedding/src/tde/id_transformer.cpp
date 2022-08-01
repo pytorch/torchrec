@@ -12,7 +12,10 @@ IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
 
 std::tuple<int64_t, torch::Tensor> IDTransformer::Transform(
     torch::Tensor global_ids,
-    torch::Tensor cache_ids) {
+    torch::Tensor cache_ids,
+    int64_t time) {
+  TORCH_CHECK(time >= 0);
+  transformer_.strategy_.UpdateTime(static_cast<uint32_t>(time));
   ids_to_fetch_.resize(2 * global_ids.numel());
   int64_t num_transformed = transformer_.Transform(
       tcb::span{

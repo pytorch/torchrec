@@ -10,7 +10,8 @@ class IDTransformer : public torch::CustomClassHolder {
   IDTransformer(int64_t num_embeddings, nlohmann::json json);
   std::tuple<int64_t, torch::Tensor> Transform(
       torch::Tensor global_ids,
-      torch::Tensor cache_ids);
+      torch::Tensor cache_ids,
+      int64_t time);
 
   torch::Tensor Evict(int64_t num_to_evict);
 

@@ -57,7 +57,7 @@ class TestIDTransformer(unittest.TestCase):
         global_ids.random_(0, 512)
 
         cache_ids = torch.empty_like(global_ids)
-        num_transformed, ids_to_fetch = transformer.transform(global_ids, cache_ids)
+        num_transformed, ids_to_fetch = transformer.transform(global_ids, cache_ids, 0)
         self.assertEqual(num_transformed, global_ids.numel())
 
         python_transformer = PythonIdTransformer(num_embedding, num_threads)

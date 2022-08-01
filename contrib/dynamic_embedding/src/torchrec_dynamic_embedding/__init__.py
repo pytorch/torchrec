@@ -23,5 +23,5 @@ class IDTransformer:
         )
         self._transformer = torch.classes.tde.IDTransformer(num_embedding, config)
 
-    def transform(self, global_ids, cache_ids):
-        return self._transformer.transform(global_ids, cache_ids)
+    def transform(self, global_ids, cache_ids, time):
+        return self._transformer.transform(global_ids, cache_ids, time)
