@@ -4,12 +4,13 @@ add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_tran
         details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
         details/clz_impl.cpp details/ctz_impl.cpp details/id_transformer_registry.cpp
-        details/id_transformer_variant.cpp)
+        details/id_transformer_variant.cpp details/redis_io.cpp details/redis_io_v1.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
 target_compile_features(tde_cpp_objs PUBLIC cxx_std_17)
-target_link_libraries(tde_cpp_objs PUBLIC tcb::span nlohmann_json)
+target_link_libraries(tde_cpp_objs PUBLIC tcb::span nlohmann_json hiredis)
+target_link_libraries(tde_cpp_objs PRIVATE foonathan::lexy::core)
 target_compile_options(tde_cpp_objs PUBLIC -fPIC)
 target_compile_definitions(tde_cpp_objs PUBLIC -DJSON_HAS_CPP_17)
 target_link_libraries(tde_cpp_objs PUBLIC ${CMAKE_DL_LIBS})
@@ -48,4 +49,7 @@ if (TDE_WITH_TESTING)
     add_tde_benchmark(random_bits_generator_benchmark details/random_bits_generator_benchmark.cpp)
     add_tde_test(id_transformer_registry_test details/id_transformer_registry_test.cpp)
     add_tde_test(id_transformer_factory_test details/id_transformer_variant_test.cpp)
+    add_tde_test(redis_io_v1_test details/redis_io_v1_test.cpp)
+    add_tde_test(url_test details/url_test.cpp)
+    target_link_libraries(url_test foonathan::lexy::core)
 endif ()

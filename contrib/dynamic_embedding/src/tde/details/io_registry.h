@@ -39,6 +39,7 @@ class IORegistry {
   [[nodiscard]] IOProvider Resolve(const std::string& name) const;
 
   static IORegistry& Instance();
+  static void RegisterAllDefaultIOs();
 
  private:
   IORegistry() = default;

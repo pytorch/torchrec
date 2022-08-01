@@ -1,6 +1,8 @@
 #include "tde/details/io_registry.h"
 #include "dlfcn.h"
+#include "tde/details/redis_io.h"
 #include "torch/torch.h"
+
 namespace tde::details {
 
 void IORegistry::Register(IOProvider provider) {
@@ -54,6 +56,10 @@ IOProvider IORegistry::Resolve(const std::string& name) const {
 IORegistry& IORegistry::Instance() {
   static IORegistry instance;
   return instance;
+}
+
+void IORegistry::RegisterAllDefaultIOs() {
+  RegisterRedisIO();
 }
 
 } // namespace tde::details
