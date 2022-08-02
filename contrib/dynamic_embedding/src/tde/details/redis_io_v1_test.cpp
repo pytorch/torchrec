@@ -6,12 +6,21 @@
 namespace tde::details::redis_v1 {
 
 TEST(TDE, redis_v1_Option) {
-  auto opt = Option::Parse("192.168.3.1:3948/?db=3&&num_threads=2");
+  auto opt = Option::Parse(
+      "192.168.3.1:3948/?db=3&&num_threads=2&&timeout=3s&&chunk_size=3000");
   ASSERT_EQ(opt.host_, "192.168.3.1");
   ASSERT_EQ(opt.port_, 3948);
   ASSERT_EQ(opt.db_, 3);
   ASSERT_EQ(opt.num_io_threads_, 2);
+  ASSERT_EQ(opt.chunk_size_, 3000);
+  ASSERT_EQ(opt.timeout_ms_, 3000);
   ASSERT_TRUE(opt.prefix_.empty());
+}
+
+TEST(TDE, redis_v1_Option_ParseError) {
+  ASSERT_ANY_THROW(
+      Option::Parse("192.168.3.1:3948/?db=3&&no_opt=3000&&num_threads=2"));
+  ASSERT_ANY_THROW(Option::Parse("192.168.3.1:3948/?timeout=3d"));
 }
 
 struct PullContext {
