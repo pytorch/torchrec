@@ -12,7 +12,11 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
+from torchrec.distributed.planner.constants import (
+    BATCH_SIZE,
+    MIN_CW_DIM,
+    POOLING_FACTOR,
+)
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
@@ -48,14 +52,15 @@ class EmbeddingEnumerator(Enumerator):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int = BATCH_SIZE,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
         self._compute_device: str = topology.compute_device
         self._world_size: int = topology.world_size
         self._local_world_size: int = topology.local_world_size
+        self._batch_size: int = batch_size
         self._constraints = constraints
-        self._batch_size: int = topology.batch_size
 
         if estimator:
             self._estimators: List[ShardEstimator] = (

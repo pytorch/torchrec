@@ -46,6 +46,7 @@ class EmbeddingStats(Stats):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        batch_size: int,
         storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,
@@ -63,6 +64,7 @@ class EmbeddingStats(Stats):
         Args:
             sharding_plan (ShardingPlan): sharding plan chosen by the planner.
             topology (Topology): device topology.
+            batch_size (int): batch size.
             storage_constraint (Topology): available storage after storage reservation.
             storage_reservation (StorageReservation): reserves storage for unsharded
                 parts of the model
@@ -283,9 +285,9 @@ class EmbeddingStats(Stats):
             for row in formatted_param_table:
                 self._stats_table.append(f"# {row: <{self._width-3}}#")
 
-        batch_size = f"Batch Size: {topology.batch_size}"
+        batch_size_text = f"Batch Size: {batch_size}"
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {batch_size : <{self._width-3}}#")
+        self._stats_table.append(f"# {batch_size_text : <{self._width-3}}#")
 
         self._log_compute_kernel_stats(compute_kernels_to_count)
 

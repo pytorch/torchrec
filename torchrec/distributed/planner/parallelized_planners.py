@@ -19,7 +19,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
-from torchrec.distributed.planner.constants import MAX_SIZE
+from torchrec.distributed.planner.constants import BATCH_SIZE, MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
@@ -112,6 +112,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int = BATCH_SIZE,
         enumerator: Optional[Enumerator] = None,
         storage_reservation: Optional[StorageReservation] = None,
         proposer: Optional[Union[Proposer, List[Proposer]]] = None,
@@ -123,12 +124,14 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         debug: bool = True,
     ) -> None:
         self._topology = topology
+        self._batch_size: int = self._topology.batch_size
         self._constraints = constraints
         self._enumerator: Enumerator = (
             enumerator
             if enumerator
             else EmbeddingEnumerator(
                 topology=topology,
+                batch_size=self._batch_size,
                 constraints=constraints,
             )
         )
@@ -191,6 +194,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
 
         storage_constraint: Topology = self._storage_reservation.reserve(
             topology=self._topology,
+            batch_size=self._batch_size,
             module=module,
             sharders=sharders,
             constraints=self._constraints,
@@ -277,6 +281,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
             self._stats.log(
                 sharding_plan=sharding_plan,
                 topology=self._topology,
+                batch_size=self._batch_size,
                 storage_reservation=self._storage_reservation,
                 num_proposals=self._num_proposals,
                 num_plans=self._num_plans,

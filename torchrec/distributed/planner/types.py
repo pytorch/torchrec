@@ -292,6 +292,7 @@ class StorageReservation(abc.ABC):
     def reserve(
         self,
         topology: Topology,
+        batch_size: int,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
@@ -338,6 +339,7 @@ class Enumerator(abc.ABC):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int = BATCH_SIZE,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
@@ -409,6 +411,7 @@ class Stats(abc.ABC):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        batch_size: int,
         storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,

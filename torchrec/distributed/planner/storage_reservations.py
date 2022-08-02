@@ -29,6 +29,7 @@ class FixedPercentageReservation(StorageReservation):
     def reserve(
         self,
         topology: Topology,
+        batch_size: int,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
@@ -58,6 +59,7 @@ class HeuristicalStorageReservation(StorageReservation):
     def reserve(
         self,
         topology: Topology,
+        batch_size: int,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
@@ -96,7 +98,7 @@ class HeuristicalStorageReservation(StorageReservation):
         )
 
         self._kjt_storage = _reserve_kjt_storage(
-            reserved_topology, all_input_lengths, BIGINT_DTYPE
+            reserved_topology, batch_size, all_input_lengths, BIGINT_DTYPE
         )
 
         return reserved_topology
@@ -140,14 +142,13 @@ def _reserve_unshardable_storage(
 
 def _reserve_kjt_storage(
     topology: Topology,
+    batch_size: int,
     all_input_lengths: List[float],
     input_data_type_size: int,
 ) -> Storage:
     kjt_size = (
         math.ceil(
-            float(topology.batch_size)
-            * sum(all_input_lengths)
-            * float(input_data_type_size)
+            float(batch_size) * sum(all_input_lengths) * float(input_data_type_size)
         )
         * 20  # 2 pipelined batches each with 10 internal copies
     )
