@@ -372,6 +372,9 @@ class ParameterSharding:
     ranks: Optional[List[int]] = None
     sharding_spec: Optional[ShardingSpec] = None
 
+    # Used for kernel X sharding reparation.
+    placement: str = "HOST"
+
 
 @dataclass
 class ShardedModuleContext(Multistreamable):
