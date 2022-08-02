@@ -47,6 +47,7 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
 }
 
 TEST(TDE, MixedLFULRUStrategy_Transform) {
+  constexpr static size_t n_iter = 1000000;
   MixedLFULRUStrategy strategy;
   strategy.UpdateTime(10);
   MixedLFULRUStrategy::lxu_record_t val;
@@ -60,7 +61,7 @@ TEST(TDE, MixedLFULRUStrategy_Transform) {
   uint32_t freq_power_5_cnt = 0;
   uint32_t freq_power_6_cnt = 0;
 
-  for (size_t i = 0; i < 100000; ++i) {
+  for (size_t i = 0; i < n_iter; ++i) {
     auto tmp = strategy.Transform(val);
     auto record = reinterpret_cast<MixedLFULRUStrategy::Record*>(&tmp);
     ASSERT_EQ(record->time_, 10);
