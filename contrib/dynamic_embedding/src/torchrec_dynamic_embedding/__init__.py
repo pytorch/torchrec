@@ -25,3 +25,6 @@ class IDTransformer:
 
     def transform(self, global_ids, cache_ids, time):
         return self._transformer.transform(global_ids, cache_ids, time)
+
+    def evict(self, num_to_evict):
+        return self._transformer.evict(num_to_evict)

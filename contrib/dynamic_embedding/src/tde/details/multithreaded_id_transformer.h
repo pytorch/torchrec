@@ -2,6 +2,7 @@
 #include <optional>
 #include <vector>
 #include "tcb/span.hpp"
+#include "tde/details/move_only_function.h"
 #include "tde/details/naive_id_transformer.h"
 #include "tde/details/thread_pool.h"
 
@@ -78,6 +79,9 @@ class MultiThreadedIDTransformer {
           [](int64_t global_id, int64_t cache_id, lxu_record_t tag) {});
 
   void Evict(tcb::span<const int64_t> global_ids);
+
+  MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()>
+  CreateIterator();
 
  private:
   size_t num_threads_;

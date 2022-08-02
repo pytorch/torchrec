@@ -62,4 +62,26 @@ void MultiThreadedIDTransformer<UnderlyingTransformer>::Evict(
   }
 }
 
+template <typename UnderlyingTransformer>
+MoveOnlyFunction<std::optional<
+    std::pair<int64_t, typename UnderlyingTransformer::lxu_record_t>>()>
+MultiThreadedIDTransformer<UnderlyingTransformer>::CreateIterator() {
+  auto iter = transformers_.begin();
+  MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()> iterator =
+      iter->CreateIterator();
+  return [iter, this, iterator = std::move(iterator)]() mutable {
+    auto opt = iterator();
+    while (!opt.has_value()) {
+      iter++;
+      if (iter != transformers_.end()) {
+        iterator = std::move(iter->CreateIterator());
+        opt = iterator();
+      } else {
+        return opt;
+      }
+    }
+    return opt;
+  };
+}
+
 } // namespace tde::details

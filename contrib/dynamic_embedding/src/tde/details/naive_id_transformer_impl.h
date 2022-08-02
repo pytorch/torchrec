@@ -46,19 +46,20 @@ inline bool Bitmap<T>::Full() const {
   return next_free_bit_ >= num_total_bits_;
 }
 
-template <typename Tag, typename T>
-inline NaiveIDTransformer<Tag, T>::NaiveIDTransformer(int64_t num_embedding)
+template <typename LXURecord, typename T>
+inline NaiveIDTransformer<LXURecord, T>::NaiveIDTransformer(
+    int64_t num_embedding)
     : bitmap_(num_embedding) {
   global_id2cache_value_.reserve(num_embedding);
 }
 
-template <typename Tag, typename T>
+template <typename LXURecord, typename T>
 template <
     typename Filter,
     typename CacheIDTransformer,
     typename Update,
     typename Fetch>
-inline int64_t NaiveIDTransformer<Tag, T>::Transform(
+inline int64_t NaiveIDTransformer<LXURecord, T>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Filter filter,
@@ -85,9 +86,9 @@ inline int64_t NaiveIDTransformer<Tag, T>::Transform(
       }
       auto stored_cache_id = bitmap_.NextFreeBit();
       cache_id = cache_id_transformer(stored_cache_id);
-      Tag tag = update(std::nullopt, global_id, cache_id);
+      LXURecord record = update(std::nullopt, global_id, cache_id);
       global_id2cache_value_.emplace(
-          global_id, CacheValue{stored_cache_id, tag});
+          global_id, CacheValue{stored_cache_id, record});
       fetch(global_id, cache_id);
     }
     cache_ids[i] = cache_id;
@@ -96,16 +97,16 @@ inline int64_t NaiveIDTransformer<Tag, T>::Transform(
   return num_transformed;
 }
 
-template <typename Tag, typename T>
+template <typename LXURecord, typename T>
 template <typename Callback>
-inline void NaiveIDTransformer<Tag, T>::ForEach(Callback callback) {
+inline void NaiveIDTransformer<LXURecord, T>::ForEach(Callback callback) {
   for (auto&& [global_id, value] : global_id2cache_value_) {
     callback(global_id, value.cache_id_, value.lxu_record_);
   }
 }
 
-template <typename Tag, typename T>
-inline void NaiveIDTransformer<Tag, T>::Evict(
+template <typename LXURecord, typename T>
+inline void NaiveIDTransformer<LXURecord, T>::Evict(
     tcb::span<const int64_t> global_ids) {
   for (const int64_t global_id : global_ids) {
     auto iter = global_id2cache_value_.find(global_id);
@@ -116,6 +117,22 @@ inline void NaiveIDTransformer<Tag, T>::Evict(
     global_id2cache_value_.erase(iter);
     bitmap_.FreeBit(cache_id);
   }
+}
+
+template <typename LXURecord, typename T>
+inline MoveOnlyFunction<std::optional<std::pair<int64_t, LXURecord>>()>
+NaiveIDTransformer<LXURecord, T>::CreateIterator() {
+  auto iter = global_id2cache_value_.begin();
+  return [iter, this]() mutable {
+    if (iter != global_id2cache_value_.end()) {
+      auto opt = std::optional<std::pair<int64_t, LXURecord>>(
+          std::make_pair(iter->first, iter->second.lxu_record_));
+      iter++;
+      return opt;
+    } else {
+      return std::optional<std::pair<int64_t, LXURecord>>();
+    }
+  };
 }
 
 } // namespace tde::details

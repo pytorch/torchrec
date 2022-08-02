@@ -28,6 +28,15 @@ struct LXUStrategy {
         var_);
   }
 
+  template <typename Iterator>
+  std::vector<int64_t> Evict(Iterator iterator, uint64_t num_to_evict) {
+    return std::visit(
+        [&, iterator = std::move(iterator)](auto& s) mutable {
+          return s.Evict(std::move(iterator), num_to_evict);
+        },
+        var_);
+  }
+
   Variant var_;
 };
 
@@ -53,6 +62,8 @@ struct IDTransformer {
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
       Fetch fetch = transform_default::NoFetch);
+
+  std::vector<int64_t> Evict(int64_t num_to_evict);
 
   LXUStrategy strategy_;
   Variant var_;
@@ -93,6 +104,26 @@ inline int64_t IDTransformer::Transform(
         var_);
   });
   return processed;
+}
+
+inline std::vector<int64_t> IDTransformer::Evict(int64_t num_to_evict) {
+  // Get the ids to evict from lxu strategy.
+  std::vector<int64_t> ids_to_evict = std::visit(
+      [&](auto&& s) {
+        return strategy_.Evict(s.CreateIterator(), num_to_evict);
+      },
+      var_);
+  // get the cache id of the ids to evict.
+  std::vector<int64_t> cache_ids(ids_to_evict.size());
+  Transform(ids_to_evict, cache_ids);
+  std::vector<int64_t> result(2 * ids_to_evict.size());
+  for (size_t i = 0; i < ids_to_evict.size(); i++) {
+    result[2 * i] = ids_to_evict[i];
+    result[2 * i + 1] = cache_ids[i];
+  }
+  // Evict ids from the ID transformer.
+  std::visit([&](auto&& s) { s.Evict(ids_to_evict); }, var_);
+  return result;
 }
 
 } // namespace tde::details

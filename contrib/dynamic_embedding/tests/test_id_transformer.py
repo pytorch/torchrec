@@ -68,3 +68,29 @@ class TestIDTransformer(unittest.TestCase):
         for global_id, cache_id in zip(global_ids.tolist(), cache_ids.tolist()):
             self.assertTrue(global_id in ids_map)
             self.assertEqual(cache_id, ids_map[global_id])
+
+    def testEvict(self):
+        num_embedding = 9
+        num_threads = 2
+        transformer = IDTransformer(
+            num_embedding,
+            transform_config={
+                "type": "thread",
+                "underlying": {"type": "naive"},
+                "num_threads": num_threads,
+            },
+        )
+        global_ids = torch.tensor([1, 2, 3, 4], dtype=torch.long)
+        cache_ids = torch.empty_like(global_ids)
+        num_transformed, _ = transformer.transform(global_ids, cache_ids, 0)
+        self.assertEqual(num_transformed, global_ids.numel())
+
+        global_ids = torch.tensor([1, 3, 5, 7], dtype=torch.long)
+        num_transformed, _ = transformer.transform(global_ids, cache_ids, 1)
+        self.assertEqual(num_transformed, global_ids.numel())
+
+        num_to_evict = 2
+        evicted_tensor = transformer.evict(num_to_evict)
+        self.assertEqual(num_to_evict, evicted_tensor.shape[0])
+        evicted_ids = sorted(evicted_tensor.tolist())
+        self.assertEqual(evicted_ids, [[2, 0], [4, 1]])

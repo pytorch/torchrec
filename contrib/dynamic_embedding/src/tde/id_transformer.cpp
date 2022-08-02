@@ -1,4 +1,5 @@
 #include "tde/id_transformer.h"
+#include "tde/details/move_only_function.h"
 
 namespace tde {
 
@@ -40,6 +41,15 @@ std::tuple<int64_t, torch::Tensor> IDTransformer::Transform(
                                    .clone();
   num_ids_to_fetch_.store(0);
   return {num_transformed, ids_to_fetch};
+}
+
+torch::Tensor IDTransformer::Evict(int64_t num_to_evict) {
+  std::vector<int64_t> ids_to_evict = transformer_.Evict(num_to_evict);
+  int64_t num_ids_to_evict = ids_to_evict.size() / 2;
+  torch::Tensor evicted_ids_tensor =
+      torch::tensor(ids_to_evict, torch::dtype(torch::kLong))
+          .reshape({num_ids_to_evict, 2});
+  return evicted_ids_tensor;
 }
 
 } // namespace tde

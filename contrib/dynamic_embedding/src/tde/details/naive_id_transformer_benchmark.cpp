@@ -32,5 +32,4 @@ BENCHMARK(BM_NaiveIDTransformer)
     ->Args({static_cast<long long>(1e10), static_cast<long long>(2e10)})
     ->Args({static_cast<long long>(1e6), static_cast<long long>(2e6)});
 
-
 } // namespace tde::details

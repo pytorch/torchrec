@@ -1,5 +1,5 @@
-#include <vector>
 #include "tde/details/id_transformer_variant.h"
+#include <vector>
 
 namespace tde::details {
 
