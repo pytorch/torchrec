@@ -12,4 +12,8 @@ void Notification::Wait() {
   std::unique_lock<std::mutex> lock(mtx_);
   cv_.wait(lock, [this] { return set_; });
 }
+
+void Notification::Clear() {
+  set_ = false;
+}
 } // namespace tde::details

@@ -36,6 +36,10 @@ void IORegistry::RegisterPlugin(const char* filename) {
   TORCH_CHECK(pull_ptr != nullptr, "cannot find IO_Pull symbol");
   provider.Pull = reinterpret_cast<decltype(provider.Pull)>(pull_ptr);
 
+  auto push_ptr = dlsym(ptr.get(), "IO_Push");
+  TORCH_CHECK(push_ptr != nullptr, "cannot find IO_Push symbol");
+  provider.Push = reinterpret_cast<decltype(provider.Push)>(push_ptr);
+
   Register(provider);
   dls_.emplace_back(std::move(ptr));
 }
@@ -49,7 +53,8 @@ void IORegistry::DLCloser::operator()(void* ptr) const {
 
 IOProvider IORegistry::Resolve(const std::string& name) const {
   auto it = providers_.find(name);
-  TORCH_CHECK(it == providers_.end(), "IO provider %s is not registered", name);
+  TORCH_CHECK(
+      it != providers_.end(), "IO provider ", name, " is not registered");
   return it->second;
 }
 

@@ -24,8 +24,6 @@ IO::~IO() {
   provider_.Finalize(instance_);
 }
 
-void IO::Push() {}
-
 struct FetchContext {
   std::vector<torch::Tensor> tensors_;
   MoveOnlyFunction<void(std::vector<torch::Tensor>)> on_complete_;
@@ -66,8 +64,8 @@ static void OnAllFetched(void* ctx) {
 
 void IO::Pull(
     const std::string& table_name,
-    tcb::span<const int64_t> col_ids,
     tcb::span<const int64_t> global_ids,
+    tcb::span<const int64_t> col_ids,
     uint32_t num_optimizer_states,
     torch::ScalarType type,
     MoveOnlyFunction<void(std::vector<torch::Tensor>)> on_fetch_complete) {
@@ -76,7 +74,8 @@ void IO::Pull(
       .scalar_type_ = type,
       .num_optimizer_states_ = num_optimizer_states,
   });
-  ctx->tensors_.resize(global_ids.size());
+  ctx->tensors_.resize(
+      global_ids.size() * std::max(col_ids.size(), static_cast<size_t>(1)));
 
   IOPullParameter param{
       .table_name_ = table_name.c_str(),
@@ -85,12 +84,49 @@ void IO::Pull(
       .col_ids_ = col_ids.data(),
       .global_ids_ = global_ids.data(),
       .num_optimizer_stats_ = num_optimizer_states,
-      .scalar_type_ = static_cast<int8_t>(type),
       .on_global_id_fetched_ = OnGlobalIDFetched,
       .on_all_fetched_ = OnAllFetched,
   };
   param.on_complete_context_ = ctx.release();
   provider_.Pull(instance_, param);
+}
+
+struct PushContext {
+  MoveOnlyFunction<void()> on_push_complete_;
+};
+
+static void OnPushComplete(void* ctx) {
+  auto* c = reinterpret_cast<PushContext*>(ctx);
+  c->on_push_complete_();
+  delete c;
+}
+
+void IO::Push(
+    const std::string& table_name,
+    tcb::span<const int64_t> global_ids,
+    tcb::span<const int64_t> col_ids,
+    tcb::span<const uint32_t> os_ids,
+    tcb::span<const uint8_t> data,
+    tcb::span<const uint64_t> offsets,
+    MoveOnlyFunction<void()> on_push_complete) {
+  std::unique_ptr<PushContext> ctx(new PushContext{
+      .on_push_complete_ = std::move(on_push_complete),
+  });
+  IOPushParameter param{
+      .table_name_ = table_name.c_str(),
+      .num_cols_ = static_cast<uint32_t>(col_ids.size()),
+      .num_global_ids_ = static_cast<uint32_t>(global_ids.size()),
+      .col_ids_ = col_ids.data(),
+      .global_ids_ = global_ids.data(),
+      .num_optimizer_stats_ = static_cast<uint32_t>(os_ids.size()),
+      .optimizer_stats_ids_ = os_ids.data(),
+      .num_offsets_ = static_cast<uint32_t>(offsets.size()),
+      .offsets_ = offsets.data(),
+      .data_ = data.data(),
+      .on_complete_context_ = ctx.release(),
+      .on_push_complete = OnPushComplete,
+  };
+  provider_.Push(instance_, param);
 }
 
 } // namespace tde::details
