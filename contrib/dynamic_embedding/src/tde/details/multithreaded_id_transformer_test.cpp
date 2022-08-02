@@ -16,7 +16,7 @@ TEST(tde, MultiThreadedIDTransformer) {
   }
 }
 
-TEST(tde, MultiThreadedIDTransformer_CreateIterator) {
+TEST(tde, MultiThreadedIDTransformer_Iterator) {
   using Tag = int32_t;
   MultiThreadedIDTransformer<NaiveIDTransformer<Tag>> transformer(8, 3);
   const int64_t global_ids[6] = {100, 101, 100, 104, 101, 103};
@@ -25,7 +25,7 @@ TEST(tde, MultiThreadedIDTransformer_CreateIterator) {
   int64_t num_transformed = transformer.Transform(global_ids, cache_ids);
   EXPECT_EQ(6, num_transformed);
 
-  auto iterator = transformer.CreateIterator();
+  auto iterator = transformer.Iterator();
   for (size_t i = 0; i < 4; i++) {
     EXPECT_TRUE(iterator().has_value());
   }

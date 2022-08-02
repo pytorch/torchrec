@@ -46,8 +46,7 @@ struct SortItems {
 };
 
 std::vector<int64_t> MixedLFULRUStrategy::Evict(
-    MoveOnlyFunction<std::optional<
-        std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>>()> iterator,
+    MoveOnlyFunction<std::optional<transformer_record_t>()> iterator,
     uint64_t num_to_evict) {
   std::priority_queue<SortItems> items;
   while (true) {
@@ -56,7 +55,8 @@ std::vector<int64_t> MixedLFULRUStrategy::Evict(
       break;
     }
 
-    auto& [global_id, ext_val] = *val;
+    auto& global_id = val->global_id_;
+    auto& ext_val = val->lxu_record_;
     auto* record = reinterpret_cast<Record*>(&ext_val);
     SortItems item{
         .global_id_ = global_id,

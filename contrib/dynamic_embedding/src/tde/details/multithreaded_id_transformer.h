@@ -18,6 +18,7 @@ template <typename UnderlyingTransformer>
 class MultiThreadedIDTransformer {
  public:
   using lxu_record_t = typename UnderlyingTransformer::lxu_record_t;
+  using record_t = typename UnderlyingTransformer::record_t;
   static_assert(UnderlyingTransformer::TransformHasFilter);
   static_assert(UnderlyingTransformer::TransformerHasCacheIDTransformer);
   enum {
@@ -80,8 +81,7 @@ class MultiThreadedIDTransformer {
 
   void Evict(tcb::span<const int64_t> global_ids);
 
-  MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()>
-  CreateIterator();
+  MoveOnlyFunction<std::optional<record_t>()> Iterator();
 
  private:
   size_t num_threads_;

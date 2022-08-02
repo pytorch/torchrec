@@ -25,7 +25,7 @@ struct LXUStrategy {
           };
           accessor(update);
         },
-        var_);
+        strategy_);
   }
 
   template <typename Iterator>
@@ -34,10 +34,10 @@ struct LXUStrategy {
         [&, iterator = std::move(iterator)](auto& s) mutable {
           return s.Evict(std::move(iterator), num_to_evict);
         },
-        var_);
+        strategy_);
   }
 
-  Variant var_;
+  Variant strategy_;
 };
 
 struct IDTransformer {
@@ -109,9 +109,7 @@ inline int64_t IDTransformer::Transform(
 inline std::vector<int64_t> IDTransformer::Evict(int64_t num_to_evict) {
   // Get the ids to evict from lxu strategy.
   std::vector<int64_t> ids_to_evict = std::visit(
-      [&](auto&& s) {
-        return strategy_.Evict(s.CreateIterator(), num_to_evict);
-      },
+      [&](auto&& s) { return strategy_.Evict(s.Iterator(), num_to_evict); },
       var_);
   // get the cache id of the ids to evict.
   std::vector<int64_t> cache_ids(ids_to_evict.size());

@@ -63,22 +63,21 @@ void MultiThreadedIDTransformer<UnderlyingTransformer>::Evict(
 }
 
 template <typename UnderlyingTransformer>
-MoveOnlyFunction<std::optional<
-    std::pair<int64_t, typename UnderlyingTransformer::lxu_record_t>>()>
-MultiThreadedIDTransformer<UnderlyingTransformer>::CreateIterator() {
+auto MultiThreadedIDTransformer<UnderlyingTransformer>::Iterator()
+    -> MoveOnlyFunction<std::optional<record_t>()> {
   auto iter = transformers_.begin();
-  MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()> iterator =
-      iter->CreateIterator();
-  return [iter, this, iterator = std::move(iterator)]() mutable {
+  auto iterator = iter->Iterator();
+  return [iter,
+          this,
+          iterator = std::move(iterator)]() mutable -> std::optional<record_t> {
     auto opt = iterator();
     while (!opt.has_value()) {
-      iter++;
-      if (iter != transformers_.end()) {
-        iterator = std::move(iter->CreateIterator());
-        opt = iterator();
-      } else {
-        return opt;
+      ++iter;
+      if (iter == transformers_.end()) {
+        return {};
       }
+      iterator = iter->Iterator();
+      opt = iterator();
     }
     return opt;
   };

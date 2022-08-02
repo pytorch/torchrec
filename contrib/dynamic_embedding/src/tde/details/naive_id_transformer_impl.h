@@ -120,17 +120,19 @@ inline void NaiveIDTransformer<LXURecord, T>::Evict(
 }
 
 template <typename LXURecord, typename T>
-inline MoveOnlyFunction<std::optional<std::pair<int64_t, LXURecord>>()>
-NaiveIDTransformer<LXURecord, T>::CreateIterator() {
+inline auto NaiveIDTransformer<LXURecord, T>::Iterator() const
+    -> MoveOnlyFunction<std::optional<record_t>()> {
   auto iter = global_id2cache_value_.begin();
-  return [iter, this]() mutable {
+  return [iter, this]() mutable -> std::optional<record_t> {
     if (iter != global_id2cache_value_.end()) {
-      auto opt = std::optional<std::pair<int64_t, LXURecord>>(
-          std::make_pair(iter->first, iter->second.lxu_record_));
       iter++;
-      return opt;
+      return record_t{
+          .global_id_ = iter->first,
+          .cache_id_ = iter->second.cache_id_,
+          .lxu_record_ = iter->second.lxu_record_,
+      };
     } else {
-      return std::optional<std::pair<int64_t, LXURecord>>();
+      return {};
     }
   };
 }

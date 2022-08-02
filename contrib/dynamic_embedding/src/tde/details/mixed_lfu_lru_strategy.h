@@ -4,8 +4,10 @@
 #include <string_view>
 #include "nlohmann/json.hpp"
 #include "tde/details/move_only_function.h"
+#include "tde/details/naive_id_transformer.h"
 #include "tde/details/random_bits_generator.h"
 #include "tde/details/type_list.h"
+
 namespace tde::details {
 
 /**
@@ -31,6 +33,7 @@ namespace tde::details {
 class MixedLFULRUStrategy {
  public:
   using lxu_record_t = uint32_t;
+  using transformer_record_t = TransformerRecord<lxu_record_t>;
 
   static constexpr std::string_view type_ = "mixed_lru_lfu";
 
@@ -74,8 +77,7 @@ class MixedLFULRUStrategy {
    * @return
    */
   static std::vector<int64_t> Evict(
-      MoveOnlyFunction<std::optional<std::pair<int64_t, lxu_record_t>>()>
-          iterator,
+      MoveOnlyFunction<std::optional<transformer_record_t>()> iterator,
       uint64_t num_to_evict);
 
   // Record should only be used in unittest or internally.

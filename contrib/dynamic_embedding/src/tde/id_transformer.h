@@ -13,7 +13,7 @@ class IDTransformer : public torch::CustomClassHolder {
       torch::Tensor cache_ids,
       int64_t time);
 
-  torch::Tensor Evict(int64_t num_to_evict) {}
+  torch::Tensor Evict(int64_t num_to_evict);
 
  private:
   nlohmann::json json_;

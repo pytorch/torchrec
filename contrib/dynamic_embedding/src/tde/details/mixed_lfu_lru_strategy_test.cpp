@@ -25,9 +25,8 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
   }
   size_t offset_{0};
   auto ids = MixedLFULRUStrategy::Evict(
-      [&offset_, &records]()
-          -> std::optional<
-              std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>> {
+      [&offset_,
+       &records]() -> std::optional<MixedLFULRUStrategy::transformer_record_t> {
         if (offset_ == records.size()) {
           return std::nullopt;
         }
@@ -35,9 +34,11 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
         MixedLFULRUStrategy::lxu_record_t ext_type =
             *reinterpret_cast<MixedLFULRUStrategy::lxu_record_t*>(
                 &record.second);
-
-        return std::pair<int64_t, MixedLFULRUStrategy::lxu_record_t>{
-            record.first, ext_type};
+        return MixedLFULRUStrategy::transformer_record_t{
+            .global_id_ = record.first,
+            .cache_id_ = 0,
+            .lxu_record_ = ext_type,
+        };
       },
       2);
 

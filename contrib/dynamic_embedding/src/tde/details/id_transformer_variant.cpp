@@ -35,10 +35,10 @@ struct LXUStrategyCreator<type_list<>> : public CreatorBase {
 };
 
 LXUStrategy::LXUStrategy(const nlohmann::json& json)
-    : var_((LXUStrategyCreator<LXUStrategies>(json.at("type"), json))()) {}
+    : strategy_((LXUStrategyCreator<LXUStrategies>(json.at("type"), json))()) {}
 void LXUStrategy::UpdateTime(uint32_t time) {
   return std::visit(
-      [&](auto& strategy) { return strategy.UpdateTime(time); }, var_);
+      [&](auto& strategy) { return strategy.UpdateTime(time); }, strategy_);
 }
 
 LXUStrategy::lxu_record_t LXUStrategy::DefaultRecordValue() {
@@ -47,7 +47,7 @@ LXUStrategy::lxu_record_t LXUStrategy::DefaultRecordValue() {
         using T = typename std::decay_t<decltype(strategy)>::lxu_record_t;
         return T{};
       },
-      var_);
+      strategy_);
 }
 
 template <typename LXURecordType, typename List>

@@ -49,6 +49,13 @@ struct Bitmap {
   int64_t next_free_bit_;
 };
 
+template <typename LXURecord>
+struct TransformerRecord {
+  int64_t global_id_;
+  int64_t cache_id_;
+  LXURecord lxu_record_;
+};
+
 /**
  * NaiveIDTransformer
  *
@@ -60,6 +67,7 @@ template <typename LXURecord, typename Bitmap = Bitmap<uint32_t>>
 class NaiveIDTransformer {
  public:
   using lxu_record_t = LXURecord;
+  using record_t = TransformerRecord<lxu_record_t>;
   enum {
     TransformUpdateNeedThreadSafe = 0,
     TransformFetchNeedThreadSafe = 0,
@@ -125,8 +133,7 @@ class NaiveIDTransformer {
 
   void Evict(tcb::span<const int64_t> global_ids);
 
-  MoveOnlyFunction<std::optional<std::pair<int64_t, LXURecord>>()>
-  CreateIterator();
+  MoveOnlyFunction<std::optional<record_t>()> Iterator() const;
 
  private:
   struct CacheValue {
