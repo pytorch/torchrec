@@ -11,6 +11,7 @@ from typing import cast
 import torch
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology
@@ -25,7 +26,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         topology = Topology(world_size=2, compute_device="cuda")
         self.estimator = EmbeddingPerfEstimator(topology=topology)
         self.enumerator = EmbeddingEnumerator(
-            topology=topology, estimator=self.estimator
+            topology=topology, batch_size=BATCH_SIZE, estimator=self.estimator
         )
 
     def test_1_table_perf(self) -> None:

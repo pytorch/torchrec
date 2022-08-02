@@ -376,8 +376,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=self.constraints,
         )
         self.tower_model = TestTowerSparseNN(
@@ -616,8 +616,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=constraints,
         )
         sharder = cast(ModuleSharder[torch.nn.Module], AllTypesSharder())
