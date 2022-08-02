@@ -76,7 +76,6 @@ class Topology:
         local_world_size: Optional[int] = None,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
-        batch_size: int = BATCH_SIZE,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -108,11 +107,6 @@ class Topology:
         )
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
-        self._batch_size = batch_size
-
-    @property
-    def batch_size(self) -> int:
-        return self._batch_size
 
     @property
     def compute_device(self) -> str:
@@ -292,6 +286,7 @@ class StorageReservation(abc.ABC):
     def reserve(
         self,
         topology: Topology,
+        batch_size: int,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
@@ -338,6 +333,7 @@ class Enumerator(abc.ABC):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int = BATCH_SIZE,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
@@ -409,6 +405,7 @@ class Stats(abc.ABC):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        batch_size: int,
         storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,

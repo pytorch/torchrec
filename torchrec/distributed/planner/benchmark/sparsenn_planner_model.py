@@ -118,15 +118,18 @@ def main() -> None:
     topology = Topology(
         local_world_size=args.local_world_size,
         world_size=args.world_size,
-        batch_size=args.batch_size,
         hbm_cap=args.hbm_cap,
         compute_device=args.compute_device,
     )
 
     if args.planner_type == "non_parallelized":
-        planner = EmbeddingShardingPlanner(topology=topology)
+        planner = EmbeddingShardingPlanner(
+            topology=topology, batch_size=args.batch_size
+        )
     else:
-        planner = ParallelizedEmbeddingShardingPlanner(topology=topology)
+        planner = ParallelizedEmbeddingShardingPlanner(
+            topology=topology, batch_size=args.batch_size
+        )
 
     tables: List[EmbeddingBagConfig] = [
         EmbeddingBagConfig(
