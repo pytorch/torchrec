@@ -18,8 +18,8 @@ from torchrec.distributed.comm_ops import (
     alltoall_pooled,
     alltoall_sequence,
     reduce_scatter_base_pooled,
+    reduce_scatter_pooled,
 )
-
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -664,11 +664,8 @@ class PooledEmbeddingsAllToAll(nn.Module):
         self._callbacks: List[Callable[[torch.Tensor], torch.Tensor]] = []
         if callbacks is not None:
             self._callbacks = callbacks
-
         self._dim_sum_per_rank = dim_sum_per_rank
-
         self._codecs = codecs
-
         self.register_buffer(
             "_dim_sum_per_rank_tensor",
             torch.tensor(dim_sum_per_rank, device=device, dtype=torch.int),
@@ -805,7 +802,6 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     ) -> None:
         super().__init__()
         self._pg = pg
-
         self._codecs = codecs
 
     def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
@@ -819,6 +815,8 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
+        # tensor_awaitable = reduce_scatter_pooled(
+        #    list(torch.chunk(local_embs, self._pg.size(), dim=0)), self._pg)
         tensor_awaitable = reduce_scatter_base_pooled(
             local_embs, self._pg, codecs=self._codecs
         )
@@ -857,7 +855,6 @@ class PooledEmbeddingsAllGather(nn.Module):
     ) -> None:
         super().__init__()
         self._pg = pg
-
         self._codecs = codecs
 
     def forward(self, local_emb: torch.Tensor) -> PooledEmbeddingsAwaitable:
@@ -975,7 +972,6 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             "_backward_recat_tensor",
             torch.tensor(backward_recat, device=device, dtype=torch.int),
         )
-
         self._codecs = codecs
 
     def forward(
@@ -1011,10 +1007,8 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             group=self._pg,
             codecs=self._codecs,
         )
-        sequence_awaitable = SequenceEmbeddingsAwaitable(
+        return SequenceEmbeddingsAwaitable(
             tensor_awaitable=tensor_awaitable,
             unbucketize_permute_tensor=unbucketize_permute_tensor,
             embedding_dim=local_embs.shape[1],
         )
-
-        return sequence_awaitable
