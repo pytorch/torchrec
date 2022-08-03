@@ -125,12 +125,13 @@ inline auto NaiveIDTransformer<LXURecord, T>::Iterator() const
   auto iter = global_id2cache_value_.begin();
   return [iter, this]() mutable -> std::optional<record_t> {
     if (iter != global_id2cache_value_.end()) {
-      iter++;
-      return record_t{
+      auto record = record_t{
           .global_id_ = iter->first,
           .cache_id_ = iter->second.cache_id_,
           .lxu_record_ = iter->second.lxu_record_,
       };
+      iter++;
+      return record;
     } else {
       return {};
     }
