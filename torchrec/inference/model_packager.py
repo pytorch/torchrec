@@ -60,7 +60,7 @@ class PredictFactoryPackager:
         predict_factory: Type[PredictFactory],
         configs: Dict[str, Any],
         output: Union[str, Path, BinaryIO],
-        extra_files: Dict[str, str],
+        extra_files: Dict[str, Union[str, bytes]],
         loader_code: str = LOADER_CODE,
     ) -> None:
         with PackageExporter(output) as pe:
@@ -72,7 +72,12 @@ class PredictFactoryPackager:
             cls.set_mocked_modules(pe)
             pe.intern("**")
             for k, v in extra_files.items():
-                pe.save_text("extra_files", k, v)
+                if isinstance(v, str):
+                    pe.save_text("extra_files", k, v)
+                elif isinstance(v, bytes):
+                    pe.save_binary("extra_files", k, v)
+                else:
+                    raise ValueError(f"Unsupported type {type(v)}")
             cls._save_predict_factory(
                 pe, predict_factory, configs, loader_code=loader_code
             )
