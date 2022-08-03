@@ -119,7 +119,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         custom_cpu_count: Optional[int] = None,
         partitioner: Optional[Partitioner] = None,
         performance_model: Optional[PerfModel] = None,
-        stats: Optional[Stats] = None,
+        stats: Optional[Union[Stats, List[Stats]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
     ) -> None:
@@ -157,7 +157,11 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         self._perf_model: PerfModel = (
             performance_model if performance_model else NoopPerfModel(topology=topology)
         )
-        self._stats: Stats = stats if stats else EmbeddingStats()
+        if stats:
+            self._stats: List[Stats] = [stats] if not isinstance(stats, list) else stats
+        else:
+            self._stats = [EmbeddingStats()]
+
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
@@ -278,17 +282,19 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         if best_plan is not None:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
             end_time = perf_counter()
-            self._stats.log(
-                sharding_plan=sharding_plan,
-                topology=self._topology,
-                batch_size=self._batch_size,
-                storage_reservation=self._storage_reservation,
-                num_proposals=self._num_proposals,
-                num_plans=self._num_plans,
-                run_time=end_time - start_time,
-                best_plan=best_plan,
-                debug=self._debug,
-            )
+            for stats in self._stats:
+                stats.log(
+                    sharding_plan=sharding_plan,
+                    topology=self._topology,
+                    batch_size=self._batch_size,
+                    storage_reservation=self._storage_reservation,
+                    num_proposals=self._num_proposals,
+                    num_plans=self._num_plans,
+                    run_time=end_time - start_time,
+                    best_plan=best_plan,
+                    constraints=self._constraints,
+                    debug=self._debug,
+                )
             return sharding_plan
         else:
             global_storage_capacity = reduce(
