@@ -57,7 +57,7 @@ class TestIDTransformer(unittest.TestCase):
         global_ids.random_(0, 512)
 
         cache_ids = torch.empty_like(global_ids)
-        num_transformed, ids_to_fetch = transformer.transform(global_ids, cache_ids, 0)
+        num_transformed, ids_to_fetch = transformer.transform(global_ids, cache_ids)
         self.assertEqual(num_transformed, global_ids.numel())
 
         python_transformer = PythonIdTransformer(num_embedding, num_threads)
@@ -82,11 +82,11 @@ class TestIDTransformer(unittest.TestCase):
         )
         global_ids = torch.tensor([1, 2, 3, 4], dtype=torch.long)
         cache_ids = torch.empty_like(global_ids)
-        num_transformed, _ = transformer.transform(global_ids, cache_ids, 0)
+        num_transformed, _ = transformer.transform(global_ids, cache_ids)
         self.assertEqual(num_transformed, global_ids.numel())
 
         global_ids = torch.tensor([1, 3, 5, 7], dtype=torch.long)
-        num_transformed, _ = transformer.transform(global_ids, cache_ids, 1)
+        num_transformed, _ = transformer.transform(global_ids, cache_ids)
         self.assertEqual(num_transformed, global_ids.numel())
 
         num_to_evict = 2
