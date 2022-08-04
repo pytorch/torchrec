@@ -21,6 +21,7 @@ try:
 except OSError:
     pass
 
+
 # OSS
 try:
     import fbgemm_gpu  # @manual  # noqa
@@ -66,17 +67,12 @@ class Request(Awaitable[W]):
         self.agi = None  # type: ignore
         self.wait_function = None  # type: ignore
 
-        # This dummy tensor is used to build the autograd graph between
-        # CommOp-Req and CommOp-Await. The actual forward tensors, and backwards gradient tensors
-        # are stored in self.tensor
-        self.dummy_tensor: Optional[torch.Tensor] = torch.empty(0)
-
     def _wait_impl(self) -> W:
         """
         Calls the wait function for this request.
         """
 
-        ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
+        ret = self.wait_function.apply(self.pg, self, self.tensor)
         self.req = None
         self.tensor = None
         return ret
@@ -172,7 +168,7 @@ class ReduceScatterInfo(object):
     operation.
 
     Attributes:
-        input_sizes (List[int]): the sizes of the input tensors. This remembers the
+        input_sizes (List[torch.Size]): the sizes of the input tensors. This remembers the
             sizes of the input tensors when running the backward pass and producing the
             gradient.
     """
@@ -188,7 +184,7 @@ class ReduceScatterBaseInfo(object):
     operation.
 
     Attributes:
-        input_sizes (int): the sizes of the input flatten tensor.
+        input_sizes (torch.Size): the sizes of the input flatten tensor.
     """
 
     input_sizes: torch.Size
@@ -448,8 +444,7 @@ def reduce_scatter_pooled(
 
     myreq = Request(group)
     rsi = ReduceScatterInfo(
-        input_sizes=[tensor.size() for tensor in inputs],
-        codecs=codecs,
+        input_sizes=[tensor.size() for tensor in inputs], codecs=codecs
     )
     # pyre-fixme[16]
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)
@@ -581,11 +576,8 @@ class All2All_Pooled_Req(Function):
         input_embeddings: Tensor,
     ) -> Tensor:
         my_rank = dist.get_rank(pg)
-
-        if a2ai.codecs:
-            input_embeddings = a2ai.codecs.forward.encode(input_embeddings)
-
         (B_global, D_local_sum) = input_embeddings.shape
+
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         batch_size_per_rank = a2ai.batch_size_per_rank
         B_local = batch_size_per_rank[my_rank]
@@ -595,8 +587,8 @@ class All2All_Pooled_Req(Function):
         D_global_sum = sum(dim_sum_per_rank)
         sharded_output_embeddings = torch.empty(
             B_local * D_global_sum,
-            dtype=sharded_input_embeddings.dtype,
-            device=sharded_input_embeddings.device,
+            dtype=input_embeddings.dtype,
+            device=input_embeddings.device,
         )
 
         with record_function("## alltoall_fwd_single ##"):
@@ -619,9 +611,7 @@ class All2All_Pooled_Req(Function):
         myreq.wait_function = All2All_Pooled_Wait
         ctx.myreq = myreq
         ctx.pg = pg
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return sharded_output_embeddings
 
     @staticmethod
     # pyre-fixme[2]: Parameter must be annotated.
@@ -639,14 +629,9 @@ class All2All_Pooled_Req(Function):
         D_local_sum = dim_sum_per_rank[my_rank]
         B_global = sum(batch_size_per_rank)
         grad_input = grad_output.view(B_global, D_local_sum)
-
-        if a2ai.codecs is not None:
-            grad_input = a2ai.codecs.backward.decode(grad_input)
-
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
-        myreq.dummy_tensor = None
         return (None, None, None, grad_input)
 
 
@@ -658,20 +643,16 @@ class All2All_Pooled_Wait(Function):
         ctx,
         pg: dist.ProcessGroup,
         myreq: Request[Tensor],
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
+        sharded_output_embeddings: Tensor,
     ) -> Tensor:
         my_rank = dist.get_rank(pg)
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
         myreq.req.wait()
-
-        sharded_output_embeddings = myreq.tensor
-        if a2ai.codecs is not None:
-            sharded_output_embeddings = a2ai.codecs.forward.decode(
-                sharded_output_embeddings
-            )
-
+        myreq.req = None
+        myreq.tensor = None
+        ctx.pg = pg
+        ctx.myreq = myreq
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         batch_size_per_rank = a2ai.batch_size_per_rank
         B_local = batch_size_per_rank[my_rank]
@@ -682,19 +663,12 @@ class All2All_Pooled_Wait(Function):
         result = torch.cat(
             [output.view(B_local, -1) for output in outputs_by_rank], dim=1
         )
-
-        myreq.req = None
-        myreq.tensor = None
-        ctx.pg = pg
-        ctx.myreq = myreq
-
         return result
 
     @staticmethod
     # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
     # pyre-fixme[2]: Parameter must be annotated.
     def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
-
         myreq = ctx.myreq
         a2ai = ctx.a2ai
         pg = ctx.pg
@@ -702,14 +676,10 @@ class All2All_Pooled_Wait(Function):
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         batch_size_per_rank = a2ai.batch_size_per_rank
 
-        if a2ai.codecs:
-            grad_output = a2ai.codecs.backward.encode(grad_output)
-
         D_local_sum = dim_sum_per_rank[my_rank]
         (B_local, D_global_sum) = grad_output.shape
         B_global = sum(batch_size_per_rank)
         sharded_grad_input_sizes = B_global * D_local_sum
-
         assert sum(dim_sum_per_rank) == D_global_sum
 
         sharded_grad_output = _recat_pooled_embedding_grad_out(
@@ -718,9 +688,7 @@ class All2All_Pooled_Wait(Function):
         )
 
         sharded_grad_input = torch.empty(
-            sharded_grad_input_sizes,
-            device=sharded_grad_output.device,
-            dtype=sharded_grad_output.dtype,
+            sharded_grad_input_sizes, device=grad_output.device, dtype=grad_output.dtype
         )
         output_split_sizes = [
             D_local_sum * B_rank for B_rank in a2ai.batch_size_per_rank
@@ -738,8 +706,9 @@ class All2All_Pooled_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = sharded_grad_input
-
-        return (None, None, myreq.dummy_tensor)
+        # Note - this mismatch is by design! We return sharded_grad_output
+        # to allow PyTorch shape matching to proceed correctly.
+        return (None, None, sharded_grad_output)
 
 
 class All2All_Seq_Req(Function):
@@ -761,12 +730,6 @@ class All2All_Seq_Req(Function):
         input_splits = [i * D for i in a2ai.output_splits]
         output_splits = [i * D for i in a2ai.input_splits]
         local_T = lengths_after_sparse_data_all2all.shape[0]
-
-        if a2ai.codecs is not None:
-            sharded_input_embeddings = a2ai.codecs.forward.encode(
-                sharded_input_embeddings
-            )
-
         if local_T > 0:
             with record_function("## alltoall_seq_embedding_fwd_permute ##"):
                 (
@@ -780,9 +743,9 @@ class All2All_Seq_Req(Function):
                     None,
                     sharded_input_embeddings.numel(),
                 )
+
         else:
             permuted_lengths_after_sparse_data_all2all = None
-
         sharded_output_embeddings = torch.empty(
             sum(output_splits),
             dtype=sharded_input_embeddings.dtype,
@@ -798,7 +761,6 @@ class All2All_Seq_Req(Function):
                 group=pg,
                 async_op=True,
             )
-
         a2ai.permuted_lengths_after_sparse_data_all2all = (
             permuted_lengths_after_sparse_data_all2all
         )
@@ -812,9 +774,7 @@ class All2All_Seq_Req(Function):
         ctx.pg = pg
         ctx.my_rank = my_rank
         ctx.world_size = world_size
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return sharded_output_embeddings
 
     @staticmethod
     # pyre-fixme[2]: Parameter must be annotated.
@@ -831,10 +791,6 @@ class All2All_Seq_Req(Function):
         sharded_grad_input = myreq.tensor
         myreq.req = None
         myreq.tensor = None
-        myreq.dummy_tensor = None
-
-        if a2ai.codecs is not None:
-            sharded_grad_input = a2ai.codecs.backward.decode(sharded_grad_input)
 
         if permuted_lengths_after_sparse_data_all2all is not None:
             with record_function("## alltoall_seq_embedding_bwd_permute ##"):
@@ -856,26 +812,16 @@ class All2All_Seq_Req_Wait(Function):
         ctx,
         pg: dist.ProcessGroup,
         myreq: Request[Tensor],
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
+        sharded_output_embeddings: Tensor,
     ) -> Tensor:
         a2ai = myreq.a2ai
         D = a2ai.embedding_dim
         ctx.a2ai = a2ai
         myreq.req.wait()
-        sharded_output_embeddings = myreq.tensor
-
-        if a2ai.codecs is not None:
-            sharded_output_embeddings = a2ai.codecs.forward.decode(
-                sharded_output_embeddings
-            )
-
         myreq.req = None
         myreq.tensor = None
-
         ctx.pg = pg
         ctx.myreq = myreq
-
         return sharded_output_embeddings.view(-1, D)
 
     @staticmethod
@@ -887,16 +833,11 @@ class All2All_Seq_Req_Wait(Function):
         pg = ctx.pg
         input_splits = a2ai.output_splits
         output_splits = a2ai.input_splits
-
-        if a2ai.codecs is not None:
-            sharded_grad_output = a2ai.codecs.backward.encode(sharded_grad_output)
-
         sharded_grad_input = torch.empty(
             sum(output_splits),
             device=sharded_grad_output.device,
             dtype=sharded_grad_output.dtype,
         )
-
         with record_function("## alltoall_seq_embedding_bwd_single ##"):
             req = dist.all_to_all_single(
                 output=sharded_grad_input,
@@ -909,7 +850,9 @@ class All2All_Seq_Req_Wait(Function):
         myreq.req = req
         myreq.tensor = sharded_grad_input
 
-        return (None, None, myreq.dummy_tensor)
+        # Note - this mismatch is by design! We return sharded_grad_output
+        # to allow PyTorch shape matching to proceed correctly.
+        return (None, None, sharded_grad_output.view(-1))
 
 
 class All2Allv_Req(Function):
@@ -945,15 +888,13 @@ class All2Allv_Req(Function):
         myreq.a2ai = a2ai
         ctx.a2ai = a2ai
         ctx.myreq = myreq
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return output
 
     @staticmethod
     # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
-    def backward(ctx, *unused):
+    def backward(ctx, *grad_output):
         a2ai = ctx.a2ai
         myreq = ctx.myreq
         myreq.req.wait()
@@ -964,39 +905,27 @@ class All2Allv_Req(Function):
         )
         grad_inputs = [gin.contiguous() for gin in grad_inputs]
         myreq.tensor = None
-        myreq.dummy_tensor = None
         return (None, None, None, *grad_inputs)
 
 
 class All2Allv_Wait(Function):
     @staticmethod
     # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
-    def forward(
-        # pyre-fixme[2]: Parameter must be annotated.
-        ctx,
-        pg: dist.ProcessGroup,
-        # pyre-fixme[2]: Parameter must be annotated.
-        myreq,
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
-    ) -> Tuple[Tensor]:
+    # pyre-fixme[2]: Parameter must be annotated.
+    def forward(ctx, pg: dist.ProcessGroup, myreq, output) -> Tuple[Tensor]:
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
+        myreq.req.wait()
+        myreq.req = None
+        myreq.tensor = None
         ctx.pg = pg
         ctx.myreq = myreq
-
-        myreq.req.wait()
-        output = myreq.tensor
         outputs = tuple(
             [
                 out.view([a2ai.B_local, -1])
                 for out in output.split(a2ai.output_split_sizes)
             ]
         )
-
-        myreq.req = None
-        myreq.tensor = None
-
         return outputs
 
     @staticmethod
@@ -1019,7 +948,7 @@ class All2Allv_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = grad_input
-        return (None, None, myreq.dummy_tensor)
+        return (None, None, grad_output)
 
 
 class ReduceScatter_Req(Function):
@@ -1034,13 +963,6 @@ class ReduceScatter_Req(Function):
         *inputs: Any,
     ) -> Tensor:
         my_rank = dist.get_rank(pg)
-        if rsi.codecs is not None:
-            new_inputs = []
-            for input in inputs:
-                # pyre-ignore
-                new_inputs.append(rsi.codecs.forward.encode(input))
-            inputs = tuple(new_inputs)
-
         output = inputs[my_rank].new_empty(
             inputs[my_rank].size(),
             dtype=inputs[my_rank].dtype,
@@ -1048,16 +970,13 @@ class ReduceScatter_Req(Function):
         )
         with record_function("## reduce_scatter ##"):
             req = dist.reduce_scatter(output, list(inputs), group=pg, async_op=True)
-
         myreq.req = req
         myreq.tensor = output
         myreq.wait_function = ReduceScatter_Wait
         myreq.rsi = rsi
         ctx.myreq = myreq
         ctx.pg = pg
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return output
 
     @staticmethod
     # pyre-fixme[2]: Parameter must be annotated.
@@ -1066,19 +985,11 @@ class ReduceScatter_Req(Function):
         myreq.req.wait()
         myreq.req = None
         grad_inputs = list(myreq.tensor)
-
-        rsi = myreq.rsi
-        if rsi.codecs is not None:
-            grad_inputs = [
-                rsi.codecs.backward.decode(grad_input) for grad_input in grad_inputs
-            ]
-
         # Make it equivalent to running on a single rank.
         if GRADIENT_DIVISION:
             for grad_input in grad_inputs:
                 grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
-        myreq.dummy_tensor = None
         return (None, None, None, *grad_inputs)
 
 
@@ -1090,20 +1001,13 @@ class ReduceScatter_Wait(Function):
         ctx,
         pg: dist.ProcessGroup,
         myreq: Request[Tensor],
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
+        output: Tensor,
     ) -> Tensor:
         myreq.req.wait()
-        output = myreq.tensor
-
         myreq.req = None
         myreq.tensor = None
         ctx.myreq = myreq
         ctx.pg = pg
-
-        rsi = myreq.rsi
-        if rsi.codecs is not None:
-            output = rsi.codecs.forward.decode(output)
         return output
 
     @staticmethod
@@ -1112,8 +1016,6 @@ class ReduceScatter_Wait(Function):
     def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
         myreq = ctx.myreq
         rsi = myreq.rsi
-        if rsi.codecs is not None:
-            grad_output = rsi.codecs.backward.encode(grad_output)
         grad_inputs = [
             grad_output.new_empty(
                 in_size,
@@ -1129,10 +1031,9 @@ class ReduceScatter_Wait(Function):
                 group=ctx.pg,
                 async_op=True,
             )
-
         myreq.req = req
         myreq.tensor = grad_inputs
-        return (None, None, myreq.dummy_tensor)
+        return (None, None, grad_output)
 
 
 class ReduceScatterBase_Req(Function):
@@ -1148,24 +1049,16 @@ class ReduceScatterBase_Req(Function):
     ) -> Tensor:
         my_size = dist.get_world_size(pg)
         assert inputs.size(0) % my_size == 0
-
-        if rsi.codecs is not None:
-            inputs = rsi.codecs.forward.encode(inputs)
-
         output = inputs.new_empty((inputs.size(0) // my_size, inputs.size(1)))
-
         with record_function("## reduce_scatter_base ##"):
             req = dist._reduce_scatter_base(output, inputs, group=pg, async_op=True)
-
         myreq.req = req
         myreq.tensor = output
         myreq.wait_function = ReduceScatterBase_Wait
         myreq.rsi = rsi
         ctx.myreq = myreq
         ctx.pg = pg
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return output
 
     @staticmethod
     # pyre-fixme[2]: Parameter must be annotated.
@@ -1174,16 +1067,10 @@ class ReduceScatterBase_Req(Function):
         myreq.req.wait()
         myreq.req = None
         grad_inputs = myreq.tensor
-
-        rsi = myreq.rsi
-        if rsi.codecs is not None:
-            grad_inputs = rsi.codecs.backward.decode(grad_inputs)
-
         # Make it equivalent to running on a single rank.
         if GRADIENT_DIVISION:
             grad_inputs.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
-        myreq.dummy_tensor = None
         return (None, None, None, grad_inputs)
 
 
@@ -1195,22 +1082,13 @@ class ReduceScatterBase_Wait(Function):
         ctx,
         pg: dist.ProcessGroup,
         myreq: Request[Tensor],
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
+        output: Tensor,
     ) -> Tensor:
-        ctx.myreq = myreq
-        ctx.pg = pg
-
         myreq.req.wait()
-        output = myreq.tensor
-
-        rsi = myreq.rsi
-        if rsi.codecs is not None:
-            output = rsi.codecs.forward.decode(output)
-
         myreq.req = None
         myreq.tensor = None
-
+        ctx.myreq = myreq
+        ctx.pg = pg
         return output
 
     @staticmethod
@@ -1219,11 +1097,7 @@ class ReduceScatterBase_Wait(Function):
     def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
         myreq = ctx.myreq
         rsi = myreq.rsi
-
-        if rsi.codecs is not None:
-            grad_output = rsi.codecs.backward.encode(grad_output)
         grad_inputs = grad_output.new_empty(rsi.input_sizes)
-
         with record_function("## reduce_scatter_base_bw (all_gather) ##"):
             req = dist._all_gather_base(
                 grad_inputs,
@@ -1233,7 +1107,7 @@ class ReduceScatterBase_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = grad_inputs
-        return (None, None, myreq.dummy_tensor)
+        return (None, None, grad_output)
 
 
 class AllGatherBase_Req(Function):
@@ -1248,11 +1122,7 @@ class AllGatherBase_Req(Function):
         input: Tensor,
     ) -> Tensor:
         my_size = dist.get_world_size(pg)
-
-        if agi.codecs is not None:
-            input = agi.codecs.forward.encode(input)
         outputs = input.new_empty((input.size(0) * my_size, input.size(1)))
-
         with record_function("## all_gather_base ##"):
             req = dist._all_gather_base(outputs, input, group=pg, async_op=True)
         myreq.req = req
@@ -1261,9 +1131,7 @@ class AllGatherBase_Req(Function):
         myreq.agi = agi
         ctx.myreq = myreq
         ctx.pg = pg
-
-        assert myreq.dummy_tensor is not None
-        return myreq.dummy_tensor
+        return outputs
 
     @staticmethod
     # pyre-fixme[2]: Parameter must be annotated.
@@ -1272,16 +1140,10 @@ class AllGatherBase_Req(Function):
         myreq.req.wait()
         myreq.req = None
         grad_input = myreq.tensor
-
-        agi = myreq.agi
-        if agi.codecs is not None:
-            grad_input = agi.codecs.backward.decode(grad_input)
-
         # Make it equivalent to running on a single rank.
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
-        myreq.dummy_tensor = None
         return (None, None, None, grad_input)
 
 
@@ -1293,22 +1155,13 @@ class AllGatherBase_Wait(Function):
         ctx,
         pg: dist.ProcessGroup,
         myreq: Request[Tensor],
-        # pyre-fixme[2]: Parameter must be annotated.
-        *dummy_tensor,
+        outputs: Tensor,
     ) -> Tensor:
-        ctx.myreq = myreq
-        ctx.pg = pg
-
         myreq.req.wait()
-        outputs = myreq.tensor
-
-        agi = myreq.agi
-        if agi.codecs is not None:
-            outputs = agi.codecs.forward.decode(outputs)
-
         myreq.req = None
         myreq.tensor = None
-
+        ctx.myreq = myreq
+        ctx.pg = pg
         return outputs
 
     @staticmethod
@@ -1317,11 +1170,7 @@ class AllGatherBase_Wait(Function):
     def backward(ctx, grad_outputs: Tensor) -> Tuple[None, None, Tensor]:
         myreq = ctx.myreq
         agi = myreq.agi
-
-        if agi.codecs is not None:
-            grad_outputs = agi.codecs.backward.encode(grad_outputs)
         grad_input = grad_outputs.new_empty(agi.input_size)
-
         with record_function("## all_gather_base_bw (reduce_scatter) ##"):
             req = dist._reduce_scatter_base(
                 grad_input,
@@ -1331,4 +1180,4 @@ class AllGatherBase_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = grad_input
-        return (None, None, myreq.dummy_tensor)
+        return (None, None, grad_outputs)
