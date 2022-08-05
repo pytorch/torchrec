@@ -77,6 +77,7 @@ def _assert_offsets_or_lengths_is_provided(
     assert offsets is not None or lengths is not None, "Must provide lengths or offsets"
 
 
+@torch.fx.wrap
 def _regroup_keyed_tensors(
     keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
 ) -> List[torch.Tensor]:
@@ -114,9 +115,6 @@ def _regroup_keyed_tensors(
     return list(rearranged_values.split(split_lengths, dim=key_dim))
 
 
-torch.fx.wrap("_regroup_keyed_tensors")
-
-
 def _values_string(values: torch.Tensor, start: int, end: int) -> str:
     size = values.size()
     if len(size) == 1:
@@ -150,6 +148,20 @@ def _jagged_values_string(
         )
         + "]"
     )
+
+
+@torch.fx.wrap
+def _optional_mask(
+    tensor: Optional[torch.Tensor], mask: torch.Tensor
+) -> Optional[torch.Tensor]:
+
+    return tensor[mask] if tensor is not None else None
+
+
+@torch.fx.wrap
+# pyre-ignore
+def _arange(*args, **kwargs) -> torch.Tensor:
+    return torch.arange(*args, **kwargs)
 
 
 # pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
@@ -217,12 +229,13 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         Note that `lengths` is still of shape (B,).
         """
-        mask2d = torch.arange(values.size(1), device=values.device).expand(
-            values.size(0), -1
+
+        mask2d = (
+            _arange(end=values.size(1), device=values.device).expand(values.size(0), -1)
         ) < lengths.unsqueeze(-1)
         return JaggedTensor(
             values=values[mask2d],
-            weights=weights[mask2d] if weights is not None else None,
+            weights=_optional_mask(weights, mask2d),
             lengths=lengths,
         )
 
@@ -595,6 +608,7 @@ def _maybe_compute_kjt_to_jt_dict(
     return jt_dict
 
 
+@torch.fx.wrap
 def _merge_weights_or_none(
     a_weights: Optional[torch.Tensor],
     b_weights: Optional[torch.Tensor],
@@ -606,9 +620,6 @@ def _merge_weights_or_none(
         return None
     # pyre-ignore[6]
     return torch.cat([a_weights, b_weights], dim=0)
-
-
-torch.fx.wrap("_merge_weights_or_none")
 
 
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
