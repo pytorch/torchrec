@@ -206,6 +206,26 @@ class AllGatherBaseInfo(object):
 
 
 @dataclass
+class ReduceScatterVInfo(object):
+    """
+    The data class that collects the attributes when calling the `reduce_scatter_v_pooled`
+    operation.
+
+    Attributes:
+        input_sizes (List[torch.Size]): the sizes of the input tensors. This remembers the
+            sizes of the input tensors when running the backward pass and producing the
+            gradient.
+        input_splits (List[int]): the splits of the input tensors along dim0.
+        total_input_size: (List[int]): total input size
+    """
+
+    input_sizes: List[torch.Size]
+    input_splits: List[int]
+    total_input_size: List[int]
+    codecs: Optional[QuantizedCommCodecs]
+
+
+@dataclass
 class All2AllDenseInfo(object):
     """
     The data class that collects the attributes when calling the alltoall_dense
@@ -516,6 +536,55 @@ def all_gather_base_pooled(
     agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
     # pyre-fixme[16]
     AllGatherBase_Req.apply(group, myreq, agi, input)
+    return myreq
+
+
+def reduce_scatter_v_pooled(
+    input: Tensor,
+    input_splits: List[int],
+    group: Optional[dist.ProcessGroup] = None,
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> Awaitable[Tensor]:
+    """
+    Performs reduce-scatter-v operation for a pooled embeddings tensor split unevenly into world
+    size number of chunks. The result of the reduce operation gets scattered to all
+    processes in the group according to input_splits.
+
+    Args:
+        input (Tensor): tensors to scatter, one per rank.
+        input_splits (List[int]): input splits.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+
+    Returns:
+        Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
+
+    .. warning::
+        `reduce_scatter_v_pooled` is experimental and subject to change.
+    """
+
+    if group is None:
+        group = dist.distributed_c10d._get_default_group()
+
+    if dist.get_world_size(group) <= 1:
+        return NoWait(input)
+
+    myreq = Request(group)
+    input_size = list(input.size())
+    input_sizes = [
+        torch.Size(
+            [ip_split if d == 0 else input_size[d] for d in range(len(input_size))]
+        )
+        for ip_split in input_splits
+    ]
+    rsvi = ReduceScatterVInfo(
+        input_sizes=input_sizes,
+        input_splits=input_splits,
+        total_input_size=input_size,
+        codecs=codecs,
+    )
+    # pyre-fixme[16]: `ReduceScatterV_Req` has no attribute `apply`.
+    ReduceScatterV_Req.apply(group, myreq, rsvi, input)
     return myreq
 
 
@@ -1181,3 +1250,85 @@ class AllGatherBase_Wait(Function):
         myreq.req = req
         myreq.tensor = grad_input
         return (None, None, grad_outputs)
+
+
+class ReduceScatterV_Req(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        rsi: ReduceScatterVInfo,
+        input: Tensor,
+    ) -> Tensor:
+        my_rank = dist.get_rank(pg)
+        output = input.new_empty(rsi.input_sizes[my_rank])
+
+        with record_function("## _reduce_scatter_v ##"):
+            req = dist._reduce_scatter_v(
+                output, input, rsi.input_splits, group=pg, async_op=True
+            )
+
+        myreq.req = req
+        myreq.tensor = output
+        myreq.wait_function = ReduceScatterV_Wait
+        myreq.rsi = rsi
+        ctx.myreq = myreq
+        ctx.pg = pg
+
+        return output
+
+    @staticmethod
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
+        myreq = ctx.myreq
+        for req in myreq.req:
+            req.wait()
+        myreq.req = None
+        grad_input = myreq.tensor
+        # Make it equivalent to running on a single rank.
+        if GRADIENT_DIVISION:
+            grad_input.div_(dist.get_world_size(ctx.pg))
+        myreq.tensor = None
+        return (None, None, None, grad_input)
+
+
+class ReduceScatterV_Wait(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        output: Tensor,
+    ) -> Tensor:
+        for req in myreq.req:
+            req.wait()
+        myreq.req = None
+        myreq.tensor = None
+        ctx.myreq = myreq
+        ctx.pg = pg
+        return output
+
+    @staticmethod
+    # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
+        myreq = ctx.myreq
+        rsi = myreq.rsi
+        grad_input = grad_output.new_empty(rsi.total_input_size)
+
+        with record_function("## _reduce_scatter_v_bw (_all_gather_v) ##"):
+            req = dist._all_gather_v(
+                grad_input,
+                grad_output.contiguous(),
+                rsi.input_splits,
+                group=ctx.pg,
+                async_op=True,
+            )
+        myreq.req = req
+        myreq.tensor = grad_input
+        return (None, None, grad_output)
