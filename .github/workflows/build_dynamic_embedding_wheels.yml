@@ -1,0 +1,45 @@
+name: Build Dynamic Embedding Wheels
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+jobs:
+  build_wheels:
+    name: Wheels on ${{ matrix.os }}/${{ matrix.pyver }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ]
+        pyver: [ cp37, cp38, cp39, cp310 ]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - uses: pypa/cibuildwheel@v2.8.0
+        with: 
+          package-dir: contrib/dynamic_embedding
+        env:
+          CIBW_BEFORE_BUILD: contrib/dynamic_embedding/tools/before_linux_build.sh
+          CIBW_BUILD: "${{ matrix.pyver }}-manylinux_x86_64"
+          CIBW_REPAIR_WHEEL_COMMAND: "mv {wheel} {dest_dir}"
+
+      - name: Verify clean directory
+        run: git diff --exit-code
+        shell: bash
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          path: wheelhouse/*.whl

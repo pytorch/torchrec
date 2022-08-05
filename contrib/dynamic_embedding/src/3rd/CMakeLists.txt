@@ -44,7 +44,7 @@ FetchContent_MakeAvailable(nlohmann_json)
 FetchContent_Declare(
         hiredis
         GIT_REPOSITORY https://github.com/redis/hiredis.git
-        GIT_TAG v1.0.2
+        GIT_TAG 06be7ff312a78f69237e5963cc7d24bc84104d3b
 )
 
 FetchContent_GetProperties(hiredis)

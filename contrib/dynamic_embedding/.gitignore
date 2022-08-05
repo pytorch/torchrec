@@ -3,3 +3,4 @@ dist
 *egg-info
 cmake-build*
 _skbuild
+wheelhouse
