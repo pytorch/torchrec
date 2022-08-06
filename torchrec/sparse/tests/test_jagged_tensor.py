@@ -60,7 +60,6 @@ class TestJaggedTensor(unittest.TestCase):
         values = torch.Tensor(
             [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]
         )
-        weights = 12.0 - values
         j0 = JaggedTensor.from_dense_lengths(
             values=values,
             lengths=torch.IntTensor([1, 0, 2, 3]),
@@ -70,6 +69,27 @@ class TestJaggedTensor(unittest.TestCase):
             torch.equal(j0.values(), torch.Tensor([1.0, 7.0, 8.0, 10.0, 11.0, 12.0]))
         )
         self.assertTrue(j0.weights_or_none() is None)
+
+        traced_from_dense_lengths = torch.fx.symbolic_trace(
+            JaggedTensor.from_dense_lengths
+        )
+        traced_j0 = traced_from_dense_lengths(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 3]),
+        )
+        self.assertTrue(torch.equal(traced_j0.lengths(), torch.IntTensor([1, 0, 2, 3])))
+        self.assertTrue(
+            torch.equal(
+                traced_j0.values(), torch.Tensor([1.0, 7.0, 8.0, 10.0, 11.0, 12.0])
+            )
+        )
+
+    def test_from_dense_lengths_weighted(self) -> None:
+        values = torch.Tensor(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]
+        )
+        weights = 12.0 - values
+
         j1 = JaggedTensor.from_dense_lengths(
             values=values,
             lengths=torch.IntTensor([2, 0, 1, 1]),
@@ -78,6 +98,22 @@ class TestJaggedTensor(unittest.TestCase):
         self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([2, 0, 1, 1])))
         self.assertTrue(torch.equal(j1.values(), torch.Tensor([1.0, 2.0, 7.0, 10.0])))
         self.assertTrue(torch.equal(j1.weights(), torch.Tensor([11.0, 10.0, 5.0, 2.0])))
+
+        traced_from_dense_lengths = torch.fx.symbolic_trace(
+            JaggedTensor.from_dense_lengths
+        )
+        traced_j1 = traced_from_dense_lengths(
+            values=values,
+            lengths=torch.IntTensor([2, 0, 1, 1]),
+            weights=weights,
+        )
+        self.assertTrue(torch.equal(traced_j1.lengths(), torch.IntTensor([2, 0, 1, 1])))
+        self.assertTrue(
+            torch.equal(traced_j1.values(), torch.Tensor([1.0, 2.0, 7.0, 10.0]))
+        )
+        self.assertTrue(
+            torch.equal(traced_j1.weights(), torch.Tensor([11.0, 10.0, 5.0, 2.0]))
+        )
 
     def test_from_dense(self) -> None:
         values = [
@@ -451,7 +487,6 @@ class TestJaggedTensorTracing(unittest.TestCase):
         # Case 1: JaggedTensor is only used as an output of the root module.
         m = ModuleUseJaggedTensorAsOutput()
         gm = symbolic_trace(m)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("JaggedTensor").check("return jagged_tensor").run(gm.code)
 
         values = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7])
@@ -1050,7 +1085,6 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # the root module's input/output interface.
         m = ModuleCreateAndAccessKeyedJaggedTensor()
         gm = symbolic_trace(m)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("return 35").check_not("KeyedJaggedTensor").run(gm.code)
         ref_out = m(8)
         traced_out = gm(8)
@@ -1077,7 +1111,6 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 3: KeyedJaggedTensor is used as both an input and an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsInputAndOutput()
         gm = symbolic_trace(m)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("values()").check(
             "._stride"
         ).run(gm.code)
@@ -1109,7 +1142,6 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 2: KeyedJaggedTensor is only used as an input of the root module.
         m = ModuleUseKeyedJaggedTensorAsInput()
         gm = symbolic_trace(m)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("len").check(
             "values()"
         ).check("numel()").run(gm.code)
@@ -1143,7 +1175,6 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         # Case 1: KeyedJaggedTensor is only used as an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsOutput()
         gm = symbolic_trace(m)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("KeyedJaggedTensor").check(
             "return (keyed_jagged_tensor,"
         ).run(gm.code)
