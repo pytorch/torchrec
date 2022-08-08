@@ -64,7 +64,7 @@ class IDTransformerCollection:
             )
             cache_ids = torch.empty_like(global_ids)
             # TODO(zilinzhu) Do fetch and evict.
-            num_transformed, fetch_ids = transformer.transform(global_ids, cache_ids)
+            _ = transformer.transform(global_ids, cache_ids)
 
             offset = 0
             for idx in feature_indices:

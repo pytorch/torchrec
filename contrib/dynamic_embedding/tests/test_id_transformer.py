@@ -53,21 +53,26 @@ class TestIDTransformer(unittest.TestCase):
                 "num_threads": num_threads,
             },
         )
-        global_ids = torch.empty(shape, dtype=torch.int64)
-        global_ids.random_(0, 512)
-
-        cache_ids = torch.empty_like(global_ids)
-        num_transformed, ids_to_fetch = transformer.transform(global_ids, cache_ids)
-        self.assertEqual(num_transformed, global_ids.numel())
-
         python_transformer = PythonIdTransformer(num_embedding, num_threads)
-        python_cache_ids = python_transformer.transform(global_ids)
-        self.assertTrue(torch.all(cache_ids == python_cache_ids))
+        global_ids = torch.empty(shape, dtype=torch.int64)
 
-        ids_map = {global_id: cache_id for global_id, cache_id in ids_to_fetch.tolist()}
-        for global_id, cache_id in zip(global_ids.tolist(), cache_ids.tolist()):
-            self.assertTrue(global_id in ids_map)
-            self.assertEqual(cache_id, ids_map[global_id])
+        for i in range(10):
+            global_ids.random_(0, 512)
+            cache_ids = torch.empty_like(global_ids)
+            result = transformer.transform(global_ids, cache_ids)
+            num_transformed, ids_to_fetch = result.num_transformed, result.ids_to_fetch
+            self.assertEqual(num_transformed, global_ids.numel())
+
+            python_cache_ids = python_transformer.transform(global_ids)
+            self.assertTrue(torch.all(cache_ids == python_cache_ids))
+
+            if ids_to_fetch is not None:
+                ids_map = {
+                    global_id: cache_id for global_id, cache_id in ids_to_fetch.tolist()
+                }
+                for global_id, cache_id in zip(global_ids.tolist(), cache_ids.tolist()):
+                    if global_id in ids_map:
+                        self.assertEqual(cache_id, ids_map[global_id])
 
     def testEvict(self):
         num_embedding = 9
@@ -82,12 +87,12 @@ class TestIDTransformer(unittest.TestCase):
         )
         global_ids = torch.tensor([1, 2, 3, 4], dtype=torch.long)
         cache_ids = torch.empty_like(global_ids)
-        num_transformed, _ = transformer.transform(global_ids, cache_ids)
-        self.assertEqual(num_transformed, global_ids.numel())
+        result = transformer.transform(global_ids, cache_ids)
+        self.assertEqual(result.num_transformed, global_ids.numel())
 
         global_ids = torch.tensor([1, 3, 5, 7], dtype=torch.long)
-        num_transformed, _ = transformer.transform(global_ids, cache_ids)
-        self.assertEqual(num_transformed, global_ids.numel())
+        result = transformer.transform(global_ids, cache_ids)
+        self.assertEqual(result.num_transformed, global_ids.numel())
 
         num_to_evict = 2
         evicted_tensor = transformer.evict(num_to_evict)

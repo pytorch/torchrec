@@ -11,7 +11,7 @@ IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
           json_["id_transformer"]),
       num_ids_to_fetch_(0) {}
 
-std::tuple<int64_t, torch::Tensor> IDTransformer::Transform(
+c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
     torch::Tensor global_ids,
     torch::Tensor cache_ids,
     int64_t time) {
@@ -32,7 +32,7 @@ std::tuple<int64_t, torch::Tensor> IDTransformer::Transform(
       });
   int64_t num_ids_to_fetch = num_ids_to_fetch_.load();
   if (num_ids_to_fetch == 0) {
-    return {num_transformed, torch::Tensor{}};
+    return c10::make_intrusive<TransformResult>(num_transformed, torch::Tensor{});
   }
   torch::Tensor ids_to_fetch = torch::from_blob(
                                    ids_to_fetch_.data(),
@@ -40,7 +40,7 @@ std::tuple<int64_t, torch::Tensor> IDTransformer::Transform(
                                    torch::dtype(torch::kLong))
                                    .clone();
   num_ids_to_fetch_.store(0);
-  return {num_transformed, ids_to_fetch};
+  return c10::make_intrusive<TransformResult>(num_transformed, ids_to_fetch);
 }
 
 torch::Tensor IDTransformer::Evict(int64_t num_to_evict) {
