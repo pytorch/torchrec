@@ -301,13 +301,13 @@ class FusedEmbeddingBagCollection(
     Example::
 
         table_0 = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
         )
         table_1 = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+            name="t2", embedding_dim=8, num_embeddings=10, feature_names=["f2"]
         )
 
-        ebc = FusedEmeddingBagCollection(tables=[table_0, table_1], optimizer=torch.optim.SGD, optimizer_kwargs={"lr": .01})
+        ebc = FusedEmbeddingBagCollection(tables=[table_0, table_1], optimizer=torch.optim.SGD, optimizer_kwargs={"lr": .01})
 
         #        0       1        2  <-- batch
         # "f1"   [0,1] None    [2]
@@ -323,17 +323,16 @@ class FusedEmbeddingBagCollection(
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.6149,  0.0000, -0.3176],
-        [-0.8876,  0.0000, -1.5606],
-        [ 1.6805,  0.0000,  0.6810],
-        [-1.4206, -1.0409,  0.2249],
-        [ 0.1823, -0.4697,  1.3823],
-        [-0.2767, -0.9965, -0.1797],
-        [ 0.8864,  0.1315, -2.0724]], grad_fn=<TransposeBackward0>)
+        tensor([[ 0.2093,  0.1395,  0.1571,  0.3583,  0.0421,  0.0037, -0.0692,  0.0663,
+          0.2166, -0.3150, -0.2771, -0.0301],
+        [ 0.0000,  0.0000,  0.0000,  0.0000,  0.0165, -0.1225,  0.2483,  0.0624,
+         -0.1168, -0.0509, -0.1309,  0.3059],
+        [ 0.0811, -0.1779, -0.1443,  0.1097, -0.4410, -0.4036,  0.4458, -0.2735,
+         -0.3080, -0.2102, -0.0564,  0.5583]], grad_fn=<CatBackward0>)
         print(pooled_embeddings.keys())
         ['f1', 'f2']
         print(pooled_embeddings.offset_per_key())
-        tensor([0, 3, 7])
+        [0, 4, 12]
     """
 
     def __init__(
