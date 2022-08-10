@@ -74,8 +74,19 @@ void IO::Pull(
       .scalar_type_ = type,
       .num_optimizer_states_ = num_optimizer_states,
   });
-  ctx->tensors_.resize(
-      global_ids.size() * std::max(col_ids.size(), static_cast<size_t>(1)));
+  try {
+    ctx->tensors_.resize(
+        global_ids.size() * std::max(col_ids.size(), static_cast<size_t>(1)));
+  } catch (std::bad_alloc& ex) {
+    TORCH_CHECK(
+        false,
+        "bad allocate ",
+        ex.what(),
+        " global_ids.size()=",
+        global_ids.size(),
+        " col_ids.size()=",
+        col_ids.size());
+  }
 
   IOPullParameter param{
       .table_name_ = table_name.c_str(),

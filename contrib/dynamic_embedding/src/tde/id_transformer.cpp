@@ -17,7 +17,16 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
     int64_t time) {
   TORCH_CHECK(time >= 0);
   transformer_.strategy_.UpdateTime(static_cast<uint32_t>(time));
-  ids_to_fetch_.resize(2 * global_ids.numel());
+  try {
+    ids_to_fetch_.resize(2 * global_ids.numel());
+  } catch (std::bad_alloc& ex) {
+    TORCH_CHECK(
+        false,
+        "bad allocate ",
+        ex.what(),
+        " the global_ids.numel()=",
+        global_ids.numel());
+  }
   int64_t num_transformed = transformer_.Transform(
       tcb::span{
           global_ids.template data_ptr<int64_t>(),
@@ -32,7 +41,8 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
       });
   int64_t num_ids_to_fetch = num_ids_to_fetch_.load();
   if (num_ids_to_fetch == 0) {
-    return c10::make_intrusive<TransformResult>(num_transformed, torch::Tensor{});
+    return c10::make_intrusive<TransformResult>(
+        num_transformed, torch::Tensor{});
   }
   torch::Tensor ids_to_fetch = torch::from_blob(
                                    ids_to_fetch_.data(),
