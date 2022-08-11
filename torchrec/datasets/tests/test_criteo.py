@@ -288,7 +288,7 @@ class TestBinaryCriteoUtils(CriteoTest):
             save_data_list(sparse_data, "sparse")
             save_data_list(labels_data, "labels")
 
-            rows_per_day = {0: 3, 1: 3, 2: 3}
+            rows_per_day = {0: 3, 1: 3}
             BinaryCriteoUtils.shuffle(
                 temp_input_dir,
                 temp_input_dir,
