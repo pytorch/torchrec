@@ -2341,10 +2341,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding.ShardedEmbeddingCollection.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding.ShardedEmbeddingCollection.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -2515,10 +2520,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -2676,10 +2686,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -2893,10 +2908,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -3057,10 +3077,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -4171,10 +4196,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.ShardedEmbeddingBag.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -4396,10 +4426,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -4548,10 +4583,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.grouped_position_weighted.GroupedPositionWeightedModule.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.grouped_position_weighted.GroupedPositionWeightedModule.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -4813,10 +4853,15 @@ are direct members of this module.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for
@@ -5002,10 +5047,15 @@ exists in <a class="reference internal" href="#torchrec.distributed.quant_embedd
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.state_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a dictionary containing a whole state of the module.</p>
+<dd><p>Returns a dictionary containing references to the whole state of the module.</p>
 <p>Both parameters and persistent buffers (e.g. running averages) are
 included. Keys are corresponding parameter and buffer names.
 Parameters and buffers set to <code class="docutils literal notranslate"><span class="pre">None</span></code> are not included.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The returned object is a shallow copy. It contains references
+to the module’s parameters and buffers.</p>
+</div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Currently <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> also accepts positional arguments for

@@ -424,6 +424,8 @@ Sparse data must be in: day_x_sparse.npy
 Labels data must be in: day_x_labels.npy</p>
 <p>The dataset will be reconstructed, shuffled and then split back into
 separate dense, sparse and labels files.</p>
+<p>This will only shuffle the first DAYS-1 days as the training set. The final day will remain
+untouched as the validation, and training set.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
