@@ -34,6 +34,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         required=True,
         help="Output directory to store npy files.",
     )
+    parser.add_argument(
+        "--frequency_threshold",
+        type=int,
+        default=0,
+        help="IDs occuring less than this frequency will be remapped to an index of 1. If this value is not set (e.g. 0), no frequency thresholding will be applied.",
+    )
     return parser.parse_args(argv)
 
 
@@ -67,7 +73,9 @@ def main(argv: List[str]) -> None:
         )
 
     print(f"Processing files in: {input_files}. Outputs will be saved to {output_dir}.")
-    BinaryCriteoUtils.sparse_to_contiguous(input_files, output_dir)
+    BinaryCriteoUtils.sparse_to_contiguous(
+        input_files, output_dir, frequency_threshold=int(args.frequency_threshold)
+    )
     print("Done processing.")
 
 

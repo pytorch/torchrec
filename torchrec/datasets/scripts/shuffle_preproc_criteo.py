@@ -86,7 +86,7 @@ def main(argv: List[str]) -> None:
             name="count_rows:day%i" % i,
             args=(rows_per_file, input_dir_labels_and_dense, i),
         )
-        for i in range(0, DAYS)
+        for i in range(0, DAYS - 1)
     ]
 
     for process in processes:
@@ -101,6 +101,7 @@ def main(argv: List[str]) -> None:
         rows_per_file,
         output_dir_full_set,
         random_seed=args.random_seed,
+        days=DAYS,
     )
 
 
