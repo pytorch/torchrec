@@ -14,13 +14,14 @@ on:
 
 jobs:
   build_wheels:
-    name: Wheels on ${{ matrix.os }}/${{ matrix.pyver }}
+    name: Wheels on ${{ matrix.os }}/${{ matrix.pyver }}/cu${{ matrix.cuver }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
         pyver: [ cp37, cp38, cp39, cp310 ]
+        cuver: [ "11.6", "11.3"]
 
     steps:
       - uses: actions/checkout@v3
@@ -31,9 +32,9 @@ jobs:
         with: 
           package-dir: contrib/dynamic_embedding
         env:
-          CIBW_BEFORE_BUILD: contrib/dynamic_embedding/tools/before_linux_build.sh
+          CIBW_BEFORE_BUILD: "env CUDA_VERSION=${{ matrix.cuver }} contrib/dynamic_embedding/tools/before_linux_build.sh"
           CIBW_BUILD: "${{ matrix.pyver }}-manylinux_x86_64"
-          CIBW_REPAIR_WHEEL_COMMAND: "mv {wheel} {dest_dir}"
+          CIBW_REPAIR_WHEEL_COMMAND: "env CUDA_VERSION=${{ matrix.cuver }} contrib/dynamic_embedding/tools/repair_wheel.sh {wheel} {dest_dir}"
 
       - name: Verify clean directory
         run: git diff --exit-code
