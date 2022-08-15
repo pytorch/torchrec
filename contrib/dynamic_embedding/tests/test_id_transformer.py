@@ -2,7 +2,7 @@ import unittest
 
 import torch
 import torchrec_dynamic_embedding
-from torchrec_dynamic_embedding import IDTransformer
+from torchrec_dynamic_embedding import IDTransformer, TensorList
 
 
 class PythonIdTransformer:
@@ -56,12 +56,15 @@ class TestIDTransformer(unittest.TestCase):
         python_transformer = PythonIdTransformer(num_embedding, num_threads)
         global_ids = torch.empty(shape, dtype=torch.int64)
 
-        for i in range(10):
+        for _ in range(10):
             global_ids.random_(0, 512)
             cache_ids = torch.empty_like(global_ids)
-            result = transformer.transform(global_ids, cache_ids)
-            num_transformed, ids_to_fetch = result.num_transformed, result.ids_to_fetch
-            self.assertEqual(num_transformed, global_ids.numel())
+
+            result = transformer.transform(
+                TensorList([global_ids]), TensorList([cache_ids])
+            )
+            success, ids_to_fetch = result.success, result.ids_to_fetch
+            self.assertTrue(success)
 
             python_cache_ids = python_transformer.transform(global_ids)
             self.assertTrue(torch.all(cache_ids == python_cache_ids))
@@ -87,12 +90,16 @@ class TestIDTransformer(unittest.TestCase):
         )
         global_ids = torch.tensor([1, 2, 3, 4], dtype=torch.long)
         cache_ids = torch.empty_like(global_ids)
-        result = transformer.transform(global_ids, cache_ids)
-        self.assertEqual(result.num_transformed, global_ids.numel())
+        result = transformer.transform(
+            TensorList([global_ids]), TensorList([cache_ids])
+        )
+        self.assertTrue(result.success)
 
         global_ids = torch.tensor([1, 3, 5, 7], dtype=torch.long)
-        result = transformer.transform(global_ids, cache_ids)
-        self.assertEqual(result.num_transformed, global_ids.numel())
+        result = transformer.transform(
+            TensorList([global_ids]), TensorList([cache_ids])
+        )
+        self.assertTrue(result.success)
 
         num_to_evict = 2
         evicted_tensor = transformer.evict(num_to_evict)

@@ -5,8 +5,16 @@ namespace tde {
 TORCH_LIBRARY(tde, m) {
   details::IORegistry::RegisterAllDefaultIOs();
   m.class_<TransformResult>("TransformResult")
-      .def_readonly("num_transformed", &TransformResult::num_transformed_)
+      .def_readonly("success", &TransformResult::success_)
       .def_readonly("ids_to_fetch", &TransformResult::ids_to_fetch_);
+
+  m.class_<TensorList>("TensorList")
+      .def(torch::init([] () {
+        return c10::make_intrusive<TensorList>();
+      }))
+      .def("append", &TensorList::push_back)
+      .def("__len__", &TensorList::size)
+      .def("__getitem__", &TensorList::operator[]);
 
   m.class_<IDTransformer>("IDTransformer")
       .def(torch::init([](int64_t num_embedding, std::string config) {

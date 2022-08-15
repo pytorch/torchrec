@@ -12,22 +12,31 @@ IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
       num_ids_to_fetch_(0) {}
 
 c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
-    torch::Tensor global_ids,
-    torch::Tensor cache_ids,
+    c10::intrusive_ptr<TensorList> global_id_list,
+    c10::intrusive_ptr<TensorList> cache_id_list,
     int64_t time) {
   TORCH_CHECK(time >= 0);
+  TORCH_CHECK(global_id_list->size() == cache_id_list->size());
   transformer_.strategy_.UpdateTime(static_cast<uint32_t>(time));
+  int64_t total_numel = 0;
+  for (int64_t i = 0; i < global_id_list->size(); ++i) {
+    total_numel += (*global_id_list)[i].numel();
+  }
   try {
-    ids_to_fetch_.resize(2 * global_ids.numel());
+    ids_to_fetch_.resize(2 * total_numel);
   } catch (std::bad_alloc& ex) {
     TORCH_CHECK(
         false,
         "bad allocate ",
         ex.what(),
-        " the global_ids.numel()=",
-        global_ids.numel());
+        " the total_numel=",
+        total_numel);
   }
-  int64_t num_transformed = transformer_.Transform(
+  int64_t num_transformed = 0;
+  for (int64_t i = 0; i < global_id_list->size(); ++i) {
+    torch::Tensor global_ids = (*global_id_list)[i];
+    torch::Tensor cache_ids = (*cache_id_list)[i];
+    num_transformed += transformer_.Transform(
       tcb::span{
           global_ids.template data_ptr<int64_t>(),
           static_cast<size_t>(global_ids.numel())},
@@ -39,10 +48,12 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
         ids_to_fetch_[2 * idx] = global_id;
         ids_to_fetch_[2 * idx + 1] = cache_id;
       });
+  }
+  bool success = num_transformed == total_numel;
   int64_t num_ids_to_fetch = num_ids_to_fetch_.load();
   if (num_ids_to_fetch == 0) {
     return c10::make_intrusive<TransformResult>(
-        num_transformed, torch::Tensor{});
+        success, torch::Tensor{});
   }
   torch::Tensor ids_to_fetch = torch::from_blob(
                                    ids_to_fetch_.data(),
@@ -50,7 +61,7 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
                                    torch::dtype(torch::kLong))
                                    .clone();
   num_ids_to_fetch_.store(0);
-  return c10::make_intrusive<TransformResult>(num_transformed, ids_to_fetch);
+  return c10::make_intrusive<TransformResult>(success, ids_to_fetch);
 }
 
 torch::Tensor IDTransformer::Evict(int64_t num_to_evict) {

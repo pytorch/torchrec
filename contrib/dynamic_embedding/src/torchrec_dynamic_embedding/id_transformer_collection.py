@@ -3,7 +3,7 @@ from typing import List, Union
 import torch
 from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
 
-from .id_transformer import IDTransformer
+from .id_transformer import IDTransformer, TensorList
 
 
 __all__ = ["IDTransformerCollection"]
@@ -56,23 +56,17 @@ class IDTransformerCollection:
             feature_indices = [
                 global_feature_indices[feature_name] for feature_name in feature_names
             ]
-            global_ids = torch.cat(
-                [
-                    global_values[offset_per_key[idx] : offset_per_key[idx + 1]]
-                    for idx in feature_indices
-                ]
-            )
-            cache_ids = torch.empty_like(global_ids)
+            global_ids = [
+                global_values[offset_per_key[idx] : offset_per_key[idx + 1]]
+                for idx in feature_indices
+            ]
+            cache_ids = [
+                cache_values[offset_per_key[idx] : offset_per_key[idx + 1]]
+                for idx in feature_indices
+            ]
             # TODO(zilinzhu) Do fetch and evict.
-            _ = transformer.transform(global_ids, cache_ids)
+            _ = transformer.transform(TensorList(global_ids), TensorList(cache_ids))
 
-            offset = 0
-            for idx in feature_indices:
-                length = offset_per_key[idx + 1] - offset_per_key[idx]
-                cache_values[offset_per_key[idx] : offset_per_key[idx + 1]] = cache_ids[
-                    offset : offset + length
-                ]
-                offset += length
         cache_values = KeyedJaggedTensor(
             keys=global_features.keys(),
             values=cache_values,
