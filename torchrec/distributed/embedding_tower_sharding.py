@@ -32,6 +32,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
+    EmptyContext,
     LazyAwaitable,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -150,6 +151,7 @@ class ShardedEmbeddingTower(
 
         self.embedding: Optional[nn.Module] = None
         self.interaction: Optional[nn.Module] = None
+        self.input_dist_param: Tuple[bool, bool] = tower_input_params(module.embedding)
         if self._active_device:
             _replace_sharding_with_intra_node(
                 table_name_to_parameter_sharding, dist.get_world_size(self._intra_pg)
@@ -228,6 +230,13 @@ class ShardedEmbeddingTower(
             self._device,
         )
 
+    def create_context(self) -> ShardedModuleContext:
+        if self.embedding:
+            # pyre-ignore [29]
+            return self.embedding.create_context()
+        else:
+            return EmptyContext()
+
     # pyre-ignore [14]
     def input_dist(
         self,
@@ -275,24 +284,40 @@ class ShardedEmbeddingTower(
                     id_score_list_features=wkjt_features,
                 )
             )
-            return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
+            sparse_features = tensor_awaitable.wait().wait()
+
+            input_dists = []
+            if self.embedding:
+                kjt_param, wkjt_param = self.input_dist_param
+                if kjt_param and wkjt_param:
+                    input_dists.append(
+                        # pyre-ignore [29]
+                        self.embedding.input_dist(
+                            ctx,
+                            sparse_features.id_list_features,
+                            sparse_features.id_score_list_features,
+                        )
+                    )
+                elif kjt_param:
+                    input_dists.append(
+                        # pyre-ignore [29]
+                        self.embedding.input_dist(ctx, sparse_features.id_list_features)
+                    )
+                else:
+                    input_dists.append(
+                        # pyre-ignore [29]
+                        self.embedding.input_dist(
+                            ctx, sparse_features.id_score_list_features
+                        )
+                    )
+            return SparseFeaturesListAwaitable(input_dists)
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
-        kjt_features = dist_input[0].id_list_features
-        wkjt_features = dist_input[0].id_score_list_features
-
         if self._active_device:
-            if kjt_features and wkjt_features:
-                # pyre-ignore [29]
-                embeddings = self.embedding(kjt_features, wkjt_features)
-            elif wkjt_features:
-                # pyre-ignore [29]
-                embeddings = self.embedding(wkjt_features)
-            else:
-                # pyre-ignore [29]
-                embeddings = self.embedding(kjt_features)
+            # pyre-ignore [16]
+            embeddings = self.embedding.compute_and_output_dist(ctx, dist_input[0])
             # pyre-ignore [29]
             output = self.interaction(embeddings)
         else:
