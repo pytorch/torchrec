@@ -343,12 +343,8 @@ def main(argv: List[str]):
                         train_pipeline, test_it
                     )
                     if rank == 0:
-                        print(f"AUROC over tes tset: {auroc_result}.")
+                        print(f"AUROC over test set: {auroc_result}.")
                         print(f"Accuracy over test set: {accuracy_result}.")
-                        print(
-                            "binary cross entropy loss",
-                            bce_loss / (args.batch_size),
-                        )
 
                 step += 1
 
