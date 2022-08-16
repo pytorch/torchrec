@@ -161,19 +161,19 @@ def _eval(
 
 def main(argv: List[str]):
     args = parse_args(argv)
-    os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["LOCAL_RANK"]
+    # os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["LOCAL_RANK"]
     rank = int(os.environ["LOCAL_RANK"])
 
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
+        torch.cuda.set_device(device)
     else:
         device: torch.device = torch.device("cpu")
         backend = "gloo"
 
     if not torch.distributed.is_initialized():
         dist.init_process_group(backend=backend)
-        torch.cuda.set_device(device)
 
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -249,14 +249,15 @@ def main(argv: List[str]):
                 compute_device=device.type,
                 local_world_size=local_world_size,
                 hbm_cap=hbm_cap,
-                batch_size=args.batch_size,
             ),
             storage_reservation=trec_dist.planner.storage_reservations.HeuristicalStorageReservation(
                 percentage=0.25,
             ),
+            batch_size=args.batch_size,
         ).collective_plan(train_model, sharders, pg),
         sharders=sharders,
     )
+
 
     non_fused_optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
