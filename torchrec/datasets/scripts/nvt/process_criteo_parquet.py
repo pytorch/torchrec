@@ -27,7 +27,14 @@ from utils.dask import setup_dask
 def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess criteo dataset")
     parser.add_argument("--base_path", "-b", dest="base_path", help="Base path")
-    parser.add_argument("--shuffle_train", "-s", dest="shuffle_train", default=False, action="store_true", help="Base path")
+    parser.add_argument(
+        "--shuffle_train",
+        "-s",
+        dest="shuffle_train",
+        default=False,
+        action="store_true",
+        help="Base path",
+    )
     args = parser.parse_args()
 
     return args
