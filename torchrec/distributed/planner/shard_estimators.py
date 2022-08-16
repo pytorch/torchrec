@@ -96,6 +96,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
             if isinstance(module, EmbeddingBagCollectionInterface):
                 is_weighted = module.is_weighted()
+            elif (
+                self._constraints
+                and self._constraints.get(sharding_option.name)
+                and self._constraints[sharding_option.name].is_weighted
+            ):
+                is_weighted = self._constraints[sharding_option.name].is_weighted
             else:
                 is_weighted = False
 

@@ -268,6 +268,7 @@ class ParameterConstraints:
     )  # average number of embedding lookups required per sample
     num_poolings: Optional[List[float]] = None  # number of poolings per sample in batch
     batch_sizes: Optional[List[int]] = None  # batch size per input feature
+    is_weighted: bool = False
 
 
 class PlannerError(Exception):
