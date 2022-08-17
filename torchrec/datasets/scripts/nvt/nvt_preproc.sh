@@ -16,7 +16,7 @@ BINARY_OUTPUT_PATH=""$BASE_OUTPUT_PATH"criteo_binary/"
 FINAL_OUTPUT_PATH=""$BINARY_OUTPUT_PATH"split"
 
 python convert_tsv_to_parquet.py -i "$INPUT_PATH" -o "$BASE_OUTPUT_PATH"
-python process_criteo_parquet.py -b "$BASE_OUTPUT_PATH"
+python process_criteo_parquet.py -b "$BASE_OUTPUT_PATH" -s
 python convert_parquet_to_binary.py --src_dir "$SRC_DIR" \
                                 --intermediate_dir  "$TEMP_PATH" \
                                 --dst_dir "$BINARY_OUTPUT_PATH"

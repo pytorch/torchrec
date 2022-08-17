@@ -27,7 +27,14 @@ from utils.dask import setup_dask
 def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess criteo dataset")
     parser.add_argument("--base_path", "-b", dest="base_path", help="Base path")
-
+    parser.add_argument(
+        "--shuffle_train",
+        "-s",
+        dest="shuffle_train",
+        default=False,
+        action="store_true",
+        help="Base path",
+    )
     args = parser.parse_args()
 
     return args
@@ -77,7 +84,6 @@ if __name__ == "__main__":
         c: np.float32 for c in DEFAULT_COLUMN_NAMES[:14] + [DEFAULT_LABEL_NAME]
     }
     target_dtypes.update({c: "hex" for c in DEFAULT_COLUMN_NAMES[14:]})
-    shuffle = Shuffle.PER_WORKER  # Shuffle algorithm
     out_files_per_proc = 8  # Number of output files per worker
     features = cat_features + cont_features + [DEFAULT_LABEL_NAME]
     workflow = nvt.Workflow(features)
@@ -85,7 +91,6 @@ if __name__ == "__main__":
     train_dataset = nvt.Dataset(input_train, engine="parquet", part_size="256MB")
     valid_dataset = nvt.Dataset(input_valid, engine="parquet", part_size="256MB")
     test_dataset = nvt.Dataset(input_test, engine="parquet", part_size="256MB")
-
     workflow.fit(train_dataset)
 
     workflow.transform(train_dataset).to_parquet(
@@ -94,17 +99,17 @@ if __name__ == "__main__":
         cats=DEFAULT_CAT_NAMES,
         conts=DEFAULT_INT_NAMES,
         labels=[DEFAULT_LABEL_NAME],
-        shuffle=shuffle,
+        shuffle=Shuffle.PER_WORKER if args.shuffle_train else None,
         out_files_per_proc=out_files_per_proc,
     )
 
+    # Never shuffle the validation/training set
     workflow.transform(valid_dataset).to_parquet(
         output_path=os.path.join(out_valid),
         dtypes=target_dtypes,
         cats=DEFAULT_CAT_NAMES,
         conts=DEFAULT_INT_NAMES,
         labels=[DEFAULT_LABEL_NAME],
-        shuffle=shuffle,
         out_files_per_proc=out_files_per_proc,
     )
 
@@ -114,7 +119,6 @@ if __name__ == "__main__":
         cats=DEFAULT_CAT_NAMES,
         conts=DEFAULT_INT_NAMES,
         labels=[DEFAULT_LABEL_NAME],
-        shuffle=shuffle,
         out_files_per_proc=out_files_per_proc,
     )
 
