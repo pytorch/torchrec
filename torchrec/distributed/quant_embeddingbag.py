@@ -5,12 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
-from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
@@ -36,10 +34,10 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
-from torchrec.distributed.utils import filter_state_dict
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
+    EmbeddingBagConfig,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.quant.embedding_modules import (
@@ -75,6 +73,9 @@ class ShardedQuantEmbeddingBagCollection(
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
+        self._embedding_bag_configs: List[
+            EmbeddingBagConfig
+        ] = module.embedding_bag_configs()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags."
         )
@@ -88,10 +89,10 @@ class ShardedQuantEmbeddingBagCollection(
         }
 
         self._is_weighted: bool = module.is_weighted()
-        self._input_dists: nn.ModuleList = nn.ModuleList()
-        self._lookups: nn.ModuleList = nn.ModuleList()
+        self._input_dists: List[nn.Module] = []
+        self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params)
-        self._output_dists: nn.ModuleList = nn.ModuleList()
+        self._output_dists: List[nn.Module] = []
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
@@ -101,6 +102,27 @@ class ShardedQuantEmbeddingBagCollection(
         self._has_uninitialized_input_dist: bool = True
         self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
+
+        # This provides consistency between this class and the EmbeddingBagCollection's
+        # nn.Module API calls (state_dict, named_modules, etc)
+        # Currently, Sharded Quant EBC only uses TW sharding, and returns non-sharded tensors as part of state dict
+        # TODO - revisit if we state_dict can be represented as sharded tensor
+        self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
+        for table in self._embedding_bag_configs:
+            self.embedding_bags[table.name] = torch.nn.Module()
+
+        for _sharding_type, lookup in zip(
+            self._sharding_type_to_sharding.keys(), self._lookups
+        ):
+            lookup_state_dict = lookup.state_dict()
+            for key in lookup_state_dict:
+                if not key.endswith(".weight"):
+                    continue
+                table_name = key[: -len(".weight")]
+                # Register as buffer because this is an inference model, and can potentially use uint8 types.
+                self.embedding_bags[table_name].register_buffer(
+                    "weight", lookup_state_dict[key]
+                )
 
     def _create_input_dist(
         self,
@@ -131,6 +153,7 @@ class ShardedQuantEmbeddingBagCollection(
             self.register_buffer(
                 "_features_order_tensor",
                 torch.tensor(self._features_order, device=device, dtype=torch.int32),
+                persistent=False,
             )
 
     def _create_lookups(
@@ -217,41 +240,6 @@ class ShardedQuantEmbeddingBagCollection(
             ],
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
-        )
-
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-        for lookup in self._lookups:
-            lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
-        return destination
-
-    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
-    #  inconsistently.
-    def load_state_dict(
-        self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
-        strict: bool = True,
-    ) -> _IncompatibleKeys:
-        missing_keys = []
-        unexpected_keys = []
-        for lookup in self._lookups:
-            missing, unexpected = lookup.load_state_dict(
-                filter_state_dict(state_dict, "embedding_bags"),
-                strict,
-            )
-            missing_keys.extend(missing)
-            unexpected_keys.extend(unexpected)
-        return _IncompatibleKeys(
-            missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
     def copy(self, device: torch.device) -> nn.Module:
