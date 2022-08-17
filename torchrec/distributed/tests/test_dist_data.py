@@ -23,6 +23,7 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
+    PooledEmbeddingsReduceScatterV,
 )
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -553,6 +554,129 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
             kwargs_per_rank.append(
                 {
                     "input": embeddings_by_rank[rank],
+                    "expected_output": expect_results[rank],
+                    "qcomms_config": qcomms_config,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
+
+
+class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
+    @classmethod
+    def _run_test_dist(
+        cls,
+        rank: int,
+        world_size: int,
+        input: torch.Tensor,
+        input_splits: List[int],
+        expected_output: torch.Tensor,
+        qcomms_config: Optional[QCommsConfig] = None,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=2, backend="nccl")
+        pg = dist.group.WORLD
+        input = input.cuda(rank)
+        input.requires_grad = True
+
+        codecs = get_qcomm_codecs(qcomms_config)
+
+        rs = PooledEmbeddingsReduceScatterV(
+            # pyre-ignore
+            pg,
+            codecs=codecs,
+        ).cuda(rank)
+        actual_output = rs(input, input_splits=input_splits).wait()
+        s = torch.sum(actual_output)
+        s.backward()
+
+        atol, rtol = None, None
+        if qcomms_config is not None:
+            atol, rtol = 0.003, 0.004
+        torch.testing.assert_close(
+            actual_output.cpu().detach(),
+            expected_output.cpu().detach(),
+            rtol=rtol,
+            atol=atol,
+        )
+        if qcomms_config is None:
+            assert_array_equal(
+                # pyre-ignore
+                input.grad.cpu().detach(),
+                torch.ones(input.size()).div_(world_size),
+            )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @settings(deadline=30000)
+    # pyre-ignore
+    @given(
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=128,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.FP8,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP8,
+                ),
+                # FP8 is not numerically stable for reduce_scatter_v
+                # Not supported for now for forward case
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.FP8,
+                # ),
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.BF16,
+                # ),
+            ]
+        ),
+    )
+    def test_pooled_embedding_reduce_scatter_v(
+        self, qcomms_config: Optional[QCommsConfig]
+    ) -> None:
+        world_size = 2
+        embeddding_dim = 10
+        batch_size = 2
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
+        embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
+        expect_results = torch.chunk(
+            torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
+            2,
+            dim=0,
+        )
+        input_splits = [er.size(0) for er in expect_results]
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "input_splits": input_splits,
                     "expected_output": expect_results[rank],
                     "qcomms_config": qcomms_config,
                 }

@@ -18,7 +18,7 @@ from torchrec.distributed.comm_ops import (
     alltoall_pooled,
     alltoall_sequence,
     reduce_scatter_base_pooled,
-    reduce_scatter_pooled,
+    reduce_scatter_v_pooled,
 )
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -870,6 +870,64 @@ class PooledEmbeddingsAllGather(nn.Module):
 
         tensor_awaitable = all_gather_base_pooled(
             local_emb, self._pg, codecs=self._codecs
+        )
+        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+
+
+class PooledEmbeddingsReduceScatterV(nn.Module):
+    """
+    The module class that wraps reduce-scatter-v communication primitive for pooled
+    embedding communication in row-wise and twrw sharding.
+
+    For pooled embeddings, we have a local model-parallel output tensor with a layout of
+    [num_buckets x batch_size, dimension]. We need to sum over num_buckets dimension
+    across batches. We split tensor along the first dimension into unequal chunks (tensor
+    slices of different buckets) according to input_splits and reduce them into the output
+    tensor and scatter the results for corresponding ranks.
+
+    The class returns the async `Awaitable` handle for pooled embeddings tensor.
+    The reduce-scatter-v is only available for NCCL backend.
+
+    Args:
+        pg (dist.ProcessGroup): The process group that the reduce-scatter communication
+            happens within.
+        codecs (Optional[QuantizedCommCodecs]): Quantization codec
+
+    Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        input = torch.randn(2 * 2, 2)
+        input_splits = [1,3]
+        m = PooledEmbeddingsReduceScatterV(pg)
+        output = m(input, input_splits)
+        tensor = output.wait()
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ) -> None:
+        super().__init__()
+        self._pg = pg
+        self._codecs = codecs
+
+    def forward(
+        self, local_embs: torch.Tensor, input_splits: List[int]
+    ) -> PooledEmbeddingsAwaitable:
+        """
+        Performs reduce scatter v operation on pooled embeddings tensor.
+
+        Args:
+            local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
+            input_splits (List[int]): list of splits for local_embs dim0.
+
+        Returns:
+            PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
+        """
+        tensor_awaitable = reduce_scatter_v_pooled(
+            local_embs, input_splits, self._pg, codecs=self._codecs
         )
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
