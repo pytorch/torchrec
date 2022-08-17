@@ -3,6 +3,7 @@
 #include "tde/details/mixed_lfu_lru_strategy.h"
 #include "tde/details/multithreaded_id_transformer.h"
 #include "tde/details/naive_id_transformer.h"
+#include "tde/details/cacheline_id_transformer.h"
 #include "tde/details/type_list.h"
 namespace tde::details {
 
@@ -16,7 +17,7 @@ namespace tde::details {
  * NOTE: Register more ComposableTransformer here
  */
 template <typename LXURecord>
-using ComposableTransformers = type_list<NaiveIDTransformer<LXURecord>>;
+using ComposableTransformers = type_list<NaiveIDTransformer<LXURecord>, CachelineIDTransformer<LXURecord>>;
 
 /**
  * ComposeTransformers

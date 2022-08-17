@@ -1,7 +1,10 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
-add_library(tde_cpp_objs OBJECT id_transformer.cpp details/multithreaded_id_transformer.cpp
+add_library(tde_cpp_objs OBJECT id_transformer.cpp
+        details/naive_id_transformer.cpp
+        details/multithreaded_id_transformer.cpp
+        details/cacheline_id_transformer.cpp
         details/io.cpp details/io_registry.cpp
-        details/move_only_function.cpp details/thread_pool.cpp details/naive_id_transformer.cpp
+        details/move_only_function.cpp details/thread_pool.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
         details/clz_impl.cpp details/ctz_impl.cpp details/id_transformer_registry.cpp
         details/id_transformer_variant.cpp details/redis_io.cpp details/redis_io_v1.cpp
@@ -40,6 +43,9 @@ if (TDE_WITH_TESTING)
 
     add_tde_test(naive_id_transformer_test details/naive_id_transformer_test.cpp)
     add_tde_benchmark(naive_id_transformer_benchmark details/naive_id_transformer_benchmark.cpp)
+
+    add_tde_test(cacheline_id_transformer_test details/cacheline_id_transformer_test.cpp)
+    add_tde_benchmark(cacheline_id_transformer_benchmark details/cacheline_id_transformer_benchmark.cpp)
 
     add_tde_test(move_only_function_test details/move_only_function_test.cpp)
     add_tde_test(thread_pool_test details/thread_pool_test.cpp)

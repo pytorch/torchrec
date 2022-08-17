@@ -6,7 +6,7 @@ namespace tde::details {
 
 static void BM_MultiThreadedIDTransformer_Cold(benchmark::State& state) {
   MultiThreadedIDTransformer<NaiveIDTransformer<int32_t>> transformer(
-      1e8, state.range(0));
+      2e8, state.range(0));
   torch::Tensor global_ids = torch::empty({1024, 1024}, torch::kLong);
   torch::Tensor cache_ids = torch::empty_like(global_ids);
   for (auto _ : state) {
@@ -32,7 +32,7 @@ BENCHMARK(BM_MultiThreadedIDTransformer_Cold)
 
 static void BM_MultiThreadedIDTransformer_Hot(benchmark::State& state) {
   MultiThreadedIDTransformer<NaiveIDTransformer<int32_t>> transformer(
-      1e8, state.range(0));
+      2e8, state.range(0));
   torch::Tensor global_ids = torch::empty({1024, 1024}, torch::kLong);
   torch::Tensor cache_ids = torch::empty_like(global_ids);
   for (auto _ : state) {
