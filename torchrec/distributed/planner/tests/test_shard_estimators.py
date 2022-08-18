@@ -15,7 +15,9 @@ from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology
+from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.tests.test_quant_model_parallel import _quantize
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
 from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
@@ -23,10 +25,10 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConf
 
 class TestEmbeddingPerfEstimator(unittest.TestCase):
     def setUp(self) -> None:
-        topology = Topology(world_size=2, compute_device="cuda")
-        self.estimator = EmbeddingPerfEstimator(topology=topology)
+        self.topology = Topology(world_size=2, compute_device="cuda")
+        self.estimator = EmbeddingPerfEstimator(topology=self.topology)
         self.enumerator = EmbeddingEnumerator(
-            topology=topology, batch_size=BATCH_SIZE, estimator=self.estimator
+            topology=self.topology, batch_size=BATCH_SIZE, estimator=self.estimator
         )
 
     def test_1_table_perf(self) -> None:
@@ -150,3 +152,46 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         }
 
         self.assertEqual(expected_perfs, perfs)
+
+    def test_inference_1_table_perf(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="table_0",
+                feature_names=["feature_0"],
+            )
+        ]
+        model = TestSparseNN(tables=tables, weighted_tables=[])
+        quant_model = _quantize(model, inplace=True)
+
+        inference_estimator = EmbeddingPerfEstimator(
+            topology=self.topology, is_inference=True
+        )
+        inference_enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=BATCH_SIZE, estimator=inference_estimator
+        )
+        sharding_options = inference_enumerator.enumerate(
+            module=quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module], QuantEmbeddingBagCollectionSharder()
+                )
+            ],
+        )
+
+        expected_perfs = {
+            ("quant", "table_wise"): [0.0001296231579222408],
+            ("quant_uvm", "table_wise"): [0.018350937787224266],
+            ("quant_uvm_caching", "table_wise"): [0.004269758427175579],
+        }
+
+        perfs = {
+            (
+                sharding_option.compute_kernel,
+                sharding_option.sharding_type,
+            ): [shard.perf for shard in sharding_option.shards]
+            for sharding_option in sharding_options
+        }
+
+        self.assertEqual(perfs, expected_perfs)
