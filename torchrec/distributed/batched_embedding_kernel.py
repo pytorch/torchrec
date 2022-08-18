@@ -365,7 +365,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -431,20 +431,19 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, param in zip(
-            self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
-        ):
-            key = append_prefix(prefix, f"{config.name}.weight")
-            yield key, param
 
     def flush(self) -> None:
         self._emb_module.flush()
@@ -477,6 +476,11 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -583,7 +587,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -653,6 +657,15 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
@@ -689,6 +702,11 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
