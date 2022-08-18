@@ -14,6 +14,7 @@ from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_si
 from torchrec.distributed.planner.storage_reservations import (
     FixedPercentageReservation,
     HeuristicalStorageReservation,
+    InferenceStorageReservation,
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
@@ -94,22 +95,34 @@ class EmbeddingStats(Stats):
             storage_reservation._percentage
             if isinstance(
                 storage_reservation,
-                (FixedPercentageReservation, HeuristicalStorageReservation),
+                (
+                    FixedPercentageReservation,
+                    HeuristicalStorageReservation,
+                    InferenceStorageReservation,
+                ),
             )
             else 0.0
         )
         dense_storage = (
             storage_reservation._dense_storage
-            if isinstance(storage_reservation, HeuristicalStorageReservation)
-            and storage_reservation._dense_storage
+            if isinstance(
+                storage_reservation,
+                (HeuristicalStorageReservation, InferenceStorageReservation),
+            )
+            and storage_reservation._dense_storage is not None
             else Storage(0, 0)
         )
+        assert dense_storage
         kjt_storage = (
             storage_reservation._kjt_storage
-            if isinstance(storage_reservation, HeuristicalStorageReservation)
+            if isinstance(
+                storage_reservation,
+                (HeuristicalStorageReservation, InferenceStorageReservation),
+            )
             and storage_reservation._kjt_storage
             else Storage(0, 0)
         )
+        assert kjt_storage
 
         for sharding_option in best_plan:
             fqn = sharding_option.fqn
