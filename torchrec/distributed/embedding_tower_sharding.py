@@ -700,18 +700,20 @@ class ShardedEmbeddingTowerCollection(
     ) -> torch.Tensor:
 
         if self.embeddings:
+            embeddings = [
+                embedding.compute_and_output_dist(embedding_ctx, embedding_input)
+                for embedding_ctx, embedding, embedding_input in zip(
+                    ctx.embedding_contexts,
+                    self.embeddings.values(),
+                    dist_input,
+                )
+            ]
             output = torch.cat(
                 [
-                    interaction(
-                        embedding.compute_and_output_dist(
-                            embedding_ctx, embedding_input
-                        )
-                    )
-                    for embedding_ctx, embedding, interaction, embedding_input in zip(
-                        ctx.embedding_contexts,
-                        self.embeddings.values(),
+                    interaction(embedding)
+                    for embedding, interaction in zip(
+                        embeddings,
                         self.interactions.values(),
-                        dist_input,
                     )
                 ],
                 dim=1,
