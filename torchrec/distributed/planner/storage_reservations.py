@@ -101,23 +101,29 @@ def _get_input_lengths_and_shardable_parameters(
     input_lengths: List[float] = []
     shardable_modules: Set[nn.Module] = set()
 
-    for child_module in module.modules():
-        sharder_key = sharder_name(type(child_module))
+    def populate_shardable_modules(
+        module: nn.Module,
+    ) -> None:
+        sharder_key = sharder_name(type(module))
         sharder = sharder_map.get(sharder_key)
+
         if not sharder:
-            continue
+            for _child_name, child in module.named_children():
+                populate_shardable_modules(child)
+        else:
+            names = sharder.shardable_parameters(module).keys()
+            shardable_modules.add(module)
 
-        shardable_modules.add(child_module)
+            input_lengths.extend(
+                [
+                    sum(constraints[name].pooling_factors)
+                    if constraints and constraints.get(name)
+                    else POOLING_FACTOR
+                    for name in names
+                ]
+            )
 
-        names = sharder.shardable_parameters(child_module).keys()
-        input_lengths.extend(
-            [
-                sum(constraints[name].pooling_factors)
-                if constraints and constraints.get(name)
-                else POOLING_FACTOR
-                for name in names
-            ]
-        )
+    populate_shardable_modules(module)
 
     return input_lengths, shardable_modules
 
