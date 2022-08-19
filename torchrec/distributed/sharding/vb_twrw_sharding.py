@@ -15,7 +15,7 @@ import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
-    PooledEmbeddingsReduceScatter,
+    PooledEmbeddingsReduceScatterV,
 )
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
@@ -248,7 +248,7 @@ class VariableBatchTwRwPooledEmbeddingDist(
         self._intra_pg: dist.ProcessGroup = intra_pg
         self._cross_pg: dist.ProcessGroup = cross_pg
         self._device: Optional[torch.device] = device
-        self._intra_dist = PooledEmbeddingsReduceScatter(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatterV(intra_pg)
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,
@@ -270,32 +270,14 @@ class VariableBatchTwRwPooledEmbeddingDist(
             self._cross_pg.size(),
             sharding_ctx.batch_size_per_rank,
         )
-        # Pad each chunk to same size, prepare for ReduceScatter
-        # Skip padding when a host has no table assigned, in which case its dim is 0
-        max_length = max(batch_size_sum_by_cross_group)
-        if local_embs.shape[1] != 0:
-            # pyre-fixme[28]: Unexpected keyword argument `pin_memory`.
-            lengths = torch.tensor(
-                batch_size_sum_by_cross_group,
-                pin_memory=True,
-            ).to(device=self._device, non_blocking=True)
-            local_embs = torch.ops.fbgemm.pack_segments(
-                t_in=local_embs,
-                max_length=max_length,
-                lengths=lengths,
-            )
-        # Perform ReduceScatter within one host
+
+        # Perform ReduceScatterV within one host
+        lengths = batch_size_sum_by_cross_group
         rs_result = self._intra_dist(
-            local_embs.view(self._intra_pg.size() * max_length, -1)
+            local_embs.view(sum(lengths), -1), input_splits=lengths
         ).wait()
 
         local_rank = self._rank % self._intra_pg.size()
-        rs_result = torch.narrow(
-            rs_result,
-            0,
-            0,
-            batch_size_sum_by_cross_group[local_rank],
-        )
 
         return self._cross_dist(
             rs_result,
