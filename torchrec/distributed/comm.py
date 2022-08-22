@@ -98,6 +98,35 @@ def get_num_groups(world_size: Optional[int] = None) -> int:
     return world_size // get_local_size(world_size)
 
 
+def validate_intra_group(backend: str, local_size: int) -> None:
+    """
+    We cannot create process group for a subset of the GPUs within a host.
+    This is because it's not guaranteed that the GPUs within the sub-group has
+    direct nvlink support and they might have to go through SHM (blocked due to
+    https://github.com/NVIDIA/nccl/issues/596) or RDMA (policy-based routing
+    may not be available leading to training slowdown or even failures that
+    are hard to debug).  Therefore we're disallowing create intra-group
+    with a subset of GPUs.
+    """
+    if backend != "nccl":
+        return
+
+    # we only check this on a machine with RDMA enabled. This prevent us from erroring
+    # out on a local test with devgpus
+    nccl_net = os.environ.get("NCCL_NET", None)
+    if nccl_net != "IB":
+        return
+
+    total_gpus = torch.cuda.device_count()
+    assert local_size >= total_gpus, (
+        "Fatal: creating process group with only a subset of GPUs within a "
+        "host is disallowed. This is because we cannot guarantee direct NVLink "
+        "connectivity for the GPUs within the subset (some with HCM instead of "
+        "NVSwitch. This is most likely you're doing TWRW sharding in a single "
+        "server which is not going to give perf benefits."
+    )
+
+
 def intra_and_cross_node_pg(
     device: Optional[torch.device] = None,
     backend: str = "nccl",
@@ -130,6 +159,9 @@ def intra_and_cross_node_pg(
         f"[{my_rank}] my_local_rank = {my_local_rank}, local_size = {local_size},"
         f"my_group_rank = {my_group_rank}, group_count = {group_count}, backend = {backend}"
     )
+
+    validate_intra_group(backend, local_size)
+
     if _INTRA_PG is None:
         for group_rank in range(group_count):
             peers = [group_rank * local_size + r for r in range(local_size)]

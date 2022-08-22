@@ -10,11 +10,13 @@ import multiprocessing
 import os
 import unittest
 from typing import Callable
+from unittest.mock import patch
 
 import numpy
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
+from torchrec.distributed.comm import validate_intra_group
 from torchrec.test_utils import get_free_port, seed_and_log
 
 
@@ -195,3 +197,33 @@ class TestAllToAll(unittest.TestCase):
             # pyre-ignore [6]
             callable=self._test_alltoall_sequence,
         )
+
+    def test_validate_intra_group(self) -> None:
+        old_nccl_net = os.environ.get("NCCL_NET", None)
+        if "NCCL_NET" in os.environ:
+            del os.environ["NCCL_NET"]
+
+        # non-nccl pg: ok
+        with patch("torch.cuda.device_count") as cuda_patch:
+            cuda_patch.return_value = 8
+
+            # gloo env var, shouldn't care
+            validate_intra_group("gloo", 2)
+            validate_intra_group("gloo", 8)
+
+            # NCCL_NET is not SET
+            validate_intra_group("nccl", 2)
+
+            os.environ["NCCL_NET"] = "IB"
+            validate_intra_group("nccl", 8)
+
+            with self.assertRaisesRegex(
+                AssertionError,
+                "Fatal: creating process group with only a subset of GPUs",
+            ):
+                validate_intra_group("nccl", 2),
+
+        if old_nccl_net:
+            os.environ["NCCL_NET"] = old_nccl_net
+        else:
+            del os.environ["NCCL_NET"]
