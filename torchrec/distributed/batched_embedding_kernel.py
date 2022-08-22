@@ -67,6 +67,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             local_metadata: ShardMetadata,
             global_metadata: ShardedTensorMetadata,
             sharding_dim: int,
+            optimizer_state: torch.Tensor,
         ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
             rw_shards: List[ShardMetadata] = []
             rw_local_shard: ShardMetadata = local_metadata
@@ -98,9 +99,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 rw_shards.append(rw_shard)
 
             tensor_properties = TensorProperties(
-                dtype=global_metadata.tensor_properties.dtype,
+                dtype=optimizer_state.dtype,
                 layout=global_metadata.tensor_properties.layout,
-                requires_grad=global_metadata.tensor_properties.requires_grad,
+                requires_grad=False,
                 memory_format=global_metadata.tensor_properties.memory_format,
                 pin_memory=global_metadata.tensor_properties.pin_memory,
             )
@@ -215,6 +216,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                                 shard_param_local_metadata,
                                 table_config.global_metadata,
                                 sharding_dim,
+                                optimizer_state[momentum_idx - 1],
                             )
 
                         assert local_metadata is not None
