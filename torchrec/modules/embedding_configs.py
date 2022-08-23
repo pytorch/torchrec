@@ -50,7 +50,7 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.FP32
     elif dtype == torch.float16 or dtype == torch.half:
         return DataType.FP16
-    elif dtype == torch.quint8 or dtype == torch.qint8 or dtype == torch.int8:
+    elif dtype in {torch.quint8, torch.qint8, torch.int8, torch.uint8}:
         return DataType.INT8
     elif dtype == torch.quint4x2:
         return DataType.INT4
