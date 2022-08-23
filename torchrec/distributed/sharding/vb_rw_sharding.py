@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatterV
+from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatter
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
@@ -161,6 +161,7 @@ class VariableBatchRwEmbeddingDistAwaitable(Awaitable[torch.Tensor]):
 
     def _wait_impl(self) -> torch.Tensor:
         embedding = self._awaitable.wait()
+        embedding = torch.narrow(embedding, 0, 0, self._batch_size)
 
         return embedding
 
@@ -173,19 +174,24 @@ class VariableBatchRwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
         super().__init__()
         self._workers: int = pg.size()
         self._rank: int = pg.rank()
-        self._dist = PooledEmbeddingsReduceScatterV(pg)
+        self._dist = PooledEmbeddingsReduceScatter(pg)
 
     def forward(
         self,
         local_embs: torch.Tensor,
         sharding_ctx: VariableBatchShardingContext,
     ) -> Awaitable[torch.Tensor]:
+        batch_size_per_rank_tensor = sharding_ctx.batch_size_per_rank_tensor
         batch_size_per_rank = sharding_ctx.batch_size_per_rank
+        max_length = max(batch_size_per_rank)
         batch_size = batch_size_per_rank[self._rank]
-
+        packed_pooled_embs = torch.ops.fbgemm.pack_segments(
+            t_in=local_embs,
+            lengths=batch_size_per_rank_tensor,
+            max_length=max_length,
+        )
         awaitable_tensor = self._dist(
-            local_embs.view(sum(batch_size_per_rank), -1),
-            input_splits=batch_size_per_rank,
+            packed_pooled_embs.view(self._workers * max_length, -1)
         )
         return VariableBatchRwEmbeddingDistAwaitable(awaitable_tensor, batch_size)
 
