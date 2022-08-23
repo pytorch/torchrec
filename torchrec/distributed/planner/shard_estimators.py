@@ -64,7 +64,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
             caching_ratio = (
-                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                sharder.fused_params.get("cache_load_factor")
                 if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )
@@ -579,7 +579,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
             caching_ratio = (
-                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                sharder.fused_params.get("cache_load_factor")
                 if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )

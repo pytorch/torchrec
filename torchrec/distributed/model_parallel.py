@@ -198,6 +198,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_data_parallel: bool = True,
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
+        prefix_fused_params: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
@@ -216,6 +217,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             device = torch.device("cpu")
         self.device: torch.device = device
 
+        self._prefix_fused_params = prefix_fused_params
         if sharders is None:
             sharders = get_default_sharders()
         self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
@@ -351,7 +353,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         sharded_params = self._plan.get_plan_for_module(path)
         if sharded_params:
             sharder_key = sharder_name(type(module))
-            sharded_module = self._sharder_map[sharder_key].shard(
+            sharder = self._sharder_map[sharder_key]
+            if (
+                self._prefix_fused_params is not None
+                and path in self._prefix_fused_params
+            ):
+                sharder.update_fused_params(self._prefix_fused_params[path])
+            sharded_module = sharder.shard(
                 module,
                 sharded_params,
                 self._env,

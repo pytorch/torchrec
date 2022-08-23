@@ -243,10 +243,9 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-
-        # TODO remove after decoupling
-        self._fused_params = fused_params
+        super().__init__(
+            fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
@@ -282,10 +281,6 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         return ret
-
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return self._fused_params
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str

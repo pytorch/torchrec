@@ -537,10 +537,14 @@ class ModuleSharder(abc.ABC, Generic[M]):
     """
 
     def __init__(
-        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._qcomm_codecs_registry = qcomm_codecs_registry
+        # TODO remove after decoupling
+        self._fused_params = fused_params
 
     @abc.abstractclassmethod
     # pyre-ignore [3]
@@ -568,6 +572,16 @@ class ModuleSharder(abc.ABC, Generic[M]):
             ShardedModule[Any, Any, Any]: sharded module implementation.
         """
         ...
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        return self._fused_params
+
+    def update_fused_params(self, fused_params: Dict[str, Any]) -> None:
+        if self._fused_params is None:
+            self._fused_params = fused_params
+        else:
+            self._fused_params.update(fused_params)
 
     @property
     @abc.abstractmethod
