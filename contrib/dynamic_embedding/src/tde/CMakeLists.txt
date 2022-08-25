@@ -1,5 +1,5 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
-add_library(tde_cpp_objs OBJECT id_transformer.cpp
+add_library(tde_cpp_objs OBJECT id_transformer.cpp ps.cpp
         details/naive_id_transformer.cpp
         details/multithreaded_id_transformer.cpp
         details/cacheline_id_transformer.cpp

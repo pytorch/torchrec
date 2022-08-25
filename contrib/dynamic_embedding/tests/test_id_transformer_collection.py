@@ -1,5 +1,4 @@
 import unittest
-from distutils.command.config import config
 
 import torch
 from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor

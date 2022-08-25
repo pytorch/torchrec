@@ -39,6 +39,13 @@ static void OnGlobalIDFetched(
     uint32_t data_len) {
   auto c = reinterpret_cast<FetchContext*>(ctx);
   auto& tensor = c->tensors_[offset];
+  // non-existed global id
+  if (data_len == 0) {
+    if (tensor.defined()) {
+      tensor = torch::Tensor{};
+    }
+    return;
+  }
   if (!tensor.defined()) {
     size_t elem_size = torch::elementSize(c->scalar_type_);
     TORCH_CHECK(data_len % elem_size == 0);

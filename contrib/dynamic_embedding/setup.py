@@ -43,7 +43,7 @@ setup(
     packages=["torchrec_dynamic_embedding"],
     cmake_args=[
         "-DCMAKE_BUILD_TYPE=Release",
-        f"-DCMAKE_PREFIX_PATH={os.path.dirname(torch.__file__)}",
+        f"-DTDE_TORCH_BASE_DIR={os.path.dirname(torch.__file__)}",
         "-DTDE_WITH_TESTING=OFF",
     ]
     + extra_cmake_args,
