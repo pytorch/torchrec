@@ -59,14 +59,13 @@ template <
     typename CacheIDTransformer,
     typename Update,
     typename Fetch>
-inline int64_t NaiveIDTransformer<LXURecord, T>::Transform(
+inline bool NaiveIDTransformer<LXURecord, T>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Filter filter,
     CacheIDTransformer cache_id_transformer,
     Update update,
     Fetch fetch) {
-  int64_t num_transformed = 0;
   for (size_t i = 0; i < global_ids.size(); ++i) {
     int64_t global_id = global_ids[i];
     if (!filter(global_id)) {
@@ -82,7 +81,7 @@ inline int64_t NaiveIDTransformer<LXURecord, T>::Transform(
     } else {
       // The transformer is full.
       if (C10_UNLIKELY(bitmap_.Full())) {
-        break;
+        return false;
       }
       auto stored_cache_id = bitmap_.NextFreeBit();
       cache_id = cache_id_transformer(stored_cache_id);
@@ -92,9 +91,8 @@ inline int64_t NaiveIDTransformer<LXURecord, T>::Transform(
       fetch(global_id, cache_id);
     }
     cache_ids[i] = cache_id;
-    num_transformed++;
   }
-  return num_transformed;
+  return true;
 }
 
 template <typename LXURecord, typename T>

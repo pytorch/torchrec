@@ -68,7 +68,7 @@ class MultiThreadedIDTransformer {
   template <
       typename Update = decltype(transform_default::NoUpdate<lxu_record_t>),
       typename Fetch = decltype(transform_default::NoFetch)>
-  int64_t Transform(
+  bool Transform(
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
       Update update = transform_default::NoUpdate<lxu_record_t>,

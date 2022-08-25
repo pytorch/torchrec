@@ -118,7 +118,7 @@ class NaiveIDTransformer {
       typename CacheIDTransformer = decltype(transform_default::Identity),
       typename Update = decltype(transform_default::NoUpdate<LXURecord>),
       typename Fetch = decltype(transform_default::NoFetch)>
-  int64_t Transform(
+  bool Transform(
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
       Filter filter = transform_default::All,

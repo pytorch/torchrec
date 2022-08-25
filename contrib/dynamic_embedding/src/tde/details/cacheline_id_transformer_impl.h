@@ -39,7 +39,7 @@ template <
     typename CacheIDTransformer,
     typename Update,
     typename Fetch>
-inline int64_t CachelineIDTransformer<
+inline bool CachelineIDTransformer<
     LXURecord,
     num_cacheline,
     cacheline_size,
@@ -52,7 +52,6 @@ inline int64_t CachelineIDTransformer<
         CacheIDTransformer cache_id_transformer,
         Update update,
         Fetch fetch) {
-  int64_t num_transformed = 0;
   for (size_t i = 0; i < global_ids.size(); ++i) {
     int64_t global_id = global_ids[i];
     if (!filter(global_id)) {
@@ -91,12 +90,12 @@ inline int64_t CachelineIDTransformer<
         break;
       }
     }
-    if (need_eviction)
-      break;
+    if (need_eviction) {
+      return false;
+    }
     cache_ids[i] = cache_id;
-    num_transformed++;
   }
-  return num_transformed;
+  return true;
 }
 
 template <

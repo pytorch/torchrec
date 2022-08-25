@@ -40,7 +40,7 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
   for (int64_t i = 0; i < global_id_list->size(); ++i) {
     auto& global_ids = (*global_id_list)[i];
     auto& cache_ids = (*cache_id_list)[i];
-    int64_t num_transformed = transformer_.Transform(
+    ok = transformer_.Transform(
         tcb::span{
             global_ids.data_ptr<int64_t>(),
             static_cast<size_t>(global_ids.numel())},
@@ -52,8 +52,7 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
           ids_to_fetch_[2 * offset] = global_id;
           ids_to_fetch_[2 * offset + 1] = cache_id;
         });
-    if (num_transformed != global_ids.numel()) {
-      ok = false;
+    if (!ok) {
       break;
     }
   }

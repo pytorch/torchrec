@@ -24,12 +24,12 @@ MultiThreadedIDTransformer<UnderlyingTransformer>::MultiThreadedIDTransformer(
 
 template <typename UnderlyingTransformer>
 template <typename Update, typename Fetch>
-int64_t MultiThreadedIDTransformer<UnderlyingTransformer>::Transform(
+bool MultiThreadedIDTransformer<UnderlyingTransformer>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Update update,
     Fetch fetch) {
-  std::vector<std::future<int64_t>> futures;
+  std::vector<std::future<bool>> futures;
   futures.reserve(num_threads_);
   for (size_t i = 0; i < num_threads_; ++i) {
     futures.emplace_back(std::move(thread_pool_->Enqueue([&, this, i] {
@@ -46,12 +46,12 @@ int64_t MultiThreadedIDTransformer<UnderlyingTransformer>::Transform(
           fetch);
     })));
   }
-  int64_t num_transformed = 0;
-  for (size_t i = 0; i < num_threads_; ++i) {
-    num_transformed += futures[i].get();
-  }
 
-  return num_transformed;
+  return std::accumulate(
+      futures.begin(), futures.end(), true, [](bool ok, auto&& fut) -> bool {
+        // make ok right side to avoid shortcut
+        return fut.get() && ok;
+      });
 }
 
 template <typename UnderlyingTransformer>

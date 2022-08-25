@@ -1,9 +1,16 @@
 #pragma once
+#include <type_traits>
 #include "nlohmann/json.hpp"
 #include "tde/details/id_transformer_registry.h"
 namespace tde::details {
 
 struct LXUStrategy {
+ private:
+  using _FirstLXURecord = std::tuple_element_t<0, to_tuple_t<LXURecordTypes>>;
+  using _UpdateFunctor = std::function<
+      _FirstLXURecord(std::optional<_FirstLXURecord>, int64_t, int64_t)>;
+
+ public:
   using Variant = to_variant_t<LXUStrategies>;
   using lxu_record_t = to_variant_t<LXURecordTypes>;
 
@@ -13,9 +20,10 @@ struct LXUStrategy {
 
   lxu_record_t DefaultRecordValue();
 
-  template <typename UpdateAccessor>
-  void AccessUpdate(UpdateAccessor accessor) {
-    std::visit(
+  template <typename Visitor>
+  auto VisitUpdator(Visitor visit)
+      -> std::invoke_result_t<Visitor, _UpdateFunctor> {
+    return std::visit(
         [&](auto& s) {
           using T = typename std::decay_t<decltype(s)>::lxu_record_t;
           auto update = [&](std::optional<T> record,
@@ -23,7 +31,7 @@ struct LXUStrategy {
                             int64_t cache_id) {
             return s.Update(global_id, cache_id, record);
           };
-          accessor(update);
+          return visit(update);
         },
         strategy_);
   }
@@ -58,7 +66,7 @@ struct IDTransformer {
    * evict. Then the return value is not equal to global_ids.size();
    */
   template <typename Fetch = decltype(transform_default::NoFetch)>
-  int64_t Transform(
+  bool Transform(
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
       Fetch fetch = transform_default::NoFetch);
@@ -70,14 +78,13 @@ struct IDTransformer {
 };
 
 template <typename Fetch>
-inline int64_t IDTransformer::Transform(
+inline bool IDTransformer::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
     Fetch fetch) {
-  int64_t processed = 0;
-  strategy_.AccessUpdate([&](auto&& update) {
-    processed = std::visit(
-        [&](auto& transformer) {
+  return strategy_.VisitUpdator([&](auto&& update) -> bool {
+    return std::visit(
+        [&](auto&& transformer) -> bool {
           using T = std::decay_t<decltype(transformer)>;
           if constexpr (
               T::TransformHasFilter && T::TransformerHasCacheIDTransformer) {
@@ -103,7 +110,6 @@ inline int64_t IDTransformer::Transform(
         },
         var_);
   });
-  return processed;
 }
 
 inline std::vector<int64_t> IDTransformer::Evict(int64_t num_to_evict) {
