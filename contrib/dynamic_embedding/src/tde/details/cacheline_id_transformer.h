@@ -115,33 +115,19 @@ class CachelineIDTransformer {
 
  private:
   struct CacheValue {
-    int64_t neg_global_id_;
+    int64_t global_id_not_;
     uint32_t cache_id_;
     LXURecord lxu_record_;
 
-    int64_t global_id() {
-      return -(neg_global_id_ + 1);
-    }
-    uint32_t cache_id() {
-      return cache_id_;
-    }
-    void set_cache_id(uint32_t cache_id) {
-      cache_id_ = cache_id;
-    }
-
-    bool is_filled() {
-      return neg_global_id_ < 0;
-    }
-    void set_empty() {
-      neg_global_id_ = 0;
+    [[nodiscard]] bool IsFilled() const {
+      return global_id_not_ < 0;
     }
   };
+
   static_assert(sizeof(CacheValue) <= 16);
+  static_assert(std::is_trivially_destructible_v<CacheValue>);
 
-  static constexpr int64_t kFullMask = 1LL << 63;
-  static_assert(kFullMask < 0);
-
-  std::tuple<int64_t, int64_t> FindGroupIndex(int64_t val) {
+  std::tuple<int64_t, int64_t> FindGroupIndex(int64_t val) const {
     int64_t hash = hasher_(val);
     return {hash / group_size_ % num_groups_, hash % group_size_};
   }
@@ -150,7 +136,14 @@ class CachelineIDTransformer {
       num_cacheline * cacheline_size / static_cast<int64_t>(sizeof(CacheValue));
   int64_t num_groups_;
   Hash hasher_;
-  std::unique_ptr<CacheValue[]> cache_values_;
+
+  struct CacheValueDeleter {
+    void operator()(void* ptr) const {
+      free(ptr);
+    }
+  };
+
+  std::unique_ptr<CacheValue[], CacheValueDeleter> cache_values_;
   BitMap bitmap_;
 };
 
