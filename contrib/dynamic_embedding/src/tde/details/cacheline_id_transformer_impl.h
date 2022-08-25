@@ -158,12 +158,12 @@ inline void CachelineIDTransformer<
       auto& cache_value = cache_values_[offset];
       // tricky but fast :p
       int64_t global_id_not = ~global_id;
-      int64_t xor_value = global_id_not ^ cache_value.global_id_not;
+      int64_t xor_value = global_id_not ^ cache_value.global_id_not_;
       if (xor_value < 0) { // not exist
         break;
       } else if (xor_value == 0) { // found slot
         bitmap_.FreeBit(cache_value.cache_id_);
-        cache_value.global_id_not = 0;
+        cache_value.global_id_not_ = 0;
         break;
       }
     }
