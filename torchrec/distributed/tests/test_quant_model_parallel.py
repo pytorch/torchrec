@@ -124,9 +124,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         # check all buffer/param under the module is value-identical
         # but device-different with the copied module.
         for (name, buffer), (name_copy, buffer_copy) in zip(
-            # pyre-ignore [58]
             list(module.named_buffers()) + list(module.named_parameters()),
-            # pyre-ignore [58]
             list(module_copy.named_buffers()) + list(module_copy.named_parameters()),
         ):
             self.assertEquals(name, name_copy)

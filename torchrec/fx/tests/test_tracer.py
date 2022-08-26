@@ -42,7 +42,6 @@ class TestTracer(unittest.TestCase):
 
         auto_model = AutoModel()
         auto_gm = symbolic_trace(auto_model)
-        # pyre-fixme[16]: `FileCheck` has no attribute `check`.
         FileCheck().check("+ 2").check("NeedWait").check("* 10").run(auto_gm.code)
 
         input = torch.randn(3, 4)
