@@ -10,10 +10,6 @@ namespace tde::details {
 
 namespace transform_default {
 
-inline bool All(int64_t global_id) {
-  return true;
-}
-
 template <typename LXURecord>
 inline LXURecord NoUpdate(
     std::optional<LXURecord> record,
@@ -23,10 +19,6 @@ inline LXURecord NoUpdate(
 };
 
 inline void NoFetch(int64_t global_id, int64_t cache_id) {}
-
-inline int64_t Identity(int64_t cache_id) {
-  return cache_id;
-}
 
 } // namespace transform_default
 
@@ -68,14 +60,6 @@ class NaiveIDTransformer {
  public:
   using lxu_record_t = LXURecord;
   using record_t = TransformerRecord<lxu_record_t>;
-  enum {
-    TransformUpdateNeedThreadSafe = 0,
-    TransformFetchNeedThreadSafe = 0,
-    TransformHasFilter = 1,
-    TransformerHasCacheIDTransformer = 1,
-    TransformCanContinue = 1,
-    IsCompose = 0,
-  };
   static constexpr std::string_view type_ = "naive";
 
   explicit NaiveIDTransformer(int64_t num_embedding);
@@ -91,13 +75,6 @@ class NaiveIDTransformer {
 
   /**
    * Transform global ids to cache ids
-   * @tparam Filter To filter whether this transformer need
-   * process this global id. By default it process all global-ids.
-   * This type is used by composed id transformers like
-   * `MultiThreadedIDTransformer`.
-   *
-   * @tparam CacheIDTransformer Transform the result cache id. It is used by
-   * composed id transformers like `MultiThreadedIDTransformer`.
    *
    * @tparam Update Update the eviction strategy tag type. Update LXU Record
    * @tparam Fetch Fetch the not existing global-id/cache-id pair. It is used
@@ -105,24 +82,16 @@ class NaiveIDTransformer {
    *
    * @param global_ids Global ID vector
    * @param cache_ids [out] Cache ID vector
-   * @param filter Filter lambda. See `Filter`'s doc.
-   * @param cache_id_transformer cache_id_transformer lambda. See
-   * `CacheIDTransformer`'s doc.
    * @param update update lambda. See `Update` doc.
    * @param fetch fetch lambda. See `Fetch` doc.
-   * @return offset that has been processed. If offset is not equals to
-   * global_ids.size(), it means the Transformer is Full, and need to be evict.
+   * @return true if all transformed, otherwise need eviction.
    */
   template <
-      typename Filter = decltype(transform_default::All),
-      typename CacheIDTransformer = decltype(transform_default::Identity),
       typename Update = decltype(transform_default::NoUpdate<LXURecord>),
       typename Fetch = decltype(transform_default::NoFetch)>
   bool Transform(
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
-      Filter filter = transform_default::All,
-      CacheIDTransformer cache_id_transformer = transform_default::Identity,
       Update update = transform_default::NoUpdate<LXURecord>,
       Fetch fetch = transform_default::NoFetch);
 

@@ -25,57 +25,28 @@ class CachelineIDTransformer {
  public:
   static_assert(num_cacheline > 0, "num_cacheline should be positive.");
   static_assert(cacheline_size > 0, "cacheline_size should be positive.");
-
-  using lxu_record_t = LXURecord;
-  using record_t = TransformerRecord<lxu_record_t>;
-  enum {
-    TransformUpdateNeedThreadSafe = 0,
-    TransformFetchNeedThreadSafe = 0,
-    TransformHasFilter = 1,
-    TransformerHasCacheIDTransformer = 1,
-    TransformCanContinue = 1,
-    IsCompose = 0,
-  };
-  static constexpr std::string_view type_ = "cacheline";
-
-  explicit CachelineIDTransformer(int64_t num_embedding, int64_t capacity = 0);
-  CachelineIDTransformer(const CachelineIDTransformer<
-                         LXURecord,
-                         num_cacheline,
-                         cacheline_size,
-                         BitMap,
-                         Hash>&) = delete;
-  CachelineIDTransformer(CachelineIDTransformer<
-                         LXURecord,
-                         num_cacheline,
-                         cacheline_size,
-                         BitMap,
-                         Hash>&&) noexcept = default;
-
-  static CachelineIDTransformer<
+  using Self = CachelineIDTransformer<
       LXURecord,
       num_cacheline,
       cacheline_size,
       BitMap,
-      Hash>
-  Create(int64_t num_embedding, const nlohmann::json& json) {
-    return CachelineIDTransformer<
-        LXURecord,
-        num_cacheline,
-        cacheline_size,
-        BitMap,
-        Hash>(num_embedding);
+      Hash>;
+
+  using lxu_record_t = LXURecord;
+  using record_t = TransformerRecord<lxu_record_t>;
+  static constexpr std::string_view type_ = "cacheline";
+
+  explicit CachelineIDTransformer(int64_t num_embedding, int64_t capacity = 0);
+
+  CachelineIDTransformer(const Self&) = delete;
+  CachelineIDTransformer(Self&&) noexcept = default;
+
+  static Self Create(int64_t num_embedding, const nlohmann::json& json) {
+    return Self(num_embedding);
   }
 
   /**
    * Transform global ids to cache ids
-   * @tparam Filter To filter whether this transformer need
-   * process this global id. By default it process all global-ids.
-   * This type is used by composed id transformers like
-   * `MultiThreadedIDTransformer`.
-   *
-   * @tparam CacheIDTransformer Transform the result cache id. It is used by
-   * composed id transformers like `MultiThreadedIDTransformer`.
    *
    * @tparam Update Update the eviction strategy tag type. Update LXU Record
    * @tparam Fetch Fetch the not existing global-id/cache-id pair. It is used
@@ -83,24 +54,16 @@ class CachelineIDTransformer {
    *
    * @param global_ids Global ID vector
    * @param cache_ids [out] Cache ID vector
-   * @param filter Filter lambda. See `Filter`'s doc.
-   * @param cache_id_transformer cache_id_transformer lambda. See
-   * `CacheIDTransformer`'s doc.
    * @param update update lambda. See `Update` doc.
    * @param fetch fetch lambda. See `Fetch` doc.
-   * @return offset that has been processed. If offset is not equals to
-   * global_ids.size(), it means the Transformer is Full, and need to be evict.
+   * @return true if all transformed, otherwise need eviction.
    */
   template <
-      typename Filter = decltype(transform_default::All),
-      typename CacheIDTransformer = decltype(transform_default::Identity),
       typename Update = decltype(transform_default::NoUpdate<LXURecord>),
       typename Fetch = decltype(transform_default::NoFetch)>
   bool Transform(
       tcb::span<const int64_t> global_ids,
       tcb::span<int64_t> cache_ids,
-      Filter filter = transform_default::All,
-      CacheIDTransformer cache_id_transformer = transform_default::Identity,
       Update update = transform_default::NoUpdate<LXURecord>,
       Fetch fetch = transform_default::NoFetch);
 

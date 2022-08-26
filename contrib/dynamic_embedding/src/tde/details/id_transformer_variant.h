@@ -85,28 +85,11 @@ inline bool IDTransformer::Transform(
   return strategy_.VisitUpdator([&](auto&& update) -> bool {
     return std::visit(
         [&](auto&& transformer) -> bool {
-          using T = std::decay_t<decltype(transformer)>;
-          if constexpr (
-              T::TransformHasFilter && T::TransformerHasCacheIDTransformer) {
-            auto filter = transform_default::All;
-            auto cache_id_transformer = transform_default::Identity;
-            return transformer.Transform(
-                global_ids,
-                cache_ids,
-                filter,
-                cache_id_transformer,
-                std::forward<decltype(update)>(update),
-                std::move(fetch));
-          } else if constexpr (
-              !T::TransformHasFilter && !T::TransformerHasCacheIDTransformer) {
-            return transformer.Transform(
-                global_ids,
-                cache_ids,
-                std::forward<decltype(update)>(update),
-                std::move(fetch));
-          } else {
-            TORCH_CHECK(false, "unexpected branch");
-          }
+          return transformer.Transform(
+              global_ids,
+              cache_ids,
+              std::forward<decltype(update)>(update),
+              std::move(fetch));
         },
         var_);
   });

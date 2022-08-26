@@ -46,11 +46,7 @@ template <
     int64_t cacheline_size,
     typename BitMap,
     typename Hash>
-template <
-    typename Filter,
-    typename CacheIDTransformer,
-    typename Update,
-    typename Fetch>
+template <typename Update, typename Fetch>
 inline bool CachelineIDTransformer<
     LXURecord,
     num_cacheline,
@@ -60,15 +56,10 @@ inline bool CachelineIDTransformer<
     Transform(
         tcb::span<const int64_t> global_ids,
         tcb::span<int64_t> cache_ids,
-        Filter filter,
-        CacheIDTransformer cache_id_transformer,
         Update update,
         Fetch fetch) {
   for (size_t i = 0; i < global_ids.size(); ++i) {
     int64_t global_id = global_ids[i];
-    if (!filter(global_id)) {
-      continue;
-    }
     auto [group_id, intra_id] = FindGroupIndex(global_id);
 
     CacheValue* group_begin = &cache_values_[group_id];
@@ -93,8 +84,7 @@ inline bool CachelineIDTransformer<
         if (C10_UNLIKELY(bitmap_.Full())) {
           return false;
         }
-        auto stored_cache_id = bitmap_.NextFreeBit();
-        cache_id = cache_id_transformer(stored_cache_id);
+        cache_id = bitmap_.NextFreeBit();
         cache_value.global_id_not_ = global_id_not;
         cache_value.cache_id_ = cache_id;
         cache_value.lxu_record_ = update(std::nullopt, global_id, cache_id);

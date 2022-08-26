@@ -55,27 +55,20 @@ inline NaiveIDTransformer<LXURecord, T>::NaiveIDTransformer(
 
 template <typename LXURecord, typename T>
 template <
-    typename Filter,
-    typename CacheIDTransformer,
     typename Update,
     typename Fetch>
 inline bool NaiveIDTransformer<LXURecord, T>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,
-    Filter filter,
-    CacheIDTransformer cache_id_transformer,
     Update update,
     Fetch fetch) {
   for (size_t i = 0; i < global_ids.size(); ++i) {
     int64_t global_id = global_ids[i];
-    if (!filter(global_id)) {
-      continue;
-    }
     auto iter = global_id2cache_value_.find(global_id);
     // cache_id is in [0, num_embedding)
     int64_t cache_id;
     if (iter != global_id2cache_value_.end()) {
-      cache_id = cache_id_transformer(iter->second.cache_id_);
+      cache_id = iter->second.cache_id_;
       iter->second.lxu_record_ =
           update(iter->second.lxu_record_, global_id, cache_id);
     } else {
@@ -84,7 +77,7 @@ inline bool NaiveIDTransformer<LXURecord, T>::Transform(
         return false;
       }
       auto stored_cache_id = bitmap_.NextFreeBit();
-      cache_id = cache_id_transformer(stored_cache_id);
+      cache_id = stored_cache_id;
       LXURecord record = update(std::nullopt, global_id, cache_id);
       global_id2cache_value_.emplace(
           global_id, CacheValue{stored_cache_id, record});

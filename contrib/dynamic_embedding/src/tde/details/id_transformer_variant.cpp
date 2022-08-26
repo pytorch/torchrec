@@ -86,17 +86,7 @@ struct IDTransformerCreator<LXURecordType, type_list<Head, Tail...>>
     if (Head::type_ != type_) {
       return CallNext();
     }
-    if constexpr (Head::IsCompose) {
-      auto underlying = json_["underlying"];
-      auto creator = [&](int64_t num_embeddings) ->
-          typename Head::underlying_t {
-            auto var = creator_(num_embeddings, underlying, LXURecordType());
-            return std::get<typename Head::underlying_t>(std::move(var));
-          };
-      return Head::Create(num_embeddings_, json_, std::move(creator));
-    } else {
-      return Head::Create(num_embeddings_, json_);
-    }
+    return Head::Create(num_embeddings_, json_);
   }
 };
 

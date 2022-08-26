@@ -19,9 +19,7 @@ static void BM_NaiveIDTransformer(benchmark::State& state) {
             static_cast<size_t>(global_ids.numel())},
         tcb::span{
             cache_ids.template data_ptr<int64_t>(),
-            static_cast<size_t>(cache_ids.numel())},
-        transform_default::All,
-        [](int64_t cid) { return cid + 2e8; });
+            static_cast<size_t>(cache_ids.numel())});
   }
 }
 
