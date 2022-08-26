@@ -595,6 +595,78 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
         )
 
+    def test_empty(self) -> None:
+        keys = ["index_0"]
+        values = torch.tensor([])
+        lengths = torch.tensor([])
+        offsets = torch.tensor([])
+
+        kjt_0 = KeyedJaggedTensor(keys=keys, values=values, lengths=lengths)
+        j0 = kjt_0["index_0"]
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([])))
+
+        keys = ["index_1"]
+        kjt_1 = KeyedJaggedTensor(keys=keys, values=values, offsets=offsets)
+        j1 = kjt_1["index_1"]
+
+        self.assertTrue(isinstance(j1, JaggedTensor))
+        self.assertTrue(torch.equal(j1.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.values(), torch.Tensor([])))
+
+        combined_kjt = KeyedJaggedTensor.concat([kjt_0, kjt_1])
+        j0 = combined_kjt["index_0"]
+        j1 = combined_kjt["index_1"]
+
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([])))
+        self.assertTrue(isinstance(j1, JaggedTensor))
+        self.assertTrue(torch.equal(j1.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.values(), torch.Tensor([])))
+
+        kjt_2 = KeyedJaggedTensor.empty()
+        self.assertEqual(kjt_2.to_dict(), {})
+
+    def test_empty_to_dict(self) -> None:
+        keys = ["index_0", "index_1"]
+        values = torch.tensor([])
+        lengths = torch.tensor([[], []])
+        length_per_key = [0, 0]
+
+        jag_tensor = KeyedJaggedTensor(
+            keys=keys, values=values, lengths=lengths, length_per_key=length_per_key
+        )
+        jag_tensor_dict = jag_tensor.to_dict()
+        j0 = jag_tensor_dict["index_0"]
+        j1 = jag_tensor_dict["index_1"]
+
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.offsets(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([])))
+        self.assertTrue(isinstance(j1, JaggedTensor))
+        self.assertTrue(torch.equal(j1.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.offsets(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.values(), torch.Tensor([])))
+
+        jag_tensor = KeyedJaggedTensor.from_lengths_sync(
+            keys=keys, values=values, lengths=lengths
+        )
+        jag_tensor_dict = jag_tensor.to_dict()
+        j0 = jag_tensor_dict["index_0"]
+        j1 = jag_tensor_dict["index_1"]
+
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.offsets(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([])))
+        self.assertTrue(isinstance(j1, JaggedTensor))
+        self.assertTrue(torch.equal(j1.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.offsets(), torch.Tensor([])))
+        self.assertTrue(torch.equal(j1.values(), torch.Tensor([])))
+
     def test_split(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
