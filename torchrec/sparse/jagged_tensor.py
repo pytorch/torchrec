@@ -476,12 +476,12 @@ def _maybe_compute_stride_kjt(
     if stride is None:
         if len(keys) == 0:
             stride = 0
-        elif offsets is not None:
+        elif offsets is not None and offsets.numel() > 0:
             stride = (offsets.numel() - 1) // len(keys)
         elif lengths is not None:
             stride = lengths.numel() // len(keys)
         else:
-            stride = 1
+            stride = 0
     return stride
 
 
@@ -507,7 +507,7 @@ def _maybe_compute_length_per_key(
     offsets: Optional[torch.Tensor],
 ) -> List[int]:
     if length_per_key is None:
-        if len(keys) and offsets is not None:
+        if len(keys) and offsets is not None and len(offsets) > 0:
             _length: List[int] = (
                 torch.sum((offsets[1:] - offsets[:-1]).view(-1, stride), dim=1)
                 .cpu()
@@ -516,6 +516,8 @@ def _maybe_compute_length_per_key(
         elif len(keys) and lengths is not None:
             _length: List[int] = (
                 torch.sum(lengths.view(-1, stride), dim=1).cpu().tolist()
+                if lengths.numel() != 0
+                else [0] * len(keys)
             )
         else:
             _length: List[int] = []
@@ -579,9 +581,14 @@ def _maybe_compute_kjt_to_jt_dict(
     if jt_dict is None:
         _jt_dict: Dict[str, JaggedTensor] = {}
         values_list = torch.split(values, length_per_key)
-        lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        lengths_tuple = torch.unbind(
+            lengths.view(-1, stride) if lengths.numel() != 0 else lengths, dim=0
+        )
         offsets_tuple = torch.unbind(
-            _batched_lengths_to_offsets(lengths.view(-1, stride)), dim=0
+            _batched_lengths_to_offsets(lengths.view(-1, stride))
+            if lengths.numel() != 0
+            else lengths,
+            dim=0,
         )
 
         if weights is not None:
@@ -799,6 +806,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             keys=[],
             values=torch.tensor([], device=device) if device else torch.tensor([]),
             weights=weights,
+            lengths=torch.tensor([], device=device) if device else torch.tensor([]),
             stride=0,
         )
 
@@ -810,8 +818,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=None
             if kjt.weights_or_none() is None
             else torch.tensor([], device=kjt.device(), dtype=kjt.weights().dtype),
-            lengths=None,
-            offsets=None,
+            lengths=torch.tensor([], device=kjt.device(), dtype=kjt.lengths().dtype),
             stride=kjt.stride(),
         )
 
@@ -1001,7 +1008,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offset_per_key = self.offset_per_key()
         index = self._key_indices()[key]
         start_offset = offset_per_key[index]
-        end_offset = offset_per_key[index + 1]
+        end_offset = (
+            offset_per_key[index + 1]
+            if index + 1 < len(offset_per_key)
+            else start_offset
+        )
         return JaggedTensor(
             values=self._values[start_offset:end_offset],
             weights=None
@@ -1072,7 +1083,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
     def __str__(self) -> str:
-        if self._offsets is None and self._lengths is None:
+        if len(self._keys) == 0 or self._offsets is None and self._lengths is None:
             return "KeyedJaggedTensor()\n"
         offsets = self.offsets()
 
