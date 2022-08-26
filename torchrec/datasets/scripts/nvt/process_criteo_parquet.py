@@ -70,7 +70,7 @@ if __name__ == "__main__":
     cat_features = (
         DEFAULT_CAT_NAMES
         >> nvt.ops.FillMissing()
-        >> nvt.ops.Categorify(max_size=NUM_EMBEDDINGS_PER_FEATURE_DICT)
+        >> nvt.ops.Categorify(num_buckets=NUM_EMBEDDINGS_PER_FEATURE_DICT)
     )
     # We want to assign 0 to all missing values, and calculate log(x+3) for present values
     # so if we set missing values to -2, then the result of log(1+2+(-2)) would be 0
