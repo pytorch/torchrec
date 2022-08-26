@@ -1,7 +1,6 @@
 # tde_cpp_objs section, used by both unittests and tde_cpp.so
 add_library(tde_cpp_objs OBJECT id_transformer.cpp ps.cpp
         details/naive_id_transformer.cpp
-        details/multithreaded_id_transformer.cpp
         details/cacheline_id_transformer.cpp
         details/io.cpp details/io_registry.cpp
         details/move_only_function.cpp details/thread_pool.cpp
@@ -37,10 +36,7 @@ if (TDE_WITH_TESTING)
         add_executable(${NAME} ${ARGN})
         target_link_libraries(${NAME} tde_cpp_objs benchmark::benchmark_main benchmark::benchmark)
     endfunction()
-
-    add_tde_test(multithreaded_id_transformer_test details/multithreaded_id_transformer_test.cpp)
-    add_tde_benchmark(multithreaded_id_transformer_benchmark details/multithreaded_id_transformer_benchmark.cpp)
-
+    
     add_tde_test(naive_id_transformer_test details/naive_id_transformer_test.cpp)
     add_tde_benchmark(naive_id_transformer_benchmark details/naive_id_transformer_benchmark.cpp)
 
