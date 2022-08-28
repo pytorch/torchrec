@@ -8,6 +8,45 @@
 
 namespace tde::details {
 
+template <typename LXURecord>
+struct CachelineIDTransformerValue {
+  int64_t global_id_not_;
+  uint32_t cache_id_;
+  LXURecord lxu_record_;
+
+  [[nodiscard]] bool IsFilled() const {
+    return global_id_not_ < 0;
+  }
+};
+
+template <typename LXURecord>
+class CachelineIDTransformerIterator {
+  using Val = CachelineIDTransformerValue<LXURecord>;
+
+ public:
+  CachelineIDTransformerIterator(Val* begin, Val* end)
+      : begin_(begin), end_(end) {}
+
+  std::optional<TransformerRecord<LXURecord>> operator()() {
+    for (; begin_ != end_;) {
+      auto& record = *begin_++;
+      if (record.global_id_not_ > 0) {
+        continue;
+      }
+      TransformerRecord<LXURecord> result{};
+      result.global_id_ = -record.global_id_not_;
+      result.cache_id_ = record.cache_id_;
+      result.lxu_record_ = record.lxu_record_;
+      return result;
+    }
+    return std::nullopt;
+  }
+
+ private:
+  Val* begin_;
+  Val* end_;
+};
+
 /**
  * CachelineIDTransformer
  *
@@ -74,22 +113,16 @@ class CachelineIDTransformer {
 
   void Evict(tcb::span<const int64_t> global_ids);
 
-  MoveOnlyFunction<std::optional<record_t>()> Iterator() const;
+  CachelineIDTransformerIterator<LXURecord> Iterator() const {
+    return CachelineIDTransformerIterator<LXURecord>(
+        cache_values_.get(), cache_values_.get() + num_groups_ * group_size_);
+  }
 
  private:
-  struct CacheValue {
-    int64_t global_id_not_;
-    uint32_t cache_id_;
-    LXURecord lxu_record_;
-
-    [[nodiscard]] bool IsFilled() const {
-      return global_id_not_ < 0;
-    }
-  };
-
+  using CacheValue = CachelineIDTransformerValue<LXURecord>;
   static_assert(sizeof(CacheValue) <= 16);
   static_assert(std::is_trivially_destructible_v<CacheValue>);
-
+  static_assert(std::is_trivially_constructible_v<CacheValue>);
   std::tuple<int64_t, int64_t> FindGroupIndex(int64_t val) const {
     int64_t hash = hasher_(val);
     return {hash / group_size_ % num_groups_, hash % group_size_};

@@ -23,6 +23,12 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
     records.back().second.time_ = 100;
     records.back().second.freq_power_ = 1;
   }
+  {
+    records.emplace_back();
+    records.back().first = 4;
+    records.back().second.time_ = 150;
+    records.back().second.freq_power_ = 2;
+  }
   size_t offset_{0};
   auto ids = MixedLFULRUStrategy::Evict(
       [&offset_,
@@ -40,11 +46,12 @@ TEST(TDE, MixedLFULRUStrategy_Evict) {
             .lxu_record_ = ext_type,
         };
       },
-      2);
+      3);
 
-  ASSERT_EQ(ids.size(), 2);
+  ASSERT_EQ(ids.size(), 3);
   ASSERT_EQ(ids[0], 3);
   ASSERT_EQ(ids[1], 2);
+  ASSERT_EQ(ids[2], 1);
 }
 
 TEST(TDE, MixedLFULRUStrategy_Transform) {

@@ -1,7 +1,9 @@
 #pragma once
 #include <atomic>
 #include <optional>
+#include <queue>
 #include <string_view>
+#include <vector>
 #include "nlohmann/json.hpp"
 #include "tde/details/move_only_function.h"
 #include "tde/details/naive_id_transformer.h"
@@ -69,6 +71,14 @@ class MixedLFULRUStrategy {
     return Transform(val);
   }
 
+  struct EvictItem {
+    int64_t global_id_;
+    lxu_record_t record_;
+    bool operator<(const EvictItem& item) const {
+      return record_ < item.record_;
+    }
+  };
+
   /**
    * Analysis all ids and returns the num_elems that are most need to evict.
    * @param iterator Returns each global_id to ExtValue pair. Returns nullopt
@@ -76,14 +86,44 @@ class MixedLFULRUStrategy {
    * @param num_to_evict
    * @return
    */
-  static std::vector<int64_t> Evict(
-      MoveOnlyFunction<std::optional<transformer_record_t>()> iterator,
-      uint64_t num_to_evict);
+  template <typename Iterator>
+  static std::vector<int64_t> Evict(Iterator iterator, uint64_t num_to_evict) {
+    std::priority_queue<EvictItem> items;
+    while (true) {
+      auto val = iterator();
+      if (!val.has_value()) [[unlikely]] {
+        break;
+      }
+      EvictItem item{
+          .global_id_ = val->global_id_,
+          .record_ = val->lxu_record_,
+      };
+      if (items.size() == num_to_evict) {
+        if (!(item < items.top())) {
+          continue;
+        } else {
+          items.pop();
+          items.push(item);
+        }
+      } else {
+        items.push(item);
+      }
+    }
+    std::vector<int64_t> result;
+    result.reserve(items.size());
+    while (!items.empty()) {
+      auto item = items.top();
+      result.emplace_back(item.global_id_);
+      items.pop();
+    }
+    std::reverse(result.begin(), result.end());
+    return result;
+  }
 
   // Record should only be used in unittest or internally.
   struct Record {
-    uint16_t freq_power_ : 5;
     uint32_t time_ : 27;
+    uint16_t freq_power_ : 5;
   };
 
  private:

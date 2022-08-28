@@ -160,34 +160,4 @@ inline void CachelineIDTransformer<
   }
 }
 
-template <
-    typename LXURecord,
-    int64_t num_cacheline,
-    int64_t cacheline_size,
-    typename BitMap,
-    typename Hash>
-inline auto CachelineIDTransformer<
-    LXURecord,
-    num_cacheline,
-    cacheline_size,
-    BitMap,
-    Hash>::Iterator() const -> MoveOnlyFunction<std::optional<record_t>()> {
-  int64_t i = 0;
-  return [i, this]() mutable -> std::optional<record_t> {
-    for (; i < num_groups_ * group_size_; ++i) {
-      auto& cache_value = cache_values_[i];
-      if (cache_value.IsFilled()) {
-        auto record = record_t{
-            .global_id_ = ~cache_value.global_id_not_,
-            .cache_id_ = cache_value.cache_id_,
-            .lxu_record_ = cache_value.lxu_record_,
-        };
-        ++i;
-        return record;
-      }
-    }
-    return {};
-  };
-}
-
 } // namespace tde::details
