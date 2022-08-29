@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
-from torchrec.distributed.types import ParameterSharding, ShardingPlan
+from torchrec.distributed.types import ParameterSharding
 
 from .tensor_list import TensorList
 
@@ -15,7 +15,7 @@ except Exception as ex:
     print(f"File tde_cpp.so not found {ex}")
 
 
-__all__ = ["PS", "PSCollection", "get_ps"]
+__all__ = ["PS", "PSCollection"]
 
 
 class PS:
@@ -94,67 +94,3 @@ class PSCollection:
 
     def __getitem__(self, table_name):
         return self._ps_collection[table_name]
-
-
-def get_sharded_modules_recursive(
-    module: nn.Module,
-    path: str,
-    plan: ShardingPlan,
-) -> Dict[str, nn.Module]:
-    params_plan = plan.get_plan_for_module(path)
-    if params_plan:
-        return {path: (module, params_plan)}
-
-    res = {}
-    for name, child in module.named_children():
-        new_path = f"{path}.{name}" if path else name
-        res.update(get_sharded_modules_recursive(child, new_path, plan))
-    return res
-
-
-def get_ps(
-    module: DMP,
-    num_optimizer_stats: int,
-    ps_config: Union[str, Callable[[str, str], str]],
-):
-    # Note that `num_optimizer_stats` here does not take the weight into account,
-    # while in C++ side, the weight is also considered a optimizer stat.
-    if num_optimizer_stats > 2 or num_optimizer_stats < 0:
-        raise ValueError(
-            f"num_optimizer_stats must be in [0, 2], got {num_optimizer_stats}"
-        )
-
-    plan = module.plan
-    sharded_modules = get_sharded_modules_recursive(module.module, "", plan)
-
-    ps_list = {}
-
-    for path, (sharded_module, params_plan) in sharded_modules.items():
-        state_dict = sharded_module.state_dict()
-        optimizer_state_dict = sharded_module.fused_optimizer.state_dict()["state"]
-        tensor_infos = {}
-        for key, tensor in state_dict.items():
-            # Here we use the fact that state_dict will be shape of
-            # `embeddings.xxx.weight` or `embeddingbags.xxx.weight`
-            if len(key.split(".")) <= 1 or key.split(".")[1] not in params_plan:
-                continue
-            table_name = key.split(".")[1]
-            param_plan = params_plan.pop(table_name)
-            tensors = [tensor]
-            # This is really hardcoded right now...
-            optimizer_state = optimizer_state_dict[key]
-            for i in range(num_optimizer_stats):
-                tensors.append(optimizer_state[f"{table_name}.momentum{i+1}"])
-            tensor_infos[table_name] = (param_plan, tensors)
-
-        assert (
-            len(params_plan) == 0
-        ), f"There are sharded param not found, leaving: {params_plan}."
-
-        if isinstance(ps_config, str):
-            collection_config = ps_config
-        else:
-            collection_config = lambda table_name: ps_config(path, table_name)
-
-        ps_list[path] = PSCollection(path, tensor_infos, collection_config)
-    return ps_list

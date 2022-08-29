@@ -1,0 +1,246 @@
+import queue
+import threading
+from typing import Dict, List, Union
+
+import torch.nn as nn
+from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
+from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.types import ShardingPlan
+
+from .id_transformer_collection import IDTransformerCollection
+from .ps import PSCollection
+
+
+__all__ = ["IDTransformerGroup"]
+
+
+def _get_sharded_modules_recursive(
+    module: nn.Module,
+    path: str,
+    plan: ShardingPlan,
+) -> Dict[str, nn.Module]:
+    """
+    Get all sharded modules of module from `plan`.
+    """
+    params_plan = plan.get_plan_for_module(path)
+    if params_plan:
+        return {path: (module, params_plan)}
+
+    res = {}
+    for name, child in module.named_children():
+        new_path = f"{path}.{name}" if path else name
+        res.update(_get_sharded_modules_recursive(child, new_path, plan))
+    return res
+
+
+def _create_transformer_thread(transformer: IDTransformerCollection):
+    """
+    Create a thread for transformer.
+    """
+
+    def loop(transformer, input_queue, output_queue):
+        while True:
+            local_kjt = input_queue.get()
+            if local_kjt is None:
+                break
+            global_kjt = transformer.transform(local_kjt)
+            output_queue.put(global_kjt)
+
+    input_queue = queue.Queue()
+    output_queue = queue.Queue()
+    thread = threading.Thread(
+        target=loop, args=(transformer, input_queue, output_queue)
+    )
+    thread.start()
+    return thread, input_queue, output_queue
+
+
+class IDTransformerGroup:
+    def __init__(
+        self,
+        module: DistributedModelParallel,
+        configs_dict: Dict[str, Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]],
+        *,
+        ps_config,
+        eviction_config=None,
+        transform_config=None,
+        parallel=True,
+    ):
+        """
+        IDTransformerGroup stores the IDTransformer for all sharded modules in a DMP module.
+
+        Args:
+            module: DMP module that need dynamic embedding.
+            configs_dict: a dictionary that maps the module path of the sharded module to its embedding
+                configs or embeddingbag configs. The plan of `module` should contain the module path
+                in `configs_dict`.
+            ps_config: configuration for PS. Required fields are "schema", which designates the schema of
+                the PS server, e.g. redis://192.168.3.1:3948 and "num_optimizer_stats", which tell PS server
+                how many optimizer states for the parameter, for intance, the value is 2 for Adam optimizer.
+            eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
+            transformer_config: configuration for the transformer. Default is `{"type": "naive"}`
+            parallel: Whether the IDTransformerCollections will run paralell. When set to True,
+                IDTransformerGroup will start a thread for each IDTransformerCollection.
+
+        Example:
+            class Model(nn.Module):
+                def __init__(self, config1, config2):
+                    super().__init__()
+                    self.emb1 = EmbeddingCollection(tables=config1, device=torch.device("meta"))
+                    self.emb2 = EmbeddingCollection(tables=config2, device=torch.device("meta"))
+                    ...
+
+                def forward(self, kjt1, kjt2):
+                    ...
+
+            m = Model(config1, config2)
+            m = DistributedModelParallel(m)
+            transformers = IDTransformerGroup(
+                m,
+                {
+                    "emb1": config1,
+                    "emb2": config2,
+                },
+                ps_configs={
+                    "num_optimizer_stats": 2,
+                    "schema": "memory://"
+                })
+
+            for kjt1, kjt2 in dataset:
+                kjts = transformers.transform({
+                    "emb1": kjt1,
+                    "emb2": kjt2,
+                })
+                kjt1, kjt2 = kjts["emb1"], kjts["emb2"]
+                output = m(kjt1, kjt2)
+                ...
+        """
+        if "schema" not in ps_config:
+            raise ValueError("schema not found in ps_config")
+        self._ps_schema = ps_config["schema"]
+
+        if "num_optimizer_stats" not in ps_config:
+            raise ValueError("num_optimizer_stats not found in ps_config")
+        num_optimizer_stats = ps_config["num_optimizer_stats"]
+        # Note that `num_optimizer_stats` here does not take the weight into account,
+        # while in C++ side, the weight is also considered a optimizer stat.
+        if num_optimizer_stats > 2 or num_optimizer_stats < 0:
+            raise ValueError(
+                f"num_optimizer_stats must be in [0, 2], got {num_optimizer_stats}"
+            )
+
+        self._num_optimizer_stats = num_optimizer_stats
+
+        self._parallel = parallel
+
+        # get all sharded_modules from plan
+        plan = module.plan
+        sharded_modules = _get_sharded_modules_recursive(module.module, "", plan)
+
+        self._id_transformer_collections: Dict[str, IDTransformerCollection] = {}
+        for path, configs in configs_dict.items():
+            if path not in sharded_modules:
+                raise ValueError(
+                    f"`{path}` in configs dooes not match any sharded modules. "
+                    f"Paths for current sharded modules are: {list(sharded_modules.keys())}."
+                )
+            sharded_module, params_plan = sharded_modules[path]
+            ps_collection = self._create_ps_collection(
+                path, sharded_module, params_plan
+            )
+            id_transformer_collection = IDTransformerCollection(
+                configs, eviction_config, transform_config, ps_collection
+            )
+            self._id_transformer_collections[path] = id_transformer_collection
+
+        if self._parallel:
+            self._threads = {}
+            self._input_queues = {}
+            self._output_queues = {}
+            for path, transformer in self._id_transformer_collections.items():
+                thread, input_queue, output_queue = _create_transformer_thread(
+                    transformer
+                )
+                self._threads[path] = thread
+                self._input_queues[path] = input_queue
+                self._output_queues[path] = output_queue
+
+    def _create_ps_collection(self, path, sharded_module, params_plan):
+        """
+        Create PSCollection for `sharded_module`, whose module path is `path`
+
+        Args:
+            path: module path of the sharded module.
+            sharded_module: the sharded module.
+            params_plan: the sharding plan of `sharded_module`.
+
+        Return:
+            PSCollection of the sharded module.
+        """
+        state_dict = sharded_module.state_dict()
+        optimizer_state_dict = sharded_module.fused_optimizer.state_dict()["state"]
+        tensor_infos = {}
+        for key, tensor in state_dict.items():
+            # Here we use the fact that state_dict will be shape of
+            # `embeddings.xxx.weight` or `embeddingbags.xxx.weight`
+            if len(key.split(".")) <= 1 or key.split(".")[1] not in params_plan:
+                continue
+            table_name = key.split(".")[1]
+            param_plan = params_plan.pop(table_name)
+            tensors = [tensor]
+            # This is really hardcoded right now...
+            optimizer_state = optimizer_state_dict[key]
+            for i in range(self._num_optimizer_stats):
+                tensors.append(optimizer_state[f"{table_name}.momentum{i+1}"])
+            tensor_infos[table_name] = (param_plan, tensors)
+
+        assert (
+            len(params_plan) == 0
+        ), f"There are sharded param not found, leaving: {params_plan}."
+
+        if isinstance(self._ps_schema, str):
+            collection_config = self._ps_schema
+        else:
+            collection_config = lambda table_name: self._ps_schema(path, table_name)
+
+        return PSCollection(path, tensor_infos, collection_config)
+
+    def transform(self, kjt_dict: Dict[str, KeyedJaggedTensor]):
+        """
+        Transform global `KeyedJaggedTensor`s to local ones.
+
+        Args:
+            kjt_dict: dict keyed by module path of global kjts.
+        Return:
+            Dict[str, KeyedJaggedTensor]
+        """
+        result = {}
+        if self._parallel:
+            for path, kjt in kjt_dict.items():
+                if path not in self._id_transformer_collections:
+                    raise ValueError(
+                        f"kjt_dict contain invalid path {path}. "
+                        f"should be one of {self._id_transformer_collections.keys()}"
+                    )
+                self._input_queues[path].put(kjt)
+
+            for path in kjt_dict:
+                result[path] = self._output_queues[path].get()
+        else:
+            for path, kjt in kjt_dict.items():
+                if path not in self._id_transformer_collections:
+                    raise ValueError(
+                        f"kjt_dict contain invalid path {path}. "
+                        f"should be one of {self._id_transformer_collections.keys()}"
+                    )
+                result[path] = self._id_transformer_collections[path].transform(kjt)
+        return result
+
+    def __del__(self):
+        """
+        Stop the parallel threads
+        """
+        if self._parallel:
+            # stop the threads
+            for _, input_queue in self._input_queues.items():
+                input_queue.put(None)
