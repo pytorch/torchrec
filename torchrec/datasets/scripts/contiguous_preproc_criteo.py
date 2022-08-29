@@ -16,6 +16,8 @@ from typing import List
 
 from torchrec.datasets.criteo import BinaryCriteoUtils
 
+DAYS = 24
+
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -61,12 +63,9 @@ def main(argv: List[str]) -> None:
 
     # Look for files that end in "_sparse.npy" since this processing is
     # only applied to sparse data.
-    input_files = list(
-        map(
-            lambda f: os.path.join(input_dir, f),
-            list(filter(lambda f: f.endswith("_sparse.npy"), os.listdir(input_dir))),
-        )
-    )
+
+    input_files = [os.path.join(input_dir, f"day_{i}_sparse.npy") for i in range(DAYS)]
+
     if not input_files:
         raise ValueError(
             f"There are no files that end with '_sparse.npy' in this directory: {input_dir}"
