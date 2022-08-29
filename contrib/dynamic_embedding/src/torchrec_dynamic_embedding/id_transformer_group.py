@@ -2,35 +2,15 @@ import queue
 import threading
 from typing import Dict, List, Union
 
-import torch.nn as nn
 from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.types import ShardingPlan
 
 from .id_transformer_collection import IDTransformerCollection
 from .ps import PSCollection
+from .utils import _get_sharded_modules_recursive
 
 
 __all__ = ["IDTransformerGroup"]
-
-
-def _get_sharded_modules_recursive(
-    module: nn.Module,
-    path: str,
-    plan: ShardingPlan,
-) -> Dict[str, nn.Module]:
-    """
-    Get all sharded modules of module from `plan`.
-    """
-    params_plan = plan.get_plan_for_module(path)
-    if params_plan:
-        return {path: (module, params_plan)}
-
-    res = {}
-    for name, child in module.named_children():
-        new_path = f"{path}.{name}" if path else name
-        res.update(_get_sharded_modules_recursive(child, new_path, plan))
-    return res
 
 
 def _create_transformer_thread(transformer: IDTransformerCollection):
@@ -115,22 +95,6 @@ class IDTransformerGroup:
                 output = m(kjt1, kjt2)
                 ...
         """
-        if "schema" not in ps_config:
-            raise ValueError("schema not found in ps_config")
-        self._ps_schema = ps_config["schema"]
-
-        if "num_optimizer_stats" not in ps_config:
-            raise ValueError("num_optimizer_stats not found in ps_config")
-        num_optimizer_stats = ps_config["num_optimizer_stats"]
-        # Note that `num_optimizer_stats` here does not take the weight into account,
-        # while in C++ side, the weight is also considered a optimizer stat.
-        if num_optimizer_stats > 2 or num_optimizer_stats < 0:
-            raise ValueError(
-                f"num_optimizer_stats must be in [0, 2], got {num_optimizer_stats}"
-            )
-
-        self._num_optimizer_stats = num_optimizer_stats
-
         self._parallel = parallel
 
         # get all sharded_modules from plan
@@ -145,8 +109,8 @@ class IDTransformerGroup:
                     f"Paths for current sharded modules are: {list(sharded_modules.keys())}."
                 )
             sharded_module, params_plan = sharded_modules[path]
-            ps_collection = self._create_ps_collection(
-                path, sharded_module, params_plan
+            ps_collection = PSCollection.fromModule(
+                path, sharded_module, params_plan, ps_config
             )
             id_transformer_collection = IDTransformerCollection(
                 configs, eviction_config, transform_config, ps_collection
@@ -164,46 +128,6 @@ class IDTransformerGroup:
                 self._threads[path] = thread
                 self._input_queues[path] = input_queue
                 self._output_queues[path] = output_queue
-
-    def _create_ps_collection(self, path, sharded_module, params_plan):
-        """
-        Create PSCollection for `sharded_module`, whose module path is `path`
-
-        Args:
-            path: module path of the sharded module.
-            sharded_module: the sharded module.
-            params_plan: the sharding plan of `sharded_module`.
-
-        Return:
-            PSCollection of the sharded module.
-        """
-        state_dict = sharded_module.state_dict()
-        optimizer_state_dict = sharded_module.fused_optimizer.state_dict()["state"]
-        tensor_infos = {}
-        for key, tensor in state_dict.items():
-            # Here we use the fact that state_dict will be shape of
-            # `embeddings.xxx.weight` or `embeddingbags.xxx.weight`
-            if len(key.split(".")) <= 1 or key.split(".")[1] not in params_plan:
-                continue
-            table_name = key.split(".")[1]
-            param_plan = params_plan.pop(table_name)
-            tensors = [tensor]
-            # This is really hardcoded right now...
-            optimizer_state = optimizer_state_dict[key]
-            for i in range(self._num_optimizer_stats):
-                tensors.append(optimizer_state[f"{table_name}.momentum{i+1}"])
-            tensor_infos[table_name] = (param_plan, tensors)
-
-        assert (
-            len(params_plan) == 0
-        ), f"There are sharded param not found, leaving: {params_plan}."
-
-        if isinstance(self._ps_schema, str):
-            collection_config = self._ps_schema
-        else:
-            collection_config = lambda table_name: self._ps_schema(path, table_name)
-
-        return PSCollection(path, tensor_infos, collection_config)
 
     def transform(self, kjt_dict: Dict[str, KeyedJaggedTensor]):
         """

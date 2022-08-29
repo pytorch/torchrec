@@ -6,7 +6,8 @@ import torch.distributed as dist
 import torch.nn as nn
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
-from torchrec_dynamic_embedding import get_ps, IDTransformerCollection
+from torchrec_dynamic_embedding import IDTransformerCollection, PSCollection
+from torchrec_dynamic_embedding.utils import _get_sharded_modules_recursive
 from utils import init_dist, register_memory_io
 
 
@@ -40,14 +41,21 @@ class TestPSCollection(unittest.TestCase):
         ]
         model = Model(configs=configs)
         model = DMP(module=model, device=device)
-        ps_dict = get_ps(model, 0, "memory://")
-        self.assertEqual(len(ps_dict), 1)
-        self.assertTrue("emb" in ps_dict)
-        ps_collection = ps_dict["emb"]
-        keys = ps_collection.keys()
-        self.assertEqual(len(keys), 2)
-        self.assertTrue("AB" in keys)
-        self.assertTrue("C" in keys)
+
+        plan = model.plan
+        sharded_modules = _get_sharded_modules_recursive(model.module, "", plan)
+        sharded_module, params_plan = sharded_modules["emb"]
+        ps_collection = PSCollection.fromModule(
+            "emb",
+            sharded_module,
+            params_plan,
+            {"num_optimizer_stats": 0, "schema": "memory://"},
+        )
+
+        table_names = ps_collection.table_names()
+        self.assertEqual(len(table_names), 2)
+        self.assertTrue("AB" in table_names)
+        self.assertTrue("C" in table_names)
 
     def testModuleEviction(self):
         init_dist()
@@ -69,9 +77,19 @@ class TestPSCollection(unittest.TestCase):
         ]
         model = EmbeddingCollection(tables=configs, device=torch.device("meta"))
         model = DMP(module=model, device=device)
-        ps_dict = get_ps(model, 0, "memory://")
+
+        plan = model.plan
+        sharded_modules = _get_sharded_modules_recursive(model.module, "", plan)
+        sharded_module, params_plan = sharded_modules[""]
+        ps_collection = PSCollection.fromModule(
+            "",
+            sharded_module,
+            params_plan,
+            {"num_optimizer_stats": 0, "schema": "memory://"},
+        )
+
         transformer_collection = IDTransformerCollection(
-            configs, ps_collection=ps_dict[""]
+            configs, ps_collection=ps_collection
         )
 
         # extract weight manually

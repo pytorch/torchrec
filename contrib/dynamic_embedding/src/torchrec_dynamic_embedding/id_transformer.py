@@ -31,10 +31,16 @@ class IDTransformer:
         self._time = 0
 
     def transform(self, global_ids: TensorList, cache_ids: TensorList):
+        """
+        Transform `global_ids` and store the results in `cache_ids`.
+        """
         self._time += 1
         return self._transformer.transform(
             global_ids.tensor_list, cache_ids.tensor_list, self._time
         )
 
     def evict(self, num_to_evict):
+        """
+        Evict `num_to_evict` ids from the transformer.
+        """
         return self._transformer.evict(num_to_evict)

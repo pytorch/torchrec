@@ -15,7 +15,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 
-from torchrec_dynamic_embedding import get_ps, IDTransformerCollection
+from torchrec_dynamic_embedding import IDTransformerGroup
 from utils import init_dist, register_memory_io
 
 register_memory_io()
@@ -103,11 +103,11 @@ class TestPSPrecision(unittest.TestCase):
         model1, optimizer1 = get_dmp(model1)
         model2, optimizer2 = get_dmp(model2)
 
-        ps_dict = get_ps(model2, 2, "memory://")
-        transformer = IDTransformerCollection(
-            [model2_config],
+        transformer = IDTransformerGroup(
+            model2,
+            {"emb": [model2_config]},
+            ps_config={"num_optimizer_stats": 2, "schema": "memory://"},
             transform_config={"type": "naive"},
-            ps_collection=ps_dict["emb"],
         )
 
         def sigmoid_crossentropy(y_true, y_pred):
@@ -120,7 +120,7 @@ class TestPSPrecision(unittest.TestCase):
                 values=torch.randint(0, 1000, (40,), dtype=torch.long),
                 lengths=torch.tensor([10, 10, 10, 10], dtype=torch.long),
             )
-            mapped_kjt = transformer.transform(kjt)
+            mapped_kjt = transformer.transform({"emb": kjt})["emb"]
             label = torch.randint(0, 2, (4, 1), device=device).float()
             kjt = kjt.to(device)
             mapped_kjt = mapped_kjt.to(device)

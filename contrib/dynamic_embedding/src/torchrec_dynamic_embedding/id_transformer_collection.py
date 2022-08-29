@@ -13,11 +13,24 @@ __all__ = ["IDTransformerCollection"]
 class IDTransformerCollection:
     def __init__(
         self,
-        tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
+        tables: Union[List[EmbeddingConfig], List[EmbeddingBagConfig]],
         eviction_config=None,
         transform_config=None,
         ps_collection: PSCollection = None,
     ):
+        """
+        IDTransformerCollection could transform the input of a `Embedding(Bag)Collection`.
+        It contains the `IDTransformer` of tables in the
+        `Embedding(Bag)Collection`.
+
+        Args:
+            tables: list of `Embedding(Bag)Config` or `EmbeddingBagConfig` one passed to
+                `Embedding(Bag)Collection`.
+            eviction_config: config of the eviction strategy for IDTransformers.
+            transformer_config: config of the transform strategy for IDTransformers.
+            ps_collection: `PSCollection` of the collection, if `None`, won't do eviction or fetch.
+                By default, IDTransformerCollection will evict half the ids when full.
+        """
         self._configs = tables
         self._ps_collection = ps_collection
 
@@ -46,6 +59,9 @@ class IDTransformerCollection:
         self._ever_evicted = False
 
     def transform(self, global_features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+        """
+        Transform global kjts into local kjts.
+        """
         global_values = global_features.values()
         cache_values = torch.empty_like(global_values)
 
