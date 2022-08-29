@@ -20,11 +20,11 @@ def _create_transformer_thread(transformer: IDTransformerCollection):
 
     def loop(transformer, input_queue, output_queue):
         while True:
-            local_kjt = input_queue.get()
-            if local_kjt is None:
+            global_kjt = input_queue.get()
+            if global_kjt is None:
                 break
-            global_kjt = transformer.transform(local_kjt)
-            output_queue.put(global_kjt)
+            cache_kjt = transformer.transform(global_kjt)
+            output_queue.put(cache_kjt)
 
     input_queue = queue.Queue()
     output_queue = queue.Queue()
@@ -77,20 +77,14 @@ class IDTransformerGroup:
             m = DistributedModelParallel(m)
             transformers = IDTransformerGroup(
                 m,
-                {
-                    "emb1": config1,
-                    "emb2": config2,
-                },
+                { "emb1": config1, "emb2": config2 },
                 ps_configs={
                     "num_optimizer_stats": 2,
                     "schema": "memory://"
                 })
 
-            for kjt1, kjt2 in dataset:
-                kjts = transformers.transform({
-                    "emb1": kjt1,
-                    "emb2": kjt2,
-                })
+            for label, kjt1, kjt2 in dataset:
+                kjts = transformers.transform({ "emb1": kjt1, "emb2": kjt2 })
                 kjt1, kjt2 = kjts["emb1"], kjts["emb2"]
                 output = m(kjt1, kjt2)
                 ...
@@ -159,6 +153,12 @@ class IDTransformerGroup:
                     )
                 result[path] = self._id_transformer_collections[path].transform(kjt)
         return result
+
+    def __contains__(self, path):
+        """
+        Check if there is transformer for the path.
+        """
+        return path in self._id_transformer_collections
 
     def __del__(self):
         """
