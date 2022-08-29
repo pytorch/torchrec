@@ -95,7 +95,7 @@ struct IDTransformerCreator<LXURecordType, type_list<>>
     : public IDTransformerCreatorBase {
   using IDTransformerCreatorBase::IDTransformerCreatorBase;
   IDTransformer::Variant operator()() {
-    TORCH_CHECK(false, "not support type %s", type_);
+    TORCH_CHECK(false, "not support transformer type: ", type_);
   }
 };
 
