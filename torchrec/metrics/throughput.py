@@ -54,8 +54,8 @@ class ThroughputMetric(nn.Module):
                   )
     """
 
-    _namespace: MetricNamespace
-    _metric_name: MetricName
+    _namespace: MetricNamespace = MetricNamespace.THROUGHPUT
+    _metric_name: MetricName = MetricName.THROUGHPUT
     _batch_examples: int
     _window_seconds: int
     _warmup_steps: int
@@ -76,8 +76,6 @@ class ThroughputMetric(nn.Module):
         warmup_steps: int = 100,
     ) -> None:
         super().__init__()
-        self._namespace = MetricNamespace.THROUGHPUT
-        self._metric_name = MetricName.THROUGHPUT
         if window_seconds < 1:
             raise ValueError(
                 "window_seconds must be at least 1 to give window throughput "
