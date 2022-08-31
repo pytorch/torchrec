@@ -228,10 +228,11 @@ void GPUExecutor::process(int idx) {
 
           if (predictions.isNone()) {
             observer->addPredictionExceptionCount(1);
-            rejectionExecutor_->add([batch = std::move(batch)]() {
-              handleBatchException(
-                  batch->contexts, "GPUExecutor prediction exception");
-            });
+            rejectionExecutor_->add(
+                [contexts = std::move(batch->contexts)]() mutable {
+                  handleBatchException(
+                      contexts, "GPUExecutor prediction exception");
+                });
           } else {
             size_t offset = 0;
             auto rsfStart = std::chrono::steady_clock::now();
