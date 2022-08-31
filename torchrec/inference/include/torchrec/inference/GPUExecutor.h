@@ -19,7 +19,13 @@
 #include <folly/io/IOBuf.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+
+// remove this after we switch over to multipy externally for torchrec
+#ifdef FBCODE_CAFFE2
+#include <multipy/runtime/deploy.h> // @manual
+#else
 #include <torch/csrc/deploy/deploy.h> // @manual
+#endif
 
 #include "torchrec/inference/BatchingQueue.h"
 #include "torchrec/inference/Observer.h"
