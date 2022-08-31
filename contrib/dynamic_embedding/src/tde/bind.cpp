@@ -1,7 +1,8 @@
+#include <torch/torch.h>
+
 #include "tde/id_transformer.h"
 #include "tde/ps.h"
 
-#include "torch/torch.h"
 namespace tde {
 TORCH_LIBRARY(tde, m) {
   details::IORegistry::RegisterAllDefaultIOs();
@@ -36,6 +37,9 @@ TORCH_LIBRARY(tde, m) {
         return c10::make_intrusive<LocalShardList>();
       }))
       .def("append", &LocalShardList::emplace_back);
+
+  m.class_<FetchHandle>("FetchHandle")
+      .def("wait", &FetchHandle::Wait);
 
   m.class_<PS>("PS")
       .def(torch::init<std::string, c10::intrusive_ptr<LocalShardList>, int64_t, int64_t, std::string>())

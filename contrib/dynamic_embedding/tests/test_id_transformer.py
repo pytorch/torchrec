@@ -43,12 +43,12 @@ class TestIDTransformer(unittest.TestCase):
         python_transformer = PythonIdTransformer(num_embedding)
         global_ids = torch.empty(shape, dtype=torch.int64)
 
-        for _ in range(10):
+        for timestamp in range(10):
             global_ids.random_(0, 512)
             cache_ids = torch.empty_like(global_ids)
 
             result = transformer.transform(
-                TensorList([global_ids]), TensorList([cache_ids])
+                TensorList([global_ids]), TensorList([cache_ids]), timestamp
             )
             success, ids_to_fetch = result.success, result.ids_to_fetch
             self.assertTrue(success)
@@ -75,13 +75,13 @@ class TestIDTransformer(unittest.TestCase):
         global_ids = torch.tensor([1, 2, 3, 4], dtype=torch.long)
         cache_ids = torch.empty_like(global_ids)
         result = transformer.transform(
-            TensorList([global_ids]), TensorList([cache_ids])
+            TensorList([global_ids]), TensorList([cache_ids]), 0
         )
         self.assertTrue(result.success)
 
         global_ids = torch.tensor([1, 3, 5, 7], dtype=torch.long)
         result = transformer.transform(
-            TensorList([global_ids]), TensorList([cache_ids])
+            TensorList([global_ids]), TensorList([cache_ids]), 1
         )
         self.assertTrue(result.success)
 

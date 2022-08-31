@@ -28,15 +28,13 @@ class IDTransformer:
             }
         )
         self._transformer = torch.classes.tde.IDTransformer(num_embedding, config)
-        self._time = 0
 
-    def transform(self, global_ids: TensorList, cache_ids: TensorList):
+    def transform(self, global_ids: TensorList, cache_ids: TensorList, time: int):
         """
         Transform `global_ids` and store the results in `cache_ids`.
         """
-        self._time += 1
         return self._transformer.transform(
-            global_ids.tensor_list, cache_ids.tensor_list, self._time
+            global_ids.tensor_list, cache_ids.tensor_list, time
         )
 
     def evict(self, num_to_evict):

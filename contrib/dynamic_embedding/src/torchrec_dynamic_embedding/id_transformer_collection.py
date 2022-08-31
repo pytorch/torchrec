@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import torch
 from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
@@ -57,10 +57,17 @@ class IDTransformerCollection:
             config.feature_names for config in tables
         ]
         self._ever_evicted = False
+        self._time = 0
 
-    def transform(self, global_features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+    def transform(
+        self, global_features: KeyedJaggedTensor
+    ) -> Tuple[KeyedJaggedTensor, List[torch.classes.tde.FetchHandle]]:
         """
         Transform global kjts into local kjts.
+
+        Return:
+            KeyedJaggedTensor: the transformed kjt.
+            List[torch.classes.tde.FetchHandle]: list of fetch handles to wait.
         """
         global_values = global_features.values()
         cache_values = torch.empty_like(global_values)
@@ -70,6 +77,7 @@ class IDTransformerCollection:
         }
         offset_per_key = global_features.offset_per_key()
 
+        fetch_handles = []
         for i, transformer in enumerate(self._transformers):
             feature_names = self._feature_names[i]
             feature_indices = [
@@ -85,18 +93,20 @@ class IDTransformerCollection:
             ]
 
             result = transformer.transform(
-                TensorList(global_ids), TensorList(cache_ids)
+                TensorList(global_ids), TensorList(cache_ids), self._time
             )
             if self._ps_collection is not None:
                 table_name = self._table_names[i]
                 ps = self._ps_collection[table_name]
-                if result.ids_to_fetch is not None:
-                    ps.fetch(
+                if result.ids_to_fetch.numel() > 0:
+                    handle = ps.fetch(
                         result.ids_to_fetch,
+                        self._time,
                         self._ever_evicted,
                         self._configs[i].get_weight_init_min(),
                         self._configs[i].get_weight_init_max(),
                     )
+                    fetch_handles.append(handle)
                 if not result.success:
                     # TODO(zilinzhu): make this configurable
                     ids_to_evict = transformer.evict(transformer._num_embedding // 2)
@@ -105,7 +115,7 @@ class IDTransformerCollection:
 
                     # retry after eviction.
                     result = transformer.transform(
-                        TensorList(global_ids), TensorList(cache_ids)
+                        TensorList(global_ids), TensorList(cache_ids), self._time
                     )
                     if not result.success:
                         raise RuntimeError(
@@ -113,11 +123,14 @@ class IDTransformerCollection:
                             f"Maybe the num_embedding of table {table_name} is too small?"
                         )
                     if result.ids_to_fetch is not None:
-                        ps.fetch(
-                            result.ids_to_fetch,
-                            self._ever_evicted,
-                            self._configs[i].get_weight_init_min(),
-                            self._configs[i].get_weight_init_max(),
+                        fetch_handles.append(
+                            ps.fetch(
+                                result.ids_to_fetch,
+                                self._time,
+                                self._ever_evicted,
+                                self._configs[i].get_weight_init_min(),
+                                self._configs[i].get_weight_init_max(),
+                            )
                         )
 
         cache_values = KeyedJaggedTensor(
@@ -126,4 +139,5 @@ class IDTransformerCollection:
             lengths=global_features.lengths(),
             weights=global_features.weights_or_none(),
         )
-        return cache_values
+        self._time += 1
+        return cache_values, fetch_handles

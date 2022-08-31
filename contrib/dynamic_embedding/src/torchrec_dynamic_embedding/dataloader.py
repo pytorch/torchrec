@@ -53,7 +53,10 @@ class DataLoaderIter:
     def _get_data(self):
         if not self._transform_thread.is_alive():
             raise RuntimeError("Transform thread exited unexpectedly")
-        return self._data_queue.get()
+        data, handles = self._data_queue.get()
+        for handle in handles:
+            handle.wait()
+        return data
 
 
 class DataLoader:
@@ -147,11 +150,11 @@ class DataLoader:
         transform data with `data_info`
         """
         global_kjts = {path: data[idx] for idx, path in self._data_info.items()}
-        cache_kjts = self._id_transformer_group.transform(global_kjts)
+        cache_kjts, fetch_handles = self._id_transformer_group.transform(global_kjts)
         data = list(data)
         for idx, path in self._data_info.items():
             data[idx] = cache_kjts[path]
-        return tuple(data)
+        return tuple(data), fetch_handles
 
     def __iter__(self):
         return DataLoaderIter(

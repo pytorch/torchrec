@@ -18,7 +18,7 @@ class TestPS(unittest.TestCase):
         ps = PS("table", [tensor], "memory://")
         ps.evict(ids)
         tensor[:, :] = 0
-        ps.fetch(ids)
+        ps.fetch(ids, 0).wait()
         self.assertTrue(torch.allclose(tensor[cache_ids], origin_tensor[cache_ids]))
 
     def testOS(self):
@@ -35,7 +35,7 @@ class TestPS(unittest.TestCase):
         tensor[:, :] = 0
         optim1[:, :] = 0
         optim2[:, :] = 0
-        ps.fetch(ids)
+        ps.fetch(ids, 0).wait()
         self.assertTrue(torch.allclose(tensor[cache_ids], origin_tensor[cache_ids]))
         self.assertTrue(torch.allclose(optim1[cache_ids], origin_optim1[cache_ids]))
         self.assertTrue(torch.allclose(optim2[cache_ids], origin_optim2[cache_ids]))
@@ -54,7 +54,7 @@ class TestPS(unittest.TestCase):
         fetch_ids = torch.tensor(
             [[100, 1], [101, 3], [102, 5], [103, 7]], dtype=torch.long
         )
-        ps.fetch(fetch_ids)
+        ps.fetch(fetch_ids, 0).wait()
         self.assertTrue(torch.allclose(tensor[new_cache_ids], origin_tensor[cache_ids]))
 
     def testFetchNonExist(self):
@@ -67,7 +67,7 @@ class TestPS(unittest.TestCase):
         tensor[:, :] = 0
         addition_cache_ids = [3, 9]
         additional_fetch_ids = torch.tensor([[103, 3], [104, 9]], dtype=torch.long)
-        ps.fetch(torch.cat([evict_ids, additional_fetch_ids]))
+        ps.fetch(torch.cat([evict_ids, additional_fetch_ids]), 0).wait()
         self.assertTrue(torch.allclose(tensor[cache_ids], origin_tensor[cache_ids]))
         self.assertTrue(
             torch.allclose(

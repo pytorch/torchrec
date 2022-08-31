@@ -72,6 +72,7 @@ class PS:
     def fetch(
         self,
         ids_to_fetch: torch.Tensor,
+        time: int,
         reinit: bool = False,
         weight_init_max: float = 0,
         weight_init_min: float = 0,
@@ -80,7 +81,9 @@ class PS:
         Fetch `ids_to_fetch` from tensor. If `reinit` is set to `True`, will
         reinitialize the embedding if the global id is not in PS.
         """
-        self._ps.fetch(ids_to_fetch, reinit, weight_init_max, weight_init_min)
+        return self._ps.fetch(
+            ids_to_fetch, time, reinit, weight_init_max, weight_init_min
+        )
 
 
 class PSCollection:

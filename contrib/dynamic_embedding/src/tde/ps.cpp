@@ -1,11 +1,11 @@
 #include "tde/ps.h"
 #include "tde/details/io.h"
-#include "tde/details/notification.h"
 
 namespace tde {
 
-void PS::Fetch(
+c10::intrusive_ptr<FetchHandle> PS::Fetch(
     torch::Tensor ids_to_fetch,
+    int64_t time,
     bool reinit,
     double weight_init_min,
     double weight_init_max) {
@@ -13,10 +13,11 @@ void PS::Fetch(
   std::vector<int64_t> col_ids{0};
   Filter(ids_to_fetch);
   if (cache_ids_to_fetch_or_evict_.empty()) {
-    return;
+    return c10::make_intrusive<FetchHandle>(time, c10::intrusive_ptr<PS>());
   }
+  fetch_notifications_.emplace_back(time, c10::make_intrusive<Notification>());
+  c10::intrusive_ptr<Notification> notification = fetch_notifications_.back().second;
   uint32_t num_os_ids = os_ids_.size();
-  details::Notification notification;
   io_.Pull(
       table_name_,
       global_ids_to_fetch_or_evict_,
@@ -45,9 +46,12 @@ void PS::Fetch(
             tensors[j].copy_(fetched.slice(0, j, j + 1));
           }
         }
-        notification.Done();
+        notification->Done();
       });
-  notification.Wait();
+  // `unsafe_reclain_from_nonowning` is the `instrusive_ptr` version of `enable_shared_from_this`
+  return c10::make_intrusive<FetchHandle>(
+      time,
+      c10::intrusive_ptr<PS>::unsafe_reclaim_from_nonowning(this));
 }
 
 void PS::Filter(const torch::Tensor& tensor) {
@@ -69,6 +73,9 @@ void PS::Filter(const torch::Tensor& tensor) {
 
 void PS::Evict(torch::Tensor ids_to_evict) {
   TORCH_CHECK(ids_to_evict.dim() == 2);
+  // make sure all previous fetches are done.
+  SyncFetch();
+
   std::vector<int64_t> col_ids{0};
   // remove this copy!
   Filter(ids_to_evict);
@@ -112,6 +119,17 @@ void PS::Evict(torch::Tensor ids_to_evict) {
       [&notification] { notification.Done(); });
 
   notification.Wait();
+}
+
+void PS::SyncFetch(int64_t time) {
+  while (!fetch_notifications_.empty()) {
+    auto& [t, notification] = fetch_notifications_.front();
+    if (t != time && time >= 0) {
+      break;
+    }
+    notification->Wait();
+    fetch_notifications_.pop_front();
+  }
 }
 
 std::vector<torch::Tensor> PS::GetTensorViews(int64_t cache_id) {

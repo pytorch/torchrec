@@ -2,8 +2,10 @@
 #include <torch/custom_class.h>
 #include <torch/torch.h>
 
+#include <deque>
 #include <utility>
 #include "tde/details/io.h"
+#include "tde/notification.h"
 #include "tde/tensor_list.h"
 
 namespace tde {
@@ -57,6 +59,8 @@ class LocalShardList : public torch::CustomClassHolder {
   Container shards_;
 };
 
+class FetchHandle;
+
 class PS : public torch::CustomClassHolder {
  public:
   PS(std::string table_name,
@@ -74,12 +78,15 @@ class PS : public torch::CustomClassHolder {
     }
   }
 
-  void Fetch(
+  c10::intrusive_ptr<FetchHandle> Fetch(
       torch::Tensor ids_to_fetch,
+      int64_t time,
       bool reinit,
       double weight_init_min,
       double weight_init_max);
   void Evict(torch::Tensor ids_to_evict);
+
+  void SyncFetch(int64_t time = -1);
 
  private:
   std::vector<torch::Tensor> GetTensorViews(int64_t cache_id);
@@ -93,6 +100,20 @@ class PS : public torch::CustomClassHolder {
   int64_t col_size_;
   std::vector<uint32_t> os_ids_;
   details::IO io_;
+  std::deque<std::pair<int64_t, c10::intrusive_ptr<Notification>>> fetch_notifications_;
+};
+
+struct FetchHandle : public torch::CustomClassHolder {
+ public:
+  FetchHandle(int64_t time, c10::intrusive_ptr<PS> ps) : time_(time), ps_(std::move(ps)) {}
+  void Wait() {
+    if (ps_ != nullptr)
+      ps_->SyncFetch(time_);
+  }
+
+ private:
+  int64_t time_;
+  c10::intrusive_ptr<PS> ps_;  // not owned
 };
 
 } // namespace tde

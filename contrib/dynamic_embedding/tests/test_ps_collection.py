@@ -106,7 +106,9 @@ class TestPSCollection(unittest.TestCase):
             values=torch.tensor([1, 2, 3, 4, 1, 2]),
             lengths=torch.tensor([4, 2]),
         )
-        cache_kjt = transformer_collection.transform(global_kjt_1)
+        cache_kjt, fetch_handles = transformer_collection.transform(global_kjt_1)
+        for handle in fetch_handles:
+            handle.wait()
         embedding = model(cache_kjt.to(device))
         self.assertTrue(
             torch.all(cache_kjt.values() == torch.tensor([0, 1, 2, 3, 0, 1]))
@@ -129,7 +131,9 @@ class TestPSCollection(unittest.TestCase):
         )
 
         # this will evict 3 and 4
-        cache_kjt = transformer_collection.transform(global_kjt_2)
+        cache_kjt, fetch_handles = transformer_collection.transform(global_kjt_2)
+        for handle in fetch_handles:
+            handle.wait()
         embedding = model(cache_kjt.to(device))
         self.assertTrue(
             torch.all(cache_kjt.values() == torch.tensor([0, 1, 0, 2, 2, 3]))
@@ -152,7 +156,9 @@ class TestPSCollection(unittest.TestCase):
             values=torch.tensor([1, 2, 1, 4, 3, 4]),
             lengths=torch.tensor([3, 3]),
         )
-        cache_kjt = transformer_collection.transform(global_kjt_3)
+        cache_kjt, fetch_handles = transformer_collection.transform(global_kjt_3)
+        for handle in fetch_handles:
+            handle.wait()
         embedding = model(cache_kjt.to(device))
         self.assertTrue(
             torch.all(cache_kjt.values() == torch.tensor([0, 1, 0, 2, 3, 2]))

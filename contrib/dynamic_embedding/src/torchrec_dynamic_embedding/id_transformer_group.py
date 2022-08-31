@@ -131,8 +131,10 @@ class IDTransformerGroup:
             kjt_dict: dict keyed by module path of global kjts.
         Return:
             Dict[str, KeyedJaggedTensor]
+            List[torch.classes.tde.FetchHandle]: list of fetch handles to wait.
         """
         result = {}
+        fetch_handles = []
         if self._parallel:
             for path, kjt in kjt_dict.items():
                 if path not in self._id_transformer_collections:
@@ -143,7 +145,9 @@ class IDTransformerGroup:
                 self._input_queues[path].put(kjt)
 
             for path in kjt_dict:
-                result[path] = self._output_queues[path].get()
+                kjt, handles = self._output_queues[path].get()
+                result[path] = kjt
+                fetch_handles.extend(handles)
         else:
             for path, kjt in kjt_dict.items():
                 if path not in self._id_transformer_collections:
@@ -151,8 +155,16 @@ class IDTransformerGroup:
                         f"kjt_dict contain invalid path {path}. "
                         f"should be one of {self._id_transformer_collections.keys()}"
                     )
-                result[path] = self._id_transformer_collections[path].transform(kjt)
-        return result
+                kjt, handles = self._id_transformer_collections[path].transform(kjt)
+                result[path] = kjt
+                fetch_handles.extend(handles)
+        return result, fetch_handles
+
+    def __contains__(self, path):
+        """
+        Check if there is transformer for the path.
+        """
+        return path in self._id_transformer_collections
 
     def __contains__(self, path):
         """

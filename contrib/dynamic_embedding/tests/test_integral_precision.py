@@ -120,7 +120,10 @@ class TestPSPrecision(unittest.TestCase):
                 values=torch.randint(0, 1000, (40,), dtype=torch.long),
                 lengths=torch.tensor([10, 10, 10, 10], dtype=torch.long),
             )
-            mapped_kjt = transformer.transform({"emb": kjt})["emb"]
+            kjts, fetch_handles = transformer.transform({"emb": kjt})
+            for handle in fetch_handles:
+                handle.wait()
+            mapped_kjt = kjts["emb"]
             label = torch.randint(0, 2, (4, 1), device=device).float()
             kjt = kjt.to(device)
             mapped_kjt = mapped_kjt.to(device)
