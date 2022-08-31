@@ -145,17 +145,12 @@ class Tracer(torch.fx.Tracer):
     # that, we can likely remove this line
     proxy_buffer_attributes = False
 
-    def __init__(self, unsharded_module_names: Optional[List[str]] = None) -> None:
+    def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
         super().__init__()
-        self._unsharded_module_names: List[str] = (
-            unsharded_module_names if unsharded_module_names is not None else []
-        )
+        self._leaf_modules: List[str] = leaf_modules if leaf_modules is not None else []
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if (
-            isinstance(m, ShardedModule)
-            or module_qualified_name in self._unsharded_module_names
-        ):
+        if isinstance(m, ShardedModule) or module_qualified_name in self._leaf_modules:
             return True
         return super().is_leaf_module(m, module_qualified_name)
 
@@ -417,7 +412,7 @@ def _rewrite_model(  # noqa C901
             fp_modules[name] = m
 
     # Trace a model.
-    tracer = Tracer(_get_unsharded_module_names(model))
+    tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
     graph = tracer.trace(model)
 
     feature_processor_nodes = []
