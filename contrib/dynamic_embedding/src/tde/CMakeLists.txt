@@ -3,9 +3,9 @@ add_library(tde_cpp_objs OBJECT id_transformer.cpp ps.cpp
         details/naive_id_transformer.cpp
         details/cacheline_id_transformer.cpp
         details/io.cpp details/io_registry.cpp
-        details/move_only_function.cpp details/thread_pool.cpp
+        details/move_only_function.cpp
         details/random_bits_generator.cpp details/mixed_lfu_lru_strategy.cpp
-        details/clz_impl.cpp details/ctz_impl.cpp details/id_transformer_registry.cpp
+        details/clz_impl.cpp details/ctz_impl.cpp
         details/id_transformer_variant.cpp details/redis_io.cpp details/redis_io_v1.cpp
         details/notification.cpp)
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../)
@@ -44,14 +44,12 @@ if (TDE_WITH_TESTING)
     add_tde_benchmark(cacheline_id_transformer_benchmark details/cacheline_id_transformer_benchmark.cpp)
 
     add_tde_test(move_only_function_test details/move_only_function_test.cpp)
-    add_tde_test(thread_pool_test details/thread_pool_test.cpp)
     add_tde_test(random_bits_generator_test details/random_bits_generator_test.cpp)
     add_tde_test(mixed_lfu_lru_strategy_test details/mixed_lfu_lru_strategy_test.cpp)
     add_tde_test(bits_op_test details/bits_op_test.cpp)
     add_tde_benchmark(mixed_lfu_lru_strategy_benchmark details/mixed_lfu_lru_strategy_benchmark.cpp)
     add_tde_benchmark(random_bits_generator_benchmark details/random_bits_generator_benchmark.cpp)
-    add_tde_test(id_transformer_registry_test details/id_transformer_registry_test.cpp)
-    add_tde_test(id_transformer_factory_test details/id_transformer_variant_test.cpp)
+    add_tde_test(id_transformer_variant_test details/id_transformer_variant_test.cpp)
     # TODO: Need start a empty redis-server on 127.0.0.1:6379 before run *redis*_test.
     add_tde_test(redis_io_v1_test details/redis_io_v1_test.cpp)
     add_tde_test(io_redis_test details/io_redis_test.cpp)

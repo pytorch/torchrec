@@ -100,12 +100,14 @@ class PS : public torch::CustomClassHolder {
   int64_t col_size_;
   std::vector<uint32_t> os_ids_;
   details::IO io_;
-  std::deque<std::pair<int64_t, c10::intrusive_ptr<Notification>>> fetch_notifications_;
+  std::deque<std::pair<int64_t, c10::intrusive_ptr<Notification>>>
+      fetch_notifications_;
 };
 
 struct FetchHandle : public torch::CustomClassHolder {
  public:
-  FetchHandle(int64_t time, c10::intrusive_ptr<PS> ps) : time_(time), ps_(std::move(ps)) {}
+  FetchHandle(int64_t time, c10::intrusive_ptr<PS> ps)
+      : time_(time), ps_(std::move(ps)) {}
   void Wait() {
     if (ps_ != nullptr)
       ps_->SyncFetch(time_);
@@ -113,7 +115,7 @@ struct FetchHandle : public torch::CustomClassHolder {
 
  private:
   int64_t time_;
-  c10::intrusive_ptr<PS> ps_;  // not owned
+  c10::intrusive_ptr<PS> ps_; // not owned
 };
 
 } // namespace tde

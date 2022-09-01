@@ -16,7 +16,8 @@ c10::intrusive_ptr<FetchHandle> PS::Fetch(
     return c10::make_intrusive<FetchHandle>(time, c10::intrusive_ptr<PS>());
   }
   fetch_notifications_.emplace_back(time, c10::make_intrusive<Notification>());
-  c10::intrusive_ptr<Notification> notification = fetch_notifications_.back().second;
+  c10::intrusive_ptr<Notification> notification =
+      fetch_notifications_.back().second;
   uint32_t num_os_ids = os_ids_.size();
   io_.Pull(
       table_name_,
@@ -48,10 +49,10 @@ c10::intrusive_ptr<FetchHandle> PS::Fetch(
         }
         notification->Done();
       });
-  // `unsafe_reclain_from_nonowning` is the `instrusive_ptr` version of `enable_shared_from_this`
+  // `unsafe_reclain_from_nonowning` is the `instrusive_ptr` version of
+  // `enable_shared_from_this`
   return c10::make_intrusive<FetchHandle>(
-      time,
-      c10::intrusive_ptr<PS>::unsafe_reclaim_from_nonowning(this));
+      time, c10::intrusive_ptr<PS>::unsafe_reclaim_from_nonowning(this));
 }
 
 void PS::Filter(const torch::Tensor& tensor) {

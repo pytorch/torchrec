@@ -1,5 +1,4 @@
 #include "tde/id_transformer.h"
-#include "tde/details/debug.h"
 #include "tde/details/move_only_function.h"
 namespace tde {
 
@@ -7,7 +6,7 @@ IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
     : transformer_(
           std::move(details::LXUStrategy(json["lxu_strategy"])),
           num_embedding,
-          json["id_transformer"]) {}
+          static_cast<const std::string&>(json["id_transformer"]["type"])) {}
 
 c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
     c10::intrusive_ptr<TensorList> global_id_list,

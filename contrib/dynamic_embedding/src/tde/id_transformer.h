@@ -7,8 +7,8 @@
 namespace tde {
 
 struct TransformResult : public torch::CustomClassHolder {
-  TransformResult(bool success, torch::Tensor ids_to_fetch) :
-    success_(success), ids_to_fetch_(ids_to_fetch) {}
+  TransformResult(bool success, torch::Tensor ids_to_fetch)
+      : success_(success), ids_to_fetch_(ids_to_fetch) {}
   bool success_;
   torch::Tensor ids_to_fetch_;
 };

@@ -8,7 +8,6 @@
 #include "tde/details/move_only_function.h"
 #include "tde/details/naive_id_transformer.h"
 #include "tde/details/random_bits_generator.h"
-#include "tde/details/type_list.h"
 
 namespace tde::details {
 

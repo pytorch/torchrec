@@ -1,8 +1,8 @@
 #pragma once
 #include <algorithm>
 #include <vector>
+#include <torch/torch.h>
 #include "tde/details/bits_op.h"
-#include "torch/torch.h"
 
 namespace tde::details {
 
@@ -61,14 +61,13 @@ inline bool CachelineIDTransformer<
   for (size_t i = 0; i < global_ids.size(); ++i) {
     int64_t global_id = global_ids[i];
     auto [group_id, intra_id] = FindGroupIndex(global_id);
-
-    CacheValue* group_begin = &cache_values_[group_id];
+    int64_t global_id_not = ~global_id;
+    CacheValue* group_begin = &cache_values_[group_id * group_size_];
     int64_t k = 0;
     for (; k < group_size_; k++, intra_id++) {
       intra_id %= group_size_;
       auto& cache_value = group_begin[intra_id];
       // tricky but fast :p
-      int64_t global_id_not = ~global_id;
       int64_t xor_value = cache_value.global_id_not_ ^ global_id_not;
       if (xor_value > 0) {
         continue;

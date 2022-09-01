@@ -6,8 +6,12 @@ namespace tde {
 
 class Notification : public torch::CustomClassHolder {
  public:
-  void Done() { return notification_.Done(); }
-  void Wait() { return notification_.Wait(); }
+  void Done() {
+    return notification_.Done();
+  }
+  void Wait() {
+    return notification_.Wait();
+  }
 
  private:
   details::Notification notification_;

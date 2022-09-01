@@ -1,20 +1,30 @@
 #pragma once
 #include <type_traits>
+#include <variant>
 #include "nlohmann/json.hpp"
-#include "tde/details/id_transformer_registry.h"
+//#include "tde/details/id_transformer_registry.h"
+#include <variant>
+#include "tde/details/mixed_lfu_lru_strategy.h"
+#include "tde/details/naive_id_transformer.h"
+#include "tde/details/cacheline_id_transformer.h"
+
 namespace tde::details {
+
+using LXUStrategies = std::tuple<MixedLFULRUStrategy>;
+using LXURecordTypes = std::tuple<MixedLFULRUStrategy::lxu_record_t>;
 
 struct LXUStrategy {
  private:
-  using _FirstLXURecord = std::tuple_element_t<0, to_tuple_t<LXURecordTypes>>;
+  using _FirstLXURecord = std::tuple_element_t<0, LXURecordTypes>;
   using _UpdateFunctor = std::function<
       _FirstLXURecord(std::optional<_FirstLXURecord>, int64_t, int64_t)>;
 
  public:
-  using Variant = to_variant_t<LXUStrategies>;
-  using lxu_record_t = to_variant_t<LXURecordTypes>;
+  using Variant = std::variant<MixedLFULRUStrategy>;
+  using lxu_record_t = std::variant<MixedLFULRUStrategy::lxu_record_t>;
 
-  explicit LXUStrategy(const nlohmann::json& json);
+  explicit LXUStrategy(const nlohmann::json& json)
+    : strategy_(MixedLFULRUStrategy(json.value("min_used_freq_power", 5))) {}
 
   void UpdateTime(uint32_t time);
 
@@ -49,12 +59,15 @@ struct LXUStrategy {
 };
 
 struct IDTransformer {
-  using Variant = to_variant_t<Transformers>;
+  using Variant = std::variant<NaiveIDTransformer<uint32_t>, CachelineIDTransformer<uint32_t>>;
 
   IDTransformer(
       LXUStrategy strategy,
       int64_t num_embeddings,
-      const nlohmann::json& json);
+      const std::string& type)
+    : strategy_(std::move(strategy)),
+      var_(type == "naive" ? Variant(NaiveIDTransformer<uint32_t>(num_embeddings)) :
+                             Variant(CachelineIDTransformer<uint32_t>(num_embeddings))) {}
 
   /**
    * Transform GlobalIDs to CacheIDs.

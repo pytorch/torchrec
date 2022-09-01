@@ -30,7 +30,7 @@ class CachelineIDTransformerIterator {
   std::optional<TransformerRecord<LXURecord>> operator()() {
     for (; begin_ != end_;) {
       auto& record = *begin_++;
-      if (record.global_id_not_ > 0) {
+      if (record.global_id_not_ >= 0) {
         continue;
       }
       TransformerRecord<LXURecord> result{};

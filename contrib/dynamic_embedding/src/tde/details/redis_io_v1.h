@@ -1,9 +1,12 @@
 #pragma once
+#include <condition_variable>
+#include <deque>
 #include <string>
 #include <string_view>
+#include <thread>
 #include "hiredis.h"
 #include "tde/details/io_registry.h"
-#include "tde/details/thread_pool.h"
+#include "tde/details/move_only_function.h"
 
 namespace tde::details::redis_v1 {
 
