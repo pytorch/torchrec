@@ -2,33 +2,33 @@
 #include <type_traits>
 #include <variant>
 #include "nlohmann/json.hpp"
-//#include "tde/details/id_transformer_registry.h"
-#include <variant>
+#include "tde/details/cacheline_id_transformer.h"
 #include "tde/details/mixed_lfu_lru_strategy.h"
 #include "tde/details/naive_id_transformer.h"
-#include "tde/details/cacheline_id_transformer.h"
 
 namespace tde::details {
 
-using LXUStrategies = std::tuple<MixedLFULRUStrategy>;
-using LXURecordTypes = std::tuple<MixedLFULRUStrategy::lxu_record_t>;
-
 struct LXUStrategy {
  private:
-  using _FirstLXURecord = std::tuple_element_t<0, LXURecordTypes>;
-  using _UpdateFunctor = std::function<
-      _FirstLXURecord(std::optional<_FirstLXURecord>, int64_t, int64_t)>;
+  // use to indicate VisitUpdator 's result
+  using _UpdateFunctor = std::function<MixedLFULRUStrategy::lxu_record_t(
+      std::optional<MixedLFULRUStrategy::lxu_record_t>,
+      int64_t,
+      int64_t)>;
 
  public:
-  using Variant = std::variant<MixedLFULRUStrategy>;
-  using lxu_record_t = std::variant<MixedLFULRUStrategy::lxu_record_t>;
-
   explicit LXUStrategy(const nlohmann::json& json)
-    : strategy_(MixedLFULRUStrategy(json.value("min_used_freq_power", 5))) {}
+      : strategy_(MixedLFULRUStrategy(json.value("min_used_freq_power", 5))) {
+    if (auto it = json.find("type"); it != json.end()) {
+      TORCH_CHECK(
+          static_cast<std::string>(it.value()) == MixedLFULRUStrategy::type_,
+          "json type must be mixed_lru_lfu for now");
+    } else {
+      TORCH_CHECK(false, "type must set");
+    }
+  }
 
   void UpdateTime(uint32_t time);
-
-  lxu_record_t DefaultRecordValue();
 
   template <typename Visitor>
   auto VisitUpdator(Visitor visit)
@@ -55,19 +55,27 @@ struct LXUStrategy {
         strategy_);
   }
 
+ private:
+  // Currently, only MixedLFULRUStrategy is the LXUStrategy. Add more strategy
+  // when it is necessary.
+  using Variant = std::variant<MixedLFULRUStrategy>;
   Variant strategy_;
 };
 
-struct IDTransformer {
-  using Variant = std::variant<NaiveIDTransformer<uint32_t>, CachelineIDTransformer<uint32_t>>;
+class IDTransformer {
+  using Variant = std::
+      variant<NaiveIDTransformer<uint32_t>, CachelineIDTransformer<uint32_t>>;
 
+ public:
   IDTransformer(
       LXUStrategy strategy,
       int64_t num_embeddings,
       const std::string& type)
-    : strategy_(std::move(strategy)),
-      var_(type == "naive" ? Variant(NaiveIDTransformer<uint32_t>(num_embeddings)) :
-                             Variant(CachelineIDTransformer<uint32_t>(num_embeddings))) {}
+      : strategy_(std::move(strategy)),
+        var_(
+            type == "naive"
+                ? Variant(NaiveIDTransformer<uint32_t>(num_embeddings))
+                : Variant(CachelineIDTransformer<uint32_t>(num_embeddings))) {}
 
   /**
    * Transform GlobalIDs to CacheIDs.
@@ -87,6 +95,8 @@ struct IDTransformer {
   std::vector<int64_t> Evict(int64_t num_to_evict);
 
   LXUStrategy strategy_;
+
+ private:
   Variant var_;
 };
 
@@ -116,10 +126,11 @@ inline std::vector<int64_t> IDTransformer::Evict(int64_t num_to_evict) {
   // get the cache id of the ids to evict.
   std::vector<int64_t> cache_ids(ids_to_evict.size());
   Transform(ids_to_evict, cache_ids);
-  std::vector<int64_t> result(2 * ids_to_evict.size());
+  std::vector<int64_t> result;
+  result.reserve(2 * ids_to_evict.size());
   for (size_t i = 0; i < ids_to_evict.size(); i++) {
-    result[2 * i] = ids_to_evict[i];
-    result[2 * i + 1] = cache_ids[i];
+    result.emplace_back(ids_to_evict[i]);
+    result.emplace_back(cache_ids[i]);
   }
   // Evict ids from the ID transformer.
   std::visit([&](auto&& s) { s.Evict(ids_to_evict); }, var_);

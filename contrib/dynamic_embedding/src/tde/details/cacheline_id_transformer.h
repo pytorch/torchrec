@@ -13,10 +13,6 @@ struct CachelineIDTransformerValue {
   int64_t global_id_not_;
   uint32_t cache_id_;
   LXURecord lxu_record_;
-
-  [[nodiscard]] bool IsFilled() const {
-    return global_id_not_ < 0;
-  }
 };
 
 template <typename LXURecord>
@@ -56,23 +52,20 @@ class CachelineIDTransformerIterator {
  */
 template <
     typename LXURecord,
-    int64_t num_cacheline = 8,
-    int64_t cacheline_size = 64,
+    int64_t NumCacheline = 8,
+    int64_t CachelineSize = 64,
     typename BitMap = Bitmap<uint32_t>,
     typename Hash = std::hash<int64_t>>
 class CachelineIDTransformer {
  public:
-  static_assert(num_cacheline > 0, "num_cacheline should be positive.");
-  static_assert(cacheline_size > 0, "cacheline_size should be positive.");
+  static_assert(NumCacheline > 0, "NumCacheline should be positive.");
+  static_assert(CachelineSize > 0, "CachelineSize should be positive.");
   using Self = CachelineIDTransformer<
       LXURecord,
-      num_cacheline,
-      cacheline_size,
+      NumCacheline,
+      CachelineSize,
       BitMap,
       Hash>;
-
-  using lxu_record_t = LXURecord;
-  using record_t = TransformerRecord<lxu_record_t>;
   static constexpr std::string_view type_ = "cacheline";
 
   explicit CachelineIDTransformer(int64_t num_embedding, int64_t capacity = 0);
@@ -106,11 +99,6 @@ class CachelineIDTransformer {
       Update update = transform_default::NoUpdate<LXURecord>,
       Fetch fetch = transform_default::NoFetch);
 
-  template <typename Callback>
-  void ForEach(
-      Callback callback =
-          [](int64_t global_id, int64_t cache_id, LXURecord tag) {});
-
   void Evict(tcb::span<const int64_t> global_ids);
 
   CachelineIDTransformerIterator<LXURecord> Iterator() const {
@@ -123,13 +111,13 @@ class CachelineIDTransformer {
   static_assert(sizeof(CacheValue) <= 16);
   static_assert(std::is_trivially_destructible_v<CacheValue>);
   static_assert(std::is_trivially_constructible_v<CacheValue>);
-  std::tuple<int64_t, int64_t> FindGroupIndex(int64_t val) const {
+  [[nodiscard]] std::tuple<int64_t, int64_t> FindGroupIndex(int64_t val) const {
     int64_t hash = hasher_(val);
     return {hash / group_size_ % num_groups_, hash % group_size_};
   }
 
   static constexpr int64_t group_size_ =
-      num_cacheline * cacheline_size / static_cast<int64_t>(sizeof(CacheValue));
+      NumCacheline * CachelineSize / static_cast<int64_t>(sizeof(CacheValue));
   int64_t num_groups_;
   Hash hasher_;
 

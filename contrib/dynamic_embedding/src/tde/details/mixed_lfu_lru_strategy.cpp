@@ -1,6 +1,5 @@
 #include "mixed_lfu_lru_strategy.h"
 #include <algorithm>
-#include <queue>
 #include "c10/macros/Macros.h"
 
 namespace tde::details {

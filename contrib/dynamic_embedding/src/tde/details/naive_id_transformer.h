@@ -95,11 +95,6 @@ class NaiveIDTransformer {
       Update update = transform_default::NoUpdate<LXURecord>,
       Fetch fetch = transform_default::NoFetch);
 
-  template <typename Callback>
-  void ForEach(
-      Callback callback =
-          [](int64_t global_id, int64_t cache_id, LXURecord tag) {});
-
   void Evict(tcb::span<const int64_t> global_ids);
 
   MoveOnlyFunction<std::optional<record_t>()> Iterator() const;

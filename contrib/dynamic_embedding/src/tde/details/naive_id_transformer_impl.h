@@ -89,14 +89,6 @@ inline bool NaiveIDTransformer<LXURecord, T>::Transform(
 }
 
 template <typename LXURecord, typename T>
-template <typename Callback>
-inline void NaiveIDTransformer<LXURecord, T>::ForEach(Callback callback) {
-  for (auto&& [global_id, value] : global_id2cache_value_) {
-    callback(global_id, value.cache_id_, value.lxu_record_);
-  }
-}
-
-template <typename LXURecord, typename T>
 inline void NaiveIDTransformer<LXURecord, T>::Evict(
     tcb::span<const int64_t> global_ids) {
   for (const int64_t global_id : global_ids) {

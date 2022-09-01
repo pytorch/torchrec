@@ -1,7 +1,7 @@
 #pragma once
+#include <torch/torch.h>
 #include <algorithm>
 #include <vector>
-#include <torch/torch.h>
 #include "tde/details/bits_op.h"
 
 namespace tde::details {
@@ -19,21 +19,21 @@ static void* alignMalloc(size_t align, size_t size) {
 
 template <
     typename LXURecord,
-    int64_t num_cacheline,
-    int64_t cacheline_size,
+    int64_t NumCacheline,
+    int64_t CachelineSize,
     typename BitMap,
     typename Hash>
 inline CachelineIDTransformer<
     LXURecord,
-    num_cacheline,
-    cacheline_size,
+    NumCacheline,
+    CachelineSize,
     BitMap,
     Hash>::CachelineIDTransformer(int64_t num_embedding, int64_t capacity)
     : num_groups_(
           ((capacity == 0 ? 2 * num_embedding : capacity) + group_size_ - 1) /
-          group_size_),
+          group_size_) /*capacity by default is 2 * num_embedding */,
       cache_values_(reinterpret_cast<CacheValue*>(alignMalloc(
-          cacheline_size,
+          CachelineSize,
           sizeof(CacheValue) * num_groups_ * group_size_))),
       bitmap_(num_embedding) {
   memset(
@@ -42,15 +42,15 @@ inline CachelineIDTransformer<
 
 template <
     typename LXURecord,
-    int64_t num_cacheline,
-    int64_t cacheline_size,
+    int64_t NumCacheline,
+    int64_t CachelineSize,
     typename BitMap,
     typename Hash>
 template <typename Update, typename Fetch>
 inline bool CachelineIDTransformer<
     LXURecord,
-    num_cacheline,
-    cacheline_size,
+    NumCacheline,
+    CachelineSize,
     BitMap,
     Hash>::
     Transform(
@@ -102,41 +102,14 @@ inline bool CachelineIDTransformer<
 
 template <
     typename LXURecord,
-    int64_t num_cacheline,
-    int64_t cacheline_size,
-    typename BitMap,
-    typename Hash>
-template <typename Callback>
-inline void CachelineIDTransformer<
-    LXURecord,
-    num_cacheline,
-    cacheline_size,
-    BitMap,
-    Hash>::ForEach(Callback callback) {
-  for (int64_t i = 0; i < num_groups_; ++i) {
-    for (int64_t j = 0; j < group_size_; ++j) {
-      int64_t offset = i * group_size_ + j;
-      auto& cache_value = cache_values_[offset];
-      if (cache_value.is_filled()) {
-        callback(
-            ~cache_value.global_id_not_,
-            cache_value.cache_id_,
-            cache_value.lxu_record_);
-      }
-    }
-  }
-}
-
-template <
-    typename LXURecord,
-    int64_t num_cacheline,
-    int64_t cacheline_size,
+    int64_t NumCacheline,
+    int64_t CachelineSize,
     typename BitMap,
     typename Hash>
 inline void CachelineIDTransformer<
     LXURecord,
-    num_cacheline,
-    cacheline_size,
+    NumCacheline,
+    CachelineSize,
     BitMap,
     Hash>::Evict(tcb::span<const int64_t> global_ids) {
   for (const int64_t global_id : global_ids) {
