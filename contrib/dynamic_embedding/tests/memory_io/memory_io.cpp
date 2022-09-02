@@ -101,11 +101,9 @@ class MemoryIO {
           uint64_t beg = param.offsets_[offset];
           uint64_t end = param.offsets_[offset + 1];
           std::string key = Key(param.table_name_, gid, cid, os_id);
-          ps_.emplace(
-              key,
-              std::vector<uint8_t>(
-                  reinterpret_cast<const uint8_t*>(param.data_) + beg,
-                  reinterpret_cast<const uint8_t*>(param.data_) + end));
+          ps_[key] = std::vector<uint8_t>(
+              reinterpret_cast<const uint8_t*>(param.data_) + beg,
+              reinterpret_cast<const uint8_t*>(param.data_) + end);
         }
       }
     }
