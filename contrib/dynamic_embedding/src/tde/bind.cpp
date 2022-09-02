@@ -7,7 +7,7 @@ namespace tde {
 TORCH_LIBRARY(tde, m) {
   details::IORegistry::RegisterAllDefaultIOs();
 
-  m.def("register_io", [](std::string name) {
+  m.def("register_io", [](const std::string& name) {
     details::IORegistry::Instance().RegisterPlugin(name.c_str());
   });
 
@@ -22,7 +22,7 @@ TORCH_LIBRARY(tde, m) {
       .def("__getitem__", &TensorList::operator[]);
 
   m.class_<IDTransformer>("IDTransformer")
-      .def(torch::init([](int64_t num_embedding, std::string config) {
+      .def(torch::init([](int64_t num_embedding, const std::string& config) {
         nlohmann::json json = nlohmann::json::parse(config);
         return c10::make_intrusive<IDTransformer>(
             num_embedding, std::move(json));

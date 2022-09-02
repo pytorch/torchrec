@@ -89,7 +89,7 @@ class DataLoader:
                 the PS server, e.g. redis://192.168.3.1:3948 and "num_optimizer_stats", which tell PS server
                 how many optimizer states for the parameter, for intance, the value is 2 for Adam optimizer.
             eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
-            transformer_config: configuration for the transformer. Default is `{"type": "naive"}`
+            transform_config: configuration for the transformer. Default is `{"type": "naive"}`
             parallel: Whether the IDTransformerCollections will run paralell. When set to True,
                 IDTransformerGroup will start a thread for each IDTransformerCollection.
             num_prefetch: number of samples to prefetch.

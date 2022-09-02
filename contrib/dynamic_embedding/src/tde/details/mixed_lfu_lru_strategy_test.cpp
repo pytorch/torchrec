@@ -2,6 +2,13 @@
 #include "tde/details/mixed_lfu_lru_strategy.h"
 
 namespace tde::details {
+TEST(TDE, order) {
+  MixedLFULRUStrategy::Record a;
+  a.time_ = 1;
+  a.freq_power_ = 31;
+  uint32_t i32 = a.ToUint32();
+  ASSERT_EQ(0xF8000001, i32);
+}
 
 TEST(TDE, MixedLFULRUStrategy_Evict) {
   std::vector<std::pair<int64_t, MixedLFULRUStrategy::Record>> records;
