@@ -572,7 +572,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
-        if not sharder_map:
+        if sharder_map is None:
             raise ValueError("sharder map not provided for storage estimator")
 
         for sharding_option in sharding_options:
