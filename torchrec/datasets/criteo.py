@@ -518,11 +518,11 @@ class BinaryCriteoUtils:
             input_dir_labels_and_dense (str): Input directory of labels and dense npy files.
             input_dir_sparse (str): Input directory of sparse npy files.
             output_dir_shuffled (str): Output directory for shuffled labels, dense and sparse npy files.
-            rows_per_day Dict[int, int]: Number of rows in each file.
+            rows_per_day (Dict[int, int]): Number of rows in each file.
             output_dir_full_set (str): Output directory of the full dataset, if desired.
             days (int): Number of day files.
             int_columns (int): Number of columns with dense features.
-            columns (int): Total number of columns.
+            sparse_columns (int): Total number of categorical columns.
             path_manager_key (str): Path manager key used to load from different filesystems.
             random_seed (int): Random seed used for the random.shuffle operator.
         """
