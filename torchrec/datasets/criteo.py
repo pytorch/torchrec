@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import shutil
 import time
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
@@ -498,6 +499,7 @@ class BinaryCriteoUtils:
         int_columns: int = INT_FEATURE_COUNT,
         sparse_columns: int = CAT_FEATURE_COUNT,
         path_manager_key: str = PATH_MANAGER_KEY,
+        random_seed: int = 0,
     ) -> None:
         """
         Shuffle the dataset. Expects the files to be in .npy format and the data
@@ -509,6 +511,9 @@ class BinaryCriteoUtils:
         The dataset will be reconstructed, shuffled and then split back into
         separate dense, sparse and labels files.
 
+        This will only shuffle the first DAYS-1 days as the training set. The final day will remain
+        untouched as the validation, and training set.
+
         Args:
             input_dir_labels_and_dense (str): Input directory of labels and dense npy files.
             input_dir_sparse (str): Input directory of sparse npy files.
@@ -519,6 +524,7 @@ class BinaryCriteoUtils:
             int_columns (int): Number of columns with dense features.
             columns (int): Total number of columns.
             path_manager_key (str): Path manager key used to load from different filesystems.
+            random_seed (int): Random seed used for the random.shuffle operator.
         """
 
         total_rows = sum(rows_per_day.values())
@@ -526,7 +532,7 @@ class BinaryCriteoUtils:
         full_dataset = np.zeros((total_rows, columns), dtype=np.float32)
         curr_first_row = 0
         curr_last_row = 0
-        for d in range(0, days):
+        for d in range(0, days - 1):
             curr_last_row += rows_per_day[d]
 
             # dense
@@ -574,13 +580,14 @@ class BinaryCriteoUtils:
                 print(f"Writing full set file: {full_output_file}")
                 np.save(fout, full_dataset)
 
-        print("Shuffling dataset")
+        print(f"Shuffling dataset with random_seed={random_seed}")
+        np.random.seed(random_seed)
         np.random.shuffle(full_dataset)
 
         # Slice and save each portion into dense, sparse and labels
         curr_first_row = 0
         curr_last_row = 0
-        for d in range(0, days):
+        for d in range(0, days - 1):
             curr_last_row += rows_per_day[d]
 
             # write dense columns
@@ -622,8 +629,18 @@ class BinaryCriteoUtils:
                         np.int32
                     ),
                 )
-
             curr_first_row = curr_last_row
+
+        # Directly copy over the last day's files since they will be used for validation and testing.
+        for part in ["dense", "sparse", "labels"]:
+            path_to_original = os.path.join(
+                input_dir_sparse, f"day_{days-1}_{part}.npy"
+            )
+            val_train_path = os.path.join(
+                output_dir_shuffled, f"day_{days-1}_{part}.npy"
+            )
+            shutil.copyfile(path_to_original, val_train_path)
+            print(f"Copying over {path_to_original} to {val_train_path}")
 
 
 class InMemoryBinaryCriteoIterDataPipe(IterableDataset):

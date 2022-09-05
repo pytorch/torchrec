@@ -18,11 +18,15 @@ import torchrec
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from hypothesis import given, settings
 from torchrec.fx import symbolic_trace
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingCollection,
+)
 from torchrec.modules.fused_embedding_modules import (
     fuse_embedding_optimizer,
     FusedEmbeddingBagCollection,
+    FusedEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -46,6 +50,25 @@ class TestModel(torch.nn.Module):
         for key in kjt.keys():
             sparse_features.append(ebc_output[key])
         sparse_features = torch.cat(sparse_features, dim=0)
+        return self.over_arch(sparse_features)
+
+
+class TestSequentialModel(torch.nn.Module):
+    def __init__(self, ec: EmbeddingCollection) -> None:
+        super().__init__()
+        self.ec = ec
+        self.over_arch = torch.nn.Linear(
+            ec.embedding_dim(),
+            1,
+        )
+
+    def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
+        ec_output = self.ec.forward(kjt)
+        sparse_features = []
+        for key in kjt.keys():
+            sparse_features.extend(ec_output[key].to_dense())
+        sparse_features = torch.Tensor(sparse_features)
+        sparse_features = torch.sum(sparse_features)
         return self.over_arch(sparse_features)
 
 
@@ -698,35 +721,6 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         ).to(device)
         test_model(features)
 
-    def test_fx(self) -> None:
-        eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1", "f3"]
-        )
-        eb2_config = EmbeddingBagConfig(
-            name="t2",
-            embedding_dim=4,
-            num_embeddings=10,
-            feature_names=["f2"],
-        )
-        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config], is_weighted=True)
-
-        gm = symbolic_trace(ebc)
-        torch.jit.script(gm)
-
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f3", "f2"],
-            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 3, 4, 7]),
-            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 12]),
-            weights=torch.tensor(
-                [0.1, 0.2, 0.4, 0.5, 0.4, 0.3, 0.2, 0.9, 0.1, 0.3, 0.4, 0.7]
-            ),
-        )
-
-        pooled_embeddings = gm(features)
-        self.assertEqual(pooled_embeddings.values().size(), (2, 10))
-        self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
-        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
-
     def test_composability(self) -> None:
         device = torch.device("cpu")
         eb1_config = EmbeddingBagConfig(
@@ -753,6 +747,293 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
             optimizer_kwargs={"lr": 0.02},
             device=device,
         )
+
+        fused_named_buffers = dict(test_model.named_buffers())
+        fused_named_modules = dict(test_model.named_modules())
+        fused_named_parameters = dict(test_model.named_parameters())
+
+        self.assertEqual(original_named_buffers.keys(), fused_named_buffers.keys())
+        for buffer_key in original_named_buffers.keys():
+            original_buffer, fused_buffer = (
+                original_named_buffers[buffer_key],
+                fused_named_buffers[buffer_key],
+            )
+            self.assertEqual(original_buffer.shape, fused_buffer.shape)
+
+        self.assertEqual(original_named_modules.keys(), fused_named_modules.keys())
+
+        self.assertEqual(
+            original_named_parameters.keys(), fused_named_parameters.keys()
+        )
+        for param_key in original_named_parameters.keys():
+            original_param, fused_param = (
+                original_named_parameters[param_key],
+                fused_named_parameters[param_key],
+            )
+            self.assertEqual(original_param.shape, fused_param.shape)
+
+
+class FusedEmbeddingCollectionTest(unittest.TestCase):
+    def _assert_dense_list_equality(
+        self, dense_list_1: List[torch.Tensor], dense_list_2: List[torch.Tensor]
+    ) -> None:
+        self.assertEqual(len(dense_list_1), len(dense_list_2))
+        for tensor_1, tensor_2 in zip(dense_list_1, dense_list_2):
+            torch.testing.assert_close(tensor_1, tensor_2, rtol=0, atol=0)
+
+    @unittest.skipIf(
+        # TODO remove restriction once FBGEMM supports CPU
+        torch.cuda.device_count() < 1,
+        "This test requires a gpu",
+    )
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(device=st.sampled_from([torch.device("cuda")]))
+    def test_forward_with_state_dict(
+        self,
+        device: torch.device,
+    ) -> None:
+        # this tests the common components of an EmbeddingCollection, namely
+        # lookup with multiple features, shared features,
+        # calling state_dict and calling load_state_dict
+        e1_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=4,
+            num_embeddings=2,
+            feature_names=["f1", "f1_1", "f_shared"],
+        )
+        e2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=2,
+            feature_names=["f2", "f_shared"],
+        )
+        e3_config = EmbeddingConfig(
+            name="t3", embedding_dim=4, num_embeddings=2, feature_names=["f3"]
+        )
+
+        ec = FusedEmbeddingCollection(
+            tables=[e1_config, e2_config, e3_config],
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        non_fused_ec = EmbeddingCollection(
+            tables=[e1_config, e2_config, e3_config],
+            device=device,
+        )
+
+        ec.load_state_dict(
+            OrderedDict(
+                [
+                    (
+                        "embeddings.t1.weight",
+                        torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
+                    ),
+                    (
+                        "embeddings.t2.weight",
+                        torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
+                    ),
+                    (
+                        "embeddings.t3.weight",
+                        torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]).to(device),
+                    ),
+                ]
+            )
+        )
+
+        non_fused_ec.load_state_dict(ec.state_dict())
+
+        #    0       1        2  <-- batch
+        # f1   [0,1] []    [0]
+        # f1_1   [0] [1]    [1,0]
+        # f2   [0]    [1]    [0,1]
+        # f3   []    []    [0]
+        # f_shared   [0]    [1]    [0,1]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f1_1", "f2", "f3", "f_shared"],
+            values=torch.tensor([0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1]),
+            lengths=torch.tensor([2, 0, 1, 1, 1, 2, 1, 1, 2, 0, 0, 1, 1, 1, 2]),
+        ).to(device)
+
+        sequential_embeddings = ec(features)
+        self.assertEquals(
+            set(sequential_embeddings.keys()),
+            {"f1", "f1_1", "f_shared@t1", "f2", "f_shared@t2", "f3"},
+        )
+
+        self._assert_dense_list_equality(
+            sequential_embeddings["f1"].to_dense(),
+            [
+                torch.Tensor([[1.0, 1.0, 1.0, 1.0], [2.0, 2.0, 2.0, 2.0]]).to(device),
+                torch.empty(0, 4).to(device),
+                torch.Tensor([[1.0, 1.0, 1.0, 1.0]]).to(device),
+            ],
+        )
+
+        self._assert_dense_list_equality(
+            sequential_embeddings["f1_1"].to_dense(),
+            [
+                torch.Tensor([[1.0, 1.0, 1.0, 1.0]]).to(device),
+                torch.Tensor([[2.0, 2.0, 2.0, 2.0]]).to(device),
+                torch.Tensor([[2.0, 2.0, 2.0, 2.0], [1.0, 1.0, 1.0, 1.0]]).to(device),
+            ],
+        )
+
+        non_fused_sequential_embeddings = non_fused_ec(features)
+
+        for key in sequential_embeddings:
+            self._assert_dense_list_equality(
+                sequential_embeddings[key].to_dense(),
+                non_fused_sequential_embeddings[key].to_dense(),
+            )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "This test requires a gpu",
+    )
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(
+        optimizer_type_and_kwargs=st.sampled_from(
+            [
+                (torch.optim.SGD, {"lr": 0.1}),
+                (torch.optim.Adagrad, {"lr": 0.1}),
+                (torchrec.optim.RowWiseAdagrad, {"lr": 0.1}),
+            ]
+        ),
+        device=st.sampled_from([torch.device("cuda")]),
+    )
+    def test_optimizer_fusion(
+        self,
+        optimizer_type_and_kwargs: Tuple[Type[torch.optim.Optimizer], Dict[str, Any]],
+        device: torch.device,
+    ) -> None:
+        optimizer_type, optimizer_kwargs = optimizer_type_and_kwargs
+        embedding_configs = [
+            EmbeddingConfig(
+                num_embeddings=2,
+                embedding_dim=4,
+                name="table_0",
+                feature_names=["feature_0"],
+            ),
+            EmbeddingConfig(
+                num_embeddings=2,
+                embedding_dim=4,
+                name="table_1",
+                feature_names=["feature_1"],
+            ),
+        ]
+
+        fused_ec = FusedEmbeddingCollection(
+            tables=embedding_configs,
+            optimizer_type=optimizer_type,
+            optimizer_kwargs=optimizer_kwargs,
+            device=device,
+        )
+
+        ec = EmbeddingCollection(tables=embedding_configs, device=device)
+
+        state_dict = OrderedDict(
+            [
+                (
+                    "embeddings.table_0.weight",
+                    torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
+                ),
+                (
+                    "embeddings.table_1.weight",
+                    torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
+                ),
+            ]
+        )
+        fused_ec.load_state_dict(state_dict)
+        ec.load_state_dict(state_dict)
+
+        #        0       1        2  <-- batch
+        # "f1"   [] [0]    [0,1]
+        # "f2"   [1]    [0,1]    []
+        #  ^
+        # feature
+        features = KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1"],
+            values=torch.tensor([0, 0, 1, 1, 0, 1]),
+            lengths=torch.tensor([0, 1, 2, 1, 2, 0]),
+        ).to(device)
+
+        opt = optimizer_type(ec.parameters(), **optimizer_kwargs)
+        # pyre-ignore
+        def run_one_training_step() -> None:
+            fused_embeddings = fused_ec(features)
+            fused_vals = []
+            for _name, jt in fused_embeddings.items():
+                fused_vals.extend(jt.to_dense())
+            torch.cat(fused_vals).sum().backward()
+
+            opt.zero_grad()
+            sequence_embeddings = ec(features)
+            vals = []
+            for _name, jt in sequence_embeddings.items():
+                vals.extend(jt.to_dense())
+            torch.cat(vals).sum().backward()
+            opt.step()
+
+        run_one_training_step()
+        torch.testing.assert_close(
+            ec.state_dict()["embeddings.table_0.weight"],
+            fused_ec.state_dict()["embeddings.table_0.weight"],
+        )
+
+        run_one_training_step()
+        torch.testing.assert_close(
+            ec.state_dict()["embeddings.table_0.weight"],
+            fused_ec.state_dict()["embeddings.table_0.weight"],
+        )
+
+        fused_optimizer = fused_ec.fused_optimizer()
+        fused_optimizer.load_state_dict(fused_optimizer.state_dict())
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "This test requires a gpu",
+    )
+    @settings(deadline=None)
+    # pyre-ignore
+    @given(
+        device=st.sampled_from([torch.device("cuda")]),
+    )
+    def test_replacement_composability(self, device: torch.device) -> None:
+        # tests replacement and composability
+
+        ec_1 = EmbeddingConfig(
+            name="t1", embedding_dim=4, num_embeddings=10, feature_names=["f1"]
+        )
+        ec_2 = EmbeddingConfig(
+            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+        ec_3 = EmbeddingConfig(
+            name="t3", embedding_dim=4, num_embeddings=10, feature_names=["f3"]
+        )
+
+        embedding_collection = EmbeddingCollection(
+            tables=[ec_1, ec_2, ec_3],
+        )
+
+        test_model = TestSequentialModel(embedding_collection).to(device)
+        original_named_buffers = dict(test_model.named_buffers())
+        original_named_modules = dict(test_model.named_modules())
+        original_named_parameters = dict(test_model.named_parameters())
+
+        fuse_embedding_optimizer(
+            test_model,
+            optimizer_type=torch.optim.SGD,
+            optimizer_kwargs={"lr": 0.02},
+            device=device,
+        )
+
+        self.assertIsInstance(test_model.ec, FusedEmbeddingCollection)
 
         fused_named_buffers = dict(test_model.named_buffers())
         fused_named_modules = dict(test_model.named_modules())

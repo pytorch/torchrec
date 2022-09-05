@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Type
 import torch.distributed as dist  # noqa
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torchrec.distributed.fbgemm_qcomm_codec import QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNN, TestSparseNNBase
@@ -58,6 +59,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         local_size: Optional[int] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSparseNN,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -71,4 +73,5 @@ class ModelParallelTestShared(MultiProcessTestBase):
             backend=backend,
             optim=EmbOptimType.EXACT_SGD,
             constraints=constraints,
+            qcomms_config=qcomms_config,
         )

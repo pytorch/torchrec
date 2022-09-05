@@ -214,18 +214,13 @@ class KeyedOptimizer(optim.Optimizer):
         """
         for key, param in self.params.items():
             if param.requires_grad:
-                # pyre-fixme[6]: For 1st param expected `Tensor` but got
-                #  `Union[Tensor, ShardedTensor]`.
                 t = torch.zeros_like(param)
                 if (
                     sparse_grad_parameter_names is not None
                     and key in sparse_grad_parameter_names
                 ):
                     t = t.to_sparse()
-                # pyre-fixme[16]: `ShardedTensor` has no attribute `grad`.
-                # pyre-fixme[8]: Attribute has type `Optional[Tensor]`; used as
-                #  `Variable`.
-                # pyre-fixme[19]: Expected 0 positional arguments.
+                # pyre-fixme[8, 9, 19]
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 

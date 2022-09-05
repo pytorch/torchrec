@@ -13,6 +13,11 @@ import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
@@ -52,19 +57,32 @@ def create_test_sharder(
     sharding_type: str,
     kernel_type: str,
     fused_params: Optional[Dict[str, Any]] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
+    device: Optional[torch.device] = None,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
+    qcomm_codecs_registry = {}
+    if qcomms_config is not None:
+        qcomm_codecs_registry = get_qcomm_codecs_registry(qcomms_config, device=device)
     if "learning_rate" not in fused_params:
         fused_params["learning_rate"] = 0.1
     if sharder_type == SharderType.EMBEDDING_BAG.value:
-        return TestEBSharder(sharding_type, kernel_type, fused_params)
+        return TestEBSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(sharding_type, kernel_type, fused_params)
+        return TestEBCSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
-        return TestETSharder(sharding_type, kernel_type, fused_params)
+        return TestETSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
-        return TestETCSharder(sharding_type, kernel_type, fused_params)
+        return TestETCSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+        )
     else:
         raise ValueError(f"Sharder not supported {sharder_type}")
 
@@ -202,6 +220,7 @@ def sharding_single_rank_test(
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
+    qcomms_config: Optional[QCommsConfig] = None,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -300,7 +319,20 @@ def sharding_single_rank_test(
         )
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        if qcomms_config is None:
+            torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+        else:
+            # With quantized comms, we can relax constraints a bit
+            rtol = 0.003
+            if CommType.FP8 in [
+                qcomms_config.forward_precision,
+                qcomms_config.backward_precision,
+            ]:
+                rtol = 0.05
+            atol = global_pred.max() * rtol
+            torch.testing.assert_allclose(
+                global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
+            )
 
 
 def gen_full_pred_after_one_step(

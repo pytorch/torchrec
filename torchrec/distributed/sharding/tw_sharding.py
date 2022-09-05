@@ -34,7 +34,9 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    CommOp,
     NoWait,
+    QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
@@ -56,8 +58,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
         self._device = device
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
@@ -283,9 +286,20 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
+        self._dist = PooledEmbeddingsAllToAll(
+            pg,
+            dim_sum_per_rank,
+            device,
+            callbacks,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -348,6 +362,7 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
 

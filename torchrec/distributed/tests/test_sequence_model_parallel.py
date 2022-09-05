@@ -14,6 +14,7 @@ import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
@@ -46,17 +47,32 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_nccl_rw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_rw(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+    ) -> None:
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
+                    qcomms_config=qcomms_config,
                 )
             ],
             backend="nccl",
+            qcomms_config=qcomms_config,
         )
 
     @unittest.skipIf(
@@ -105,17 +121,32 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_nccl_tw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_tw(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+    ) -> None:
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
+                    qcomms_config=qcomms_config,
                 )
             ],
             backend="nccl",
+            qcomms_config=qcomms_config,
         )
 
     @unittest.skipIf(
@@ -179,6 +210,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         local_size: Optional[int] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -191,4 +223,5 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             optim=EmbOptimType.EXACT_SGD,
             backend=backend,
             constraints=constraints,
+            qcomms_config=qcomms_config,
         )

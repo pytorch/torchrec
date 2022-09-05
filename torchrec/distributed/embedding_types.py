@@ -16,6 +16,7 @@ from torch import nn
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
+    QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingType,
     ShardMetadata,
@@ -237,9 +238,14 @@ M = TypeVar("M", bound=nn.Module)
 
 
 class BaseEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
 
+        # TODO remove after decoupling
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -258,7 +264,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         return types
 
     def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
+        # TODO remove after decoupling
+        self,
+        sharding_type: str,
+        compute_device_type: str,
     ) -> List[str]:
         ret = [
             EmbeddingComputeKernel.DENSE.value,

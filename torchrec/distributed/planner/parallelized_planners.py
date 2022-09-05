@@ -19,7 +19,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
-from torchrec.distributed.planner.constants import MAX_SIZE
+from torchrec.distributed.planner.constants import BATCH_SIZE, MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.perf_models import NoopPerfModel
@@ -112,23 +112,26 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
     def __init__(
         self,
         topology: Topology,
+        batch_size: Optional[int] = None,
         enumerator: Optional[Enumerator] = None,
         storage_reservation: Optional[StorageReservation] = None,
         proposer: Optional[Union[Proposer, List[Proposer]]] = None,
         custom_cpu_count: Optional[int] = None,
         partitioner: Optional[Partitioner] = None,
         performance_model: Optional[PerfModel] = None,
-        stats: Optional[Stats] = None,
+        stats: Optional[Union[Stats, List[Stats]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
     ) -> None:
         self._topology = topology
+        self._batch_size: int = batch_size if batch_size else BATCH_SIZE
         self._constraints = constraints
         self._enumerator: Enumerator = (
             enumerator
             if enumerator
             else EmbeddingEnumerator(
                 topology=topology,
+                batch_size=self._batch_size,
                 constraints=constraints,
             )
         )
@@ -154,7 +157,11 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         self._perf_model: PerfModel = (
             performance_model if performance_model else NoopPerfModel(topology=topology)
         )
-        self._stats: Stats = stats if stats else EmbeddingStats()
+        if stats:
+            self._stats: List[Stats] = [stats] if not isinstance(stats, list) else stats
+        else:
+            self._stats = [EmbeddingStats()]
+
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
@@ -191,6 +198,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
 
         storage_constraint: Topology = self._storage_reservation.reserve(
             topology=self._topology,
+            batch_size=self._batch_size,
             module=module,
             sharders=sharders,
             constraints=self._constraints,
@@ -274,16 +282,19 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         if best_plan is not None:
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
             end_time = perf_counter()
-            self._stats.log(
-                sharding_plan=sharding_plan,
-                topology=self._topology,
-                storage_reservation=self._storage_reservation,
-                num_proposals=self._num_proposals,
-                num_plans=self._num_plans,
-                run_time=end_time - start_time,
-                best_plan=best_plan,
-                debug=self._debug,
-            )
+            for stats in self._stats:
+                stats.log(
+                    sharding_plan=sharding_plan,
+                    topology=self._topology,
+                    batch_size=self._batch_size,
+                    storage_reservation=self._storage_reservation,
+                    num_proposals=self._num_proposals,
+                    num_plans=self._num_plans,
+                    run_time=end_time - start_time,
+                    best_plan=best_plan,
+                    constraints=self._constraints,
+                    debug=self._debug,
+                )
             return sharding_plan
         else:
             global_storage_capacity = reduce(
@@ -302,6 +313,6 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
                 f"\n\t  Global storage: {global_storage_capacity.hbm}, "
                 f"\n\t  Available for model parallel: {global_storage_constraints},"
                 f"\n\t  Requirement for model parallel: {lowest_storage})"
-                f"\n  3) Reduce local batch size ({self._topology.batch_size})"
+                f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )

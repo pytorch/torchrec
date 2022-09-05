@@ -59,7 +59,7 @@ class DLRMPredictSingleGPUFactory(PredictFactory):
                 self.model_config.id_list_features_keys
             )
         ]
-        ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
+        ebc = EmbeddingBagCollection(tables=eb_configs, device=device)
 
         module = DLRMPredictSingleGPUModule(
             embedding_bag_collection=ebc,

@@ -67,6 +67,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             local_metadata: ShardMetadata,
             global_metadata: ShardedTensorMetadata,
             sharding_dim: int,
+            optimizer_state: torch.Tensor,
         ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
             rw_shards: List[ShardMetadata] = []
             rw_local_shard: ShardMetadata = local_metadata
@@ -98,9 +99,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 rw_shards.append(rw_shard)
 
             tensor_properties = TensorProperties(
-                dtype=global_metadata.tensor_properties.dtype,
+                dtype=optimizer_state.dtype,
                 layout=global_metadata.tensor_properties.layout,
-                requires_grad=global_metadata.tensor_properties.requires_grad,
+                requires_grad=False,
                 memory_format=global_metadata.tensor_properties.memory_format,
                 pin_memory=global_metadata.tensor_properties.pin_memory,
             )
@@ -215,6 +216,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                                 shard_param_local_metadata,
                                 table_config.global_metadata,
                                 sharding_dim,
+                                optimizer_state[momentum_idx - 1],
                             )
 
                         assert local_metadata is not None
@@ -365,7 +367,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -431,20 +433,19 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, param in zip(
-            self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
-        ):
-            key = append_prefix(prefix, f"{config.name}.weight")
-            yield key, param
 
     def flush(self) -> None:
         self._emb_module.flush()
@@ -477,6 +478,11 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -583,7 +589,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -653,6 +659,15 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
@@ -689,6 +704,11 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True

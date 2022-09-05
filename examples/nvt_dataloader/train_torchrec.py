@@ -16,6 +16,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torchmetrics as metrics
+import torchrec
 import torchrec.distributed as trec_dist
 import torchrec.optim as trec_optim
 
@@ -31,12 +32,13 @@ from torchrec.datasets.criteo import (
 )
 from torchrec.datasets.utils import Batch
 from torchrec.distributed import TrainPipelineSparseDist
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.types import ModuleSharder
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 
 
@@ -127,6 +129,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=10000,
         help="Frequency at which validation will be run within an epoch.",
     )
+    parser.add_argument(
+        "--adagrad",
+        dest="adagrad",
+        action="store_true",
+        help="Flag to determine if adagrad optimizer should be used.",
+    )
     return parser.parse_args(argv)
 
 
@@ -161,19 +169,20 @@ def _eval(
 
 def main(argv: List[str]):
     args = parse_args(argv)
-    os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["LOCAL_RANK"]
     rank = int(os.environ["LOCAL_RANK"])
+
+    print("Running with args", args)
 
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
+        torch.cuda.set_device(device)
     else:
         device: torch.device = torch.device("cpu")
         backend = "gloo"
 
     if not torch.distributed.is_initialized():
         dist.init_process_group(backend=backend)
-        torch.cuda.set_device(device)
 
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -222,21 +231,23 @@ def main(argv: List[str]):
         ),
     )
 
-    # Enable optimizer fusion
-    fused_params = {
-        "learning_rate": args.learning_rate,
-        "optimizer": OptimType.EXACT_SGD,
-    }
+    train_model = fuse_embedding_optimizer(
+        train_model,
+        optimizer_type=torchrec.optim.RowWiseAdagrad
+        if args.adagrad
+        else torch.optim.SGD,
+        optimizer_kwargs={"learning_rate": args.learning_rate},
+        device=torch.device("meta"),
+    )
 
     sharders = cast(
         List[ModuleSharder[nn.Module]],
         [
-            EmbeddingBagCollectionSharder(fused_params=fused_params),
+            FusedEmbeddingBagCollectionSharder(),
         ],
     )
 
     pg = dist.GroupMember.WORLD
-
     hbm_cap = torch.cuda.get_device_properties(device).total_memory
     local_world_size = trec_dist.comm.get_local_size(world_size)
     model = DistributedModelParallel(
@@ -249,18 +260,20 @@ def main(argv: List[str]):
                 compute_device=device.type,
                 local_world_size=local_world_size,
                 hbm_cap=hbm_cap,
-                batch_size=args.batch_size,
             ),
             storage_reservation=trec_dist.planner.storage_reservations.HeuristicalStorageReservation(
                 percentage=0.25,
             ),
+            batch_size=args.batch_size,
         ).collective_plan(train_model, sharders, pg),
         sharders=sharders,
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
         dict(model.named_parameters()),
-        lambda params: torch.optim.SGD(params, lr=args.learning_rate),
+        lambda params: torch.optim.Adagrad(params, lr=args.learning_rate)
+        if args.adagrad
+        else torch.optim.SGD(params, lr=args.learning_rate),
     )
 
     opt = trec_optim.keyed.CombinedOptimizer(
@@ -324,6 +337,15 @@ def main(argv: List[str]):
                             "binary cross entropy loss",
                             bce_loss / (args.batch_size),
                         )
+
+                    test_it = iter(test_loader)
+                    auroc_result, accuracy_result, bce_loss = _eval(
+                        train_pipeline, test_it
+                    )
+                    if rank == 0:
+                        print(f"AUROC over test set: {auroc_result}.")
+                        print(f"Accuracy over test set: {accuracy_result}.")
+
                 step += 1
 
             except StopIteration:

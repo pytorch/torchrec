@@ -46,19 +46,26 @@ class EmbeddingPerfEstimator(ShardEstimator):
         self,
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        is_inference: bool = False,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
+        self._is_inference = is_inference
 
     def estimate(
         self,
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        if not sharder_map:
+            raise ValueError("sharder map not provided for perf estimator")
+
         for sharding_option in sharding_options:
+            sharder_key = sharder_name(type(sharding_option.module[1]))
+            sharder = sharder_map[sharder_key]
             caching_ratio = (
-                self._constraints[sharding_option.name].caching_ratio
-                if self._constraints and self._constraints.get(sharding_option.name)
+                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )
             num_poolings = (
@@ -91,6 +98,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
             if isinstance(module, EmbeddingBagCollectionInterface):
                 is_weighted = module.is_weighted()
+            elif (
+                self._constraints
+                and self._constraints.get(sharding_option.name)
+                and self._constraints[sharding_option.name].is_weighted
+            ):
+                is_weighted = self._constraints[sharding_option.name].is_weighted
             else:
                 is_weighted = False
 
@@ -110,6 +123,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 bw_inter_host=self._topology.inter_host_bw,
                 is_pooled=sharding_option.is_pooled,
                 is_weighted=is_weighted,
+                is_inference=self._is_inference,
                 has_feature_processor=has_feature_processor,
                 caching_ratio=caching_ratio,
             )
@@ -136,6 +150,7 @@ def perf_func_emb_wall_time(
     is_weighted: bool = False,
     has_feature_processor: bool = False,
     caching_ratio: Optional[float] = None,
+    is_inference: bool = False,
 ) -> List[float]:
     """
     Attempts to model perfs as a function of relative wall times.
@@ -162,6 +177,7 @@ def perf_func_emb_wall_time(
             if unpooled/sequential (ie. Embedding).
         is_weighted (bool = False): if the module is an EBC and is weighted, typically
             signifying an id score list feature.
+        is_inference (bool = False): if planning for inference.
         has_feature_processor (bool = False): if the module has a feature processor.
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
             of device.
@@ -197,6 +213,7 @@ def perf_func_emb_wall_time(
                 bw_intra_host=bw_intra_host,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
+                is_inference=is_inference,
                 has_feature_processor=has_feature_processor,
             )
         elif sharding_type == ShardingType.ROW_WISE.value:
@@ -273,6 +290,7 @@ def _get_tw_sharding_perf(
     bw_intra_host: float,
     is_pooled: bool,
     is_weighted: bool = False,
+    is_inference: bool = False,
     has_feature_processor: bool = False,
 ) -> float:
     batch_inputs = sum(
@@ -311,6 +329,9 @@ def _get_tw_sharding_perf(
         * block_usage_penalty
         / device_bw
     )
+    if is_inference:
+        # only consider forward compute and comms for inference
+        return fwd_compute + fwd_comms
 
     bwd_comms = fwd_comms
 
@@ -558,8 +579,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
             caching_ratio = (
-                self._constraints[sharding_option.name].caching_ratio
-                if self._constraints and self._constraints.get(sharding_option.name)
+                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                if hasattr(sharder, "fused_params") and sharder.fused_params
                 else None
             )
             num_poolings = (

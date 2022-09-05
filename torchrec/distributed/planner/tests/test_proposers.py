@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import torch
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import (
     GreedyProposer,
@@ -46,7 +47,7 @@ class MockProposer(Proposer):
 class TestProposers(unittest.TestCase):
     def setUp(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")
-        self.enumerator = EmbeddingEnumerator(topology=topology)
+        self.enumerator = EmbeddingEnumerator(topology=topology, batch_size=BATCH_SIZE)
         self.greedy_proposer = GreedyProposer()
         self.uniform_proposer = UniformProposer()
         self.grid_search_proposer = GridSearchProposer()

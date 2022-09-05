@@ -24,7 +24,13 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <torch/csrc/autograd/profiler_legacy.h>
+
+// remove this after we switch over to multipy externally for torchrec
+#ifdef FBCODE_CAFFE2
+#include <multipy/runtime/deploy.h> // @manual
+#else
 #include <torch/csrc/deploy/deploy.h> // @manual
+#endif
 
 #include "ATen/cuda/CUDAEvent.h"
 #include "torchrec/inference/BatchingQueue.h"
@@ -222,10 +228,11 @@ void GPUExecutor::process(int idx) {
 
           if (predictions.isNone()) {
             observer->addPredictionExceptionCount(1);
-            rejectionExecutor_->add([batch = std::move(batch)]() {
-              handleBatchException(
-                  batch->contexts, "GPUExecutor prediction exception");
-            });
+            rejectionExecutor_->add(
+                [contexts = std::move(batch->contexts)]() mutable {
+                  handleBatchException(
+                      contexts, "GPUExecutor prediction exception");
+                });
           } else {
             size_t offset = 0;
             auto rsfStart = std::chrono::steady_clock::now();

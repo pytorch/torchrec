@@ -101,6 +101,16 @@ class MetricsConfig:
             RecMetrics will perform the actual update every ``update()`` calls.
         state_metrics (List[StateMetricEnum]): indicates what state_metrics
             will be enabled.
+        compute_interval_steps(int): computing metrics every step can be
+            expsensive. This field is used to specify the computation interval
+            in batch count. `should_compute()` return True if the current
+            trained batch count match the setting.
+        min_compute_interval(float): minimum compute interval in seconds.
+            If this value is set (should be larger than 0), MetricModule will
+            adjust `compute_interval_steps` after the second compute() is called.
+        max_compute_interval(float): maximum compute interval in seconds.
+            If this value is set (should be larger than 0), MetricModule will
+            adjust `compute_interval_steps` after the second compute() is called.
         compute_on_all_ranks (bool): whether to compute rec metrics on all ranks.
             If False, only compute on rank 0.
         should_validate_update (bool): whether to check the inputs of update() and skip
@@ -114,11 +124,9 @@ class MetricsConfig:
     rec_compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION
     fused_update_limit: int = 0
     state_metrics: List[StateMetricEnum] = field(default_factory=list)
-    # Computing metrics every step can be expsensive. This field is used to
-    # specify the computation interval. MetricModule does not use this field but
-    # the end users need to use this field to decide whether to call
-    # ``compute()``.
     compute_interval_steps: int = 100
+    min_compute_interval: float = 0.0
+    max_compute_interval: float = float("inf")
     compute_on_all_ranks: bool = False
     should_validate_update: bool = False
 

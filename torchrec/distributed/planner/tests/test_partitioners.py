@@ -12,6 +12,7 @@ from typing import cast, List
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.types import (
@@ -91,7 +92,9 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         ]
         self.topology = Topology(world_size=2, compute_device=compute_device)
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
-        self.enumerator = EmbeddingEnumerator(topology=self.topology)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=BATCH_SIZE
+        )
         self.partitioner = GreedyPerfPartitioner()
 
     def test_tw_balanced_perf_device(self) -> None:
@@ -194,7 +197,9 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         ]
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
-        self.enumerator = EmbeddingEnumerator(topology=self.topology)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=BATCH_SIZE
+        )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[TWRWSharder()]
@@ -248,7 +253,9 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         ]
 
         self.model = TestSparseNN(tables=tables, weighted_tables=[])
-        self.enumerator = EmbeddingEnumerator(topology=self.topology)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=BATCH_SIZE
+        )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
             module=self.model, sharders=[RWSharder()]
@@ -309,7 +316,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables)
         self.enumerator = EmbeddingEnumerator(
-            topology=self.topology, constraints=constraints
+            topology=self.topology, batch_size=BATCH_SIZE, constraints=constraints
         )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
@@ -371,7 +378,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables)
         self.enumerator = EmbeddingEnumerator(
-            topology=self.topology, constraints=constraints
+            topology=self.topology, batch_size=BATCH_SIZE, constraints=constraints
         )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
@@ -434,7 +441,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables)
         self.enumerator = EmbeddingEnumerator(
-            topology=self.topology, constraints=constraints
+            topology=self.topology, batch_size=BATCH_SIZE, constraints=constraints
         )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(
@@ -515,7 +522,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
 
         self.model = TestSparseNN(tables=tables)
         self.enumerator = EmbeddingEnumerator(
-            topology=self.topology, constraints=constraints
+            topology=self.topology, batch_size=BATCH_SIZE, constraints=constraints
         )
         self.partitioner = GreedyPerfPartitioner()
         sharding_options = self.enumerator.enumerate(

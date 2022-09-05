@@ -158,11 +158,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        sharder_type=st.sampled_from(
-            [
-                SharderType.EMBEDDING_BAG_COLLECTION.value,
-            ]
-        ),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
@@ -176,7 +171,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_fused_ebc_module_replace(
         self,
-        sharder_type: str,
         sharding_type: str,
     ) -> None:
 

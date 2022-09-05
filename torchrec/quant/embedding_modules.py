@@ -8,7 +8,7 @@
 import copy
 import itertools
 from collections import defaultdict, OrderedDict
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -18,7 +18,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     PoolingMode,
 )
 from torch import Tensor
-from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
@@ -69,9 +68,7 @@ def quantize_state_dict(
             quant_weight = torch.empty(
                 (tensor.shape[0], (tensor.shape[1] * num_bits) // 8),
                 device="meta",
-                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                #  no attribute `weight`.
-                dtype=module.qconfig.weight().dtype,
+                dtype=torch.uint8,
             )
             if (
                 data_type == DataType.INT8
@@ -81,9 +78,7 @@ def quantize_state_dict(
                 scale_shift = torch.empty(
                     (tensor.shape[0], 4),
                     device="meta",
-                    # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has
-                    #  no attribute `weight`.
-                    dtype=module.qconfig.weight().dtype,
+                    dtype=torch.uint8,
                 )
             else:
                 scale_shift = None
@@ -191,7 +186,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
         ] = defaultdict(list)
         self._length_per_key: List[int] = []
-        self._emb_modules: nn.ModuleList = nn.ModuleList()
+        # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
+        # Their states will be modified via self.embedding_bags
+        self._emb_modules: List[nn.Module] = []
         self._output_dtype = output_dtype
 
         table_names = set()
@@ -240,6 +237,23 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._embedding_names: List[str] = list(
             itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
         )
+        # We map over the parameters from FBGEMM backed kernels to the canonical nn.EmbeddingBag
+        # representation. This provides consistency between this class and the EmbeddingBagCollection
+        # nn.Module API calls (state_dict, named_modules, etc)
+        self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
+        for (_key, tables), emb_module in zip(
+            self._key_to_tables.items(), self._emb_modules
+        ):
+            for embedding_config, (weight, _) in zip(
+                tables, emb_module.split_embedding_weights(split_scale_shifts=False)
+            ):
+                self.embedding_bags[embedding_config.name] = torch.nn.Module()
+                # register as a buffer so it's exposed in state_dict.
+                # however, since this is only needed for inference, we do not need to expose it as part of parameters.
+                # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
+                self.embedding_bags[embedding_config.name].register_buffer(
+                    "weight", weight
+                )
 
     def forward(
         self,
@@ -297,66 +311,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             values=embeddings,
             length_per_key=self._length_per_key,
         )
-
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-        for emb_op, (_key, tables) in zip(
-            self._emb_modules, self._key_to_tables.items()
-        ):
-            for table, (weight, _) in zip(
-                tables, emb_op.split_embedding_weights(split_scale_shifts=False)
-            ):
-                destination[prefix + f"embedding_bags.{table.name}.weight"] = weight
-        return destination
-
-    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module` inconsistently.
-    def load_state_dict(
-        self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
-        strict: bool = True,
-    ) -> _IncompatibleKeys:
-
-        missing_keys = []
-        unexpected_keys = []
-
-        current_state_dict = self.state_dict()
-        for key in current_state_dict.keys():
-            if key not in state_dict:
-                missing_keys.append(key)
-        for key in state_dict.keys():
-            if key not in current_state_dict.keys():
-                unexpected_keys.append(key)
-
-        if missing_keys or unexpected_keys:
-            return _IncompatibleKeys(
-                missing_keys=missing_keys, unexpected_keys=unexpected_keys
-            )
-
-        for (_key, tables) in self._key_to_tables.items():
-            for table in tables:
-                current_state_dict[
-                    f"embedding_bags.{table.name}.weight"
-                ].detach().copy_(state_dict[f"embedding_bags.{table.name}.weight"])
-
-        return _IncompatibleKeys(
-            missing_keys=missing_keys, unexpected_keys=unexpected_keys
-        )
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
-        state_dict = self.state_dict(prefix=prefix, keep_vars=True)
-        for key, value in state_dict.items():
-            yield key, value
 
     def _get_name(self) -> str:
         return "QuantizedEmbeddingBagCollection"
@@ -586,13 +540,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             device=device,
             need_indices=module.need_indices(),
         )
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
-        state_dict = self.state_dict(prefix=prefix, keep_vars=True)
-        for key, value in state_dict.items():
-            yield key, value
 
     def _get_name(self) -> str:
         return "QuantizedEmbeddingCollection"

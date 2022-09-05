@@ -48,14 +48,6 @@ DEFINE_bool(
 
 namespace torchrec {
 
-size_t PredictionBatch::size() const {
-  size_t size = 0;
-  for (auto& iter : forwardArgs) {
-    size += iter.value().storage().nbytes();
-  }
-  return size;
-}
-
 BatchingQueue::BatchingQueue(
     std::vector<BatchQueueCb> cbs,
     const Config& config,

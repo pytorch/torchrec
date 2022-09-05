@@ -112,24 +112,24 @@ EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
         Storage(hbm=510144, ddr=960),
     ],
     [
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
     ],
     [
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1338840, ddr=1760),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337696, ddr=1760),
     ],
 ]
 
@@ -346,11 +346,9 @@ class TestEnumerators(unittest.TestCase):
         self.constraints = {
             "table_0": ParameterConstraints(min_partition=20),
             "table_1": ParameterConstraints(min_partition=8, pooling_factors=[1, 3, 5]),
-            "table_2": ParameterConstraints(
-                min_partition=9, caching_ratio=0.36, pooling_factors=[8, 2]
-            ),
+            "table_2": ParameterConstraints(min_partition=9, pooling_factors=[8, 2]),
             "table_3": ParameterConstraints(
-                min_partition=12, caching_ratio=0.85, pooling_factors=[2, 1, 3, 7]
+                min_partition=12, pooling_factors=[2, 1, 3, 7]
             ),
         }
         self.num_tables = 4
@@ -378,8 +376,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=self.constraints,
         )
         self.tower_model = TestTowerSparseNN(
@@ -618,8 +616,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=constraints,
         )
         sharder = cast(ModuleSharder[torch.nn.Module], AllTypesSharder())
