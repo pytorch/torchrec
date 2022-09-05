@@ -4,7 +4,7 @@ import torch.nn as nn
 from torchrec.distributed.types import ShardingPlan
 
 
-__all__ = ["_get_sharded_modules_recursive"]
+__all__ = []
 
 
 def _get_sharded_modules_recursive(

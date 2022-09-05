@@ -1,7 +1,8 @@
 import unittest
 
 import torch
-from torchrec_dynamic_embedding import IDTransformer, TensorList
+from torchrec_dynamic_embedding.id_transformer import IDTransformer
+from torchrec_dynamic_embedding.tensor_list import TensorList
 
 
 class PythonIdTransformer:

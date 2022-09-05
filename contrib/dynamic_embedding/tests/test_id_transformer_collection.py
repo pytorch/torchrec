@@ -2,7 +2,7 @@ import unittest
 
 import torch
 from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
-from torchrec_dynamic_embedding import IDTransformerCollection
+from torchrec_dynamic_embedding.id_transformer_collection import IDTransformerCollection
 
 
 class TestIDTransformer(unittest.TestCase):

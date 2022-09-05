@@ -1,8 +1,7 @@
-import os
 import unittest
 
 import torch
-from torchrec_dynamic_embedding import PS
+from torchrec_dynamic_embedding.ps import PS
 from utils import register_memory_io
 
 

@@ -1,3 +1,4 @@
+import logging
 import queue
 import threading
 from typing import Dict, List, Union
@@ -6,17 +7,21 @@ import torch
 from torch.utils.data._utils import MP_STATUS_CHECK_INTERVAL
 from torchrec import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 from .id_transformer_group import IDTransformerGroup
 
 
+__all__ = ["wrap"]
+
+
 # Similar to torch.utils.data._utils.pin_memory._pin_memory_loop
-def transform_loop(dataset, transform_fn, out_queue, done_event):
+def transform_loop(dataloader, transform_fn, out_queue, done_event):
     # This setting is thread local, and prevents the copy in pin_memory from
     # consuming all CPU cores.
     torch.set_num_threads(1)
 
-    for data in dataset:
+    for data in dataloader:
         if done_event.is_set():
             break
         transformed_data = transform_fn(data)
@@ -32,12 +37,12 @@ def transform_loop(dataset, transform_fn, out_queue, done_event):
 
 
 class DataLoaderIter:
-    def __init__(self, dataset, transform_fn, num_prefetch=0):
+    def __init__(self, dataloader, transform_fn, num_prefetch=0):
         self._data_queue = queue.Queue(maxsize=num_prefetch)
         self._done_event = threading.Event()
         self._transform_thread = threading.Thread(
             target=transform_loop,
-            args=(dataset, transform_fn, self._data_queue, self._done_event),
+            args=(dataloader, transform_fn, self._data_queue, self._done_event),
         )
         self._transform_thread.start()
 
@@ -62,104 +67,135 @@ class DataLoaderIter:
 class DataLoader:
     def __init__(
         self,
+        url: str,
+        dataloader,
         module: DistributedModelParallel,
         configs_dict: Dict[str, Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]],
-        dataset,
         *,
-        data_info: Dict[int, str],
-        ps_config,
+        data_info: Dict[int, str] = None,
         eviction_config=None,
         transform_config=None,
         parallel=True,
         num_prefetch=0,
     ):
-        """
-        DataLoader to transform data from global id to cache id.
-
-        Args:
-            module: DMP module that need dynamic embedding.
-            configs_dict: a dictionary that maps the module path of the sharded module to its embedding
-                configs or embeddingbag configs. The plan of `module` should contain the module path
-                in `configs_dict`.
-            dataset: dataset to transform.
-            data_info: dict keyed by int index of module path. For example, if the dataset produces
-                `label, kjt1, kjt2` each iteration and `kjt1` and `kjt2` are inputs to modules of path
-                `emb1` and `emb2` respectively, then `data_info` should be `{ 1: "emb1", 2: "emb2" }`.
-            ps_config: configuration for PS. Required fields are "schema", which designates the schema of
-                the PS server, e.g. redis://192.168.3.1:3948 and "num_optimizer_stats", which tell PS server
-                how many optimizer states for the parameter, for intance, the value is 2 for Adam optimizer.
-            eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
-            transform_config: configuration for the transformer. Default is `{"type": "naive"}`
-            parallel: Whether the IDTransformerCollections will run paralell. When set to True,
-                IDTransformerGroup will start a thread for each IDTransformerCollection.
-            num_prefetch: number of samples to prefetch.
-
-        Example:
-            class Model(nn.Module):
-                def __init__(self, config1, config2):
-                    super().__init__()
-                    self.emb1 = EmbeddingCollection(tables=config1, device=torch.device("meta"))
-                    self.emb2 = EmbeddingCollection(tables=config2, device=torch.device("meta"))
-                    ...
-
-                def forward(self, kjt1, kjt2):
-                    ...
-
-            m = Model(config1, config2)
-            m = DistributedModelParallel(m)
-            dataloader = DataLoader(
-                m,
-                { "emb1": config1, "emb2": config2 },
-                dataset,
-                data_info={ 1: "emb1", 2: "emb2" }
-                ps_configs={
-                    "num_optimizer_stats": 2,
-                    "schema": "memory://"
-                },
-                num_prefetch=1)
-
-            for label, kjt1, kjt2 in dataloader:
-                output = m(kjt1, kjt2)
-                ...
-        """
         self._id_transformer_group = IDTransformerGroup(
+            url,
             module,
             configs_dict,
-            ps_config=ps_config,
             eviction_config=eviction_config,
             transform_config=transform_config,
             parallel=parallel,
         )
 
-        for _, path in data_info.items():
-            if path not in self._id_transformer_group:
-                raise ValueError(
-                    f"invalid path `{path}` data_info. No id transformer for this path."
-                )
+        if data_info is not None:
+            for _, path in data_info.items():
+                if path not in self._id_transformer_group:
+                    raise ValueError(
+                        f"invalid path `{path}` data_info. No id transformer for this path."
+                    )
+        else:
+            self._paths = list(configs_dict.keys())
 
         self._data_info = data_info
 
         self._data_queue = queue.Queue(maxsize=num_prefetch)
         self._done_event = threading.Event()
 
-        self._dataset = dataset
+        self._dataloader = dataloader
         self._num_prefetch = num_prefetch
 
     def _transform_fn(self, data):
         """
         transform data with `data_info`
         """
-        global_kjts = {path: data[idx] for idx, path in self._data_info.items()}
+        if self._data_info is None:
+            data_info = {}
+            path_idx = 0
+            for i in range(len(data)):
+                if isinstance(data[i], KeyedJaggedTensor):
+                    if path_idx >= len(self._paths):
+                        raise ValueError(
+                            "Has more KJT in a data sample than the number of modules, "
+                            "could not infer data_info, please set data_info manually"
+                        )
+                    data_info[i] = self._paths[path_idx]
+                    path_idx += 1
+        else:
+            data_info = self._data_info
+        global_kjts = {path: data[idx] for idx, path in data_info.items()}
         cache_kjts, fetch_handles = self._id_transformer_group.transform(global_kjts)
         data = list(data)
-        for idx, path in self._data_info.items():
+        for idx, path in data_info.items():
             data[idx] = cache_kjts[path]
         return tuple(data), fetch_handles
 
     def __iter__(self):
         return DataLoaderIter(
-            self._dataset, self._transform_fn, num_prefetch=self._num_prefetch
+            self._dataloader, self._transform_fn, num_prefetch=self._num_prefetch
         )
 
     def __len__(self):
-        return len(self._dataset)
+        return len(self._dataloader)
+
+
+def wrap(
+    url: str,
+    dataloader,
+    module: DistributedModelParallel,
+    configs_dict: Dict[str, Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]],
+    *,
+    data_info: Dict[int, str] = None,
+    eviction_config=None,
+    transform_config=None,
+    parallel=True,
+    num_prefetch=0,
+):
+    """
+    DataLoader to transform data from global id to cache id.
+
+    Args:
+        url: configuration for PS, e.g. redis://127.0.0.1:6379/?prefix=model.
+        dataloader: dataloader to transform.
+        module: DMP module that need dynamic embedding.
+        configs_dict: a dictionary that maps the module path of the sharded module to its embedding
+            configs or embeddingbag configs. The plan of `module` should contain the module path
+            in `configs_dict`.
+        data_info: dict keyed by int index of module path. For example, if the dataloader produces
+            `label, kjt1, kjt2` each iteration and `kjt1` and `kjt2` are inputs to modules of path
+            `emb1` and `emb2` respectively, then `data_info` should be `{ 1: "emb1", 2: "emb2" }`.
+        eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
+        transform_config: configuration for the transformer. Default is `{"type": "naive"}`
+        parallel: Whether the IDTransformerCollections will run paralell. When set to True,
+            IDTransformerGroup will start a thread for each IDTransformerCollection.
+        num_prefetch: number of samples to prefetch.
+
+    Example:
+        class Model(nn.Module):
+            def __init__(self, config1, config2):
+                super().__init__()
+                self.emb1 = EmbeddingCollection(tables=config1, device=torch.device("meta"))
+                self.emb2 = EmbeddingCollection(tables=config2, device=torch.device("meta"))
+                ...
+
+            def forward(self, kjt1, kjt2):
+                ...
+
+        m = Model(config1, config2)
+        m = DistributedModelParallel(m)
+        dataloader = wrap("redis://127.0.0.1:6379/", dataloader, m, { "emb1": config1, "emb2": config2 })
+
+        for label, kjt1, kjt2 in dataloader:
+            output = m(kjt1, kjt2)
+            ...
+    """
+    return DataLoader(
+        url=url,
+        dataloader=dataloader,
+        module=module,
+        configs_dict=configs_dict,
+        data_info=data_info,
+        eviction_config=eviction_config,
+        transform_config=transform_config,
+        parallel=parallel,
+        num_prefetch=num_prefetch,
+    )

@@ -15,7 +15,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 
-from torchrec_dynamic_embedding import IDTransformerGroup
+from torchrec_dynamic_embedding.id_transformer_group import IDTransformerGroup
 from utils import init_dist, register_memory_io
 
 register_memory_io()
@@ -104,9 +104,9 @@ class TestPSPrecision(unittest.TestCase):
         model2, optimizer2 = get_dmp(model2)
 
         transformer = IDTransformerGroup(
+            "memory://",
             model2,
             {"emb": [model2_config]},
-            ps_config={"num_optimizer_stats": 2, "schema": "memory://"},
             transform_config={"type": "naive"},
         )
 

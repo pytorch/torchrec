@@ -6,7 +6,8 @@ import torch.distributed as dist
 import torch.nn as nn
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
-from torchrec_dynamic_embedding import IDTransformerCollection, PSCollection
+from torchrec_dynamic_embedding.id_transformer_collection import IDTransformerCollection
+from torchrec_dynamic_embedding.ps import PSCollection
 from torchrec_dynamic_embedding.utils import _get_sharded_modules_recursive
 from utils import init_dist, register_memory_io
 
@@ -49,7 +50,7 @@ class TestPSCollection(unittest.TestCase):
             "emb",
             sharded_module,
             params_plan,
-            {"num_optimizer_stats": 0, "schema": "memory://"},
+            "memory://",
         )
 
         table_names = ps_collection.table_names()
@@ -82,10 +83,7 @@ class TestPSCollection(unittest.TestCase):
         sharded_modules = _get_sharded_modules_recursive(model.module, "", plan)
         sharded_module, params_plan = sharded_modules[""]
         ps_collection = PSCollection.fromModule(
-            "",
-            sharded_module,
-            params_plan,
-            {"num_optimizer_stats": 0, "schema": "memory://"},
+            "", sharded_module, params_plan, "memory://"
         )
 
         transformer_collection = IDTransformerCollection(

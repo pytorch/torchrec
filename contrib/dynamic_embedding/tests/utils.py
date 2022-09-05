@@ -2,10 +2,9 @@ import os
 
 import torch
 import torch.distributed as dist
-import torchrec_dynamic_embedding
 
 
-__all__ = ["register_memory_io", "init_dist"]
+__all__ = []
 
 
 MEMORY_IO_REGISTERED = False

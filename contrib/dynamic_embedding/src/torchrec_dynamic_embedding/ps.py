@@ -23,7 +23,7 @@ class PS:
         self,
         table_name: str,
         tensors: Union[List[torch.Tensor], List[ShardedTensor]],
-        schema: str,
+        url: str,
     ):
         """
         PS table of an embedding table.
@@ -32,7 +32,7 @@ class PS:
             table_name: name of the table.
             tensors: tensors of the table, the first one is the parameter tensor, others are
                 tenors of optimizers, e.g. for Adam, it will be [weight, m, v].
-            schema: schema of the PS.
+            url: url of the PS.
         """
         shards = torch.classes.tde.LocalShardList()
         num_optimizer_stats = len(tensors)
@@ -60,7 +60,7 @@ class PS:
             )
             col_size = tensors[0].shape[1]
         self._ps = torch.classes.tde.PS(
-            table_name, shards, col_size, num_optimizer_stats, schema
+            table_name, shards, col_size, num_optimizer_stats, url
         )
 
     def evict(self, ids_to_evict: torch.Tensor):
@@ -95,21 +95,21 @@ class PSCollection:
         self,
         path: str,
         plan: Dict[str, Tuple[ParameterSharding, Union[torch.Tensor, ShardedTensor]]],
-        schema: Union[str, Callable[[str], str]],
+        url: Union[str, Callable[[str], str]],
     ):
         """
         Args:
             path: module path.
             plan: dict keyed by table name of ParameterSharding and tensor of the table.
-            schema: schema of the PS.
+            url: url of the PS.
         """
         self._path = path
         self._ps_collection = {}
         for table_name, (param_plan, tensor) in plan.items():
-            if isinstance(schema, str):
-                table_config = schema
+            if isinstance(url, str):
+                table_config = url
             else:
-                table_config = schema[table_name]
+                table_config = url(table_name)
             self._ps_collection[table_name] = PS(
                 f"{path}.{table_name}", tensor, table_config
             )
@@ -121,7 +121,7 @@ class PSCollection:
         return self._ps_collection[table_name]
 
     @staticmethod
-    def fromModule(path, sharded_module, params_plan, ps_config):
+    def fromModule(path, sharded_module, params_plan, url):
         """
         Create PSCollection for `sharded_module`, whose module path is `path`
 
@@ -129,26 +129,11 @@ class PSCollection:
             path: module path of the sharded module.
             sharded_module: the sharded module.
             params_plan: the sharding plan of `sharded_module`.
-            ps_config: configuration for PS. Required fields are "schema", which designates the schema of
-                the PS server, e.g. redis://192.168.3.1:3948 and "num_optimizer_stats", which tell PS server
-                how many optimizer states for the parameter, for intance, the value is 2 for Adam optimizer.
+            url: configuration for PS, e.g. redis://127.0.0.1:6379/?prefix=model.
 
         Return:
             PSCollection of the sharded module.
         """
-        if "schema" not in ps_config:
-            raise ValueError("schema not found in ps_config")
-        schema = ps_config["schema"]
-
-        if "num_optimizer_stats" not in ps_config:
-            raise ValueError("num_optimizer_stats not found in ps_config")
-        num_optimizer_stats = ps_config["num_optimizer_stats"]
-        # Note that `num_optimizer_stats` here does not take the weight into account,
-        # while in C++ side, the weight is also considered a optimizer stat.
-        if num_optimizer_stats > 2 or num_optimizer_stats < 0:
-            raise ValueError(
-                f"num_optimizer_stats must be in [0, 2], got {num_optimizer_stats}"
-            )
 
         state_dict = sharded_module.state_dict()
         optimizer_state_dict = sharded_module.fused_optimizer.state_dict()["state"]
@@ -163,17 +148,19 @@ class PSCollection:
             tensors = [tensor]
             # This is really hardcoded right now...
             optimizer_state = optimizer_state_dict[key]
-            for i in range(num_optimizer_stats):
-                tensors.append(optimizer_state[f"{table_name}.momentum{i+1}"])
+            if f"{table_name}.momentum1" in optimizer_state:
+                tensors.append(optimizer_state[f"{table_name}.momentum1"])
+            if f"{table_name}.momentum2" in optimizer_state:
+                tensors.append(optimizer_state[f"{table_name}.momentum2"])
             tensor_infos[table_name] = (param_plan, tensors)
 
         assert (
             len(params_plan) == 0
         ), f"There are sharded param not found, leaving: {params_plan}."
 
-        if isinstance(schema, str):
-            collection_schema = schema
+        if isinstance(url, str):
+            collection_schema = url
         else:
-            collection_schema = lambda table_name: schema(path, table_name)
+            collection_schema = lambda table_name: url(path, table_name)
 
         return PSCollection(path, tensor_infos, collection_schema)

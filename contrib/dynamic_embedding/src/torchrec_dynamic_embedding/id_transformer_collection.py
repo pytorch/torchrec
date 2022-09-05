@@ -7,7 +7,7 @@ from .id_transformer import IDTransformer, TensorList
 from .ps import PSCollection
 
 
-__all__ = ["IDTransformerCollection"]
+__all__ = []
 
 
 class IDTransformerCollection:

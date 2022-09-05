@@ -10,7 +10,7 @@ except Exception as ex:
     print(f"File tde_cpp.so not found {ex}")
 
 
-__all__ = ["TensorList"]
+__all__ = []
 
 
 class TensorList:

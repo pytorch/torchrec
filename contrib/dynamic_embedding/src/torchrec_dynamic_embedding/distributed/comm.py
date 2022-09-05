@@ -6,7 +6,7 @@ import torch.distributed as dist
 
 from torchrec import KeyedJaggedTensor
 
-__all__ = ["gatherv_kjts", "default_group"]
+__all__ = []
 
 _group = [None]
 

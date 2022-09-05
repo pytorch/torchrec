@@ -10,7 +10,7 @@ from .ps import PSCollection
 from .utils import _get_sharded_modules_recursive
 
 
-__all__ = ["IDTransformerGroup"]
+__all__ = []
 
 
 def _create_transformer_thread(transformer: IDTransformerCollection):
@@ -38,10 +38,10 @@ def _create_transformer_thread(transformer: IDTransformerCollection):
 class IDTransformerGroup:
     def __init__(
         self,
+        url,
         module: DistributedModelParallel,
         configs_dict: Dict[str, Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]],
         *,
-        ps_config,
         eviction_config=None,
         transform_config=None,
         parallel=True,
@@ -50,13 +50,11 @@ class IDTransformerGroup:
         IDTransformerGroup stores the IDTransformer for all sharded modules in a DMP module.
 
         Args:
+            url: configuration for PS, e.g. redis://127.0.0.1:6379/?prefix=model.
             module: DMP module that need dynamic embedding.
             configs_dict: a dictionary that maps the module path of the sharded module to its embedding
                 configs or embeddingbag configs. The plan of `module` should contain the module path
                 in `configs_dict`.
-            ps_config: configuration for PS. Required fields are "schema", which designates the schema of
-                the PS server, e.g. redis://192.168.3.1:3948 and "num_optimizer_stats", which tell PS server
-                how many optimizer states for the parameter, for intance, the value is 2 for Adam optimizer.
             eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
             transformer_config: configuration for the transformer. Default is `{"type": "naive"}`
             parallel: Whether the IDTransformerCollections will run paralell. When set to True,
@@ -76,12 +74,9 @@ class IDTransformerGroup:
             m = Model(config1, config2)
             m = DistributedModelParallel(m)
             transformers = IDTransformerGroup(
+                "redis://127.0.0.1:6379/?prefix=model",
                 m,
-                { "emb1": config1, "emb2": config2 },
-                ps_configs={
-                    "num_optimizer_stats": 2,
-                    "schema": "memory://"
-                })
+                { "emb1": config1, "emb2": config2 })
 
             for label, kjt1, kjt2 in dataset:
                 kjts = transformers.transform({ "emb1": kjt1, "emb2": kjt2 })
@@ -104,7 +99,7 @@ class IDTransformerGroup:
                 )
             sharded_module, params_plan = sharded_modules[path]
             ps_collection = PSCollection.fromModule(
-                path, sharded_module, params_plan, ps_config
+                path, sharded_module, params_plan, url
             )
             id_transformer_collection = IDTransformerCollection(
                 configs, eviction_config, transform_config, ps_collection
