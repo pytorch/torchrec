@@ -633,8 +633,8 @@ class BinaryCriteoUtils:
 
         # Directly copy over the last day's files since they will be used for validation and testing.
         for part, input_dir in zip(
-                ["sparse", "dense", "labels"],
-                [input_dir_sparse, input_dir_labels_and_dense, input_dir_labels_and_dense],
+            ["sparse", "dense", "labels"],
+            [input_dir_sparse, input_dir_labels_and_dense, input_dir_labels_and_dense],
         ):
             path_to_original = os.path.join(
                 input_dir, f"day_{days-1}_{part}.npy"
