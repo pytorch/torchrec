@@ -14,11 +14,11 @@ MEMORY_IO_REGISTERED = False
 def register_memory_io():
     global MEMORY_IO_REGISTERED
     if not MEMORY_IO_REGISTERED:
-        torch.ops.tde.register_io(
-            os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "memory_io/memory_io.so"
-            )
-        )
+        mem_io_path = os.getenv("TDE_MEMORY_IO_PATH")
+        if mem_io_path is None:
+            raise RuntimeError("env TDE_MEMORY_IO_PATH must set for unittest")
+
+        torch.ops.tde.register_io(mem_io_path)
         MEMORY_IO_REGISTERED = True
 
 

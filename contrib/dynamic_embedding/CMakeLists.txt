@@ -36,5 +36,6 @@ endif()
 
 if (TDE_WITH_TESTING)
     enable_testing()
+    add_subdirectory(tests/memory_io)
 endif()
 add_subdirectory(src)
