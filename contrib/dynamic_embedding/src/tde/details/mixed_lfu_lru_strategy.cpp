@@ -10,7 +10,9 @@ void MixedLFULRUStrategy::UpdateTime(uint32_t time) {
   time_->store(time);
 }
 
-MixedLFULRUStrategy::lxu_record_t MixedLFULRUStrategy::Transform(
+MixedLFULRUStrategy::lxu_record_t MixedLFULRUStrategy::Update(
+    int64_t global_id,
+    int64_t cache_id,
     std::optional<lxu_record_t> val) {
   Record r{};
   r.time_ = time_->load();

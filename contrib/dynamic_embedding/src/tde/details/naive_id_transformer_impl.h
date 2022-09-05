@@ -54,9 +54,7 @@ inline NaiveIDTransformer<LXURecord, T>::NaiveIDTransformer(
 }
 
 template <typename LXURecord, typename T>
-template <
-    typename Update,
-    typename Fetch>
+template <typename Update, typename Fetch>
 inline bool NaiveIDTransformer<LXURecord, T>::Transform(
     tcb::span<const int64_t> global_ids,
     tcb::span<int64_t> cache_ids,

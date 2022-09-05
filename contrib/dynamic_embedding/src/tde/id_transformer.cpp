@@ -3,10 +3,7 @@
 namespace tde {
 
 IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
-    : transformer_(
-          std::move(details::LXUStrategy(json["lxu_strategy"])),
-          num_embedding,
-          static_cast<const std::string&>(json["id_transformer"]["type"])) {}
+    : transformer_(num_embedding, std::move(json)) {}
 
 c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
     c10::intrusive_ptr<TensorList> global_id_list,

@@ -4,12 +4,11 @@
 namespace tde::details {
 void BM_MixedLFULRUStrategy(benchmark::State& state) {
   size_t num_ext_values = state.range(0);
-  std::vector<MixedLFULRUStrategy::lxu_record_t> ext_values(
-      num_ext_values);
+  std::vector<MixedLFULRUStrategy::lxu_record_t> ext_values(num_ext_values);
 
   MixedLFULRUStrategy strategy;
   for (auto& v : ext_values) {
-    v = strategy.Transform(std::nullopt);
+    v = strategy.Update(0, 0, std::nullopt);
   }
 
   size_t num_elems = state.range(1);
@@ -28,7 +27,7 @@ void BM_MixedLFULRUStrategy(benchmark::State& state) {
     ++time;
     strategy.UpdateTime(time);
     for (auto& v : offsets) {
-      ext_values[v] = strategy.Transform(ext_values[v]);
+      ext_values[v] = strategy.Update(0, 0, ext_values[v]);
     }
   }
 }

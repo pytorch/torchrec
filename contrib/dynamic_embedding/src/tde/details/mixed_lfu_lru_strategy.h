@@ -61,14 +61,10 @@ class MixedLFULRUStrategy {
 
   void UpdateTime(uint32_t time);
 
-  lxu_record_t Transform(std::optional<lxu_record_t> val);
-
   lxu_record_t Update(
       int64_t global_id,
       int64_t cache_id,
-      std::optional<lxu_record_t> val) {
-    return Transform(val);
-  }
+      std::optional<lxu_record_t> val);
 
   struct EvictItem {
     int64_t global_id_;
