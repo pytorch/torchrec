@@ -376,10 +376,16 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths = _lengths
         return _lengths
 
+    def lengths_or_none(self) -> Optional[torch.Tensor]:
+        return self._lengths
+
     def offsets(self) -> torch.Tensor:
         _offsets = _maybe_compute_offsets(self._lengths, self._offsets)
         self._offsets = _offsets
         return _offsets
+
+    def offsets_or_none(self) -> Optional[torch.Tensor]:
+        return self._offsets
 
     def values(self) -> torch.Tensor:
         return self._values
@@ -835,10 +841,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths = _lengths
         return _lengths
 
+    def lengths_or_none(self) -> Optional[torch.Tensor]:
+        return self._lengths
+
     def offsets(self) -> torch.Tensor:
         _offsets = _maybe_compute_offsets(self._lengths, self._offsets)
         self._offsets = _offsets
         return _offsets
+
+    def offsets_or_none(self) -> Optional[torch.Tensor]:
+        return self._offsets
 
     def keys(self) -> List[str]:
         return self._keys
@@ -874,6 +886,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._length_per_key = _length_per_key
         return _length_per_key
 
+    def length_per_key_or_none(self) -> Optional[List[int]]:
+        return self._length_per_key
+
     def offset_per_key(self) -> List[int]:
         _length_per_key, _offset_per_key = _maybe_compute_offset_per_key(
             self._keys,
@@ -886,6 +901,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._length_per_key = _length_per_key
         self._offset_per_key = _offset_per_key
         return _offset_per_key
+
+    def offset_per_key_or_none(self) -> Optional[List[int]]:
+        return self._offset_per_key
 
     def split(self, segments: List[int]) -> List["KeyedJaggedTensor"]:
         split_list: List[KeyedJaggedTensor] = []
