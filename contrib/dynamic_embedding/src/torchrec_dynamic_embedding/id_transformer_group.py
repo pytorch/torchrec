@@ -44,6 +44,7 @@ class IDTransformerGroup:
         *,
         eviction_config=None,
         transform_config=None,
+        ps_config=None,
         parallel=True,
     ):
         """
@@ -99,7 +100,7 @@ class IDTransformerGroup:
                 )
             sharded_module, params_plan = sharded_modules[path]
             ps_collection = PSCollection.fromModule(
-                path, sharded_module, params_plan, url
+                path, sharded_module, params_plan, url, ps_config
             )
             id_transformer_collection = IDTransformerCollection(
                 configs, eviction_config, transform_config, ps_collection
@@ -154,6 +155,10 @@ class IDTransformerGroup:
                 result[path] = kjt
                 fetch_handles.extend(handles)
         return result, fetch_handles
+
+    def save(self):
+        for _, id_transformer_collection in self._id_transformer_collections.items():
+            id_transformer_collection.save()
 
     def __contains__(self, path):
         """

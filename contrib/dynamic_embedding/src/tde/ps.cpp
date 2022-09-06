@@ -9,6 +9,8 @@ c10::intrusive_ptr<FetchHandle> PS::Fetch(
     bool reinit,
     double weight_init_min,
     double weight_init_max) {
+  std::lock_guard<std::mutex> lock(mu_);
+  torch::NoGradGuard no_grad;
   TORCH_CHECK(ids_to_fetch.dim() == 2);
   std::vector<int64_t> col_ids{0};
   Filter(ids_to_fetch);
@@ -74,6 +76,8 @@ void PS::Filter(const torch::Tensor& tensor) {
 }
 
 void PS::Evict(torch::Tensor ids_to_evict) {
+  std::lock_guard<std::mutex> lock(mu_);
+  torch::NoGradGuard no_grad;
   TORCH_CHECK(ids_to_evict.dim() == 2);
   // make sure all previous fetches are done.
   SyncFetch();
@@ -86,40 +90,53 @@ void PS::Evict(torch::Tensor ids_to_evict) {
   }
 
   uint32_t num_os_ids = os_ids_.size();
-  std::vector<uint64_t> offsets;
-  offsets.reserve(
-      global_ids_to_fetch_or_evict_.size() * num_os_ids * col_ids.size() + 1);
-  offsets.emplace_back(0);
-  std::vector<float> data(
-      global_ids_to_fetch_or_evict_.size() * num_os_ids * col_ids.size() *
-      col_size_);
-
-  for (auto cache_id : cache_ids_to_fetch_or_evict_) {
-    std::vector<torch::Tensor> tensors = GetTensorViews(cache_id);
-    for (uint32_t j : os_ids_) {
-      // this cause 2 copy. is this avoidable?
-      torch::Tensor tensor = tensors[j].cpu();
-      // need to change this when considering col
-      memcpy(
-          reinterpret_cast<uint8_t*>(data.data()) + offsets.back(),
-          tensor.data_ptr<float>(),
-          tensor.numel() * tensor.element_size());
-      offsets.emplace_back(
-          offsets.back() + tensor.numel() * tensor.element_size());
-    }
-  }
+  uint32_t num_ids_to_fetch = global_ids_to_fetch_or_evict_.size();
 
   details::Notification notification;
-  io_.Push(
-      table_name_,
-      global_ids_to_fetch_or_evict_,
-      col_ids,
-      os_ids_,
-      tcb::span{
-          reinterpret_cast<uint8_t*>(data.data()), data.size() * sizeof(float)},
-      tcb::span{offsets.data(), offsets.size()},
-      [&notification] { notification.Done(); });
+  // Done first so that the Wait after preparing the first chunk won't stuck.
+  notification.Done();
+  // The shared data for all chunks.
+  std::vector<uint64_t> offsets;
+  offsets.reserve(num_ids_per_chunk_ * num_os_ids * col_ids.size() + 1);
+  std::vector<float> data(
+      num_ids_per_chunk_ * num_os_ids * col_ids.size() * col_size_);
 
+  for (uint32_t i = 0; i < num_ids_to_fetch; i += num_ids_per_chunk_) {
+    uint32_t num_ids_in_chunk = std::min(
+        static_cast<uint32_t>(num_ids_per_chunk_), num_ids_to_fetch - i);
+    uint32_t data_size = num_ids_in_chunk * num_os_ids * col_ids.size();
+    uint32_t offsets_size = num_ids_in_chunk * num_os_ids * col_ids.size() + 1;
+
+    offsets.clear();
+    offsets.emplace_back(0);
+    for (uint32_t j = i; j < i + num_ids_in_chunk; ++j) {
+      int64_t cache_id = cache_ids_to_fetch_or_evict_[j];
+      std::vector<torch::Tensor> tensors = GetTensorViews(cache_id);
+      for (uint32_t k : os_ids_) {
+        // this cause 2 copy. is this avoidable?
+        torch::Tensor tensor = tensors[k].cpu();
+        // need to change this when considering col
+        memcpy(
+            reinterpret_cast<uint8_t*>(data.data()) + offsets.back(),
+            tensor.data_ptr<float>(),
+            tensor.numel() * tensor.element_size());
+        offsets.emplace_back(
+            offsets.back() + tensor.numel() * tensor.element_size());
+      }
+    }
+    // waiting for the Push of last chunk finishes.
+    notification.Wait();
+    notification.Clear();
+    io_.Push(
+        table_name_,
+        tcb::span{global_ids_to_fetch_or_evict_.data() + i, num_ids_in_chunk},
+        col_ids,
+        os_ids_,
+        tcb::span{
+            reinterpret_cast<uint8_t*>(data.data()), data_size * sizeof(float)},
+        tcb::span{offsets.data(), offsets_size},
+        [&notification] { notification.Done(); });
+  }
   notification.Wait();
 }
 

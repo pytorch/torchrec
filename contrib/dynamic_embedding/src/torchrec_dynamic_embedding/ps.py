@@ -18,12 +18,16 @@ except Exception as ex:
 __all__ = ["PS", "PSCollection"]
 
 
+DEFAULT_PS_CHUNK_SIZE = 8 * 1024 * 1024
+
+
 class PS:
     def __init__(
         self,
         table_name: str,
         tensors: Union[List[torch.Tensor], List[ShardedTensor]],
         url: str,
+        chunk_size: str,
     ):
         """
         PS table of an embedding table.
@@ -60,7 +64,7 @@ class PS:
             )
             col_size = tensors[0].shape[1]
         self._ps = torch.classes.tde.PS(
-            table_name, shards, col_size, num_optimizer_stats, url
+            table_name, shards, col_size, num_optimizer_stats, url, chunk_size
         )
 
     def evict(self, ids_to_evict: torch.Tensor):
@@ -96,22 +100,27 @@ class PSCollection:
         path: str,
         plan: Dict[str, Tuple[ParameterSharding, Union[torch.Tensor, ShardedTensor]]],
         url: Union[str, Callable[[str], str]],
+        ps_config=None,
     ):
         """
         Args:
             path: module path.
             plan: dict keyed by table name of ParameterSharding and tensor of the table.
-            url: url of the PS.
+            url: configuration for PS, e.g. redis://127.0.0.1:6379/?prefix=model.
+            ps_config: config of the PS, currently only support setting chunk size.
         """
         self._path = path
         self._ps_collection = {}
+        chunk_size = DEFAULT_PS_CHUNK_SIZE
+        if ps_config is not None and "chunk_size" in ps_config:
+            chunk_size = ps_config["chunk_size"]
         for table_name, (param_plan, tensor) in plan.items():
             if isinstance(url, str):
                 table_config = url
             else:
                 table_config = url(table_name)
             self._ps_collection[table_name] = PS(
-                f"{path}.{table_name}", tensor, table_config
+                f"{path}.{table_name}", tensor, table_config, chunk_size
             )
 
     def table_names(self):
@@ -121,7 +130,7 @@ class PSCollection:
         return self._ps_collection[table_name]
 
     @staticmethod
-    def fromModule(path, sharded_module, params_plan, url):
+    def fromModule(path, sharded_module, params_plan, url, ps_config=None):
         """
         Create PSCollection for `sharded_module`, whose module path is `path`
 
@@ -130,6 +139,7 @@ class PSCollection:
             sharded_module: the sharded module.
             params_plan: the sharding plan of `sharded_module`.
             url: configuration for PS, e.g. redis://127.0.0.1:6379/?prefix=model.
+            ps_config: config of the PS, currently only support setting chunk size.
 
         Return:
             PSCollection of the sharded module.
@@ -163,4 +173,4 @@ class PSCollection:
         else:
             collection_schema = lambda table_name: url(path, table_name)
 
-        return PSCollection(path, tensor_infos, collection_schema)
+        return PSCollection(path, tensor_infos, collection_schema, ps_config)

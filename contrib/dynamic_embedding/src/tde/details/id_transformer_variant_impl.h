@@ -35,6 +35,14 @@ inline auto IDTransformer::LXUStrategy::VisitUpdator(Visitor visit)
       strategy_);
 }
 
+template <typename T>
+int64_t IDTransformer::LXUStrategy::Time(T record) {
+    return std::visit([&](auto& s) -> int64_t {
+      return s.Time(record);
+    },
+    strategy_);
+}
+
 template <typename Iterator>
 inline std::vector<int64_t> IDTransformer::LXUStrategy::Evict(
     Iterator iterator,

@@ -1,4 +1,3 @@
-import logging
 import queue
 import threading
 from typing import Dict, List, Union
@@ -12,7 +11,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from .id_transformer_group import IDTransformerGroup
 
 
-__all__ = ["wrap"]
+__all__ = ["wrap", "save"]
 
 
 # Similar to torch.utils.data._utils.pin_memory._pin_memory_loop
@@ -67,25 +66,14 @@ class DataLoaderIter:
 class DataLoader:
     def __init__(
         self,
-        url: str,
+        id_transformer_group: IDTransformerGroup,
         dataloader,
-        module: DistributedModelParallel,
-        configs_dict: Dict[str, Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]],
         *,
         data_info: Dict[int, str] = None,
-        eviction_config=None,
-        transform_config=None,
-        parallel=True,
+        paths: List[str] = None,
         num_prefetch=0,
     ):
-        self._id_transformer_group = IDTransformerGroup(
-            url,
-            module,
-            configs_dict,
-            eviction_config=eviction_config,
-            transform_config=transform_config,
-            parallel=parallel,
-        )
+        self._id_transformer_group = id_transformer_group
 
         if data_info is not None:
             for _, path in data_info.items():
@@ -94,7 +82,7 @@ class DataLoader:
                         f"invalid path `{path}` data_info. No id transformer for this path."
                     )
         else:
-            self._paths = list(configs_dict.keys())
+            self._paths = paths
 
         self._data_info = data_info
 
@@ -147,6 +135,7 @@ def wrap(
     data_info: Dict[int, str] = None,
     eviction_config=None,
     transform_config=None,
+    ps_config=None,
     parallel=True,
     num_prefetch=0,
 ):
@@ -165,9 +154,14 @@ def wrap(
             `emb1` and `emb2` respectively, then `data_info` should be `{ 1: "emb1", 2: "emb2" }`.
         eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
         transform_config: configuration for the transformer. Default is `{"type": "naive"}`
+        transform_config: configuration for the ps. Default is `{"chunk_size": 8 * 1024 * 1024}
         parallel: Whether the IDTransformerCollections will run paralell. When set to True,
             IDTransformerGroup will start a thread for each IDTransformerCollection.
         num_prefetch: number of samples to prefetch.
+
+    Return:
+        DataLoader: the dataloader to transform data.
+        DistributedModelParallel: model with id_transformer_group attached.
 
     Example:
         class Model(nn.Module):
@@ -182,20 +176,48 @@ def wrap(
 
         m = Model(config1, config2)
         m = DistributedModelParallel(m)
-        dataloader = wrap("redis://127.0.0.1:6379/", dataloader, m, { "emb1": config1, "emb2": config2 })
+        dataloader, m = tde.wrap("redis://127.0.0.1:6379/", dataloader, m, { "emb1": config1, "emb2": config2 })
 
         for label, kjt1, kjt2 in dataloader:
             output = m(kjt1, kjt2)
             ...
     """
-    return DataLoader(
-        url=url,
-        dataloader=dataloader,
-        module=module,
-        configs_dict=configs_dict,
-        data_info=data_info,
+    id_transformer_group = IDTransformerGroup(
+        url,
+        module,
+        configs_dict,
         eviction_config=eviction_config,
         transform_config=transform_config,
+        ps_config=ps_config,
         parallel=parallel,
-        num_prefetch=num_prefetch,
     )
+    paths = list(configs_dict.keys())
+    # Attach the id transformer group to module for saving.
+    module._id_transformer_group = id_transformer_group
+
+    return (
+        DataLoader(
+            id_transformer_group=id_transformer_group,
+            dataloader=dataloader,
+            data_info=data_info,
+            paths=paths,
+            num_prefetch=num_prefetch,
+        ),
+        module,
+    )
+
+
+def save(module: DistributedModelParallel):
+    """
+    Save the dynamic embedding part of the model.
+    """
+    if not hasattr(module, "_id_transformer_group"):
+        raise ValueError(
+            "No _id_transformer_group property for module, is this a module with dynamic embeding?"
+        )
+    if not isinstance(module._id_transformer_group, IDTransformerGroup):
+        raise ValueError(
+            "module._id_transformer_group property is not IDTransformerGroup, is this a module with dynamic embeding?"
+        )
+
+    module._id_transformer_group.save()

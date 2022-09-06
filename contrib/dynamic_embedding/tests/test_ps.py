@@ -14,7 +14,7 @@ class TestPS(unittest.TestCase):
         ids = torch.tensor([[100, 0], [101, 2], [102, 4], [103, 8]], dtype=torch.long)
         tensor = torch.rand((10, 4))
         origin_tensor = tensor.clone()
-        ps = PS("table", [tensor], "memory://")
+        ps = PS("table", [tensor], "memory://", 1024)
         ps.evict(ids)
         tensor[:, :] = 0
         ps.fetch(ids, 0).wait()
@@ -29,7 +29,7 @@ class TestPS(unittest.TestCase):
         origin_tensor = tensor.clone()
         origin_optim1 = optim1.clone()
         origin_optim2 = optim2.clone()
-        ps = PS("table", [tensor, optim1, optim2], "memory://")
+        ps = PS("table", [tensor, optim1, optim2], "memory://", 1024)
         ps.evict(ids)
         tensor[:, :] = 0
         optim1[:, :] = 0
@@ -46,7 +46,7 @@ class TestPS(unittest.TestCase):
         )
         tensor = torch.rand((10, 4))
         origin_tensor = tensor.clone()
-        ps = PS("table", [tensor], "memory://")
+        ps = PS("table", [tensor], "memory://", 1024)
         ps.evict(evict_ids)
         tensor[:, :] = 0
         new_cache_ids = [1, 3, 5, 7]
@@ -61,7 +61,7 @@ class TestPS(unittest.TestCase):
         evict_ids = torch.tensor([[100, 0], [101, 2], [102, 4]], dtype=torch.long)
         tensor = torch.rand((10, 4))
         origin_tensor = tensor.clone()
-        ps = PS("table", [tensor], "memory://")
+        ps = PS("table", [tensor], "memory://", 1024)
         ps.evict(evict_ids)
         tensor[:, :] = 0
         addition_cache_ids = [3, 9]

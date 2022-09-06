@@ -5,7 +5,7 @@ from torchrec import EmbeddingBagConfig, EmbeddingConfig, KeyedJaggedTensor
 from torchrec_dynamic_embedding.id_transformer_collection import IDTransformerCollection
 
 
-class TestIDTransformer(unittest.TestCase):
+class TestIDTransformerCollection(unittest.TestCase):
     def testTransform(self):
         configs = [
             EmbeddingConfig(name="A", num_embeddings=8, embedding_dim=32),

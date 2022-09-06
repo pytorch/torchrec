@@ -108,6 +108,7 @@ class TestPSPrecision(unittest.TestCase):
             model2,
             {"emb": [model2_config]},
             transform_config={"type": "naive"},
+            ps_config={"chunk_size": 1024},
         )
 
         def sigmoid_crossentropy(y_true, y_pred):

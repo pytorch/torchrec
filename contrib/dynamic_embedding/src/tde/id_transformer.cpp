@@ -3,14 +3,19 @@
 namespace tde {
 
 IDTransformer::IDTransformer(int64_t num_embedding, nlohmann::json json)
-    : transformer_(num_embedding, std::move(json)) {}
+    : transformer_(num_embedding, std::move(json)),
+      time_(-1),
+      last_save_time_(-1) {}
 
 c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
     c10::intrusive_ptr<TensorList> global_id_list,
     c10::intrusive_ptr<TensorList> cache_id_list,
     int64_t time) {
+  std::lock_guard<std::mutex> lock(mu_);
   torch::NoGradGuard no_grad;
   TORCH_CHECK(time >= 0);
+  TORCH_CHECK(time >= time_, "Time cannot go backward");
+  time_ = time;
   TORCH_CHECK(global_id_list->size() == cache_id_list->size());
   transformer_.strategy_.UpdateTime(static_cast<uint32_t>(time));
   {
@@ -62,13 +67,21 @@ c10::intrusive_ptr<TransformResult> IDTransformer::Transform(
 }
 
 torch::Tensor IDTransformer::Evict(int64_t num_to_evict) {
+  std::lock_guard<std::mutex> lock(mu_);
   torch::NoGradGuard no_grad;
   std::vector<int64_t> ids_to_evict = transformer_.Evict(num_to_evict);
   int64_t num_ids_to_evict = ids_to_evict.size() / 2;
-  torch::Tensor evicted_ids_tensor =
-      torch::tensor(ids_to_evict, torch::dtype(torch::kLong))
-          .reshape({num_ids_to_evict, 2});
-  return evicted_ids_tensor;
+  return torch::tensor(ids_to_evict, torch::dtype(torch::kLong))
+      .reshape({num_ids_to_evict, 2});
+}
+
+torch::Tensor IDTransformer::Save() {
+  std::lock_guard<std::mutex> lock(mu_);
+  torch::NoGradGuard no_grad;
+  std::vector<int64_t> ids = transformer_.Save(last_save_time_);
+  last_save_time_ = time_;
+  int64_t num_ids = ids.size() / 2;
+  return torch::tensor(ids, torch::dtype(torch::kLong)).reshape({num_ids, 2});
 }
 
 } // namespace tde

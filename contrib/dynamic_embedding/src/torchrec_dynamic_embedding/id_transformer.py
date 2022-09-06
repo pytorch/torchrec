@@ -42,3 +42,9 @@ class IDTransformer:
         Evict `num_to_evict` ids from the transformer.
         """
         return self._transformer.evict(num_to_evict)
+
+    def save(self):
+        """
+        Get ids to save.
+        """
+        return self._transformer.save()

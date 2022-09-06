@@ -141,3 +141,11 @@ class IDTransformerCollection:
         )
         self._time += 1
         return cache_values, fetch_handles
+
+    def save(self):
+        if self._ps_collection is None:
+            return
+        for i, transformer in enumerate(self._transformers):
+            table_name = self._table_names[i]
+            ids = transformer.save()
+            self._ps_collection[table_name].evict(ids)

@@ -31,6 +31,7 @@ class IDTransformer {
       Fetch fetch = transform_default::NoFetch);
 
   std::vector<int64_t> Evict(int64_t num_to_evict);
+  std::vector<int64_t> Save(int64_t time);
 
   struct LXUStrategy {
    private:
@@ -44,6 +45,8 @@ class IDTransformer {
     explicit LXUStrategy(const nlohmann::json& json);
 
     void UpdateTime(uint32_t time);
+    template <typename T>
+    int64_t Time(T record);
 
     template <typename Visitor>
     auto VisitUpdator(Visitor visit)

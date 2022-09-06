@@ -60,6 +60,11 @@ class MixedLFULRUStrategy {
   MixedLFULRUStrategy(MixedLFULRUStrategy&& o) noexcept = default;
 
   void UpdateTime(uint32_t time);
+  template <typename T>
+  static int64_t Time(T record) {
+    static_assert(sizeof(T) == sizeof(Record));
+    return static_cast<int64_t>(reinterpret_cast<Record*>(&record)->time_);
+  }
 
   lxu_record_t Update(
       int64_t global_id,
