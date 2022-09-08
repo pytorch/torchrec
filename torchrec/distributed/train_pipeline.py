@@ -272,11 +272,10 @@ def _start_data_dist(
             else:
                 args.append(None)
         # Start input distribution.
-        module_ctx = module.create_context()
-        context.module_contexts[forward.name] = module_ctx
-        context.input_dist_requests[forward.name] = module.input_dist(
-            module_ctx, *args, **kwargs
-        )
+        (
+            context.module_contexts[forward.name],
+            context.input_dist_requests[forward.name],
+        ) = module.input_dist(*args, **kwargs)
 
 
 def _get_node_args_helper(

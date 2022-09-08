@@ -231,11 +231,10 @@ class ShardedEmbeddingTower(
     # pyre-ignore [14]
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[SparseFeaturesList]:
-
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeaturesList]]:
+        ctx = self.create_context()
         # optional_features are populated only if both kjt and weighted kjt present in tower
         if self._wkjt_feature_names and self._kjt_feature_names:
             kjt_features = features
@@ -275,7 +274,7 @@ class ShardedEmbeddingTower(
                     id_score_list_features=wkjt_features,
                 )
             )
-            return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
+            return ctx, SparseFeaturesListAwaitable([tensor_awaitable.wait()])
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
@@ -631,10 +630,10 @@ class ShardedEmbeddingTowerCollection(
     # pyre-ignore [14]
     def input_dist(
         self,
-        ctx: EmbeddingTowerCollectionContext,
         kjt_features: Optional[KeyedJaggedTensor] = None,
         wkjt_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeaturesList]]:
+        ctx = self.create_context()
         if self._has_uninitialized_input_dist:
             # pyre-ignore [16]
             stride = kjt_features.stride() if kjt_features else wkjt_features.stride()
@@ -669,30 +668,23 @@ class ShardedEmbeddingTowerCollection(
                 self.embeddings.values(), self.input_dist_params
             ):
 
-                embedding_ctx = embedding.create_context()
-                ctx.embedding_contexts.append(embedding_ctx)
                 kjt_param, wkjt_param = input_dist_params
                 if kjt_param and wkjt_param:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx,
-                            sparse_features.id_list_features,
-                            sparse_features.id_score_list_features,
-                        )
+                    embedding_ctx, embedding_input_dist = embedding.input_dist(
+                        sparse_features.id_list_features,
+                        sparse_features.id_score_list_features,
                     )
                 elif kjt_param:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx, sparse_features.id_list_features
-                        )
+                    embedding_ctx, embedding_input_dist = embedding.input_dist(
+                        sparse_features.id_list_features
                     )
                 else:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx, sparse_features.id_score_list_features
-                        )
+                    embedding_ctx, embedding_input_dist = embedding.input_dist(
+                        sparse_features.id_score_list_features
                     )
-            return SparseFeaturesListAwaitable(input_dists)
+                ctx.embedding_contexts.append(embedding_ctx)
+                input_dists.append(embedding_input_dist)
+            return ctx, SparseFeaturesListAwaitable(input_dists)
 
     # pyre-ignore [14]
     def compute(

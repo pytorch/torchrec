@@ -404,9 +404,9 @@ class ShardedEmbeddingCollection(
     # pyre-ignore [14]
     def input_dist(
         self,
-        ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeaturesList]]:
+        ctx = self.create_context()
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
@@ -444,7 +444,7 @@ class ShardedEmbeddingCollection(
                         #  `_out_lengths_per_worker`.
                         tensor_awaitable._id_list_features_awaitable._out_lengths_per_worker
                     )
-                ctx.sharding_contexts.append(
+                cast(EmbeddingCollectionContext, ctx).sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
                         input_splits=input_splits,
@@ -455,7 +455,7 @@ class ShardedEmbeddingCollection(
                     )
                 )
                 awaitables.append(tensor_awaitable)
-            return SparseFeaturesListAwaitable(awaitables)
+            return ctx, SparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList

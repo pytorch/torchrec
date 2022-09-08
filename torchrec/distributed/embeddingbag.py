@@ -346,8 +346,9 @@ class ShardedEmbeddingBagCollection(
 
     # pyre-ignore [14]
     def input_dist(
-        self, ctx: ShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[SparseFeaturesList]:
+        self, features: KeyedJaggedTensor
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeaturesList]]:
+        ctx = self.create_context()
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
@@ -374,7 +375,7 @@ class ShardedEmbeddingBagCollection(
                     )
                 )
                 awaitables.append(all2all_lengths.wait())
-            return SparseFeaturesListAwaitable(awaitables)
+            return ctx, SparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self,
@@ -635,11 +636,11 @@ class ShardedEmbeddingBag(
     # pyre-ignore [14]
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
         input: Tensor,
         offsets: Optional[Tensor] = None,
         per_sample_weights: Optional[Tensor] = None,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeatures]]:
+        ctx = self.create_context()
         if per_sample_weights is None:
             per_sample_weights = torch.ones_like(input, dtype=torch.float)
         features = KeyedJaggedTensor(
@@ -648,12 +649,15 @@ class ShardedEmbeddingBag(
             offsets=offsets,
             weights=per_sample_weights,
         )
-        return self._input_dist(
-            SparseFeatures(
-                id_list_features=None,
-                id_score_list_features=features,
-            )
-        ).wait()
+        return (
+            ctx,
+            self._input_dist(
+                SparseFeatures(
+                    id_list_features=None,
+                    id_score_list_features=features,
+                )
+            ).wait(),
+        )
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: SparseFeatures

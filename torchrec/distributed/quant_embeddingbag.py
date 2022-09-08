@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 from torch import nn
@@ -171,8 +171,9 @@ class ShardedQuantEmbeddingBagCollection(
 
     # pyre-ignore [14]
     def input_dist(
-        self, ctx: ShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[ListOfSparseFeaturesList]:
+        self, features: KeyedJaggedTensor
+    ) -> Tuple[ShardedModuleContext, Awaitable[ListOfSparseFeaturesList]]:
+        ctx = self.create_context()
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
@@ -204,7 +205,7 @@ class ShardedQuantEmbeddingBagCollection(
                     self._input_dists, features_by_shards
                 )
             ]
-            return ListOfSparseFeaturesListAwaitable(awaitables)
+            return ctx, ListOfSparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self,

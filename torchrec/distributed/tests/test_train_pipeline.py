@@ -52,10 +52,9 @@ from torchrec.test_utils import get_free_port, init_distributed_single_host
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[SparseFeaturesList]:
-        return super().input_dist(ctx, features)
+    ) -> Tuple[ShardedModuleContext, Awaitable[SparseFeaturesList]]:
+        return super().input_dist(features)
 
 
 class TestCustomEBCSharder(EmbeddingBagCollectionSharder):

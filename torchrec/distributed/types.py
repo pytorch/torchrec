@@ -9,7 +9,18 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 from torch.autograd.profiler import record_function
 
@@ -474,7 +485,7 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
         *input,
         # pyre-ignore[2]
         **kwargs,
-    ) -> Awaitable[CompIn]:
+    ) -> Tuple[ShardedModuleContext, Awaitable[CompIn]]:
         pass
 
     @abc.abstractmethod
@@ -510,9 +521,8 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
         Returns:
             LazyAwaitable[Out]: awaitable of output from output dist.
         """
-        ctx = self.create_context()
-        dist_input = self.input_dist(ctx, *input, **kwargs).wait()
-        return self.compute_and_output_dist(ctx, dist_input)
+        ctx, dist_input = self.input_dist(*input, **kwargs)
+        return self.compute_and_output_dist(ctx, dist_input.wait())
 
     def sparse_grad_parameter_names(
         self,

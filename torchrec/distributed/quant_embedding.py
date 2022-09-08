@@ -7,7 +7,7 @@
 
 
 from collections import OrderedDict
-from typing import Any, cast, Dict, List, Optional, Type
+from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import torch
 from torch import nn
@@ -151,9 +151,9 @@ class ShardedQuantEmbeddingCollection(
     # pyre-ignore [3, 14]
     def input_dist(
         self,
-        ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Any]:
+    ) -> Tuple[ShardedModuleContext, Awaitable[Any]]:
+        ctx = self.create_context()
         if self._has_uninitialized_input_dist:
             self._create_input_dist(
                 input_feature_names=features.keys() if features is not None else [],
@@ -184,7 +184,7 @@ class ShardedQuantEmbeddingCollection(
                         id_score_list_features=None,
                     )
                 ).wait()  # a dummy wait since now length indices comm is splited
-                ctx.sharding_contexts.append(
+                cast(EmbeddingCollectionContext, ctx).sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
                         input_splits=[],
@@ -193,7 +193,7 @@ class ShardedQuantEmbeddingCollection(
                     )
                 )
                 awaitables.append(tensor_awaitable)
-            return ListOfSparseFeaturesListAwaitable(awaitables)
+            return ctx, ListOfSparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self, ctx: ShardedModuleContext, dist_input: ListOfSparseFeaturesList
