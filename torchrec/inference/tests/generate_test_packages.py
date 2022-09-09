@@ -37,9 +37,9 @@ parser = argparse.ArgumentParser(description="Generate Examples")
 parser.add_argument("--install_dir", help="Root directory for all output files")
 
 if __name__ == "__main__":
-    args = parser.parse_args() # pyre-ignore
+    args = parser.parse_args()  # pyre-ignore
     if args.install_dir is None:
-        p = Path(__file__).parent / "generated" # pyre-ignore
+        p = Path(__file__).parent / "generated"  # pyre-ignore
         p.mkdir(exist_ok=True)
     else:
         p = Path(args.install_dir)
