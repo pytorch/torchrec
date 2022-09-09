@@ -24,6 +24,15 @@ from torchrec.optim.keyed import (  # noqa
     KeyedOptimizerWrapper,
     OptimizerWrapper,
 )
+from torchrec.optim.optimizers import (  # noqa
+    Adagrad,
+    Adam,
+    LAMB,
+    LarsSGD,
+    PartialRowWiseAdam,
+    PartialRowWiseLAMB,
+    SGD,
+)
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad  # noqa
 from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage  # noqa
 
@@ -32,6 +41,7 @@ from . import (  # noqa  # noqa  # noqa  # noqa
     clipping,
     fused,
     keyed,
+    optimizers,
     rowwise_adagrad,
     warmup,
 )

@@ -8,13 +8,11 @@
 import abc
 import copy
 import itertools
-import logging
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     ComputeDevice,
     DenseTableBatchedEmbeddingBagsCodegen,
@@ -43,8 +41,6 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-
-logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
@@ -254,33 +250,6 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
-def configure_fused_params(
-    fused_params: Optional[Dict[str, Any]], weights_precision: SparseType
-) -> Dict[str, Any]:
-
-    """
-    Configure the fused_params including cache_precision if the value is not preset
-
-    Args:
-        fused_params (Optional[Dict[str, Any]]): the original fused_params
-        weights_precision (SparseType): the weights_precision to be used for
-        the embedding lookup kernel
-
-    Returns:
-        [Dict[str, Any]]: a non-null configured fused_params dictionary to be
-        used to configure the embedding lookup kernel
-    """
-
-    if fused_params is None:
-        fused_params = {}
-    if "cache_precision" not in fused_params:
-        # Set cache_precision to be the same as weights_precision
-        # if it is not preset
-        fused_params["cache_precision"] = weights_precision
-
-    return fused_params
-
-
 class BaseBatchedEmbedding(BaseEmbedding):
     def __init__(
         self,
@@ -384,7 +353,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -399,10 +367,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -412,7 +383,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
                 pooling_mode=PoolingMode.NONE,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -420,7 +391,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
-
         self.init_parameters()
 
     @property
@@ -606,7 +576,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -625,10 +594,12 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -638,7 +609,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 pooling_mode=self._pooling,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(

@@ -8,7 +8,7 @@
 import os
 import unittest
 from collections import defaultdict, OrderedDict
-from typing import cast, Dict, List, Optional, Tuple
+from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 import numpy as np
@@ -87,6 +87,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -95,6 +104,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         self._test_sharding(
             sharders=[
@@ -111,6 +123,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             qcomms_config=qcomms_config,
             backend="nccl",
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     @unittest.skipIf(
@@ -135,17 +148,27 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from([None]),
+        # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_dp(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
+
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     @unittest.skipIf(
@@ -156,7 +179,7 @@ class ModelParallelTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
@@ -167,7 +190,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -179,6 +202,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
@@ -187,6 +219,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -205,6 +240,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     @unittest.skipIf(
@@ -239,6 +275,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
@@ -247,6 +292,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -261,6 +309,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     # pyre-fixme[56]
@@ -292,6 +341,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_tw(
@@ -300,6 +358,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -314,6 +375,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             qcomms_config=qcomms_config,
             backend="gloo",
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     # pyre-fixme[56]
@@ -346,6 +408,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_cw(
@@ -354,6 +425,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -374,6 +448,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     # pyre-fixme[56]

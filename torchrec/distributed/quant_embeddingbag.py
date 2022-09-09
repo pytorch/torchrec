@@ -77,7 +77,7 @@ class ShardedQuantEmbeddingBagCollection(
             EmbeddingBagConfig
         ] = module.embedding_bag_configs()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
-            module, table_name_to_parameter_sharding, "embedding_bags."
+            module, table_name_to_parameter_sharding, "embedding_bags.", fused_params
         )
         self._sharding_type_to_sharding: Dict[
             str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]

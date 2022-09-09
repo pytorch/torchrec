@@ -53,7 +53,6 @@ class CwSequenceEmbeddingSharding(
         assert feature_processor is None
         return GroupedEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
         )

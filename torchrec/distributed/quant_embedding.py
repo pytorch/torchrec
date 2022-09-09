@@ -88,7 +88,7 @@ class ShardedQuantEmbeddingCollection(
     ) -> None:
         super().__init__()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
-            module, table_name_to_parameter_sharding
+            module, table_name_to_parameter_sharding, fused_params
         )
         self._sharding_type_to_sharding: Dict[
             str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]

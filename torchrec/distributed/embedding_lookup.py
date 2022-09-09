@@ -85,7 +85,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         grouped_configs: List[GroupedEmbeddingConfig],
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
@@ -101,7 +100,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
                     config=config,
                     pg=pg,
                     device=device,
-                    fused_params=fused_params,
                 )
             else:
                 raise ValueError(
@@ -196,7 +194,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         grouped_configs: List[GroupedEmbeddingConfig],
         grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
@@ -215,7 +212,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     config=config,
                     pg=pg,
                     device=device,
-                    fused_params=fused_params,
                 )
             else:
                 raise ValueError(

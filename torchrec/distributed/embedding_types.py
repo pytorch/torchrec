@@ -154,7 +154,7 @@ class ShardedEmbeddingTable(
     EmbeddingAttributes,
     EmbeddingTableConfig,
 ):
-    pass
+    fused_params: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -165,6 +165,7 @@ class GroupedEmbeddingConfig:
     has_feature_processor: bool
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
+    fused_params: Optional[Dict[str, Any]] = None
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []

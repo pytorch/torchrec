@@ -24,7 +24,7 @@ except ImportError:
 
 def save(
     name: str, model: torch.nn.Module, eg: Optional[Tuple] = None  # pyre-ignore
-) -> None:  # pyre-ignore
+) -> None:
     with PackageExporter(str(p / name)) as e:
         e.mock("iopath.**")
         e.intern("**")
