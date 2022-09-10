@@ -5,10 +5,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import torch
+from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torchrec import optim as trec_optim
 from torchrec.distributed.types import ShardedModule
 
 
@@ -184,3 +187,61 @@ class sharded_model_copy:
         torch._C._distributed_c10d.Work.__deepcopy__ = None
         # pyre-ignore [16]
         torch.cuda.streams.Stream.__deepcopy__ = None
+
+
+def optimizer_type_to_emb_opt_type(
+    optimizer_class: Type[torch.optim.Optimizer],
+) -> Optional[EmbOptimType]:
+    # TODO add more optimizers to be in parity with ones provided by FBGEMM
+    # TODO kwargs accepted by fbgemm and and canonical optimizers are different
+    # may need to add special handling for them
+    lookup = {
+        torch.optim.SGD: EmbOptimType.EXACT_SGD,
+        torch.optim.Adagrad: EmbOptimType.EXACT_ADAGRAD,
+        torch.optim.Adam: EmbOptimType.ADAM,
+        # below are torchrec wrappers over these optims.
+        # they accept an **unused kwargs portion, that let us set FBGEMM specific args such as
+        # max gradient, etc
+        trec_optim.SGD: EmbOptimType.EXACT_SGD,
+        trec_optim.LarsSGD: EmbOptimType.LARS_SGD,
+        trec_optim.LAMB: EmbOptimType.LAMB,
+        trec_optim.PartialRowWiseLAMB: EmbOptimType.PARTIAL_ROWWISE_LAMB,
+        trec_optim.Adam: EmbOptimType.ADAM,
+        trec_optim.PartialRowWiseAdam: EmbOptimType.PARTIAL_ROWWISE_ADAM,
+        trec_optim.Adagrad: EmbOptimType.EXACT_ADAGRAD,
+        trec_optim.RowWiseAdagrad: EmbOptimType.EXACT_ROWWISE_ADAGRAD,
+    }
+    if optimizer_class not in lookup:
+        raise ValueError(f"Cannot cast {optimizer_class} to an EmbOptimType")
+    return lookup[optimizer_class]
+
+
+def merge_fused_params(
+    fused_params: Optional[Dict[str, Any]] = None,
+    param_fused_params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+
+    """
+    Configure the fused_params including cache_precision if the value is not preset.
+
+    Values set in table_level_fused_params take precidence over the global fused_params
+
+    Args:
+        fused_params (Optional[Dict[str, Any]]): the original fused_params
+        grouped_fused_params
+
+    Returns:
+        [Dict[str, Any]]: a non-null configured fused_params dictionary to be
+        used to configure the embedding lookup kernel
+    """
+
+    if fused_params is None:
+        fused_params = {}
+    if param_fused_params is None:
+        param_fused_params = {}
+    if "lr" in param_fused_params:
+        param_fused_params["learning_rate"] = param_fused_params.pop("lr")
+
+    _fused_params = copy.deepcopy(fused_params)
+    _fused_params.update(param_fused_params)
+    return _fused_params

@@ -169,6 +169,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
                         ),
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
+                        fused_params=info.fused_params,
                     )
                 )
 
@@ -217,7 +218,6 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,

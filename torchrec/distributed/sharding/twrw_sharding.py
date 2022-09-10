@@ -160,6 +160,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
                         global_metadata=global_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
+                        fused_params=info.fused_params,
                     )
                 )
 
@@ -546,7 +547,6 @@ class TwRwPooledEmbeddingSharding(
             grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
                 self._rank
             ],
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,

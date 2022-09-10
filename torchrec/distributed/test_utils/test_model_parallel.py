@@ -5,7 +5,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
+
+import torch
 
 import torch.distributed as dist  # noqa
 import torch.nn as nn
@@ -60,6 +62,9 @@ class ModelParallelTestShared(MultiProcessTestBase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSparseNN,
         qcomms_config: Optional[QCommsConfig] = None,
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -74,4 +79,5 @@ class ModelParallelTestShared(MultiProcessTestBase):
             optim=EmbOptimType.EXACT_SGD,
             constraints=constraints,
             qcomms_config=qcomms_config,
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )

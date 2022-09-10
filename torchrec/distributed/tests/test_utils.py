@@ -21,7 +21,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder
-from torchrec.distributed.utils import get_unsharded_module_names
+from torchrec.distributed.utils import get_unsharded_module_names, merge_fused_params
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.sparse.test_utils import keyed_jagged_tensor_equals
@@ -320,3 +320,23 @@ class KJTBucketizeTest(unittest.TestCase):
                 block_bucketized_kjt, expected_block_bucketized_kjt
             )
         )
+
+
+class MergeFusedParamsTest(unittest.TestCase):
+    def test_merge_fused_params(self) -> None:
+        # Case fused_params is None, change it to be an empty dict
+        # and set cache_precision to be the same as weights_precision
+        fused_params = None
+        configured_fused_params = merge_fused_params(fused_params=fused_params)
+        self.assertFalse(configured_fused_params is None)
+        self.assertEqual(configured_fused_params, {})
+
+    def test_merge_fused_params_update(self) -> None:
+        # Case fused_params is None, change it to be an empty dict
+        # and set cache_precision to be the same as weights_precision
+        fused_params = None
+        configured_fused_params = merge_fused_params(
+            fused_params=fused_params, param_fused_params={"learning_rate": 0.0}
+        )
+        self.assertFalse(configured_fused_params is None)
+        self.assertEqual(configured_fused_params, {"learning_rate": 0.0})

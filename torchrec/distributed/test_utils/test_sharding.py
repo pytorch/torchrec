@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, cast, Dict, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -41,6 +41,7 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
+from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from typing_extensions import Protocol
 
@@ -221,6 +222,9 @@ def sharding_single_rank_test(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
     qcomms_config: Optional[QCommsConfig] = None,
+    apply_overlapped_optimizer_config: Optional[
+        Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+    ] = None,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -246,6 +250,26 @@ def sharding_single_rank_test(
             sparse_device=torch.device("meta"),
             num_float_features=16,
         )
+
+        global_model_named_params_as_dict = dict(global_model.named_parameters())
+        local_model_named_params_as_dict = dict(local_model.named_parameters())
+
+        if apply_overlapped_optimizer_config is not None:
+            for apply_optim_name, (
+                optimizer_type,
+                optimizer_kwargs,
+            ) in apply_overlapped_optimizer_config.items():
+                for name, param in global_model_named_params_as_dict.items():
+                    if name not in apply_optim_name:
+                        continue
+                    assert name in local_model_named_params_as_dict
+                    local_param = local_model_named_params_as_dict[name]
+                    apply_overlapped_optimizer(
+                        optimizer_type, [param], optimizer_kwargs
+                    )
+                    apply_overlapped_optimizer(
+                        optimizer_type, [local_param], optimizer_kwargs
+                    )
 
         planner = EmbeddingShardingPlanner(
             topology=Topology(
@@ -314,6 +338,7 @@ def sharding_single_rank_test(
         # Run second training step of the unsharded model.
         assert optim == EmbOptimType.EXACT_SGD
         global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
+
         global_pred = gen_full_pred_after_one_step(
             global_model, global_opt, global_input
         )

@@ -64,7 +64,12 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.distributed.utils import append_prefix, filter_state_dict
+from torchrec.distributed.utils import (
+    append_prefix,
+    filter_state_dict,
+    merge_fused_params,
+    optimizer_type_to_emb_opt_type,
+)
 from torchrec.modules.embedding_configs import (
     EmbeddingConfig,
     EmbeddingTableConfig,
@@ -122,9 +127,18 @@ def create_embedding_sharding(
 def create_sharding_infos_by_sharding(
     module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
+    fused_params: Optional[Dict[str, Any]],
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
+
+    if fused_params is None:
+        fused_params = {}
+
     sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = {}
+    # state_dict returns parameter.Tensor, which loses parameter level attributes
+    parameter_by_name = dict(module.named_parameters())
+    # QuantEBC registers weights as buffers (since they are INT8), and so we need to grab it there
     state_dict = module.state_dict()
+
     for (
         config,
         embedding_names,
@@ -141,11 +155,20 @@ def create_sharding_infos_by_sharding(
             )
 
         param_name = "embeddings." + config.name + ".weight"
-        assert param_name in state_dict
-        param = state_dict[param_name]
+        assert param_name in parameter_by_name or param_name in state_dict
+        param = parameter_by_name.get(param_name, state_dict[param_name])
 
         if parameter_sharding.sharding_type not in sharding_type_to_sharding_infos:
             sharding_type_to_sharding_infos[parameter_sharding.sharding_type] = []
+
+        optimizer_params = getattr(param, "_optimizer_kwargs", {})
+        optimizer_class = getattr(param, "_optimizer_class", None)
+        if optimizer_class:
+            optimizer_params["optimizer"] = optimizer_type_to_emb_opt_type(
+                optimizer_class
+            )
+        fused_params = merge_fused_params(fused_params, optimizer_params)
+
         sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
             (
                 EmbeddingShardingInfo(
@@ -164,6 +187,7 @@ def create_sharding_infos_by_sharding(
                     ),
                     param_sharding=parameter_sharding,
                     param=param,
+                    fused_params=fused_params,
                 )
             )
         )
@@ -278,7 +302,9 @@ class ShardedEmbeddingCollection(
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
-            module, table_name_to_parameter_sharding
+            module,
+            table_name_to_parameter_sharding,
+            fused_params,
         )
         self._sharding_type_to_sharding: Dict[
             str, EmbeddingSharding[SparseFeatures, torch.Tensor]
@@ -296,7 +322,7 @@ class ShardedEmbeddingCollection(
         self._device = device
         self._input_dists: nn.ModuleList = nn.ModuleList()
         self._lookups: nn.ModuleList = nn.ModuleList()
-        self._create_lookups(fused_params)
+        self._create_lookups()
         self._output_dists: nn.ModuleList = nn.ModuleList()
         self._create_output_dist()
 
@@ -391,9 +417,9 @@ class ShardedEmbeddingCollection(
             torch.tensor(self._features_order, device=self._device, dtype=torch.int32),
         )
 
-    def _create_lookups(self, fused_params: Optional[Dict[str, Any]]) -> None:
+    def _create_lookups(self) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup(fused_params=fused_params))
+            self._lookups.append(sharding.create_lookup())
 
     def _create_output_dist(
         self,

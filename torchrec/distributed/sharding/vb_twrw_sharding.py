@@ -351,7 +351,6 @@ class VariableBatchTwRwPooledEmbeddingSharding(
             grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
                 self._rank
             ],
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,

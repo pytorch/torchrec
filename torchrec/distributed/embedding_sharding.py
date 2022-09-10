@@ -416,64 +416,101 @@ def group_tables(
     ) -> Tuple[List[GroupedEmbeddingConfig], List[GroupedEmbeddingConfig]]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
         score_grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
+
+        # add fused params:
+        fused_params_groups = []
+        for table in embedding_tables:
+            if table.fused_params is None:
+                table.fused_params = {}
+            if table.fused_params not in fused_params_groups:
+                fused_params_groups.append(table.fused_params)
+
+        compute_kernels = [
+            EmbeddingComputeKernel.DENSE,
+            EmbeddingComputeKernel.FUSED,
+            EmbeddingComputeKernel.QUANT,
+        ]
+
         for data_type in DataType:
             for pooling in PoolingType:
                 for is_weighted in [True, False]:
                     # remove this when finishing migration
                     for has_feature_processor in [False, True]:
-                        for compute_kernel in [
-                            EmbeddingComputeKernel.DENSE,
-                            EmbeddingComputeKernel.FUSED,
-                            EmbeddingComputeKernel.QUANT,
-                        ]:
-                            grouped_tables: List[ShardedEmbeddingTable] = []
-                            grouped_score_tables: List[ShardedEmbeddingTable] = []
-                            for table in embedding_tables:
-                                compute_kernel_type = table.compute_kernel
-                                if table.compute_kernel in [
-                                    EmbeddingComputeKernel.FUSED_UVM,
-                                    EmbeddingComputeKernel.FUSED_UVM_CACHING,
-                                ]:
-                                    compute_kernel_type = EmbeddingComputeKernel.FUSED
-                                elif table.compute_kernel in [
-                                    EmbeddingComputeKernel.QUANT_UVM,
-                                    EmbeddingComputeKernel.QUANT_UVM_CACHING,
-                                ]:
-                                    compute_kernel_type = EmbeddingComputeKernel.QUANT
-                                if (
-                                    table.data_type == data_type
-                                    and table.pooling == pooling
-                                    and table.is_weighted == is_weighted
-                                    and table.has_feature_processor
-                                    == has_feature_processor
-                                    and compute_kernel_type == compute_kernel
-                                ):
-                                    if table.is_weighted:
-                                        grouped_score_tables.append(table)
-                                    else:
-                                        grouped_tables.append(table)
-                            if grouped_tables:
-                                grouped_embedding_configs.append(
-                                    GroupedEmbeddingConfig(
-                                        data_type=data_type,
-                                        pooling=pooling,
-                                        is_weighted=is_weighted,
-                                        has_feature_processor=has_feature_processor,
-                                        compute_kernel=compute_kernel,
-                                        embedding_tables=grouped_tables,
+                        for fused_params_group in fused_params_groups:
+                            for compute_kernel in compute_kernels:
+                                grouped_tables: List[ShardedEmbeddingTable] = []
+                                grouped_score_tables: List[ShardedEmbeddingTable] = []
+                                for table in embedding_tables:
+                                    compute_kernel_type = table.compute_kernel
+                                    if table.compute_kernel in [
+                                        EmbeddingComputeKernel.FUSED_UVM,
+                                        EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                                    ]:
+                                        compute_kernel_type = (
+                                            EmbeddingComputeKernel.FUSED
+                                        )
+                                    elif table.compute_kernel in [
+                                        EmbeddingComputeKernel.QUANT_UVM,
+                                        EmbeddingComputeKernel.QUANT_UVM_CACHING,
+                                    ]:
+                                        compute_kernel_type = (
+                                            EmbeddingComputeKernel.QUANT
+                                        )
+                                    if (
+                                        table.data_type == data_type
+                                        and table.pooling == pooling
+                                        and table.is_weighted == is_weighted
+                                        and table.has_feature_processor
+                                        == has_feature_processor
+                                        and compute_kernel_type == compute_kernel
+                                        and table.fused_params == fused_params_group
+                                    ):
+                                        if table.is_weighted:
+                                            grouped_score_tables.append(table)
+                                        else:
+                                            grouped_tables.append(table)
+
+                                if fused_params_group is None:
+                                    fused_params_group = {}
+
+                                if grouped_tables:
+                                    grouped_embedding_configs.append(
+                                        GroupedEmbeddingConfig(
+                                            data_type=data_type,
+                                            pooling=pooling,
+                                            is_weighted=is_weighted,
+                                            has_feature_processor=has_feature_processor,
+                                            compute_kernel=compute_kernel,
+                                            embedding_tables=grouped_tables,
+                                            fused_params={
+                                                k: v
+                                                for k, v in fused_params_group.items()
+                                                if k
+                                                not in [
+                                                    "_batch_key"
+                                                ]  # drop '_batch_key' not a native fused param
+                                            },
+                                        )
                                     )
-                                )
-                            if grouped_score_tables:
-                                score_grouped_embedding_configs.append(
-                                    GroupedEmbeddingConfig(
-                                        data_type=data_type,
-                                        pooling=pooling,
-                                        is_weighted=is_weighted,
-                                        has_feature_processor=has_feature_processor,
-                                        compute_kernel=compute_kernel,
-                                        embedding_tables=grouped_score_tables,
+                                if grouped_score_tables:
+                                    score_grouped_embedding_configs.append(
+                                        GroupedEmbeddingConfig(
+                                            data_type=data_type,
+                                            pooling=pooling,
+                                            is_weighted=is_weighted,
+                                            has_feature_processor=has_feature_processor,
+                                            compute_kernel=compute_kernel,
+                                            embedding_tables=grouped_score_tables,
+                                            fused_params={
+                                                k: v
+                                                for k, v in fused_params_group.items()
+                                                if k
+                                                not in [
+                                                    "_batch_key"
+                                                ]  # drop '_batch_key', not a native fused param
+                                            },
+                                        )
                                     )
-                                )
         return grouped_embedding_configs, score_grouped_embedding_configs
 
     grouped_embedding_configs_by_rank: List[List[GroupedEmbeddingConfig]] = []
@@ -670,3 +707,4 @@ class EmbeddingShardingInfo:
     embedding_config: EmbeddingTableConfig
     param_sharding: ParameterSharding
     param: torch.Tensor
+    fused_params: Optional[Dict[str, Any]] = None

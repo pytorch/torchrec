@@ -76,7 +76,6 @@ class DpSequenceEmbeddingSharding(
         assert feature_processor is None
         return GroupedEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._env.process_group,
             device=device if device is not None else self._device,
         )
