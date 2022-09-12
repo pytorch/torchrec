@@ -772,13 +772,13 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             curr_is_weighted: bool = kjt.weights_or_none() is not None
             if is_weighted != curr_is_weighted:
                 raise ValueError("Can't merge weighted KJT with unweighted KJT")
-
+            _length_per_key: Optional[List[int]] = None
             if kjt._length_per_key is None:
                 has_length_per_key = False
-
-            if has_length_per_key:
-                # pyre-ignore[6]
-                length_per_key += kjt._length_per_key
+            else:
+                _length_per_key = kjt._length_per_key
+            if has_length_per_key and _length_per_key is not None:
+                length_per_key += _length_per_key
             keys += kjt.keys()
             value_list.append(kjt.values())
             if is_weighted:
