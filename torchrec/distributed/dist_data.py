@@ -765,6 +765,46 @@ class EmbeddingsAllToOne(nn.Module):
         )
 
 
+class SeqEmbeddingsAllToOne(nn.Module):
+    """
+    Merges the pooled/sequence embedding tensor on each device into single tensor.
+
+    Args:
+        device (torch.device): device on which buffer will be allocated
+        world_size (int): number of devices in the topology.
+        cat_dim (int): which dimension you like to concate on.
+            For pooled embedding it is 1; for sequence embedding it is 0.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._device = device
+        self._world_size = world_size
+
+    def forward(self, tensors: List[torch.Tensor]) -> Awaitable[List[torch.Tensor]]:
+        """
+        Performs AlltoOne operation on pooled embeddings tensors.
+
+        Args:
+            tensors (List[torch.Tensor]): list of pooled embedding tensors.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of the merged pooled embeddings.
+        """
+
+        assert len(tensors) == self._world_size
+        return NoWait(
+            torch.ops.fbgemm.all_to_one_device(
+                tensors,
+                self._device,
+            )
+        )
+
+
 class PooledEmbeddingsReduceScatter(nn.Module):
     """
     The module class that wraps reduce-scatter communication primitive for pooled

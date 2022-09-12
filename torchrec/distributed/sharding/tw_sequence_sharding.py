@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
-    EmbeddingsAllToOne,
+    SeqEmbeddingsAllToOne,
     SequenceEmbeddingsAllToAll,
 )
 from torchrec.distributed.embedding_lookup import (
@@ -55,13 +55,14 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
         world_size: int,
     ) -> None:
         super().__init__()
-        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(device, world_size, 0)
+        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
 
+    # pyre-ignore [15]
     def forward(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: SequenceShardingContext,
-    ) -> Awaitable[torch.Tensor]:
+    ) -> Awaitable[List[torch.Tensor]]:
         """
         Performs AlltoOne operation on sequence embeddings tensor.
 
