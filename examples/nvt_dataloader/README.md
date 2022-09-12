@@ -1,15 +1,19 @@
 # Running torchrec using NVTabular DataLoader
 
-First run nvtabular preprocessing to first convert the criteo TSV files to parquet, and perform offline preprocessing. For example
-```
-cd torchrec/torchrce/datasets/scripts/nvt/
-bash nvt_preproc.sh /data/criteo_tb /data 8096
+First run nvtabular preprocessing to first convert the criteo TSV files to parquet, and perform offline preprocessing.
+
+Please follow the installation instructions in the [README](https://github.com/pytorch/torchrec/tree/main/torchrec/datasets/scripts/nvt) of torchrec/torchrec/datasets/scripts/nvt.
+
+Afterward, to run the model across 8 GPUs, use the below command
 
 ```
-
-To run locally
+torchx run -s local_cwd dist.ddp -j 1x8 --script train_torchrec.py -- --num_embeddings_per_feature 40000000,39060,17295,7424,20265,3,7122,1543,63,40000000,3067956,405282,10,2209,11938,155,4,976,14,40000000,40000000,40000000,590152,12973,108,36 --over_arch_layer_sizes 1024,1024,512,256,1 --dense_arch_layer_sizes 512,256,128 --embedding_dim 128 --binary_path <path_to_nvt_output>/criteo_binary/split/ --learning_rate 1.0 --validation_freq_within_epoch 1000000 --throughput_check_freq_within_epoch 1000000 --batch_size 256
 ```
-torchx run -s local_cwd dist.ddp -j 1x8 --script train_torchrec.py -- --num_embeddings_per_feature 45833188,36746,17245,7413,20243,3,7114,1441,62,29275261,1572176,345138,10,2209,11267,128,4,974,14,48937457,11316796,40094537,452104,12606,104,35 --over_arch_layer_sizes 1024,1024,512,256,1 --binary_path /data/home/renfeichen/criteo_correct_output/criteo_binary/split/ --change_lr --learning_rate 15.0 --validation_freq_within_epoch 5000 --throughput_check_freq_within_epoch 200 --batch_size 2048
+
+To run with adagrad as an optimizer, use the below flag
+
+```
+---adagrad
 ```
 
 # Test on A100s
@@ -23,12 +27,10 @@ torchx run -s local_cwd dist.ddp -j 1x8 --script train_torchrec.py -- --num_embe
 
 **Results**
 
-Common settings across all runs:
-
-```
---num_embeddings_per_feature 45833188,36746,17245,7413,20243,3,7114,1441,62,29275261,1572176,345138,10,2209,11267,128,4,974,14,48937457,11316796,40094537,452104,12606,104,35 --over_arch_layer_sizes 1024,1024,512,256,1 --binary_path /data/home/renfeichen/criteo_correct_output/criteo_binary/split/ --change_lr --learning_rate 15.0 --validation_freq_within_epoch 5000 --throughput_check_freq_within_epoch 200 --batch_size 2048
-```
-
-|Number of GPUs|Collective Size of Embedding Tables (GiB)|Local Batch Size|Global Batch Size|AUROC over Val Set After 1 Epoch|AUROC Over Test Set After 1 Epoch|Train Records/Second|Time to Train 1 Epoch | Unique Flags |
---- | --- | --- | --- | --- | --- | --- | --- | ---
-|8|91.10|2048|16384|0.8039939403533936|0.7984522581100464|~1,995,163 rec/s| 37m12s | `--batch_size 2048 --lr_change_point 0.80 --lr_after_change_point 0.20` |
+Reproducing MLPerfV1 settings
+1. Embedding per features + model architecture
+2. Learning Rate fixed at 1.0 with SGD
+3. Dataset setup:
+    - No frequency thresholding
+4. Report > .8025 on validation set (0.8027645945549011 from above script)
+5. Global batch size 2048
