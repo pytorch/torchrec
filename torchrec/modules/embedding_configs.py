@@ -35,6 +35,9 @@ class DataType(Enum):
     INT4 = "INT4"
     INT2 = "INT2"
 
+    def __str__(self) -> str:
+        return self.value
+
 
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
