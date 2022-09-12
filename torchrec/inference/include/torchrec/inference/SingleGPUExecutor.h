@@ -16,13 +16,23 @@
 namespace torchrec {
 
 class SingleGPUExecutor {
+  constexpr static const size_t kQUEUE_CAPACITY = 10000;
+
  public:
+  struct ExecInfo {
+    size_t gpuIdx;
+    size_t interpIdx;
+    torch::deploy::ReplicatedObj model;
+  };
+  using ExecInfos = std::vector<ExecInfo>;
+
   SingleGPUExecutor(
       std::shared_ptr<torch::deploy::InterpreterManager> manager,
-      torch::deploy::ReplicatedObj model,
-      c10::Device device,
-      const std::vector<size_t>& interpreter_idxs,
-      c10::Device result_device = c10::kCPU);
+      ExecInfos execInfos,
+      size_t numGpu,
+      c10::Device resultDevice = c10::kCPU);
+
+  // Moveable only
   SingleGPUExecutor(SingleGPUExecutor&& executor) noexcept = default;
   SingleGPUExecutor& operator=(SingleGPUExecutor&& executor) noexcept = default;
   ~SingleGPUExecutor();
@@ -30,15 +40,16 @@ class SingleGPUExecutor {
   void schedule(std::shared_ptr<PredictionBatch> request);
 
  private:
-  void process(const size_t interpreter_idx);
+  void process();
 
   std::shared_ptr<torch::deploy::InterpreterManager> manager_;
-  torch::deploy::ReplicatedObj model_;
-  c10::Device device_;
-  c10::Device resultDevice_;
-
+  const ExecInfos execInfos_;
+  const size_t numGpu_;
+  const c10::Device resultDevice_;
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> requests_;
-  std::vector<std::thread> processThreads_;
+
   std::unique_ptr<folly::CPUThreadPoolExecutor> completionExecutor_;
+  std::atomic<size_t> roundRobinExecInfoNextIdx_;
+  std::thread processThread_;
 };
 } // namespace torchrec
