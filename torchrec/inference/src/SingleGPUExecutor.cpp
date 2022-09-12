@@ -14,31 +14,26 @@ namespace torchrec {
 
 SingleGPUExecutor::SingleGPUExecutor(
     std::shared_ptr<torch::deploy::InterpreterManager> manager,
-    torch::deploy::ReplicatedObj model,
-    c10::Device device /* cuda device */,
-    const std::vector<size_t>& interpreter_idxs,
-    c10::Device result_device /* result device */)
+    ExecInfos execInfos,
+    size_t numGpu,
+    c10::Device resultDevice)
     : manager_(manager),
-      model_(std::move(model)),
-      device_(device),
-      resultDevice_(result_device),
-      requests_(10000) {
-  for (const auto& interp_idx : interpreter_idxs) {
-    assert(interp_idx < manager->allInstances().size());
-    processThreads_.emplace_back([this, interp_idx]() { process(interp_idx); });
+      execInfos_(std::move(execInfos)),
+      numGpu_(numGpu),
+      resultDevice_(resultDevice),
+      requests_(kQUEUE_CAPACITY),
+      completionExecutor_(
+          std::make_unique<folly::CPUThreadPoolExecutor>(execInfos_.size())),
+      roundRobinExecInfoNextIdx_(0u),
+      processThread_([&]() { process(); }) {
+  for (const auto& exec_info : execInfos_) {
+    assert(exec_info.interpIdx < manager_->allInstances().size());
   }
-
-  completionExecutor_ =
-      std::make_unique<folly::CPUThreadPoolExecutor>(interpreter_idxs.size());
 }
 
 SingleGPUExecutor::~SingleGPUExecutor() {
-  for (const auto _ : c10::irange(processThreads_.size())) {
-    requests_.blockingWrite(nullptr);
-  }
-  for (auto& thread : processThreads_) {
-    thread.join();
-  }
+  requests_.blockingWrite(nullptr);
+  processThread_.join();
   completionExecutor_->join();
 }
 
@@ -81,10 +76,13 @@ std::vector<c10::IValue> toDevice(
 
 } // namespace
 
-void SingleGPUExecutor::process(const size_t interpreter_idx) {
-  auto stream = at::cuda::getStreamFromPool();
-  at::cuda::CUDAStreamGuard stream_guard(stream);
-  at::cuda::CUDAGuard device_guard(device_);
+void SingleGPUExecutor::process() {
+  c10::InferenceMode inferenceModeGuard;
+  std::vector<c10::cuda::CUDAStream> streams;
+  for (size_t i = 0; i < numGpu_; ++i) {
+    streams.push_back(at::cuda::getStreamFromPool(i));
+  }
+  at::cuda::CUDAMultiStreamGuard streamGuard(streams);
 
   while (true) {
     std::shared_ptr<PredictionBatch> request;
@@ -94,19 +92,29 @@ void SingleGPUExecutor::process(const size_t interpreter_idx) {
       break;
     }
 
-    auto* onThisInterpreter = &manager_->allInstances().at(interpreter_idx);
-    auto I = model_.acquireSession(onThisInterpreter);
+    const size_t exec_info_idx = roundRobinExecInfoNextIdx_;
+    roundRobinExecInfoNextIdx_ =
+        (roundRobinExecInfoNextIdx_ + 1) % execInfos_.size();
+
+    const auto& execInfo = execInfos_[exec_info_idx];
+
+    const auto device = c10::Device(c10::kCUDA, execInfo.gpuIdx);
+    at::cuda::CUDAGuard device_guard(device);
+
+    auto& model = execInfo.model;
+    auto I =
+        model.acquireSession(&manager_->allInstances().at(execInfo.interpIdx));
 
     request->event = Event(
         new at::cuda::CUDAEvent(cudaEventBlockingSync | cudaEventDisableTiming),
         [](at::cuda::CUDAEvent* event) { delete event; });
 
-    // TODO: Support methodName as "model.submodle.method"
+    // TODO: Support methodName as "model.submodule.method"
     auto out = I.self.attr(request->methodName.c_str())
-                   .callKwargs(toDevice(request->args, device_), {})
+                   .callKwargs(toDevice(request->args, device), {})
                    .toIValue();
     auto result = toDevice(out, resultDevice_);
-    request->event->record(stream);
+    request->event->record();
 
     completionExecutor_->add(
         [result = std::move(result), request = std::move(request)]() {

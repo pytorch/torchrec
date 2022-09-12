@@ -38,7 +38,7 @@ void assert_tensors_eq(const at::Tensor& expected, const at::Tensor& got) {
   ASSERT_TRUE(expected.allclose(got, 1e-03, 1e-05));
 }
 
-TEST(TorchDeployGPUTest, SimpleModel) {
+TEST(TorchDeployGPUTest, SimpleModelSingleGPU) {
   if (!torch::cuda::is_available()) {
     GTEST_SKIP();
   }
@@ -61,9 +61,10 @@ TEST(TorchDeployGPUTest, SimpleModel) {
     example_inputs = get_input_example(I);
   }
 
-  std::vector<size_t> interp_idxs = {0};
   auto executor = std::make_unique<torchrec::SingleGPUExecutor>(
-      manager, model, device, interp_idxs);
+      manager,
+      torchrec::SingleGPUExecutor::ExecInfos{{0u, 0u, std::move(model)}},
+      1u);
 
   {
     auto inputs = example_inputs;
@@ -95,8 +96,6 @@ TEST(TorchDeployGPUTest, SimpleModel) {
 
   {
     auto inputs = example_inputs;
-
-    // Calling forward on changed model
     folly::Promise<std::unique_ptr<torchrec::PredictionResponse>> promise;
     auto future = promise.getSemiFuture();
 
@@ -136,7 +135,7 @@ TEST(TorchDeployGPUTest, SimpleModel_multiGPU) {
   auto device = c10::Device(c10::kCUDA, 0);
 
   auto manager =
-      std::make_shared<torch::deploy::InterpreterManager>(numGpu + 1);
+      std::make_shared<torch::deploy::InterpreterManager>(2 * numGpu);
   torch::deploy::Package package = manager->loadPackage(model_filename);
 
   std::vector<torch::deploy::ReplicatedObj> models;
@@ -163,17 +162,17 @@ TEST(TorchDeployGPUTest, SimpleModel_multiGPU) {
     const std::vector<size_t> interp_idxs = {static_cast<size_t>(i)};
     workExecutors.push_back(std::make_unique<torchrec::SingleGPUExecutor>(
         manager,
-        std::move(models[i]),
-        c10::Device(c10::kCUDA, i),
-        interp_idxs));
+        torchrec::SingleGPUExecutor::ExecInfos{{i, numGpu + i, models[i]}},
+        numGpu));
   }
 
-  const std::vector<size_t> interp_idxs = {static_cast<size_t>(numGpu)};
-  auto controlExecutor = std::make_unique<torchrec::SingleGPUExecutor>(
-      manager,
-      std::move(model_control),
-      c10::Device(c10::kCUDA, gpu_rank_control),
-      interp_idxs);
+  std::vector<torchrec::SingleGPUExecutor::ExecInfo> execInfos;
+  for (size_t i = 0; i < numGpu; i++) {
+    execInfos.push_back({i, numGpu + i, models[i]});
+  }
+
+  auto controlExecutor =
+      std::make_unique<torchrec::SingleGPUExecutor>(manager, execInfos, numGpu);
 
   std::vector<at::IValue> example_inputs;
   {
@@ -190,13 +189,20 @@ TEST(TorchDeployGPUTest, SimpleModel_multiGPU) {
   }
 
   execute(*controlExecutor, "set_weight", {at::zeros(example_input0.sizes())});
-  for (size_t i = 0; i < numGpu; i++) {
-    auto result =
-        execute(*workExecutors[i], "forward", example_inputs).toTensor();
-    if (i == gpu_rank_control) {
-      assert_tensors_eq(example_input0, result);
-    } else {
-      assert_tensors_eq(expected_forward0, result);
+
+  auto checkFn = [&](size_t set_weight_count) {
+    for (size_t i = 0; i < numGpu; i++) {
+      auto result =
+          execute(*workExecutors[i], "forward", example_inputs).toTensor();
+      if (i < set_weight_count) {
+        assert_tensors_eq(example_input0, result);
+      } else {
+        assert_tensors_eq(expected_forward0, result);
+      }
     }
-  }
+  };
+  checkFn(1u);
+
+  execute(*controlExecutor, "set_weight", {at::zeros(example_input0.sizes())});
+  checkFn(2u);
 }
