@@ -634,6 +634,7 @@ class ShardedEmbeddingBag(
                     embedding_config=embedding_table_config,
                     param_sharding=self.parameter_sharding,
                     param=next(iter(module.parameters())),
+                    fused_params=fused_params,
                 ),
             ],
             env=env,

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import hypothesis.strategies as st
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import given, settings, Verbosity
+from hypothesis import assume, given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
@@ -75,6 +75,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -173,6 +177,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -222,6 +230,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(

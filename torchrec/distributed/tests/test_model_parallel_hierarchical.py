@@ -9,7 +9,7 @@ import unittest
 from typing import Any, Dict, Optional, Tuple, Type
 
 import torch
-from hypothesis import given, settings, strategies as st, Verbosity
+from hypothesis import assume, given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
@@ -85,6 +85,11 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        # Dense kernels do not have overlapped optimizer behavior yet
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -157,6 +162,11 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        # Dense kernels do not have overlapped optimizer behavior yet
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         world_size = 4
         self._test_sharding(
             # pyre-ignore[6]
@@ -226,6 +236,11 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        # Dense kernels do not have overlapped optimizer behavior yet
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -291,6 +306,11 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        assume(
+            apply_overlapped_optimizer_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
+
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
