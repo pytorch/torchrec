@@ -325,7 +325,6 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
         dim_0 = splits[pg.rank()]
         dim_1 = input.stride()
         self._batch_size_per_rank: List[int] = [dim_1] * self._workers
-        self._batch_size_per_rank_tensor: Optional[torch.Tensor] = None
         if self._workers == 1:
             return
 
@@ -349,7 +348,6 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
                     group=self._pg,
                     async_op=False,
                 )
-            self._batch_size_per_rank_tensor = batch_size_per_rank_tensor
             self._batch_size_per_rank = batch_size_per_rank_tensor.cpu().tolist()
             self._recat = _get_recat(
                 local_split=dim_0,
