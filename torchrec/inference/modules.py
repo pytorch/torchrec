@@ -117,6 +117,25 @@ class PredictFactory(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def run_weights_independent_tranformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that don't rely on weights of the predict module. e.g. fx tracing, model
+        split etc.
+        """
+        pass
+
+    @abc.abstractmethod
+    def run_weights_dependent_transformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that depends on weights of the predict module. e.g. lowering to a backend.
+        """
+        pass
+
 
 class PredictModule(nn.Module):
     """
