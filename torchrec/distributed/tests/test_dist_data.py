@@ -23,7 +23,6 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
-    PooledEmbeddingsReduceScatterV,
 )
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -584,7 +583,7 @@ class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
 
         codecs = get_qcomm_codecs(qcomms_config)
 
-        rs = PooledEmbeddingsReduceScatterV(
+        rs = PooledEmbeddingsReduceScatter(
             # pyre-ignore
             pg,
             codecs=codecs,
