@@ -170,6 +170,20 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
+    def embedding_names_per_rank(self) -> List[List[str]]:
+        embedding_names = []
+        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
+            self._grouped_embedding_configs_per_rank,
+            self._score_grouped_embedding_configs_per_rank,
+        ):
+            embedding_names_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                embedding_names_per_rank.extend(grouped_config.embedding_names())
+            for grouped_config in score_grouped_embedding_configs:
+                embedding_names_per_rank.extend(grouped_config.embedding_names())
+            embedding_names.append(embedding_names_per_rank)
+        return embedding_names
+
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
         for grouped_embedding_configs, score_grouped_embedding_configs in zip(
