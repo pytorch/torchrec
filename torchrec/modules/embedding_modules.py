@@ -185,7 +185,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     per_sample_weights=f.weights() if self._is_weighted else None,
                 )
                 pooled_embeddings.append(res)
-        data = torch.cat(pooled_embeddings, dim=1)
+        data = torch.cat(pooled_embeddings, dim=1).float()
         return KeyedTensor(
             keys=self._embedding_names,
             values=data,
@@ -348,7 +348,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 f = jt_dict[feature_name]
                 lookup = emb_module(
                     input=f.values(),
-                )
+                ).float()
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
