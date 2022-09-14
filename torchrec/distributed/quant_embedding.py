@@ -272,18 +272,18 @@ class ShardedQuantEmbeddingCollection(
                 awaitables.append(tensor_awaitable)
             return ListOfSparseFeaturesListAwaitable(awaitables)
 
-    # pyre-ignore [14]
     def compute(
-        self, ctx: EmbeddingCollectionContext, dist_input: ListOfSparseFeaturesList
+        self, ctx: ShardedModuleContext, dist_input: ListOfSparseFeaturesList
     ) -> List[List[torch.Tensor]]:
         ret: List[List[torch.Tensor]] = []
         for lookup, features in zip(
             self._lookups,
             dist_input,
         ):
+            # pyre-ignore [16]
             ctx.sharding_contexts.append(
                 SequenceShardingContext(
-                    features=features,
+                    features=[feature.id_list_features for feature in features],
                 )
             )
             ret.append([o.view(-1, self._embedding_dim) for o in lookup(features)])
@@ -300,7 +300,7 @@ class ShardedQuantEmbeddingCollection(
             cast(EmbeddingCollectionContext, ctx).sharding_contexts,
         ):
             awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
-            features_per_sharding.append(sharding_ctx.features_before_input_dist)
+            features_per_sharding.append(sharding_ctx.features)
         return EmbeddingCollectionAwaitable(
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_per_sharding,
@@ -310,27 +310,7 @@ class ShardedQuantEmbeddingCollection(
     def compute_and_output_dist(
         self, ctx: ShardedModuleContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
-        awaitables_per_sharding: List[Awaitable[List[torch.Tensor]]] = []
-        for lookup, odist, features in zip(
-            self._lookups,
-            self._output_dists,
-            input,
-        ):
-            embedding_awaitable = odist(
-                [o.view(-1, self._embedding_dim) for o in lookup(features)],
-                ctx,
-            )
-            awaitables_per_sharding.append(embedding_awaitable)
-        kjt_per_sharding = [
-            [sparse_feature.id_list_features for sparse_feature in sparse_feature_list]
-            for sparse_feature_list in input
-        ]
-        return EmbeddingCollectionAwaitable(
-            awaitables_per_sharding=awaitables_per_sharding,
-            # pyre-ignore [6]
-            features_per_sharding=kjt_per_sharding,
-            need_indices=self._need_indices,
-        )
+        return self.output_dist(ctx, self.compute(ctx, input))
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
