@@ -15,7 +15,7 @@ import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
-    PooledEmbeddingsReduceScatterV,
+    PooledEmbeddingsReduceScatter,
 )
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
@@ -248,7 +248,7 @@ class VariableBatchTwRwPooledEmbeddingDist(
         self._intra_pg: dist.ProcessGroup = intra_pg
         self._cross_pg: dist.ProcessGroup = cross_pg
         self._device: Optional[torch.device] = device
-        self._intra_dist = PooledEmbeddingsReduceScatterV(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatter(intra_pg)
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,

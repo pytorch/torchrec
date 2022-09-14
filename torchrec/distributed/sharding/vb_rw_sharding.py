@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatterV
+from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatter
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
@@ -173,7 +173,7 @@ class VariableBatchRwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
         super().__init__()
         self._workers: int = pg.size()
         self._rank: int = pg.rank()
-        self._dist = PooledEmbeddingsReduceScatterV(pg)
+        self._dist = PooledEmbeddingsReduceScatter(pg)
 
     def forward(
         self,
