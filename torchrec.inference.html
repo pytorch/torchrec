@@ -458,6 +458,19 @@ and will shard model according to torch.distributed.get_world_size().</p>
 <dd><p>Returns a string which represents the result type. This information is used for result split.</p>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.run_weights_dependent_transformations">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_weights_dependent_transformations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predict_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.run_weights_dependent_transformations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run transformations that depends on weights of the predict module. e.g. lowering to a backend.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.run_weights_independent_tranformations">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_weights_independent_tranformations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predict_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.run_weights_independent_tranformations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run transformations that don’t rely on weights of the predict module. e.g. fx tracing, model
+split etc.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
