@@ -23,7 +23,7 @@
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <torch/csrc/autograd/profiler_legacy.h>
+#include <torch/csrc/autograd/profiler.h>
 
 // remove this after we switch over to multipy externally for torchrec
 #ifdef FBCODE_CAFFE2
