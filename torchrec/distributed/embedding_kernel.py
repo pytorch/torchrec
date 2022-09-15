@@ -225,6 +225,7 @@ class GroupedEmbeddingBag(BaseEmbedding):
         sparse: bool,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        use_cache = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
@@ -237,24 +238,49 @@ class GroupedEmbeddingBag(BaseEmbedding):
         self._lengths_per_emb: List[int] = []
 
         for embedding_config in self._config.embedding_tables:
-            self._emb_modules.append(
-                nn.EmbeddingBag(
-                    num_embeddings=embedding_config.local_rows,
-                    embedding_dim=embedding_config.local_cols,
-                    mode=pooling_type_to_str(embedding_config.pooling),
-                    device=device,
-                    include_last_offset=True,
-                    sparse=self._sparse,
-                    _weight=torch.empty(
-                        embedding_config.local_rows,
-                        embedding_config.local_cols,
-                        device=device,
-                    ).uniform_(
-                        embedding_config.get_weight_init_min(),
-                        embedding_config.get_weight_init_max(),
-                    ),
+            if use_cache:
+                from colossalai.nn.parallel.layers.cache_embedding import FreqAwareEmbeddingBag
+                    # nn.EmbeddingBag(
+                emb = FreqAwareEmbeddingBag(
+                        num_embeddings=embedding_config.local_rows,
+                        embedding_dim=embedding_config.local_cols,
+                        mode=pooling_type_to_str(embedding_config.pooling),
+                        # device=device,
+                        include_last_offset=True,
+                        sparse=self._sparse,
+                        _weight=torch.empty(
+                            embedding_config.local_rows,
+                            embedding_config.local_cols,
+                            device='cpu',
+                        ).uniform_(
+                            embedding_config.get_weight_init_min(),
+                            embedding_config.get_weight_init_max(),
+                        ),
+                        # TODO(jiaruifang) hardcode the warmup ratio as 0.5
+                        cuda_row_num = int(embedding_config.local_rows * 0.5),
+                    )
+                self._emb_modules.append(
+                    emb
                 )
-            )
+            else:   
+                self._emb_modules.append(
+                    nn.EmbeddingBag(
+                        num_embeddings=embedding_config.local_rows,
+                        embedding_dim=embedding_config.local_cols,
+                        mode=pooling_type_to_str(embedding_config.pooling),
+                        device=device,
+                        include_last_offset=True,
+                        sparse=self._sparse,
+                        _weight=torch.empty(
+                            embedding_config.local_rows,
+                            embedding_config.local_cols,
+                            device=device,
+                        ).uniform_(
+                            embedding_config.get_weight_init_min(),
+                            embedding_config.get_weight_init_max(),
+                        ),
+                    )
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         pooled_embeddings: List[torch.Tensor] = []

@@ -239,6 +239,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     pg=pg,
                     sparse=False,
                     device=device,
+                    use_cache=True
                 )
             elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
                 return GroupedEmbeddingBag(
