@@ -453,6 +453,12 @@ and will shard model according to torch.distributed.get_world_size().</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.qualname_metadata">
+<span class="sig-name descname"><span class="pre">qualname_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.inference.modules.QualNameMetadata" title="torchrec.inference.modules.QualNameMetadata"><span class="pre">QualNameMetadata</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.qualname_metadata" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a dict from qualname (method name) to QualNameMetadata. This is additional information for execution of specific methods of the model.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.result_metadata">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">result_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.result_metadata" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a string which represents the result type. This information is used for result split.</p>
@@ -582,6 +588,17 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.inference.modules.PredictModule.training">
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.inference.modules.PredictModule.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.inference.modules.QualNameMetadata">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">QualNameMetadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">need_preproc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.inference.modules.QualNameMetadata" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.inference.modules.QualNameMetadata.need_preproc">
+<span class="sig-name descname"><span class="pre">need_preproc</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.inference.modules.QualNameMetadata.need_preproc" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
