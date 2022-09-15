@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import itertools
+import logging
 from typing import Callable, List, Optional
 
 import torch
@@ -13,11 +14,13 @@ import torch.distributed as dist
 from torch import nn
 from torch.autograd.profiler import record_function
 from torchrec.distributed.comm_ops import (
+    all_gather_base_pooled,
     alltoall_pooled,
     alltoall_sequence,
-    reduce_scatter_pooled,
+    reduce_scatter_base_pooled,
+    reduce_scatter_v_pooled,
 )
-from torchrec.distributed.types import Awaitable, NoWait
+from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
@@ -36,6 +39,8 @@ try:
 except ImportError:
     pass
 
+logger: logging.Logger = logging.getLogger()
+
 
 def _get_recat(
     local_split: int,
@@ -48,14 +53,15 @@ def _get_recat(
     Calculates relevant recat indices required to reorder AlltoAll collective.
 
     Args:
-        local_split: how many features in local split.
-        num_splits: how many splits (typically WORLD_SIZE).
-        stagger: secondary reordering, (typically 1, but WORLD_SIZE/LOCAL_WORLD_SIZE
-            for TWRW).
-        batch_size_per_rank: batch size in each rank, need for variable batch size
+        local_split (int): how many features in local split.
+        num_splits (int): how many splits (typically WORLD_SIZE).
+        stagger (int): secondary reordering, (typically 1, but
+            `WORLD_SIZE/LOCAL_WORLD_SIZE` for TWRW).
+        device (Optional[torch.device]): device on which buffer will be allocated.
+        batch_size_per_rank: batch size per rank, needed for variable batch size.
 
     Returns:
-        List[int]
+        torch.Tensor: recat tensor.
 
     Example::
 
@@ -140,19 +146,21 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
 
     Args:
         pg  (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        input (KeyedJaggedTensor): Input KJT tensor.
-        lengths: Output lengths tensor
+        input (KeyedJaggedTensor): input KJT tensor.
+        lengths (torch.Tensor): output lengths tensor.
         splits (List[int]): List of len(pg.size()) which indicates how many features to
-            send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
+            send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
         keys (List[str]): KJT keys after AlltoAll.
         recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
-        in_lengths_per_worker (List[str]): indices number of indices each rank will get.
+        in_lengths_per_worker (List[int]): number of indices each rank will get.
+        out_lengths_per_worker (List[int]): number of indices per rank in output.
+        batch_size_per_rank (List[int]): batch size per rank, need to support variable
+            batch size.
     """
 
     def __init__(
         self,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: dist.ProcessGroup,
         input: KeyedJaggedTensor,
         lengths: torch.Tensor,
@@ -281,13 +289,16 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
     awaitable where indices and weights AlltoAll will be issued.
 
     Args:
-        pg  (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        input (KeyedJaggedTensor): Input KJT tensor
-        splits (List[int]): List of len(pg.size()) which indicates how many features to
-            send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        input (KeyedJaggedTensor): input KJT tensor
+        splits (List[int]): list of len(pg.size()) which indicates how many features to
+            send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
         keys (List[str]): KJT keys after AlltoAll
+        stagger (int): stagger value to apply to recat tensor, see `_recat` function for
+            more detail.
         recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
+        variable_batch_size (bool): whether variable batch size is enabled.
     """
 
     def __init__(
@@ -314,7 +325,6 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
         dim_0 = splits[pg.rank()]
         dim_1 = input.stride()
         self._batch_size_per_rank: List[int] = [dim_1] * self._workers
-        self._batch_size_per_rank_tensor: Optional[torch.Tensor] = None
         if self._workers == 1:
             return
 
@@ -325,7 +335,9 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
                 dtype=torch.torch.int32,
             )
             local_batch_sizes = torch.tensor(
-                [dim_1] * self._workers, device=self._device, dtype=torch.torch.int32
+                [dim_1] * self._workers,
+                device=self._device,
+                dtype=torch.torch.int32,
             )
             with record_function("## all2all_data: Batch size ##"):
                 dist.all_to_all_single(
@@ -336,7 +348,6 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
                     group=self._pg,
                     async_op=False,
                 )
-            self._batch_size_per_rank_tensor = batch_size_per_rank_tensor
             self._batch_size_per_rank = batch_size_per_rank_tensor.cpu().tolist()
             self._recat = _get_recat(
                 local_split=dim_0,
@@ -432,9 +443,9 @@ class KJTAllToAll(nn.Module):
             send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
             destination rank. Same for all ranks.
         device (Optional[torch.device]): device on which buffers will be allocated.
-        stagger (int): stagger value to apply to recat tensor, see _recat function for
+        stagger (int): stagger value to apply to recat tensor, see `_recat` function for
             more detail.
-        variable_batch_size (bool): variable batch size in each rank
+        variable_batch_size (bool): whether variable batch size in each rank is enabled.
 
     Example::
 
@@ -539,10 +550,9 @@ class KJTOneToAll(nn.Module):
     to the devices.
 
     Args:
-        splits (List[int]): lengths of features to split the KeyJaggedTensor features
+        splits (List[int]): lengths of features to split the `KeyJaggedTensor` features
             into before copying them.
         world_size (int): number of devices in the topology.
-        recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
     """
 
     def __init__(
@@ -563,7 +573,7 @@ class KJTOneToAll(nn.Module):
             kjt (KeyedJaggedTensor): the input features.
 
         Returns:
-            Awaitable[List[KeyedJaggedTensor]]: awaitable of KeyedJaggedTensor splits.
+            Awaitable[List[KeyedJaggedTensor]]: awaitable of `KeyedJaggedTensor` splits.
         """
 
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
@@ -619,7 +629,8 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
-        callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]])
+        callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]]): callback
+            functions.
 
     Example::
 
@@ -642,15 +653,15 @@ class PooledEmbeddingsAllToAll(nn.Module):
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
         self._callbacks: List[Callable[[torch.Tensor], torch.Tensor]] = []
         if callbacks is not None:
             self._callbacks = callbacks
-
         self._dim_sum_per_rank = dim_sum_per_rank
+        self._codecs = codecs
         self.register_buffer(
             "_dim_sum_per_rank_tensor",
             torch.tensor(dim_sum_per_rank, device=device, dtype=torch.int),
@@ -669,6 +680,8 @@ class PooledEmbeddingsAllToAll(nn.Module):
 
         Args:
             local_embs (torch.Tensor): tensor of values to distribute.
+            batch_size_per_rank (Optional[List[int]]): batch size per rank, to support
+                variable batch size.
 
         Returns:
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings.
@@ -690,10 +703,11 @@ class PooledEmbeddingsAllToAll(nn.Module):
             dim_sum_per_rank_tensor=self._dim_sum_per_rank_tensor,
             cumsum_dim_sum_per_rank_tensor=self._cumsum_dim_sum_per_rank_tensor,
             group=self._pg,
+            codecs=self._codecs,
         )
 
         pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable
+            tensor_awaitable=tensor_awaitable,
         )
         pooled_embedding_awaitable.callbacks.extend(self._callbacks)
 
@@ -709,9 +723,9 @@ class EmbeddingsAllToOne(nn.Module):
     Merges the pooled/sequence embedding tensor on each device into single tensor.
 
     Args:
-        device (torch.device): device on which buffer will be allocated
+        device (torch.device): device on which buffer will be allocated.
         world_size (int): number of devices in the topology.
-        cat_dim (int): which dimension you like to concate on.
+        cat_dim (int): which dimension you would like to concatenate on.
             For pooled embedding it is 1; for sequence embedding it is 0.
     """
 
@@ -728,13 +742,13 @@ class EmbeddingsAllToOne(nn.Module):
 
     def forward(self, tensors: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
         """
-        Performs AlltoOne operation on pooled embeddings tensors.
+        Performs AlltoOne operation on pooled/sequence embeddings tensors.
 
         Args:
-            tensors (List[torch.Tensor]): list of pooled embedding tensors.
+            tensors (List[torch.Tensor]): list of embedding tensors.
 
         Returns:
-            Awaitable[torch.Tensor]: awaitable of the merged pooled embeddings.
+            Awaitable[torch.Tensor]: awaitable of the merged embeddings.
         """
 
         assert len(tensors) == self._world_size
@@ -749,30 +763,131 @@ class EmbeddingsAllToOne(nn.Module):
         )
 
 
+class SeqEmbeddingsAllToOne(nn.Module):
+    """
+    Merges the pooled/sequence embedding tensor on each device into single tensor.
+
+    Args:
+        device (torch.device): device on which buffer will be allocated
+        world_size (int): number of devices in the topology.
+        cat_dim (int): which dimension you like to concate on.
+            For pooled embedding it is 1; for sequence embedding it is 0.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._device = device
+        self._world_size = world_size
+
+    def forward(self, tensors: List[torch.Tensor]) -> Awaitable[List[torch.Tensor]]:
+        """
+        Performs AlltoOne operation on pooled embeddings tensors.
+
+        Args:
+            tensors (List[torch.Tensor]): list of pooled embedding tensors.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of the merged pooled embeddings.
+        """
+
+        assert len(tensors) == self._world_size
+        return NoWait(
+            torch.ops.fbgemm.all_to_one_device(
+                tensors,
+                self._device,
+            )
+        )
+
+
 class PooledEmbeddingsReduceScatter(nn.Module):
     """
-    The module class that wraps reduce-scatter communication primitive for pooled
+    The module class that wraps reduce-scatter communication primitives for pooled
     embedding communication in row-wise and twrw sharding.
 
     For pooled embeddings, we have a local model-parallel output tensor with a layout of
     [num_buckets x batch_size, dimension]. We need to sum over num_buckets dimension
-    across batches. We split tensor along the first dimension into equal chunks (tensor
-    slices of different buckets) and reduce them into the output tensor and scatter the
-    results for corresponding ranks.
+    across batches. We split tensor along the first dimension into unequal chunks (tensor
+    slices of different buckets) according to input_splits and reduce them into the output
+    tensor and scatter the results for corresponding ranks.
 
     The class returns the async `Awaitable` handle for pooled embeddings tensor.
-    The reduce-scatter is only available for NCCL backend.
+    The reduce-scatter-v is only available for NCCL backend.
 
     Args:
         pg (dist.ProcessGroup): The process group that the reduce-scatter communication
             happens within.
+        codecs (Optional[QuantizedCommCodecs]): Quantization codec
 
     Example::
 
         init_distributed(rank=rank, size=2, backend="nccl")
         pg = dist.new_group(backend="nccl")
         input = torch.randn(2 * 2, 2)
+        input_splits = [1,3]
         m = PooledEmbeddingsReduceScatter(pg)
+        output = m(input, input_splits)
+        tensor = output.wait()
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ) -> None:
+        super().__init__()
+        self._pg = pg
+        self._codecs = codecs
+
+    def forward(
+        self, local_embs: torch.Tensor, input_splits: Optional[List[int]] = None
+    ) -> PooledEmbeddingsAwaitable:
+        """
+        Performs reduce scatter operation on pooled embeddings tensor.
+
+        Args:
+            local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
+            input_splits (Optional[List[int]]): list of splits for local_embs dim0.
+
+        Returns:
+            PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
+        """
+
+        if input_splits and len(set(input_splits)) > 1:
+            tensor_awaitable = reduce_scatter_v_pooled(
+                local_embs, input_splits, self._pg, codecs=self._codecs
+            )
+        else:
+            tensor_awaitable = reduce_scatter_base_pooled(
+                local_embs, self._pg, codecs=self._codecs
+            )
+        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+
+
+class PooledEmbeddingsAllGather(nn.Module):
+    """
+    The module class that wraps all-gather communication primitive for pooled
+    embedding communication
+
+    We have a local input tensor with a layout of
+    [batch_size, dimension]. We need to gather input tensors from all ranks into a flatten output tensor.
+
+    The class returns the async `Awaitable` handle for pooled embeddings tensor.
+    The all-gather is only available for NCCL backend.
+
+    Args:
+        pg (dist.ProcessGroup): The process group that the all-gather communication
+            happens within.
+
+    Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        input = torch.randn(2, 2)
+        m = PooledEmbeddingsAllGather(pg)
         output = m(input)
         tensor = output.wait()
     """
@@ -780,12 +895,13 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
+        self._codecs = codecs
 
-    def forward(self, local_embs: torch.Tensor) -> PooledEmbeddingsAwaitable:
+    def forward(self, local_emb: torch.Tensor) -> PooledEmbeddingsAwaitable:
         """
         Performs reduce scatter operation on pooled embeddings tensor.
 
@@ -796,8 +912,8 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
-        tensor_awaitable = reduce_scatter_pooled(
-            list(torch.chunk(local_embs, self._pg.size(), dim=0)), self._pg
+        tensor_awaitable = all_gather_base_pooled(
+            local_emb, self._pg, codecs=self._codecs
         )
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
@@ -811,6 +927,7 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
             from all the processes in the group after collective.
         unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order of
             KJT bucketize (for row-wise sharding only).
+        embedding_dim (int): embedding dimension.
     """
 
     def __init__(
@@ -838,21 +955,21 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
         Syncs sequence embeddings after collective operation.
 
         Returns:
-            torch.Tensor: synced pooled embeddings.
+            torch.Tensor: synced sequence embeddings.
         """
 
         ret = self._tensor_awaitable.wait()
         return ret
 
 
-class SequenceEmbeddingAllToAll(nn.Module):
+class SequenceEmbeddingsAllToAll(nn.Module):
     """
     Redistributes sequence embedding to a `ProcessGroup` according to splits.
 
     Args:
         pg (dist.ProcessGroup): the process group that the AlltoAll communication
             happens within.
-        features_per_rank (List[int]): List of number of features per rank.
+        features_per_rank (List[int]): list of number of features per rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
 
     Example::
@@ -860,7 +977,7 @@ class SequenceEmbeddingAllToAll(nn.Module):
         init_distributed(rank=rank, size=2, backend="nccl")
         pg = dist.new_group(backend="nccl")
         features_per_rank = [4, 4]
-        m = SequenceEmbeddingAllToAll(pg, features_per_rank)
+        m = SequenceEmbeddingsAllToAll(pg, features_per_rank)
         local_embs = torch.rand((6, 2))
         sharding_ctx: SequenceShardingContext
         output = m(
@@ -878,9 +995,9 @@ class SequenceEmbeddingAllToAll(nn.Module):
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         forward_recat = []
@@ -899,6 +1016,7 @@ class SequenceEmbeddingAllToAll(nn.Module):
             "_backward_recat_tensor",
             torch.tensor(backward_recat, device=device, dtype=torch.int),
         )
+        self._codecs = codecs
 
     def forward(
         self,
@@ -920,7 +1038,7 @@ class SequenceEmbeddingAllToAll(nn.Module):
                 of the KJT bucketize (for row-wise sharding only).
 
         Returns:
-            SequenceEmbeddingsAwaitable
+            SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
         """
 
         tensor_awaitable = alltoall_sequence(
@@ -931,6 +1049,7 @@ class SequenceEmbeddingAllToAll(nn.Module):
             input_splits=input_splits,
             output_splits=output_splits,
             group=self._pg,
+            codecs=self._codecs,
         )
         return SequenceEmbeddingsAwaitable(
             tensor_awaitable=tensor_awaitable,

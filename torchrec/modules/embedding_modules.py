@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -31,18 +31,20 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     ) -> KeyedTensor:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def embedding_bag_configs(
         self,
     ) -> List[EmbeddingBagConfig]:
         pass
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def is_weighted(self) -> bool:
         pass
 
 
-def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
+def get_embedding_names_by_table(
+    tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
+) -> List[List[str]]:
     shared_feature: Dict[str, bool] = {}
     for embedding_config in tables:
         for feature_name in embedding_config.feature_names:
@@ -50,14 +52,16 @@ def ebc_get_embedding_names(tables: List[EmbeddingBagConfig]) -> List[str]:
                 shared_feature[feature_name] = False
             else:
                 shared_feature[feature_name] = True
-    embedding_names: List[str] = []
+    embedding_names_by_table: List[List[str]] = []
     for embedding_config in tables:
+        embedding_names: List[str] = []
         for feature_name in embedding_config.feature_names:
             if shared_feature[feature_name]:
                 embedding_names.append(feature_name + "@" + embedding_config.name)
             else:
                 embedding_names.append(feature_name)
-    return embedding_names
+        embedding_names_by_table.append(embedding_names)
+    return embedding_names_by_table
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
@@ -107,13 +111,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.6149,  0.0000, -0.3176],
-        [-0.8876,  0.0000, -1.5606],
-        [ 1.6805,  0.0000,  0.6810],
-        [-1.4206, -1.0409,  0.2249],
-        [ 0.1823, -0.4697,  1.3823],
-        [-0.2767, -0.9965, -0.1797],
-        [ 0.8864,  0.1315, -2.0724]], grad_fn=<TransposeBackward0>)
+        tensor([[-0.8899, -0.1342, -1.9060, -0.0905, -0.2814, -0.9369, -0.7783],
+            [ 0.0000,  0.0000,  0.0000,  0.1598,  0.0695,  1.3265, -0.1011],
+            [-0.4256, -1.1846, -2.1648, -1.0893,  0.3590, -1.9784, -0.7681]],
+            grad_fn=<CatBackward0>)
         print(pooled_embeddings.keys())
         ['f1', 'f2']
         print(pooled_embeddings.offset_per_key())
@@ -156,7 +157,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 len(embedding_config.feature_names) * [embedding_config.embedding_dim]
             )
 
-        self._embedding_names: List[str] = ebc_get_embedding_names(tables)
+        self._embedding_names: List[str] = [
+            embedding
+            for embeddings in get_embedding_names_by_table(tables)
+            for embedding in embeddings
+        ]
+        self._feature_names: List[List[str]] = [table.feature_names for table in tables]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
@@ -170,10 +176,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         pooled_embeddings: List[torch.Tensor] = []
 
         feature_dict = features.to_dict()
-        for embedding_config, embedding_bag in zip(
-            self._embedding_bag_configs, self.embedding_bags.values()
-        ):
-            for feature_name in embedding_config.feature_names:
+        for i, embedding_bag in enumerate(self.embedding_bags.values()):
+            for feature_name in self._feature_names[i]:
                 f = feature_dict[feature_name]
                 res = embedding_bag(
                     input=f.values(),
@@ -181,23 +185,52 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     per_sample_weights=f.weights() if self._is_weighted else None,
                 )
                 pooled_embeddings.append(res)
-        data = torch.cat(pooled_embeddings, dim=1)
+        data = torch.cat(pooled_embeddings, dim=1).float()
         return KeyedTensor(
             keys=self._embedding_names,
             values=data,
             length_per_key=self._lengths_per_embedding,
         )
 
-    @property
-    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
-        return self._embedding_bag_configs
-
-    @property
     def is_weighted(self) -> bool:
         return self._is_weighted
 
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        return self._embedding_bag_configs
 
-class EmbeddingCollection(nn.Module):
+
+class EmbeddingCollectionInterface(abc.ABC, nn.Module):
+    """
+    Interface for `EmbeddingCollection`.
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> Dict[str, JaggedTensor]:
+        pass
+
+    @abc.abstractmethod
+    def embedding_configs(
+        self,
+    ) -> List[EmbeddingConfig]:
+        pass
+
+    @abc.abstractmethod
+    def need_indices(self) -> bool:
+        pass
+
+    @abc.abstractmethod
+    def embedding_dim(self) -> int:
+        pass
+
+    @abc.abstractmethod
+    def embedding_names_by_table(self) -> List[List[str]]:
+        pass
+
+
+class EmbeddingCollection(EmbeddingCollectionInterface):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
 
@@ -219,7 +252,7 @@ class EmbeddingCollection(nn.Module):
     Args:
         tables (List[EmbeddingConfig]): list of embedding tables.
         device (Optional[torch.device]): default compute device.
-        need_indices (bool): if we need to pass indices to the final lookup result dict
+        need_indices (bool): if we need to pass indices to the final lookup dict.
 
     Example::
 
@@ -261,19 +294,18 @@ class EmbeddingCollection(nn.Module):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self.embeddings: nn.ModuleDict = nn.ModuleDict()
-        self.embedding_configs = tables
-        self.embedding_dim: int = -1
-        self.need_indices: bool = need_indices
+        self._embedding_configs = tables
+        self._embedding_dim: int = -1
+        self._need_indices: bool = need_indices
         table_names = set()
-        shared_feature: Dict[str, bool] = {}
         for config in tables:
             if config.name in table_names:
                 raise ValueError(f"Duplicate table name {config.name}")
             table_names.add(config.name)
-            self.embedding_dim = (
-                config.embedding_dim if self.embedding_dim < 0 else self.embedding_dim
+            self._embedding_dim = (
+                config.embedding_dim if self._embedding_dim < 0 else self._embedding_dim
             )
-            if self.embedding_dim != config.embedding_dim:
+            if self._embedding_dim != config.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
                 )
@@ -288,21 +320,11 @@ class EmbeddingCollection(nn.Module):
             )
             if not config.feature_names:
                 config.feature_names = [config.name]
-            for feature_name in config.feature_names:
-                if feature_name not in shared_feature:
-                    shared_feature[feature_name] = False
-                else:
-                    shared_feature[feature_name] = True
 
-        self.embedding_names_by_table: List[List[str]] = []
-        for config in tables:
-            embedding_names = []
-            for feature_name in config.feature_names:
-                if shared_feature[feature_name]:
-                    embedding_names.append(feature_name + "@" + config.name)
-                else:
-                    embedding_names.append(feature_name)
-            self.embedding_names_by_table.append(embedding_names)
+        self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
+            tables
+        )
+        self._feature_names: List[List[str]] = [table.feature_names for table in tables]
 
     def forward(
         self,
@@ -318,21 +340,30 @@ class EmbeddingCollection(nn.Module):
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
         jt_dict: Dict[str, JaggedTensor] = features.to_dict()
-        for config, embedding_names, emb_module in zip(
-            self.embedding_configs,
-            self.embedding_names_by_table,
-            self.embeddings.values(),
-        ):
-            for feature_name, embedding_name in zip(
-                config.feature_names, embedding_names
-            ):
+        for i, emb_module in enumerate(self.embeddings.values()):
+            feature_names = self._feature_names[i]
+            embedding_names = self._embedding_names_by_table[i]
+            for j, embedding_name in enumerate(embedding_names):
+                feature_name = feature_names[j]
                 f = jt_dict[feature_name]
                 lookup = emb_module(
                     input=f.values(),
-                )
+                ).float()
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
-                    weights=f.values() if self.need_indices else None,
+                    weights=f.values() if self._need_indices else None,
                 )
         return feature_embeddings
+
+    def need_indices(self) -> bool:
+        return self._need_indices
+
+    def embedding_dim(self) -> int:
+        return self._embedding_dim
+
+    def embedding_configs(self) -> List[EmbeddingConfig]:
+        return self._embedding_configs
+
+    def embedding_names_by_table(self) -> List[List[str]]:
+        return self._embedding_names_by_table

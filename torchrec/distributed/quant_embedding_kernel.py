@@ -21,6 +21,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
 from torchrec.distributed.batched_embedding_kernel import (
     BaseBatchedEmbedding,
     BaseBatchedEmbeddingBag,
+    BatchedDenseEmbedding,
+    BatchedDenseEmbeddingBag,
 )
 from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
@@ -84,7 +86,8 @@ def _copy_config(
 
 
 def _quantize_weight(
-    state_dict: Dict[str, torch.Tensor], data_type: DataType
+    state_dict: Dict[str, torch.Tensor],
+    data_type: DataType,
 ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
     quant_weight_list = []
     for weight in state_dict.values():
@@ -109,7 +112,6 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
-        # pyre-fixme[11]
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
@@ -141,7 +143,6 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
-                output_dtype=SparseType.FP32,
                 row_alignment=16,
                 **(fused_params or {}),
             )
@@ -192,7 +193,11 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 
-        state_dict = dict(module.named_buffers())
+        state_dict = (
+            dict(module.named_split_embedding_weights())
+            if isinstance(module, BatchedDenseEmbeddingBag)
+            else dict(module.named_buffers())
+        )
         device = next(iter(state_dict.values())).device
 
         config = _copy_config(module.config, data_type, sparse_type, device)
@@ -239,7 +244,6 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
                 device=device,
                 pooling_mode=PoolingMode.NONE,
                 feature_table_map=self._feature_table_map,
-                output_dtype=SparseType.FP32,
                 row_alignment=16,
                 **(fused_params or {}),
             )
@@ -286,7 +290,11 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 
-        state_dict = dict(module.named_buffers())
+        state_dict = (
+            dict(module.named_split_embedding_weights())
+            if isinstance(module, BatchedDenseEmbedding)
+            else dict(module.named_buffers())
+        )
         device = next(iter(state_dict.values())).device
 
         config = _copy_config(module.config, data_type, sparse_type, device)

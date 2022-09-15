@@ -32,7 +32,8 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     """
     Redistributes sparse features in TW fashion with an AlltoAll collective
     operation.
-    Support variable batch size in each rank.
+
+    Supports variable batch size.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
@@ -45,7 +46,6 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def __init__(
         self,
-        # pyre-fixme[11]
         pg: dist.ProcessGroup,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
@@ -67,12 +67,11 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         """
         Performs AlltoAll operation on sparse features.
 
-        Call Args:
+        Args:
             sparse_features (SparseFeatures): sparse features to redistribute.
 
         Returns:
-            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of
-                SparseFeatures.
+            Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
         return self._dist(sparse_features)
@@ -104,7 +103,8 @@ class VariableBatchTwPooledEmbeddingSharding(
     """
     Shards pooled embeddings table-wise, i.e.. a given embedding table is entirely placed
     on a selected rank.
-    Support Variable batch size.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(
@@ -112,6 +112,8 @@ class VariableBatchTwPooledEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
         return VariableBatchTwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             self._id_score_list_features_per_rank(),
@@ -127,7 +129,6 @@ class VariableBatchTwPooledEmbeddingSharding(
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -138,6 +139,8 @@ class VariableBatchTwPooledEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseVariableBatchEmbeddingDist[torch.Tensor]:
         return VariableBatchTwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,

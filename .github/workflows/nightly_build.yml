@@ -4,6 +4,14 @@
 name: Push Binary Nightly
 
 on:
+  workflow_call:
+    secrets:
+      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
+        required: true
+      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
+        required: true
+      PYPI_TOKEN:
+        required: false
   # run every day at 11:15am
   schedule:
     - cron:  '15 11 * * *'
@@ -11,7 +19,6 @@ on:
   workflow_dispatch:
 
 jobs:
-
   # build on cpu hosts and upload to GHA
   build_on_cpu:
     runs-on: ${{ matrix.os }}
@@ -36,18 +43,6 @@ jobs:
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
-      with:
-        submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
@@ -56,7 +51,7 @@ jobs:
     - name: Setup conda
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
+        bash ~/miniconda.sh -b -p $HOME/miniconda -u
     - name: setup Path
       run: |
         echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
@@ -112,7 +107,6 @@ jobs:
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-nightly \
-          --TORCH_CUDA_ARCH_LIST "'7.0;8.0'" \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
@@ -163,18 +157,6 @@ jobs:
     # Checkout the repository to the GitHub Actions runner
     - name: Checkout
       uses: actions/checkout@v2
-      with:
-        submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
     - name: Update pip
       run: |
         sudo yum update -y
@@ -230,20 +212,11 @@ jobs:
       run: |
         rm -r dist || true
         conda run -n build_binary python -m pip install *.whl
-    - name: Test fbgemm_gpu and torchrec installation
+    - name: Test torchrec installation
       shell: bash
       run: |
         conda run -n build_binary \
-          python -c "import fbgemm_gpu"
-        conda run -n build_binary \
           python -c "import torchrec"
-    - name: Test with pytest
-      run: |
-        conda run -n build_binary \
-          python -m pip install pytest
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
-    # Push to Pypi
     - name: Push TorchRec Binary to PYPI
       env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}

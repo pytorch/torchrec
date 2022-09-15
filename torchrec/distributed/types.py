@@ -90,6 +90,74 @@ class ComputeKernel(Enum):
     DEFAULT = "default"
 
 
+# Once we only support python3.8+ use
+# from typing import protocol.
+# We can't use from typing_extensions import Protocol due to torch.deploy restrictions.
+class QuantizedCommCodec:
+    """
+    Provide an implementation to quantized, or apply mixed precision, to the tensors used in collective calls (pooled_all_to_all, reduce_scatter, etc).
+    The dtype is the dtype of the tensor called from encode.
+
+    This makes the assumption that the input tensor has type torch.float32
+
+    >>>
+        quantized_tensor = quantized_comm_codec.encode(input_tensor)
+        quantized_tensor.dtype == quantized_comm_codec.quantized_dtype
+        collective_call(output_tensors, input_tensors=tensor)
+        output_tensor = decode(output_tensors)
+
+        torch.assert_close(input_tensors, output_tensor)
+
+    """
+
+    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+        ...
+
+    def quantized_dtype(self) -> torch.dtype:
+        """
+        tensor.dtype of the resultant encode(input_tensor)
+        """
+        ...
+
+
+class NoOpQuantizedCommCodec:
+    """
+    Default No-Op implementation of QuantizedCommCodec
+    """
+
+    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        return input_tensor
+
+    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+        return input_grad
+
+    def quantized_dtype(self) -> torch.dtype:
+        return torch.float
+
+
+@dataclass
+class QuantizedCommCodecs:
+    """
+    The quantization codecs to use for the forward and backward pass respectively of a comm op (e.g. pooled_all_to_all, reduce_scatter, sequence_all_to_all).
+    """
+
+    # pyre-ignore
+    forward: QuantizedCommCodec = NoOpQuantizedCommCodec()
+    # pyre-ignore
+    backward: QuantizedCommCodec = NoOpQuantizedCommCodec()
+
+
+class CommOp(Enum):
+    # For detailed descriptions of each of these, see their doc strings in dist_data.
+    # These are commonly used inside of a QuantizedCommsRegistry
+    POOLED_EMBEDDINGS_ALL_TO_ALL = "pooled_embeddings_all_to_all"
+    POOLED_EMBEDDINGS_REDUCE_SCATTER = "pooled_embeddings_reduce_scatter"
+    SEQUENCE_EMBEDDINGS_ALL_TO_ALL = "sequence_embeddings_all_to_all"
+
+
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
 Out = TypeVar("Out")
@@ -126,6 +194,7 @@ class NoWait(Awaitable[W]):
         return self._obj
 
 
+# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class _LazyAwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     """
     The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
@@ -328,7 +397,6 @@ class ShardingEnv:
         self,
         world_size: int,
         rank: int,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         self.world_size = world_size
@@ -358,7 +426,7 @@ class ShardingEnv:
 
 class ModuleCopyMixin:
     """
-    A mixin to allow modules to override copy behaviros in DMP.
+    A mixin to allow modules to override copy behaviors in DMP.
     """
 
     def copy(self, device: torch.device) -> nn.Module:
@@ -371,18 +439,32 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
 
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
+
     NOTE:
         'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
         from data-parallel to model parallel and vise-versa.
     """
 
     @abc.abstractmethod
-    def __init__(self) -> None:
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
+
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
+        if qcomm_codecs_registry is None:
+            qcomm_codecs_registry = {}
+        self._qcomm_codecs_registry = qcomm_codecs_registry
+
     def create_context(self) -> ShardedModuleContext:
         return EmptyContext()
+
+    @property
+    def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
+        return self._qcomm_codecs_registry
 
     @abc.abstractmethod
     def input_dist(
@@ -410,13 +492,24 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
     ) -> LazyAwaitable[Out]:
         """
         In case of multiple output distributions it makes sense to override this method
-        and initiate output distibution as soon as the corresponding compute completes.
+        and initiate the output distibution as soon as the corresponding compute
+        completes.
         """
         output = self.compute(ctx, input)
         return self.output_dist(ctx, output)
 
     # pyre-ignore[2]
     def forward(self, *input, **kwargs) -> LazyAwaitable[Out]:
+        """
+        Executes the input dist, compute, and output dist steps.
+
+        Args:
+            *input: input.
+            **kwargs: keyword arguments.
+
+        Returns:
+            LazyAwaitable[Out]: awaitable of output from output dist.
+        """
         ctx = self.create_context()
         dist_input = self.input_dist(ctx, *input, **kwargs).wait()
         return self.compute_and_output_dist(ctx, dist_input)
@@ -438,10 +531,16 @@ class ModuleSharder(abc.ABC, Generic[M]):
     """
     `ModuleSharder` is per each module, which supports sharding,
     e.g. `EmbeddingBagCollection`.
+
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
+        self._qcomm_codecs_registry = qcomm_codecs_registry
 
     @abc.abstractclassmethod
     # pyre-ignore [3]
@@ -475,6 +574,10 @@ class ModuleSharder(abc.ABC, Generic[M]):
     def module_type(self) -> Type[M]:
         ...
 
+    @property
+    def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
+        return self._qcomm_codecs_registry
+
     def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
         """
         List of parameters that can be sharded.
@@ -483,7 +586,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         """
-        List of supported sharding types. See ShardingType for well-known examples.
+        List of supported sharding types. See `ShardingType` for well-known examples.
         """
         return [ShardingType.DATA_PARALLEL.value]
 
@@ -491,7 +594,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         """
-        List of supported compute kernels for a given sharding_type and compute device.
+        List of supported compute kernels for a given sharding type and compute device.
         """
 
         return [ComputeKernel.DEFAULT.value]
@@ -516,8 +619,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
 class ShardingPlan:
     """
     Representation of sharding plan.
-    Attributes:
 
+    Attributes:
         plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of
             dict of parameter sharding specs keyed by parameter name.
     """

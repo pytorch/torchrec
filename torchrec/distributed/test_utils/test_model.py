@@ -19,9 +19,13 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     EmbeddingBagSharder,
 )
+from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
+from torchrec.distributed.types import QuantizedCommCodecs
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
+from torchrec.modules.feature_processor import PositionWeightedProcessor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
@@ -41,6 +45,9 @@ class ModelInput(Pipelineable):
         tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
+        dedup_tables: Optional[
+            Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
+        ] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -157,6 +164,8 @@ class ModelInput(Pipelineable):
             local_input = ModelInput(
                 float_features=global_float[r * batch_size : (r + 1) * batch_size],
                 idlist_features=local_idlist_kjt,
+                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
+                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=local_idscore_kjt,
                 label=global_label[r * batch_size : (r + 1) * batch_size],
             )
@@ -166,6 +175,8 @@ class ModelInput(Pipelineable):
             ModelInput(
                 float_features=global_float,
                 idlist_features=global_idlist_kjt,
+                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
+                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=global_idscore_kjt,
                 label=global_label,
             ),
@@ -190,10 +201,12 @@ class ModelInput(Pipelineable):
         )
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.float_features.record_stream(stream)
         self.idlist_features.record_stream(stream)
         if self.idscore_features is not None:
             self.idscore_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.label.record_stream(stream)
 
 
@@ -313,14 +326,50 @@ class TestSparseArch(nn.Module):
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
         device: Optional[torch.device] = None,
+        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
     ) -> None:
         super().__init__()
         if device is None:
             device = torch.device("cpu")
-        self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-            tables=tables,
-            device=device,
-        )
+        self.fps: Optional[nn.ModuleList] = None
+        self.fp_ebc: Optional[EmbeddingBagCollection] = None
+        if max_feature_lengths_list is not None:
+            self.fps = nn.ModuleList(
+                [
+                    PositionWeightedProcessor(
+                        max_feature_lengths=max_feature_lengths,
+                        device=device
+                        if device != torch.device("meta")
+                        else torch.device("cpu"),
+                    )
+                    for max_feature_lengths in max_feature_lengths_list
+                ]
+            )
+            normal_id_list_tables = []
+            fp_id_list_tables = []
+            for table in tables:
+                # the key set of feature_processor is either subset or none in the feature_names
+                if set(table.feature_names).issubset(
+                    set(max_feature_lengths_list[0].keys())
+                ):
+                    fp_id_list_tables.append(table)
+                else:
+                    normal_id_list_tables.append(table)
+
+            self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
+                tables=normal_id_list_tables,
+                device=device,
+            )
+            self.fp_ebc: EmbeddingBagCollection = EmbeddingBagCollection(
+                tables=fp_id_list_tables,
+                device=device,
+                is_weighted=True,
+            )
+        else:
+            self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
+                tables=tables,
+                device=device,
+            )
         self.weighted_ebc: EmbeddingBagCollection = EmbeddingBagCollection(
             tables=weighted_tables,
             is_weighted=True,
@@ -328,15 +377,36 @@ class TestSparseArch(nn.Module):
         )
 
     def forward(
-        self, features: KeyedJaggedTensor, weighted_features: KeyedJaggedTensor
+        self,
+        features: KeyedJaggedTensor,
+        weighted_features: KeyedJaggedTensor,
     ) -> KeyedTensor:
+        fp_features = features
+        if self.fps:
+            # pyre-ignore[16]: Undefined attribute [16]: `Optional` has no attribute `__iter__`.
+            for fp in self.fps:
+                fp_features = fp(fp_features)
         ebc = self.ebc(features)
+        fp_ebc = self.fp_ebc(fp_features) if self.fp_ebc is not None else None
         w_ebc = self.weighted_ebc(weighted_features)
-        return KeyedTensor(
-            keys=ebc.keys() + w_ebc.keys(),
-            length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
-            values=torch.cat([ebc.values(), w_ebc.values()], dim=1),
+        result = (
+            KeyedTensor(
+                keys=ebc.keys() + w_ebc.keys(),
+                length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
+                values=torch.cat([ebc.values(), w_ebc.values()], dim=1),
+            )
+            if self.fp_ebc is None
+            else KeyedTensor(
+                keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
+                length_per_key=ebc.length_per_key()
+                + fp_ebc.length_per_key()
+                + w_ebc.length_per_key(),
+                values=torch.cat(
+                    [ebc.values(), fp_ebc.values(), w_ebc.values()], dim=1
+                ),
+            )
         )
+        return result
 
 
 class TestSparseNNBase(nn.Module):
@@ -396,6 +466,7 @@ class TestSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -406,9 +477,13 @@ class TestSparseNN(TestSparseNNBase):
         )
         if weighted_tables is None:
             weighted_tables = []
-
         self.dense = TestDenseArch(num_float_features, dense_device)
-        self.sparse = TestSparseArch(tables, weighted_tables, sparse_device)
+        self.sparse = TestSparseArch(
+            tables,
+            weighted_tables,
+            sparse_device,
+            max_feature_lengths_list if max_feature_lengths_list is not None else None,
+        )
         self.over = TestOverArch(tables, weighted_tables, dense_device)
 
     def forward(
@@ -663,12 +738,14 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         sharding_type: str,
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         if fused_params is None:
             fused_params = {}
-        super().__init__(fused_params)
+
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
+        super().__init__(fused_params, qcomm_codecs_registry)
 
     """
     Restricts sharding to single type only.
@@ -686,16 +763,49 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
     ) -> List[str]:
         return [self._kernel_type]
 
-    @property
-    def fused_params(self) -> Optional[Dict[str, Any]]:
-        return self._fused_params
+
+class TestFusedEBCSharder(FusedEmbeddingBagCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        super().__init__(fused_params={}, qcomm_codecs_registry=qcomm_codecs_registry)
+        self._sharding_type = sharding_type
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+
+class TestFusedECSharder(FusedEmbeddingCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+    ) -> None:
+        super().__init__()
+        self._sharding_type = sharding_type
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
 
 
 class TestEBSharder(EmbeddingBagSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
@@ -722,9 +832,13 @@ class TestEBSharder(EmbeddingBagSharder):
 
 class TestETSharder(EmbeddingTowerSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry=qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
@@ -751,9 +865,13 @@ class TestETSharder(EmbeddingTowerSharder):
 
 class TestETCSharder(EmbeddingTowerCollectionSharder):
     def __init__(
-        self, sharding_type: str, kernel_type: str, fused_params: Dict[str, Any]
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Dict[str, Any],
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__(fused_params)
+        super().__init__(fused_params, qcomm_codecs_registry=qcomm_codecs_registry)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 

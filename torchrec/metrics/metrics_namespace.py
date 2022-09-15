@@ -71,8 +71,8 @@ class MetricPrefix(StrValueMixin, Enum):
 
 
 def task_wildcard_metrics_pattern(
-    namespace: MetricNamespace,
-    metric_name: MetricName,
+    namespace: MetricNamespaceBase,
+    metric_name: MetricNameBase,
     metric_prefix: MetricPrefix = MetricPrefix.DEFAULT,
 ) -> str:
     r"""Get the re (regular expression) pattern to find a set of metrics

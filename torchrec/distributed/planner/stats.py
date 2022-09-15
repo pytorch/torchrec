@@ -10,11 +10,18 @@ from collections import defaultdict
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
+from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
+from torchrec.distributed.planner.storage_reservations import (
+    FixedPercentageReservation,
+    HeuristicalStorageReservation,
+    InferenceStorageReservation,
+)
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
     ShardingOption,
     Stats,
     Storage,
+    StorageReservation,
     Topology,
 )
 from torchrec.distributed.planner.utils import bytes_to_gb, bytes_to_mb
@@ -32,17 +39,25 @@ class EmbeddingStats(Stats):
     Stats for a sharding planner execution.
     """
 
+    def __init__(self) -> None:
+        self._width: int = MIN_WIDTH
+        self._stats_table: List[str] = []
+
     def log(
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        batch_size: int,
+        storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
-        debug: bool = False,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        debug: bool = True,
     ) -> None:
         """
-        Logs stats for a given sharding plan to stdout.
+        Logs stats for a given sharding plan.
 
         Provides a tabular view of stats for the given sharding plan with per device
         storage usage (HBM and DDR), perf, input, output, and number/type of shards.
@@ -50,9 +65,16 @@ class EmbeddingStats(Stats):
         Args:
             sharding_plan (ShardingPlan): sharding plan chosen by the planner.
             topology (Topology): device topology.
+            batch_size (int): batch size.
+            storage_constraint (Topology): available storage after storage reservation.
+            storage_reservation (StorageReservation): reserves storage for unsharded
+                parts of the model
             num_proposals (int): number of proposals evaluated.
             num_plans (int): number of proposals successfully partitioned.
+            run_time (float): time taken to find plan (in seconds).
             best_plan (List[ShardingOption]): plan with expected performance.
+            constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter
+                names to provided ParameterConstraints.
             debug (bool): whether to enable debug mode.
         """
 
@@ -69,6 +91,39 @@ class EmbeddingStats(Stats):
         used_sharding_types = set()
         compute_kernels_to_count = defaultdict(int)
 
+        reserved_percent = (
+            storage_reservation._percentage
+            if isinstance(
+                storage_reservation,
+                (
+                    FixedPercentageReservation,
+                    HeuristicalStorageReservation,
+                    InferenceStorageReservation,
+                ),
+            )
+            else 0.0
+        )
+        dense_storage = (
+            storage_reservation._dense_storage
+            if isinstance(
+                storage_reservation,
+                (HeuristicalStorageReservation, InferenceStorageReservation),
+            )
+            and storage_reservation._dense_storage is not None
+            else Storage(0, 0)
+        )
+        assert dense_storage
+        kjt_storage = (
+            storage_reservation._kjt_storage
+            if isinstance(
+                storage_reservation,
+                (HeuristicalStorageReservation, InferenceStorageReservation),
+            )
+            and storage_reservation._kjt_storage
+            else Storage(0, 0)
+        )
+        assert kjt_storage
+
         for sharding_option in best_plan:
             fqn = sharding_option.fqn
 
@@ -80,7 +135,8 @@ class EmbeddingStats(Stats):
                 shard=shard,
                 sharding_option=sharding_option,
                 world_size=topology.world_size,
-                local_size=topology.local_world_size,
+                local_world_size=topology.local_world_size,
+                constraints=constraints,
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
@@ -97,11 +153,14 @@ class EmbeddingStats(Stats):
         perf = [0.0] * topology.world_size
         for sharding_option in best_plan:
             for shard in sharding_option.shards:
-                storage = cast(Storage, shard.storage)
+                shard_storage = cast(Storage, shard.storage)
                 rank = cast(int, shard.rank)
-                used_hbm[rank] += storage.hbm
-                used_ddr[rank] += storage.ddr
+                used_hbm[rank] += shard_storage.hbm
+                used_ddr[rank] += shard_storage.ddr
                 perf[rank] += cast(float, shard.perf)
+
+        used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in used_hbm]
+        used_ddr = [ddr + dense_storage.ddr + kjt_storage.ddr for ddr in used_ddr]
 
         table: List[List[Union[str, int]]] = [
             [
@@ -127,12 +186,14 @@ class EmbeddingStats(Stats):
         for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
             used_hbm_ratio = (
-                used_hbm[rank] / device.storage.hbm
+                used_hbm[rank] / ((1 - reserved_percent) * device.storage.hbm)
                 if topology.compute_device == "cuda"
                 else 0
             )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
-            used_ddr_ratio = used_ddr[rank] / device.storage.ddr
+            used_ddr_ratio = used_ddr[rank] / (
+                (1 - reserved_percent) * device.storage.ddr
+            )
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
                     stats[rank]["type"][sharding_type] = 0
@@ -158,85 +219,121 @@ class EmbeddingStats(Stats):
                 ]
             )
         formatted_table = _format_table(table)
-        width = max(MIN_WIDTH, len(formatted_table[0]) + 8)
+        self._width = max(self._width, len(formatted_table[0]) + 8)
 
         if debug:
             param_table: List[List[Union[str, int]]] = [
-                ["FQN", "Sharding", "Compute Kernel", "Perf (ms)", "Ranks"],
+                [
+                    "FQN",
+                    "Sharding",
+                    "Compute Kernel",
+                    "Perf (ms)",
+                    "Pooling Factor",
+                    "Output",
+                    "Features",
+                    "Emb Dim",
+                    "Hash Size",
+                    "Ranks",
+                ],
                 [
                     "-----",
                     "----------",
                     "----------------",
                     "-----------",
+                    "----------------",
+                    "--------",
+                    "----------",
+                    "--------",
+                    "-----------",
                     "-------",
                 ],
             ]
             for so in best_plan:
-                # pyre-ignore[6]
-                ranks = sorted([shard.rank for shard in so.shards])
-                if len(ranks) > 1 and ranks == list(range(min(ranks), max(ranks) + 1)):
-                    ranks = [f"{min(ranks)}-{max(ranks)}"]
+                ranks = sorted([cast(int, shard.rank) for shard in so.shards])
+                ranks = _collapse_consecutive_ranks(ranks)
                 shard_perfs = str(
                     round(sum([cast(float, shard.perf) for shard in so.shards]), 3)
                 )
+                pooling_factor = str(round(sum(so.input_lengths), 3))
+                output = "pooled" if so.is_pooled else "sequence"
+                num_features = len(so.input_lengths)
+                embedding_dim = so.tensor.shape[1]
+                hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
                         so.fqn,
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
                         shard_perfs,
-                        ",".join([str(rank) for rank in ranks]),
+                        pooling_factor,
+                        output,
+                        num_features,
+                        embedding_dim,
+                        hash_size,
+                        ",".join(ranks),
                     ]
                 )
             formatted_param_table = _format_table(param_table)
-            width = max(width, len(formatted_param_table[0]) + 6)
+            self._width = max(self._width, len(formatted_param_table[0]) + 6)
 
-        logger.info("#" * width)
+        self._stats_table.clear()
+        self._stats_table.append("#" * self._width)
         header_text = "--- Planner Statistics ---"
-        logger.info(f"#{header_text: ^{width-2}}#")
+        self._stats_table.append(f"#{header_text: ^{self._width-2}}#")
 
         iter_text = (
             f"--- Evalulated {num_proposals} proposal(s), "
-            f"found {num_plans} possible plan(s) ---"
+            f"found {num_plans} possible plan(s), "
+            f"ran for {run_time:.2f}s ---"
         )
-        logger.info(f"#{iter_text: ^{width-2}}#")
+        self._stats_table.append(f"#{iter_text: ^{self._width-2}}#")
 
-        divider = "-" * (width - 4)
-        logger.info(f"#{divider: ^{width-2}}#")
+        divider = "-" * (self._width - 4)
+        self._stats_table.append(f"#{divider: ^{self._width-2}}#")
 
         for row in formatted_table:
-            logger.info(f"# {row: <{width-3}}#")
+            self._stats_table.append(f"# {row: <{self._width-3}}#")
 
-        logger.info(f"#{'' : ^{width-2}}#")
         legend = "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
-        logger.info(f"# {legend: <{width-3}}#")
-        hbm_info = "HBM: est. peak memory usage for shards - parameter, comms, optimizer, and gradients"
-        logger.info(f"# {hbm_info: <{width-3}}#")
-        logger.info(f"#{'' : ^{width-2}}#")
-
-        compute_kernels_count = [
-            f"{compute_kernel}: {count}"
-            for compute_kernel, count in sorted(compute_kernels_to_count.items())
-        ]
-        logger.info(f"# {'Compute Kernels:' : <{width-3}}#")
-        for compute_kernel_count in compute_kernels_count:
-            logger.info(f"#   {compute_kernel_count : <{width-5}}#")
+        hbm_info = "HBM: estimated peak memory usage for shards, dense tensors, and features (KJT)"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {legend: <{self._width-3}}#")
+        self._stats_table.append(f"# {hbm_info: <{self._width-3}}#")
 
         if debug:
-            logger.info(f"#{'' : ^{width-2}}#")
-            logger.info(f"# {'Parameter Info:' : <{width-3}}#")
-
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(f"# {'Parameter Info:' : <{self._width-3}}#")
             for row in formatted_param_table:
-                logger.info(f"# {row: <{width-3}}#")
+                self._stats_table.append(f"# {row: <{self._width-3}}#")
 
-        logger.info("#" * width)
+        batch_size_text = f"Batch Size: {batch_size}"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {batch_size_text : <{self._width-3}}#")
+
+        self._log_compute_kernel_stats(compute_kernels_to_count)
+
+        if debug:
+            self._log_max_perf_and_max_hbm(perf, used_hbm)
+            self._log_storage_reservation_stats(
+                storage_reservation,
+                topology,
+                reserved_percent,
+                dense_storage,
+                kjt_storage,
+            )
+
+        self._stats_table.append("#" * self._width)
+
+        for row in self._stats_table:
+            logger.info(row)
 
     def _get_shard_stats(
         self,
         shard: ParameterSharding,
         sharding_option: ShardingOption,
         world_size: int,
-        local_size: int,
+        local_world_size: int,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Tuple[List[int], List[float], List[float]]:
         """
         Gets ranks, input sizes, and output sizes per shard.
@@ -251,53 +348,115 @@ class EmbeddingStats(Stats):
         assert shard.ranks
         ranks = shard.ranks
 
-        batch_size = world_size * sharding_option.batch_size
+        num_poolings = (
+            cast(List[float], constraints[sharding_option.name].num_poolings)
+            if constraints
+            and constraints.get(sharding_option.name)
+            and constraints[sharding_option.name].num_poolings
+            else [1.0] * sharding_option.num_inputs
+        )
+        batch_sizes = (
+            cast(List[int], constraints[sharding_option.name].batch_sizes)
+            if constraints
+            and constraints.get(sharding_option.name)
+            and constraints[sharding_option.name].batch_sizes
+            else [sharding_option.batch_size] * sharding_option.num_inputs
+        )
         input_data_type_size = BIGINT_DTYPE
-        pooling_factor = float(sum(sharding_option.input_lengths))
         output_data_type_size = sharding_option.tensor.element_size()
-        num_outputs = float(
-            len(sharding_option.input_lengths)
-            if sharding_option.is_pooled
-            else sum(sharding_option.input_lengths)
+
+        input_sizes, output_sizes = _calculate_shard_io_sizes(
+            sharding_type=sharding_option.sharding_type,
+            batch_sizes=batch_sizes,
+            world_size=world_size,
+            local_world_size=local_world_size,
+            input_lengths=sharding_option.input_lengths,
+            emb_dim=sharding_option.tensor.shape[1],
+            shard_sizes=[shard.size for shard in sharding_option.shards],
+            input_data_type_size=input_data_type_size,
+            output_data_type_size=output_data_type_size,
+            num_poolings=num_poolings,
+            is_pooled=sharding_option.is_pooled,
         )
 
-        if shard.sharding_type == ShardingType.DATA_PARALLEL.value:
-            batch_size = sharding_option.batch_size
-        elif shard.sharding_type == ShardingType.ROW_WISE.value:
-            pooling_factor /= world_size
-            if sharding_option.is_pooled:
-                num_outputs /= world_size
-        elif shard.sharding_type == ShardingType.TABLE_ROW_WISE.value:
-            pooling_factor /= local_size
-            if sharding_option.is_pooled:
-                num_outputs /= local_size
+        input_sizes = [bytes_to_mb(input_size) for input_size in input_sizes]
+        output_sizes = [bytes_to_mb(output_size) for output_size in output_sizes]
 
-        input_sizes = [
-            bytes_to_mb(batch_size * pooling_factor * input_data_type_size)
-        ] * len(ranks)
-        output_sizes = (
-            [
-                bytes_to_mb(
-                    batch_size
-                    * sharding_option.tensor.shape[1]  # embedding dim
-                    * num_outputs
-                    * output_data_type_size
-                )
-            ]
-            * len(ranks)
-            if shard.sharding_type == ShardingType.DATA_PARALLEL.value
-            else [
-                bytes_to_mb(
-                    batch_size
-                    * int(shard.shard_sizes[1])  # embedding dim
-                    * num_outputs
-                    * output_data_type_size
-                )
-                # pyre-ignore [16]
-                for shard in shard.sharding_spec.shards
-            ]
-        )
         return ranks, input_sizes, output_sizes
+
+    def _log_max_perf_and_max_hbm(self, perf: List[float], used_hbm: List[int]) -> None:
+        max_perf = max(perf)
+        max_perf_indices = [i for i in range(len(perf)) if perf[i] == max_perf]
+        rank_text = "ranks" if len(max_perf_indices) > 1 else "rank"
+        max_perf_indices = _collapse_consecutive_ranks(max_perf_indices)
+        max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"
+        longest_critical_path = (
+            f"Longest Critical Path: {round(max_perf, 3)} ms on {max_perf_ranks}"
+        )
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {longest_critical_path : <{self._width-3}}#")
+
+        max_hbm = max(used_hbm)
+        max_hbm_indices = [i for i in range(len(used_hbm)) if used_hbm[i] == max_hbm]
+        rank_text = "ranks" if len(max_hbm_indices) > 1 else "rank"
+        max_hbm_indices = _collapse_consecutive_ranks(max_hbm_indices)
+        max_hbm_ranks = f"{rank_text} {','.join(max_hbm_indices)}"
+        peak_memory_pressure = f"Peak Memory Pressure: {round(bytes_to_gb(max_hbm), 3)} GB on {max_hbm_ranks}"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {peak_memory_pressure : <{self._width-3}}#")
+
+    def _log_storage_reservation_stats(
+        self,
+        storage_reservation: StorageReservation,
+        topology: Topology,
+        reserved_percent: float,
+        dense_storage: Storage,
+        kjt_storage: Storage,
+    ) -> None:
+        device_storage = topology.devices[0].storage
+        usable_hbm = round(
+            bytes_to_gb(int((1 - reserved_percent) * device_storage.hbm)), 3
+        )
+        usable_ddr = round(
+            bytes_to_gb(int((1 - reserved_percent) * device_storage.ddr)), 3
+        )
+        usable_memory = f"HBM: {usable_hbm} GB, DDR: {usable_ddr} GB"
+        usable_percentage = f"Percent of Total: {(1 - reserved_percent):.0%}"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {'Usable Memory:' : <{self._width-3}}#")
+        self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
+        self._stats_table.append(f"#    {usable_percentage : <{self._width-6}}#")
+
+        if isinstance(storage_reservation, HeuristicalStorageReservation):
+            dense_hbm = round(bytes_to_gb(dense_storage.hbm), 3)
+            dense_ddr = round(bytes_to_gb(dense_storage.ddr), 3)
+            dense_storage_text = f"HBM: {dense_hbm} GB, DDR: {dense_ddr} GB"
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'Dense Storage (per rank): ' : <{self._width-3}}#"
+            )
+            self._stats_table.append(f"#    {dense_storage_text : <{self._width-6}}#")
+
+            kjt_hbm = round(bytes_to_gb(kjt_storage.hbm), 3)
+            kjt_ddr = round(bytes_to_gb(kjt_storage.ddr), 3)
+            kjt_storage_text = f"HBM: {kjt_hbm} GB, DDR: {kjt_ddr} GB"
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'KJT Storage (per rank): ' : <{self._width-3}}#"
+            )
+            self._stats_table.append(f"#    {kjt_storage_text : <{self._width-6}}#")
+
+    def _log_compute_kernel_stats(
+        self, compute_kernels_to_count: Dict[str, int]
+    ) -> None:
+        compute_kernels_count = [
+            f"{compute_kernel}: {count}"
+            for compute_kernel, count in sorted(compute_kernels_to_count.items())
+        ]
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {'Compute Kernels:' : <{self._width-3}}#")
+        for compute_kernel_count in compute_kernels_count:
+            self._stats_table.append(f"#    {compute_kernel_count : <{self._width-6}}#")
 
 
 def _get_sharding_type_abbr(sharding_type: str) -> str:
@@ -327,3 +486,10 @@ def _format_table(table: List[List[Union[str, int]]]) -> List[str]:
         ["{:>" + str(longest_col) + "}" for longest_col in longest_cols]
     )
     return [row_format.format(*row) for row in table]
+
+
+def _collapse_consecutive_ranks(ranks: List[int]) -> List[str]:
+    if len(ranks) > 1 and ranks == list(range(min(ranks), max(ranks) + 1)):
+        return [f"{min(ranks)}-{max(ranks)}"]
+    else:
+        return [str(rank) for rank in ranks]

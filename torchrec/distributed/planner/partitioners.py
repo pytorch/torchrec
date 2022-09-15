@@ -140,15 +140,15 @@ class GreedyPerfPartitioner(Partitioner):
             # in the example is just for clarity).
         """
 
-        # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
-        self._topology: Topology = copy.deepcopy(storage_constraint)
+        _topology: Topology = copy.deepcopy(storage_constraint)
         plan = copy.deepcopy(proposal)
-        # pyre-ignore [16]
-        self._host_level_devices = self._get_host_level_devices()
+        _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
         uniform_sharding_options = _get_uniform_sharding_options(plan)
-        self._uniform_partition(uniform_sharding_options, self._topology.devices)
+        GreedyPerfPartitioner._uniform_partition(
+            uniform_sharding_options, _topology.devices
+        )
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
@@ -159,7 +159,9 @@ class GreedyPerfPartitioner(Partitioner):
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.HOST.value
             ):
-                self._cohost_partition(sharding_option_group)
+                GreedyPerfPartitioner._cohost_partition(
+                    sharding_option_group, _host_level_devices
+                )
             elif (
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.DEVICE.value
@@ -167,23 +169,26 @@ class GreedyPerfPartitioner(Partitioner):
                 assert (
                     len(sharding_option_group.sharding_options) == 1
                 ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
-                self._device_partition(
-                    sharding_option_group.sharding_options[0], self._topology.devices
+                GreedyPerfPartitioner._device_partition(
+                    sharding_option_group.sharding_options[0], _topology.devices
                 )
             else:
                 raise RuntimeError(
                     f"Unexpected sharding option group {sharding_option_group}"
                 )
+        # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
+        self._topology: Topology = _topology
         return plan
 
+    @staticmethod
     def _device_partition(
-        self, sharding_option: ShardingOption, devices: List[DeviceHardware]
+        sharding_option: ShardingOption, devices: List[DeviceHardware]
     ) -> None:
         for shard in sharding_option.shards:
             sorted_devices = sorted(devices, key=lambda device: device.perf)
             success = False
             for device in sorted_devices:
-                if device.storage >= shard.storage:
+                if cast(Storage, shard.storage).fits_in(device.storage):
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
                     device.perf += cast(float, shard.perf)
@@ -194,15 +199,18 @@ class GreedyPerfPartitioner(Partitioner):
                     f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}"
                 )
 
-    def _cohost_partition(self, sharding_option_group: ShardingOptionGroup) -> None:
-        # pyre-ignore [16]
-        sorted_host_level_devices = _sort_devices_by_perf(self._host_level_devices)
+    @staticmethod
+    def _cohost_partition(
+        sharding_option_group: ShardingOptionGroup,
+        _host_level_devices: List[List[DeviceHardware]],
+    ) -> None:
+        sorted_host_level_devices = _sort_devices_by_perf(_host_level_devices)
         for devices in sorted_host_level_devices:
             host_devices = copy.deepcopy(devices)
             host_storage = Storage(hbm=0, ddr=0)
             for device in host_devices:
                 host_storage += device.storage
-            if host_storage < sharding_option_group.storage_sum:
+            if not sharding_option_group.storage_sum.fits_in(host_storage):
                 continue
 
             success = True
@@ -212,12 +220,16 @@ class GreedyPerfPartitioner(Partitioner):
                         sharding_option.sharding_type
                         == ShardingType.TABLE_ROW_WISE.value
                     ):
-                        self._uniform_partition([sharding_option], host_devices)
+                        GreedyPerfPartitioner._uniform_partition(
+                            [sharding_option], host_devices
+                        )
                     elif (
                         sharding_option.sharding_type
                         == ShardingType.TABLE_COLUMN_WISE.value
                     ):
-                        self._device_partition(sharding_option, host_devices)
+                        GreedyPerfPartitioner._device_partition(
+                            sharding_option, host_devices
+                        )
                     else:
                         raise RuntimeError(
                             f"unexpected cohost sharding type: {sharding_option.sharding_type}"
@@ -236,21 +248,20 @@ class GreedyPerfPartitioner(Partitioner):
             f"can't find a host for sharding option group {sharding_option_group}"
         )
 
-    def _get_host_level_devices(self) -> List[List[DeviceHardware]]:
-        # pyre-ignore [16]
-        num_hosts: int = self._topology.world_size // self._topology.local_world_size
+    @staticmethod
+    def _get_host_level_devices(_topology: Topology) -> List[List[DeviceHardware]]:
+        num_hosts: int = _topology.world_size // _topology.local_world_size
         host_level_devices: List[List[DeviceHardware]] = []
         for i in range(num_hosts):
-            devices_in_host = self._topology.devices[
-                i
-                * self._topology.local_world_size : (i + 1)
-                * self._topology.local_world_size
+            devices_in_host = _topology.devices[
+                i * _topology.local_world_size : (i + 1) * _topology.local_world_size
             ]
             host_level_devices.append(devices_in_host)
         return host_level_devices
 
+    @staticmethod
     def _uniform_partition(
-        self, sharding_options: List[ShardingOption], devices: List[DeviceHardware]
+        sharding_options: List[ShardingOption], devices: List[DeviceHardware]
     ) -> None:
         for sharding_option in sharding_options:
             if sharding_option.num_shards != len(devices):
@@ -259,7 +270,7 @@ class GreedyPerfPartitioner(Partitioner):
                 )
             for i in range(len(devices)):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)
-                if storage_needed > devices[i].storage:
+                if not storage_needed.fits_in(devices[i].storage):
                     raise PlannerError(
                         f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}."
                     )

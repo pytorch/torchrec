@@ -15,7 +15,6 @@ import torch.distributed as dist
 logger: logging.Logger = logging.getLogger(__name__)
 
 # Global, only should be accessed via intra_and_cross_node_pg()
-# pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
 _INTRA_PG: Optional[dist.ProcessGroup] = None
 _CROSS_PG: Optional[dist.ProcessGroup] = None
 
@@ -118,10 +117,18 @@ def intra_and_cross_node_pg(
     local_size = get_local_size(my_size)
     my_group_rank = get_group_rank(my_size, my_rank)
     group_count = get_num_groups(my_size)
+    my_backend = dist.get_backend()
+
+    if my_backend != backend:
+        logger.warn(
+            f"global PG is initialized with backend {my_backend}, while trying to perform intra_and_cross_node_pg with backend {backend}, "
+            f"use the global backend {my_backend} to proceed"
+        )
+        backend = my_backend
 
     logger.info(
         f"[{my_rank}] my_local_rank = {my_local_rank}, local_size = {local_size},"
-        f"my_group_rank = {my_group_rank}, group_count = {group_count}"
+        f"my_group_rank = {my_group_rank}, group_count = {group_count}, backend = {backend}"
     )
     if _INTRA_PG is None:
         for group_rank in range(group_count):

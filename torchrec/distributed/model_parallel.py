@@ -17,19 +17,22 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
+    ModuleCopyMixin,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
     ShardingPlan,
-    ModuleCopyMixin,
 )
 from torchrec.distributed.utils import (
     add_prefix_to_state_dict,
@@ -47,7 +50,10 @@ _DDP_STATE_DICT_PREFIX = "module."
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
     return [
         cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], FusedEmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
         cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
     ]
 
 
@@ -94,6 +100,8 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         if sharded_parameter_names == all_paramemeter_names:
             return
 
+        # pyre-fixme[16]: `DistributedDataParallel` has no attribute
+        #  `_set_params_and_buffers_to_ignore_for_model`.
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
             params_and_buffers_to_ignore=[
@@ -103,6 +111,7 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         # initialize DDP
         dmp._dmp_wrapped_module = cast(
             nn.Module,
+            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             DistributedDataParallel(
                 module=dmp._dmp_wrapped_module.to(device),
                 device_ids=None if device.type == "cpu" else [device],
@@ -125,6 +134,8 @@ def get_unwrapped_module(module: nn.Module) -> nn.Module:
     ):
         if isinstance(module, DistributedModelParallel):
             module = module._dmp_wrapped_module
+        elif isinstance(module, FullyShardedDataParallel):
+            module = module._fsdp_wrapped_module
         else:
             module = module.module
     return module
@@ -398,7 +409,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> List[str]:
         module = get_unwrapped_module(module)
         if isinstance(module, ShardedModule):
-            module.sparse_grad_parameter_names(destination, prefix)
+            pass
         elif isinstance(module, nn.Embedding):
             if module.sparse:
                 destination.append(append_prefix(prefix, "weight"))
@@ -493,12 +504,24 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.module, prefix, recurse)
+        gen = self._named_parameters(self.module, prefix, recurse)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     def bare_named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        yield from self._named_parameters(self.module, prefix, recurse, False)
+        gen = self._named_parameters(self.module, prefix, recurse, False)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     @staticmethod
     def _sharded_parameter_names(module: nn.Module, prefix: str = "") -> Iterator[str]:
@@ -527,7 +550,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        yield from self._named_buffers(self.module, prefix, recurse)
+        gen = self._named_buffers(self.module, prefix, recurse)
+        memo = set()
+        for key, param in gen:
+            if param in memo:
+                continue
+            memo.add(param)
+            yield key, param
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

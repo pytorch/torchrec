@@ -31,8 +31,10 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     Awaitable,
+    CommOp,
     LazyAwaitable,
     ParameterSharding,
+    QuantizedCommCodecs,
     ShardedModule,
     ShardedModuleContext,
     ShardingEnv,
@@ -112,10 +114,10 @@ class ShardedEmbeddingTower(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
-        # pyre-ignore [11]
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._device = device
@@ -164,7 +166,8 @@ class ShardedEmbeddingTower(
                 intra_env,
                 device,
             )
-            # Hiearcherial DDP
+            # Hierarchical DDP
+            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
                 device_ids=[self._device],
@@ -172,6 +175,13 @@ class ShardedEmbeddingTower(
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
             )
+
+        # Setup output dists for quantized comms
+        # pyre-fixme[8]: Attribute has type `ModuleList`; used as `Union[Module,
+        #  Tensor]`.
+        self._output_dists: nn.ModuleList = (
+            self.embedding._output_dists if self.embedding else nn.ModuleList()
+        )
 
     def _create_input_dist(
         self,
@@ -210,6 +220,8 @@ class ShardedEmbeddingTower(
             for node in range(node_count)
         ]
         self._cross_dist = SparseFeaturesAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._cross_pg,
             kjt_features_per_node,
             wkjt_features_per_node,
@@ -318,7 +330,18 @@ class ShardedEmbeddingTower(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
-            pg=self._cross_pg, dim_sum_per_rank=dim_sum_per_rank, device=self._device
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            pg=self._cross_pg,
+            # pyre-fixme[6]: For 2nd param expected `List[int]` but got
+            #  `List[Union[bool, float, int]]`.
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=self._device,
+            codecs=self.qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if self.qcomm_codecs_registry
+            else None,
         )
 
     def output_dist(
@@ -439,8 +462,9 @@ class ShardedEmbeddingTowerCollection(
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
 
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
@@ -551,7 +575,8 @@ class ShardedEmbeddingTowerCollection(
                     device,
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
-                # Hiearcherial DDP
+                # Hierarchical DDP
+                # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
                     device_ids=[self._device],
@@ -561,11 +586,11 @@ class ShardedEmbeddingTowerCollection(
                     static_graph=True,
                 )
 
-        # Setup output_dist for quantized comms
-        embedding_dists = []
+        # Setup output dists for quantized comms
+        output_dists = nn.ModuleList()
         for embedding in self.embeddings.values():
-            embedding_dists.extend(embedding._input_dists)
-        self._output_dists: nn.ModuleList = nn.ModuleList(embedding_dists)
+            output_dists.extend(embedding._output_dists)
+        self._output_dists: nn.ModuleList = output_dists
 
     def _create_input_dist(
         self,
@@ -595,6 +620,8 @@ class ShardedEmbeddingTowerCollection(
                 ),
             )
         self._cross_dist = SparseFeaturesAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._cross_pg,
             self._kjt_num_features_per_pt,
             self._wkjt_num_features_per_pt,
@@ -673,18 +700,20 @@ class ShardedEmbeddingTowerCollection(
     ) -> torch.Tensor:
 
         if self.embeddings:
+            embeddings = [
+                embedding.compute_and_output_dist(embedding_ctx, embedding_input)
+                for embedding_ctx, embedding, embedding_input in zip(
+                    ctx.embedding_contexts,
+                    self.embeddings.values(),
+                    dist_input,
+                )
+            ]
             output = torch.cat(
                 [
-                    interaction(
-                        embedding.compute_and_output_dist(
-                            embedding_ctx, embedding_input
-                        )
-                    )
-                    for embedding_ctx, embedding, interaction, embedding_input in zip(
-                        ctx.embedding_contexts,
-                        self.embeddings.values(),
+                    interaction(embedding)
+                    for embedding, interaction in zip(
+                        embeddings,
                         self.interactions.values(),
-                        dist_input,
                     )
                 ],
                 dim=1,
@@ -724,7 +753,17 @@ class ShardedEmbeddingTowerCollection(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
-            pg=self._cross_pg, dim_sum_per_rank=dim_sum_per_rank, device=self._device
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            pg=self._cross_pg,
+            # pyre-ignore
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=self._device,
+            codecs=self.qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if self.qcomm_codecs_registry
+            else None,
         )
 
     # pyre-ignore [14]
@@ -857,6 +896,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
             env=env,
             fused_params=self.fused_params,
             device=device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -884,10 +924,14 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         embedding: nn.Module = module.embedding
         if isinstance(embedding, EmbeddingBagCollection):
             # pyre-ignore [7]
-            return EmbeddingBagCollectionSharder(self.fused_params)
+            return EmbeddingBagCollectionSharder(
+                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         elif isinstance(embedding, EmbeddingCollection):
             # pyre-ignore [7]
-            return EmbeddingCollectionSharder(self.fused_params)
+            return EmbeddingCollectionSharder(
+                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         else:
             raise RuntimeError(f"Unsupported embedding type: {type(module)}")
 
@@ -907,10 +951,10 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
 
         weighted = False
         if isinstance(embedding, EmbeddingBagCollection):
-            configs = embedding.embedding_bag_configs
-            weighted = embedding.is_weighted
+            configs = embedding.embedding_bag_configs()
+            weighted = embedding.is_weighted()
         elif isinstance(embedding, EmbeddingCollection):
-            configs = embedding.embedding_configs
+            configs = embedding.embedding_configs()
 
         for config in configs:
             if getattr(config, "weighted", weighted):
@@ -921,9 +965,18 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
 
 
 class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollection]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
-        self._tower_sharder = EmbeddingTowerSharder(self.fused_params)
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+
+        super().__init__(
+            fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
+        self._tower_sharder = EmbeddingTowerSharder(
+            self.fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+        )
 
     def shard(
         self,
@@ -940,6 +993,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
             env=env,
             fused_params=self.fused_params,
             device=device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
     def sharding_types(self, compute_device_type: str) -> List[str]:

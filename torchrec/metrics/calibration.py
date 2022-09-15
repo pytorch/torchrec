@@ -39,7 +39,8 @@ def get_calibration_states(
 
 class CalibrationMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for Calibration.
+    This class implementation the RecMetricComputation for Calibration, which is the
+    ratio between the prediction and the labels (conversions).
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
@@ -67,7 +68,7 @@ class CalibrationMetricComputation(RecMetricComputation):
         *,
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
-        weights: Optional[torch.Tensor]
+        weights: Optional[torch.Tensor],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(

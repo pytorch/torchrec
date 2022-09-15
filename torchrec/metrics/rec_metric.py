@@ -8,6 +8,7 @@
 #!/usr/bin/env python3
 
 import abc
+import itertools
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -106,10 +107,13 @@ class RecMetricComputation(Metric, abc.ABC):
         my_rank (int): the rank of this trainer.
         batch_size (int): batch size used by this trainer.
         n_tasks (int): the number tasks this communication obj
-           will have to compute.
+            will have to compute.
         window_size (int): the window size for the window metric.
         compute_on_all_ranks (bool): whether to compute metrics on all ranks. This
-           is necessary if non-leader rank want to consum metrics result.
+            is necessary if non-leader rank want to consum metrics result.
+        should_validate_update (bool): whether to check the inputs of update() and skip
+            update if the inputs are invalid. Invalid inputs include the case where all
+            examples have 0 weights for a batch
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
@@ -122,7 +126,7 @@ class RecMetricComputation(Metric, abc.ABC):
         n_tasks: int,
         window_size: int,
         compute_on_all_ranks: bool = False,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
+        should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
         *args: Any,
         **kwargs: Any,
@@ -134,17 +138,19 @@ class RecMetricComputation(Metric, abc.ABC):
         self._batch_size = batch_size
         self._window_size = window_size
         self._compute_on_all_ranks = compute_on_all_ranks
+        self._should_validate_update = should_validate_update
         if self._window_size > 0:
             self._batch_window_buffers = {}
         else:
             self._batch_window_buffers = None
-        self._add_state(
-            "has_valid_update",
-            torch.zeros(self._n_tasks, dtype=torch.uint8),
-            add_window_state=False,
-            dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
-            persistent=True,
-        )
+        if self._should_validate_update:
+            self._add_state(
+                "has_valid_update",
+                torch.zeros(self._n_tasks, dtype=torch.uint8),
+                add_window_state=False,
+                dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
+                persistent=True,
+            )
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
@@ -156,6 +162,23 @@ class RecMetricComputation(Metric, abc.ABC):
     def _add_state(
         self, name: str, default: DefaultValueT, add_window_state: bool, **kwargs: Any
     ) -> None:
+        """
+        name(str): the name of this state. The state will be accessible
+            with `self.THE_NAME_YOU_DEFINE`.
+        default(DefaultValueT): the initial value of this state. The most common
+            initial value is `torch.zeros(self._n_tasks, dtype=torch.float)` but
+            users need to check the math formula to decide what is the correct
+            initial value for the metric. Note the `self._n_tasks` in the above
+            code. As a metric may handle multiple tasks at the same time, the
+            highest dimension of a state should be `self._n_tasks`.
+        add_window_state(bool): when this is True, a `window_{name}` state will
+            be created to record the window state information for this state.
+        dist_reduce_fx(str): the reduction function when aggregating the local
+            state. For example, tower_qps uses “sum” to aggregate the total
+            trained examples.
+        persistent(bool): set this to True if you want to save/checkpoint the
+            metric and this state is required to compute the checkpointed metric.
+        """
         # pyre-fixme[6]: Expected `Union[List[typing.Any], torch.Tensor]` for 2nd
         #  param but got `DefaultValueT`.
         super().add_state(name, default, **kwargs)
@@ -242,7 +265,10 @@ class RecMetric(nn.Module, abc.ABC):
         window_size (int): the window size for the window metric.
         fused_update_limit (int): the maximum number of updates to be fused.
         compute_on_all_ranks (bool): whether to compute metrics on all ranks. This
-           is necessary if non-leader rank want to consume global metrics result.
+            is necessary if non-leader rank want to consume global metrics result.
+        should_validate_update (bool): whether to check the inputs of update() and skip
+            update if the inputs are invalid. Invalid inputs include the case where all
+            examples have 0 weights for a batch
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
 
@@ -285,6 +311,7 @@ class RecMetric(nn.Module, abc.ABC):
         window_size: int = 100,
         fused_update_limit: int = 0,
         compute_on_all_ranks: bool = False,
+        should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
         **kwargs: Any,
     ) -> None:
@@ -305,6 +332,7 @@ class RecMetric(nn.Module, abc.ABC):
         self._tasks = tasks
         self._compute_mode = compute_mode
         self._fused_update_limit = fused_update_limit
+        self._should_validate_update = should_validate_update
         self._default_weights = {}
         self._update_buffers = {
             self.PREDICTIONS: [],
@@ -331,6 +359,7 @@ class RecMetric(nn.Module, abc.ABC):
                     task_per_metric,
                     self._window_size,
                     compute_on_all_ranks,
+                    self._should_validate_update,
                     process_group,
                     **kwargs,
                 )
@@ -349,7 +378,11 @@ class RecMetric(nn.Module, abc.ABC):
             for task, metric_value, has_valid_update in zip(
                 self._tasks,
                 metric_report.value,
-                self._metrics_computations[0].has_valid_update,
+                self._metrics_computations[0].has_valid_update
+                if self._should_validate_update
+                else itertools.repeat(
+                    1
+                ),  # has_valid_update > 0 means the update is valid
             ):
                 # The attribute has_valid_update is a tensor whose length equals to the
                 # number of tasks. Each value in it is corresponding to whether a task
@@ -375,7 +408,8 @@ class RecMetric(nn.Module, abc.ABC):
                 # will be meaningless, so we mask it with the default value, i.e. 0.
                 valid_metric_value = (
                     metric_report.value
-                    if metric_computation.has_valid_update[0] > 0
+                    if not self._should_validate_update
+                    or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
                 yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
@@ -422,9 +456,11 @@ class RecMetric(nn.Module, abc.ABC):
         )
 
     def _create_default_weights(self, predictions: torch.Tensor) -> torch.Tensor:
+        # pyre-fixme[6]: For 1st param expected `Tuple[int, ...]` but got `Size`.
         weights = self._default_weights.get(predictions.size(), None)
         if weights is None:
             weights = torch.ones_like(predictions)
+            # pyre-fixme[6]: For 1st param expected `Tuple[int, ...]` but got `Size`.
             self._default_weights[predictions.size()] = weights
         return weights
 
@@ -450,19 +486,24 @@ class RecMetric(nn.Module, abc.ABC):
                 else:
                     assert isinstance(weights, torch.Tensor)
                     weights = weights.view(-1, self._batch_size)
-                # has_valid_weights is a tensor of bool whose length equals to the number
-                # of tasks. Each value in it is corresponding to whether the weights
-                # are valid, i.e. are set to non-zero values for that task in this update.
-                # If has_valid_weights are Falses for all the tasks, we just ignore this
-                # update.
-                has_valid_weights = self._check_nonempty_weights(weights)
-                if torch.any(has_valid_weights):
+                if self._should_validate_update:
+                    # has_valid_weights is a tensor of bool whose length equals to the number
+                    # of tasks. Each value in it is corresponding to whether the weights
+                    # are valid, i.e. are set to non-zero values for that task in this update.
+                    # If has_valid_weights are Falses for all the tasks, we just ignore this
+                    # update.
+                    has_valid_weights = self._check_nonempty_weights(weights)
+                    if torch.any(has_valid_weights):
+                        self._metrics_computations[0].update(
+                            predictions=predictions, labels=labels, weights=weights
+                        )
+                        self._metrics_computations[0].has_valid_update.logical_or_(
+                            has_valid_weights
+                        )
+                else:
                     self._metrics_computations[0].update(
                         predictions=predictions, labels=labels, weights=weights
                     )
-                    self._metrics_computations[0].has_valid_update.logical_or_(
-                        has_valid_weights
-                    ).byte()
             else:
                 for task, metric_ in zip(self._tasks, self._metrics_computations):
                     if task.name not in predictions:
@@ -478,18 +519,21 @@ class RecMetric(nn.Module, abc.ABC):
                         task_weights = self._create_default_weights(task_predictions)
                     else:
                         task_weights = weights[task.name].view(1, -1)
-                    # has_valid_weights is a tensor with only 1 value corresponding to
-                    # whether the weights are valid, i.e. are set to non-zero values for
-                    # the task in this update.
-                    # If has_valid_update[0] is False, we just ignore this update.
-                    has_valid_weights = self._check_nonempty_weights(task_weights)
-                    if has_valid_weights[0]:
-                        metric_.update(
-                            predictions=task_predictions,
-                            labels=task_labels,
-                            weights=task_weights,
-                        )
-                        metric_.has_valid_update.logical_or_(has_valid_weights).byte()
+                    if self._should_validate_update:
+                        # has_valid_weights is a tensor with only 1 value corresponding to
+                        # whether the weights are valid, i.e. are set to non-zero values for
+                        # the task in this update.
+                        # If has_valid_update[0] is False, we just ignore this update.
+                        has_valid_weights = self._check_nonempty_weights(task_weights)
+                        if has_valid_weights[0]:
+                            metric_.has_valid_update.logical_or_(has_valid_weights)
+                        else:
+                            continue
+                    metric_.update(
+                        predictions=task_predictions,
+                        labels=task_labels,
+                        weights=task_weights,
+                    )
 
     def update(
         self,

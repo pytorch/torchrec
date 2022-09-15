@@ -16,54 +16,49 @@ on:
       - "third_party/*"
       - .gitignore
       - "*.md"
+  workflow_dispatch:
 
 jobs:
-
   # build on cpu hosts and upload to GHA
   build_on_cpu:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.2xlarge]
+        include:
+         - os: linux.2xlarge
+          # ideally we run on 3.8 and 3.9 as well, however we are limited in resources.
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cu11"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
       uses: actions/checkout@v2
-      with:
-        submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
-    # manually install python3.8 since self-hosted machine does not support the python action feature
-    - name: check amazon-linux-extras
-      run: |
-        sudo yum install -y amazon-linux-extras
-        amazon-linux-extras | grep -i python
-    - name: update python
-      run: |
-        sudo amazon-linux-extras install python3.8
     - name: Update pip
       run: |
         sudo yum update -y
         sudo yum -y install git python3-pip
         sudo pip3 install --upgrade pip
-    - name: create virtual env
+    - name: Setup conda
       run: |
-        sudo pip3 install --upgrade virtualenv
-        virtualenv build_binary_3.8 -p python3.8
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda -u
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
     - name: check python version
       run: |
-        source build_binary_3.8/bin/activate
-        python --version
+        conda run -n build_binary python --version
     - name: Install CUDA 11.3
       shell: bash
       run: |
@@ -84,41 +79,47 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        source build_binary_3.8/bin/activate
-        pip3 install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
     - name: Install Dependencies
       shell: bash
       run: |
-        source build_binary_3.8/bin/activate
-        pip3 install -r requirements.txt
+        conda run -n build_binary python -m pip install -r requirements.txt
     - name: Test Installation of dependencies
       run: |
-        source build_binary_3.8/bin/activate
-        python3 -c "import torch.distributed"
+        conda run -n build_binary python -c "import torch.distributed"
         echo "torch.distributed succeeded"
-        python3 -c "import skbuild"
+        conda run -n build_binary python -c "import skbuild"
         echo "skbuild succeeded"
-        python3 -c "import numpy"
+        conda run -n build_binary python -c "import numpy"
         echo "numpy succeeded"
-    - name: Build TorchRec
+    # for the conda run with quotes, we have to use "\" and double quotes
+    # here is the issue: https://github.com/conda/conda/issues/10972
+    - name: Build TorchRec Binary
       run: |
-        source build_binary_3.8/bin/activate
-        rm -r dist || true
-        python setup.py bdist_wheel --package_name torchrec-test --TORCH_CUDA_ARCH_LIST '7.0;8.0'
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrec-test \
+          --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrec_test.whl
-        path: dist/torchrec_test-*.whl
+        name: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/torchrec-test-*.whl
 
-  # download from GHA, test on gpu and push to pypi
+  # download from GHA, test on gpu
   test_on_gpu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [linux.4xlarge.nvidia.gpu]
+        python-version: [3.7]
+        cuda-tag: ["cu11"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
-    runs-on: linux.4xlarge.nvidia.gpu
     steps:
     - name: Check ldd --version
+    # Run unit tests
       run: ldd --version
     - name: check cpu info
       shell: bash
@@ -149,39 +150,29 @@ jobs:
     # Checkout the repository to the GitHub Actions runner
     - name: Checkout
       uses: actions/checkout@v2
-      with:
-        submodules: true
-    # Update references
-    # TODO: update the git submodule sync after we fixed the auto-sync part
-    - name: Git Sumbodule Update
-      run: |
-        git submodule init
-        git submodule update --remote --recursive
-        cd third_party/fbgemm/
-        git submodule sync
-        git submodule update --init --recursive
-        git log
-    # manually install python3.8 since self-hosted machine does not support the python action feature
-    - name: check amazon-linux-extras
-      run: |
-        sudo yum install -y amazon-linux-extras
-        amazon-linux-extras | grep -i python
-    - name: update python
-      run: |
-        sudo amazon-linux-extras install python3.8
     - name: Update pip
       run: |
         sudo yum update -y
         sudo yum -y install git python3-pip
         sudo pip3 install --upgrade pip
-    - name: create virtual env
+    - name: Setup conda
       run: |
-        sudo pip3 install --upgrade virtualenv
-        virtualenv build_binary_3.8 -p python3.8
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+        bash ~/miniconda.sh -b -p $HOME/miniconda
+    - name: setup Path
+      run: |
+        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+    - name: create conda env
+      run: |
+        conda create --name build_binary python=${{ matrix.python-version }}
+        conda info
+    - name: check python version no Conda
+      run: |
+        python --version
     - name: check python version
       run: |
-        source build_binary_3.8/bin/activate
-        python --version
+        conda run -n build_binary python --version
     - name: Install CUDA 11.3
       shell: bash
       run: |
@@ -202,42 +193,26 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        source build_binary_3.8/bin/activate
-        pip3 install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        source build_binary_3.8/bin/activate
-        pip3 install -r requirements.txt
-    - name: Test Installation of dependencies
-      run: |
-        source build_binary_3.8/bin/activate
-        python3 -c "import torch.distributed"
-        echo "torch.distributed succeeded"
-        python3 -c "import skbuild"
-        echo "skbuild succeeded"
-        python3 -c "import numpy"
-        echo "numpy succeeded"
+        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cu113/torch_nightly.html
     # download wheel from GHA
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec_test.whl
+        name: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
-    - name: Install TorchRec
+    - name: Install TorchRec GPU
       run: |
-        source build_binary_3.8/bin/activate
         rm -r dist || true
-        pip3 install torchrec_test-*.whl
-    - name: Test fbgemm_gpu and torchrec installation
+        conda run -n build_binary python -m pip install dist/*.whl
+    - name: Test torchrec installation
       shell: bash
       run: |
-        source build_binary_3.8/bin/activate
-        python3 -c "import fbgemm_gpu"
-        python3 -c "import torchrec"
+        conda run -n build_binary \
+          python -c "import torchrec"
     - name: Test with pytest
       run: |
-        source build_binary_3.8/bin/activate
-        pip3 install pytest
-        python3 -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+        conda run -n build_binary \
+          python -m pip install pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors

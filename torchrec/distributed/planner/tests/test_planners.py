@@ -26,7 +26,7 @@ class TWvsRWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
@@ -36,7 +36,7 @@ class TWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class TestEmbeddingShardingPlanner(unittest.TestCase):
@@ -102,7 +102,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         with self.assertRaises(PlannerError):
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
 
-        self.assertEqual(self.planner._num_proposals, 3)
+        self.assertEqual(self.planner._num_proposals, 4)
 
     def test_fail_then_rerun(self) -> None:
         tables = [

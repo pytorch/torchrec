@@ -5,51 +5,24 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from enum import Enum
-from typing import Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
+import torch
+
+import torch.distributed as dist  # noqa
+import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from torch import nn
+from torchrec.distributed.fbgemm_qcomm_codec import QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
-from torchrec.distributed.test_utils.test_model import (
-    TestEBCSharder,
-    TestEBSharder,
-    TestETCSharder,
-    TestETSharder,
-    TestSparseNN,
-    TestSparseNNBase,
-)
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelTestBase,
-)
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
+from torchrec.distributed.test_utils.test_model import TestSparseNN, TestSparseNNBase
+from torchrec.distributed.test_utils.test_sharding import sharding_single_rank_test
 from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.test_utils import seed_and_log
 
 
-class SharderType(Enum):
-    EMBEDDING_BAG = "embedding_bag"
-    EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
-    EMBEDDING_TOWER = "embedding_tower"
-    EMBEDDING_TOWER_COLLECTION = "embedding_tower_collection"
-
-
-def create_test_sharder(
-    sharder_type: str, sharding_type: str, kernel_type: str
-) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
-    if sharder_type == SharderType.EMBEDDING_BAG.value:
-        return TestEBSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
-        return TestEBCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    elif sharder_type == SharderType.EMBEDDING_TOWER.value:
-        return TestETSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
-        return TestETCSharder(sharding_type, kernel_type, {"learning_rate": 0.1})
-    else:
-        raise ValueError(f"Sharder not supported {sharder_type}")
-
-
-class ModelParallelTestShared(ModelParallelTestBase):
+class ModelParallelTestShared(MultiProcessTestBase):
     @seed_and_log
     def setUp(self) -> None:
         super().setUp()
@@ -88,10 +61,13 @@ class ModelParallelTestShared(ModelParallelTestBase):
         local_size: Optional[int] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSparseNN,
+        qcomms_config: Optional[QCommsConfig] = None,
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
     ) -> None:
         self._run_multi_process_test(
-            # pyre-ignore [6]
-            callable=self._test_sharding_single_rank,
+            callable=sharding_single_rank_test,
             world_size=world_size,
             local_size=local_size,
             model_class=model_class,
@@ -102,4 +78,6 @@ class ModelParallelTestShared(ModelParallelTestBase):
             backend=backend,
             optim=EmbOptimType.EXACT_SGD,
             constraints=constraints,
+            qcomms_config=qcomms_config,
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )

@@ -8,20 +8,23 @@
 import unittest
 from typing import Any, cast, Dict, List, Optional
 
+import hypothesis.strategies as st
 import torch
+from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
+    ModelInput,
     TestSparseNN,
 )
 from torchrec.distributed.types import (
-    ShardedModule,
-    ShardingType,
-    ShardingEnv,
     ModuleCopyMixin,
+    ShardedModule,
+    ShardingEnv,
+    ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -49,9 +52,11 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         return None
 
 
-def _quantize(module: nn.Module, inplace: bool) -> nn.Module:
+def _quantize(
+    module: nn.Module, inplace: bool, output_type: torch.dtype = torch.float
+) -> nn.Module:
     qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver,
+        activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
     )
     return quant.quantize_dynamic(
@@ -119,9 +124,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         # check all buffer/param under the module is value-identical
         # but device-different with the copied module.
         for (name, buffer), (name_copy, buffer_copy) in zip(
-            # pyre-ignore [58]
             list(module.named_buffers()) + list(module.named_parameters()),
-            # pyre-ignore [58]
             list(module_copy.named_buffers()) + list(module_copy.named_parameters()),
         ):
             self.assertEquals(name, name_copy)
@@ -150,6 +153,8 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 self.assertEqual(name, name_copy)
                 # compare tensor storage reference
                 self.assertTrue(buffer.detach().is_set_to(buffer_copy.detach()))
+            # don't go into named_children of ShardedModule
+            return
         for name_child, name_child_copy in zip(
             module.named_children(), module_copy.named_children()
         ):
@@ -164,12 +169,21 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             else:
                 self._recursive_device_check(child, child_copy, device, device_copy)
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_quant_pred(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_quant_pred(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -179,7 +193,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(model, inplace=True, output_type=output_type)
         dmp = DistributedModelParallel(
             quant_model,
             sharders=[
@@ -187,7 +201,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
                         sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
             ],
@@ -197,6 +211,80 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
         dmp_1 = dmp.copy(device_1)
         self._recursive_device_check(dmp.module, dmp_1.module, device, device_1)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]
+    @given(
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_quant_pred_state_dict(self, output_type: torch.dtype) -> None:
+        device = torch.device("cuda:0")
+
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=device,
+            sparse_device=torch.device("meta"),
+        )
+        quant_model = _quantize(model, inplace=True, output_type=output_type)
+        model.training = False
+
+        dmp = DistributedModelParallel(
+            quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ],
+            device=device,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+            init_data_parallel=False,
+        )
+
+        dmp_copy = DistributedModelParallel(
+            quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ],
+            device=device,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+            init_data_parallel=False,
+        )
+
+        _, local_batch = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+
+        # pyre-ignore
+        dmp_copy.load_state_dict(dmp.state_dict())
+        torch.testing.assert_close(
+            dmp(local_batch[0].to(device)).cpu(),
+            dmp_copy(local_batch[0].to(device)).cpu(),
+        )
 
     # pyre-fixme[56]
     @unittest.skipIf(
@@ -225,7 +313,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
                         sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.BATCHED_QUANT.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
             ],

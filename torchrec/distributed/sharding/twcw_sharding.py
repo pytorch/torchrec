@@ -5,30 +5,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import torch
+from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
-from torchrec.distributed.types import ParameterSharding, ShardingEnv
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
+from torchrec.distributed.types import QuantizedCommCodecs, ShardingEnv
 
 
 class TwCwPooledEmbeddingSharding(CwPooledEmbeddingSharding):
     """
     Shards embedding bags table-wise column-wise, i.e.. a given embedding table is
-    distributed by specified number of columns and table slices are placed on all ranks
+    partitioned along its columns and the table slices are placed on all ranks
     within a host group.
     """
 
     def __init__(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(
-            embedding_configs, env, device, permute_embeddings=permute_embeddings
+            sharding_infos,
+            env,
+            device,
+            permute_embeddings=permute_embeddings,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )

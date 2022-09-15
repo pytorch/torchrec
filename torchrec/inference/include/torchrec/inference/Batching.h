@@ -24,6 +24,8 @@ namespace torchrec {
 
 using LazyTensorRef = folly::detail::Lazy<std::function<at::Tensor()>>&;
 
+// BatchingFunc should be responsible to move the output tensor to desired
+// location using the device input.
 class BatchingFunc {
  public:
   virtual ~BatchingFunc() = default;
@@ -62,5 +64,9 @@ std::unordered_map<std::string, at::Tensor> combineSparse(
 std::unordered_map<std::string, at::Tensor> combineEmbedding(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests);
+
+std::unordered_map<std::string, at::Tensor> moveToDevice(
+    std::unordered_map<std::string, at::Tensor> combined,
+    const c10::Device& device);
 
 } // namespace torchrec

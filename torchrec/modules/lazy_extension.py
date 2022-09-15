@@ -164,7 +164,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         return super().apply(fn)
 
     # fmt: off
-    # pyre-ignore[2, 14, 47]
+    # pyre-ignore[2, 47]
     def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs) -> None:
         r"""Infers the size and initializes the parameters according to the
         provided input batch.
@@ -242,7 +242,6 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
                     var = next((v for v in var.values() if isinstance(v, torch.Tensor)))
                 else:
                     var = var[0]
-            # pyre-ignore[16]
             grad_fn = var.grad_fn
             if grad_fn is not None:
                 for hook in non_full_backward_hooks:

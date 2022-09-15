@@ -14,7 +14,8 @@ from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
 from torchrec.distributed.utils import append_prefix
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
-
+# Will be deprecated soon, please use PositionWeightedProcessor, see the full
+# doc under modules/feature_processor.py
 class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
     def __init__(
         self, max_feature_lengths: Dict[str, int], device: Optional[torch.device] = None

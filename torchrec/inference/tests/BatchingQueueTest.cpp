@@ -7,6 +7,7 @@
  */
 
 #include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/Observer.h"
 
 #include <memory>
 #include <thread>
@@ -38,7 +39,8 @@ std::shared_ptr<PredictionRequest> createRequest(
       values.release(),
       numFeatures * batchSize * sizeof(float));
   feature.num_features = numFeatures;
-  ret->features["float_features"] = std::move(feature);
+  ret->features["cuda_features"] = feature;
+  ret->features["cpu_features"] = feature;
 
   return ret;
 }
@@ -54,10 +56,18 @@ TEST(BatchingQueueTest, Basic) {
   std::vector<BatchQueueCb> batchQueueCbs;
   batchQueueCbs.push_back(
       [&](std::shared_ptr<PredictionBatch> batch) { res = batch; });
+  std::unique_ptr<IBatchingQueueObserver> batchingQueueObserver =
+      std::make_unique<EmptyBatchingQueueObserver>();
   BatchingQueue queue(
       batchQueueCbs,
-      BatchingQueue::Config{.batchingMetadata = {{"float_features", "dense"}}},
-      /* worldSize */ 1);
+      BatchingQueue::Config{
+          .batchingMetadata =
+              {{"cuda_features",
+                BatchingMetadata{.type = "dense", .device = "cuda"}},
+               {"cpu_features",
+                BatchingMetadata{.type = "dense", .device = "cpu"}}}},
+      /* worldSize */ 1,
+      std::move(batchingQueueObserver));
 
   queue.add(
       createRequest(2, 2),
@@ -76,7 +86,13 @@ TEST(BatchingQueueTest, Basic) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("float_features").numel());
+  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("cuda_features").numel());
+  ASSERT_EQ(value->forwardArgs.at("cuda_features").device().type(), at::kCUDA);
+  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("cpu_features").numel());
+  ASSERT_EQ(value->forwardArgs.at("cpu_features").device(), at::kCPU);
+  ASSERT_TRUE(at::allclose(
+      value->forwardArgs.at("cuda_features").cpu(),
+      value->forwardArgs.at("cpu_features")));
 }
 
 } // namespace torchrec

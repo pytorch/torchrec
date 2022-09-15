@@ -16,6 +16,7 @@ from torch import nn
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
+    QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingType,
     ShardMetadata,
@@ -39,37 +40,37 @@ class OptimType(Enum):
     PARTIAL_ROWWISE_ADAM = "PARTIAL_ROWWISE_ADAM"
     ADAGRAD = "ADAGRAD"
     ROWWISE_ADAGRAD = "ROWWISE_ADAGRAD"
+    SHAMPOO = "SHAMPOO"
 
 
 @unique
 class EmbeddingComputeKernel(Enum):
     DENSE = "dense"
-    SPARSE = "sparse"
-    BATCHED_DENSE = "batched_dense"
-    BATCHED_FUSED = "batched_fused"
-    BATCHED_FUSED_UVM = "batched_fused_uvm"
-    BATCHED_FUSED_UVM_CACHING = "batched_fused_uvm_caching"
-    BATCHED_QUANT = "batched_quant"
-    BATCHED_QUANT_UVM = "batched_quant_uvm"
-    BATCHED_QUANT_UVM_CACHING = "batched_quant_uvm_caching"
+    FUSED = "fused"
+    FUSED_UVM = "fused_uvm"
+    FUSED_UVM_CACHING = "fused_uvm_caching"
+    QUANT = "quant"
+    QUANT_UVM = "quant_uvm"
+    QUANT_UVM_CACHING = "quant_uvm_caching"
 
 
 def compute_kernel_to_embedding_location(
     compute_kernel: EmbeddingComputeKernel,
 ) -> EmbeddingLocation:
     if compute_kernel in [
-        EmbeddingComputeKernel.BATCHED_FUSED,
-        EmbeddingComputeKernel.BATCHED_QUANT,
+        EmbeddingComputeKernel.DENSE,
+        EmbeddingComputeKernel.FUSED,
+        EmbeddingComputeKernel.QUANT,
     ]:
         return EmbeddingLocation.DEVICE
     elif compute_kernel in [
-        EmbeddingComputeKernel.BATCHED_FUSED_UVM,
-        EmbeddingComputeKernel.BATCHED_QUANT_UVM,
+        EmbeddingComputeKernel.FUSED_UVM,
+        EmbeddingComputeKernel.QUANT_UVM,
     ]:
         return EmbeddingLocation.MANAGED
     elif compute_kernel in [
-        EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING,
-        EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+        EmbeddingComputeKernel.FUSED_UVM_CACHING,
+        EmbeddingComputeKernel.QUANT_UVM_CACHING,
     ]:
         return EmbeddingLocation.MANAGED_CACHING
     else:
@@ -153,7 +154,7 @@ class ShardedEmbeddingTable(
     EmbeddingAttributes,
     EmbeddingTableConfig,
 ):
-    pass
+    fused_params: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -164,6 +165,7 @@ class GroupedEmbeddingConfig:
     has_feature_processor: bool
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
+    fused_params: Optional[Dict[str, Any]] = None
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
@@ -237,9 +239,14 @@ M = TypeVar("M", bound=nn.Module)
 
 
 class BaseEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
 
+        # TODO remove after decoupling
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
@@ -258,21 +265,22 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         return types
 
     def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
+        # TODO remove after decoupling
+        self,
+        sharding_type: str,
+        compute_device_type: str,
     ) -> List[str]:
         ret = [
             EmbeddingComputeKernel.DENSE.value,
-            EmbeddingComputeKernel.BATCHED_DENSE.value,
         ]
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
-                EmbeddingComputeKernel.SPARSE.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
             if compute_device_type in {"cuda"}:
                 ret += [
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-                    EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
+                    EmbeddingComputeKernel.FUSED_UVM.value,
+                    EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         return ret
 
@@ -289,8 +297,8 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         """
         tensor_bytes = tensor.element_size() * tensor.nelement()
         if compute_kernel in {
-            EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-            EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
+            EmbeddingComputeKernel.FUSED_UVM.value,
+            EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
         }:
             assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
@@ -338,12 +346,12 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         ret = [
-            EmbeddingComputeKernel.BATCHED_QUANT.value,
+            EmbeddingComputeKernel.QUANT.value,
         ]
         if compute_device_type in {"cuda"}:
             ret += [
-                EmbeddingComputeKernel.BATCHED_QUANT_UVM.value,
-                EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value,
+                EmbeddingComputeKernel.QUANT_UVM.value,
+                EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
             ]
         return ret
 
@@ -360,8 +368,8 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         """
         tensor_bytes = tensor.element_size() * tensor.nelement() + tensor.shape[0] * 4
         if compute_kernel in {
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM.value,
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING.value,
+            EmbeddingComputeKernel.QUANT_UVM.value,
+            EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
         }:
             assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}

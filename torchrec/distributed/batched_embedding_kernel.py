@@ -8,13 +8,11 @@
 import abc
 import copy
 import itertools
-import logging
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     ComputeDevice,
     DenseTableBatchedEmbeddingBagsCodegen,
@@ -44,19 +42,15 @@ from torchrec.modules.embedding_configs import (
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
-logger: logging.Logger = logging.getLogger(__name__)
-
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
     def __init__(  # noqa C901
         self,
         config: GroupedEmbeddingConfig,
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
-        # pyre-fixme[11]: Annotation `ProcessGroup` is not defined as a type.
         pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         @dataclass
@@ -69,6 +63,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             local_metadata: ShardMetadata,
             global_metadata: ShardedTensorMetadata,
             sharding_dim: int,
+            optimizer_state: torch.Tensor,
         ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
             rw_shards: List[ShardMetadata] = []
             rw_local_shard: ShardMetadata = local_metadata
@@ -100,9 +95,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 rw_shards.append(rw_shard)
 
             tensor_properties = TensorProperties(
-                dtype=global_metadata.tensor_properties.dtype,
+                dtype=optimizer_state.dtype,
                 layout=global_metadata.tensor_properties.layout,
-                requires_grad=global_metadata.tensor_properties.requires_grad,
+                requires_grad=False,
                 memory_format=global_metadata.tensor_properties.memory_format,
                 pin_memory=global_metadata.tensor_properties.pin_memory,
             )
@@ -217,6 +212,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                                 shard_param_local_metadata,
                                 table_config.global_metadata,
                                 sharding_dim,
+                                optimizer_state[momentum_idx - 1],
                             )
 
                         assert local_metadata is not None
@@ -254,33 +250,6 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
-def configure_fused_params(
-    fused_params: Optional[Dict[str, Any]], weights_precision: SparseType
-) -> Dict[str, Any]:
-
-    """
-    Configure the fused_params including cache_precision if the value is not preset
-
-    Args:
-        fused_params (Optional[Dict[str, Any]]): the original fused_params
-        weights_precision (SparseType): the weights_precision to be used for
-        the embedding lookup kernel
-
-    Returns:
-        [Dict[str, Any]]: a non-null configured fused_params dictionary to be
-        used to configure the embedding lookup kernel
-    """
-
-    if fused_params is None:
-        fused_params = {}
-    if "cache_precision" not in fused_params:
-        # Set cache_precision to be the same as weights_precision
-        # if it is not preset
-        fused_params["cache_precision"] = weights_precision
-
-    return fused_params
-
-
 class BaseBatchedEmbedding(BaseEmbedding):
     def __init__(
         self,
@@ -291,7 +260,6 @@ class BaseBatchedEmbedding(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         self._local_rows: List[int] = []
@@ -368,7 +336,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -385,7 +353,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -400,10 +367,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -413,7 +383,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
                 pooling_mode=PoolingMode.NONE,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -421,7 +391,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
-
         self.init_parameters()
 
     @property
@@ -434,20 +403,19 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
-
-    def named_buffers(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, param in zip(
-            self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
-        ):
-            key = append_prefix(prefix, f"{config.name}.weight")
-            yield key, param
 
     def flush(self) -> None:
         self._emb_module.flush()
@@ -481,6 +449,11 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
 
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
+
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
@@ -502,7 +475,6 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
-        # pyre-fixme[4]: Attribute must be annotated.
         self._pg = pg
 
         self._pooling: PoolingMode = pooling_type_to_pooling_mode(config.pooling)
@@ -587,7 +559,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
     def flush(self) -> None:
         pass
 
-    def named_buffers(
+    def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, param in zip(
@@ -604,13 +576,16 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
         managed: List[EmbeddingLocation] = []
         compute_devices: List[ComputeDevice] = []
         for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
             if device is not None and device.type == "cuda":
                 compute_devices.append(ComputeDevice.CUDA)
                 managed.append(
@@ -619,10 +594,12 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -632,7 +609,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 pooling_mode=self._pooling,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -652,6 +629,15 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     @property
     def fused_optimizer(self) -> FusedOptimizer:
         return self._optim
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        """
+        By convention, fused parameters are designated as buffers because they no longer
+        have gradients available to external optimizers.
+        """
+        return self.named_split_embedding_weights(prefix, recurse)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -689,6 +675,11 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         self,
     ) -> DenseTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True

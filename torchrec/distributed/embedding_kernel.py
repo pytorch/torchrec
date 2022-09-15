@@ -8,7 +8,7 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 import torch.distributed as dist
@@ -19,8 +19,6 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
-from torchrec.distributed.utils import append_prefix
-from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -44,12 +42,6 @@ class BaseEmbedding(abc.ABC, nn.Module):
         """
         pass
 
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
-
     @property
     @abc.abstractmethod
     def config(self) -> GroupedEmbeddingConfig:
@@ -63,7 +55,6 @@ def get_state_dict(
         List[Union[nn.Module, torch.Tensor]],
         List[torch.Tensor],
     ],
-    # pyre-fixme[11]
     pg: Optional[dist.ProcessGroup] = None,
     destination: Optional[Dict[str, Any]] = None,
     prefix: str = "",
@@ -87,9 +78,9 @@ def get_state_dict(
         key = get_key_from_embedding_table(embedding_table)
         assert embedding_table.local_rows == param.size(0)
         if embedding_table.compute_kernel not in [
-            EmbeddingComputeKernel.BATCHED_QUANT,
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM,
-            EmbeddingComputeKernel.BATCHED_QUANT_UVM_CACHING,
+            EmbeddingComputeKernel.QUANT,
+            EmbeddingComputeKernel.QUANT_UVM,
+            EmbeddingComputeKernel.QUANT_UVM_CACHING,
         ]:
             assert embedding_table.local_cols == param.size(1)
         # for inference there is no pg, all tensors are local
@@ -120,6 +111,7 @@ def get_state_dict(
             )
 
     return destination
+
 
 
 class GroupedEmbedding(BaseEmbedding):
@@ -353,3 +345,4 @@ class GroupedEmbeddingBag(BaseEmbedding):
     @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
+

@@ -20,15 +20,18 @@ from torchrec.streamable import Multistreamable
 @dataclass
 class SequenceShardingContext(Multistreamable):
     """
-    SequenceEmbeddingAllToAll has the same comm pattern as KJTAllToAll.
-    Stores KJTAllToAll context and reuses it in SequenceEmbeddingAllToAll.
+    Stores KJTAllToAll context and reuses it in SequenceEmbeddingsAllToAll.
+    SequenceEmbeddingsAllToAll has the same comm pattern as KJTAllToAll.
 
-    features_before_input_dist: stores the original KJT before input dist.
-    input_splits: stores the input splits of KJT AlltoAll.
-    output_splits: stores the output splits of KJT AlltoAll.
-    unbucketize_permute_tensor: stores the permute order of
-        KJT bucketize (for row-wise sharding only).
-    lengths_after_input_dist: stores the KJT length after input dist.
+    Attributes:
+        features_before_input_dist (Optional[KeyedJaggedTensor]): stores the original
+            KJT before input dist.
+        input_splits(List[int]): stores the input splits of KJT AlltoAll.
+        output_splits (List[int]): stores the output splits of KJT AlltoAll.
+        unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order of
+            KJT bucketize (for row-wise sharding only).
+        lengths_after_input_dist (Optional[torch.Tensor]): stores the KJT length after
+            input dist.
     """
 
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
@@ -41,8 +44,10 @@ class SequenceShardingContext(Multistreamable):
         if self.features_before_input_dist is not None:
             self.features_before_input_dist.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.unbucketize_permute_tensor.record_stream(stream)
         if self.lengths_after_input_dist is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.lengths_after_input_dist.record_stream(stream)
 
 
@@ -51,8 +56,8 @@ T = TypeVar("T")
 
 class BaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
     """
-    Base class for converting output of Sequence EmbeddingLookup
-    from model-parallel to data-parallel.
+    Base class for converting output of the sequence embedding lookup from
+    model-parallel to data-parallel.
     """
 
     @abc.abstractmethod

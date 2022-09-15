@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import EmbeddingsAllToOne, SequenceEmbeddingAllToAll
+from torchrec.distributed.dist_data import (
+    SeqEmbeddingsAllToOne,
+    SequenceEmbeddingsAllToAll,
+)
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
     InferGroupedEmbeddingsLookup,
@@ -33,7 +36,7 @@ from torchrec.distributed.sharding.tw_sharding import (
     InferTwSparseFeaturesDist,
     TwSparseFeaturesDist,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
 class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]):
@@ -43,7 +46,7 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
 
     Args:
         device (torch.device): device on which the tensors will be communicated to.
-        world_size (int): how many devices we are communicating with.
+        world_size (int): number of devices in the topology.
     """
 
     def __init__(
@@ -52,17 +55,18 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
         world_size: int,
     ) -> None:
         super().__init__()
-        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(device, world_size, 0)
+        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
 
+    # pyre-ignore [15]
     def forward(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: SequenceShardingContext,
-    ) -> Awaitable[torch.Tensor]:
+    ) -> Awaitable[List[torch.Tensor]]:
         """
         Performs AlltoOne operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToOne
                 operation.
             local_embs (torch.Tensor): tensor of values to distribute.
@@ -75,25 +79,33 @@ class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]
 
 class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     """
-    Redistributes sequence embedding tensor in TW fashion with an AlltoAll
-    operation.
+    Redistributes sequence embedding tensor in TW fashion with an AlltoAll operation.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         features_per_rank (List[int]): number of features (sum of dimensions) of the
-            embedding for each host.
+            embedding for each rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
     """
 
     def __init__(
         self,
-        # pyre-fixme[11]
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, features_per_rank, device)
+        self._dist = SequenceEmbeddingsAllToAll(
+            pg,
+            features_per_rank,
+            device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -103,10 +115,10 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         """
         Performs AlltoAll operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
+            local_embs (torch.Tensor): tensor of values to distribute.
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
                 operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
@@ -125,8 +137,8 @@ class TwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards sequence (unpooled) table-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank.
+    Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
+    placed entirely on a selected rank.
     """
 
     def create_input_dist(
@@ -134,6 +146,8 @@ class TwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
         return TwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             self._id_score_list_features_per_rank(),
@@ -149,7 +163,6 @@ class TwSequenceEmbeddingSharding(
         assert feature_processor is None
         return GroupedEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
         )
@@ -159,9 +172,12 @@ class TwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return TwSequenceEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
 
@@ -169,8 +185,8 @@ class InferTwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
 ):
     """
-    Shards sequence (unpooled) table-wise, i.e.. a given embedding table is entirely placed
-    on a selected rank, for inference.
+    Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
+    placed entirely on a selected rank, for inference.
     """
 
     def create_input_dist(

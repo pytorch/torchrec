@@ -7,19 +7,18 @@
 
 
 import unittest
-from typing import List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNNBase
-from torchrec.distributed.test_utils.test_model_parallel import (
+from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
     SharderType,
-)
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelTestBase,
+    sharding_single_rank_test,
 )
 from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
@@ -32,7 +31,7 @@ from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
 @skip_if_asan_class
-class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
+class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
     """
     Testing hierarchical sharding types.
 
@@ -54,14 +53,28 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
-                EmbeddingComputeKernel.SPARSE.value,
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+        apply_overlapped_optimizer_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
             ]
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
-    def test_seq_emb_tower_nccl(self, sharding_type: str, kernel_type: str) -> None:
+    def test_seq_emb_tower_nccl(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+    ) -> None:
         self._test_sharding(
             # pyre-ignore [6]
             sharders=[
@@ -73,6 +86,7 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
             world_size=4,
             local_size=2,
             model_class=TestSequenceTowerSparseNN,
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )
 
     # TODO: consolidate the following methods with https://fburl.com/code/62zg0kel
@@ -102,17 +116,19 @@ class SequenceModelParallelHierarchicalTest(ModelParallelTestBase):
         world_size: int = 2,
         local_size: Optional[int] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
+        apply_overlapped_optimizer_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
     ) -> None:
         self._run_multi_process_test(
-            # pyre-ignore [6]
-            callable=self._test_sharding_single_rank,
+            callable=sharding_single_rank_test,
             world_size=world_size,
             local_size=local_size,
             model_class=model_class,
             tables=self.tables,
             embedding_groups=self.embedding_groups,
-            # pyre-fixme[6]
             sharders=sharders,
             optim=EmbOptimType.EXACT_SGD,
             backend=backend,
+            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
         )

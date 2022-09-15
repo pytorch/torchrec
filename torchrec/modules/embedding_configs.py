@@ -35,6 +35,9 @@ class DataType(Enum):
     INT4 = "INT4"
     INT2 = "INT2"
 
+    def __str__(self) -> str:
+        return self.value
+
 
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
@@ -46,7 +49,11 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
 
 
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:
-    if dtype == torch.quint8 or dtype == torch.qint8:
+    if dtype == torch.float:
+        return DataType.FP32
+    elif dtype == torch.float16 or dtype == torch.half:
+        return DataType.FP16
+    elif dtype in {torch.quint8, torch.qint8, torch.int8, torch.uint8}:
         return DataType.INT8
     elif dtype == torch.quint4x2:
         return DataType.INT4
@@ -61,6 +68,8 @@ def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
         return PoolingMode.SUM
     elif pooling_type == PoolingType.MEAN:
         return PoolingMode.MEAN
+    elif pooling_type == PoolingType.NONE:
+        return PoolingMode.NONE
     else:
         raise Exception(f"Invalid pooling type {pooling_type}")
 
@@ -89,6 +98,17 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
         raise ValueError(f"Invalid DataType {data_type}")
 
 
+def data_type_to_dtype(data_type: DataType) -> torch.dtype:
+    if data_type == DataType.FP32:
+        return torch.float32
+    elif data_type == DataType.FP16:
+        return torch.float16
+    elif data_type == DataType.INT8:
+        return torch.int8
+    else:
+        raise ValueError(f"DataType {data_type} cannot be converted to dtype")
+
+
 @dataclass
 class BaseEmbeddingConfig:
     num_embeddings: int
@@ -98,6 +118,9 @@ class BaseEmbeddingConfig:
     feature_names: List[str] = field(default_factory=list)
     weight_init_max: Optional[float] = None
     weight_init_min: Optional[float] = None
+    # when the position_weighted feature is in this table config,
+    # enable this flag to support rw_sharding
+    need_pos: bool = False
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:
@@ -115,6 +138,9 @@ class BaseEmbeddingConfig:
         return len(self.feature_names)
 
 
+# this class will be deprecated after migration
+# and all the following code in sharding itself
+# which contains has_feature_processor
 @dataclass
 class EmbeddingTableConfig(BaseEmbeddingConfig):
     pooling: PoolingType = PoolingType.SUM

@@ -21,6 +21,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     TestEBCSharder,
@@ -28,10 +29,10 @@ from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
     TestSparseNNBase,
 )
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    _copy_state_dict,
-    _gen_model_and_input,
-    ModelParallelTestBase,
+from torchrec.distributed.test_utils.test_sharding import (
+    copy_state_dict,
+    gen_full_pred_after_one_step,
+    gen_model_and_input,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
@@ -55,7 +56,7 @@ def create_test_sharder(
 
 
 @skip_if_asan_class
-class ModelParallelTest(ModelParallelTestBase):
+class ModelParallelTest(MultiProcessTestBase):
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -70,7 +71,7 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         optim_type=st.sampled_from(
@@ -109,7 +110,7 @@ class ModelParallelTest(ModelParallelTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.BATCHED_FUSED.value,
+                EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         optim_type=st.sampled_from(
@@ -179,7 +180,6 @@ class ModelParallelTest(ModelParallelTestBase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> None:
         self._run_multi_process_test(
-            # pyre-ignore [6]
             callable=self._test_optim_single_rank,
             world_size=world_size,
             local_size=local_size,
@@ -231,7 +231,7 @@ class ModelParallelTest(ModelParallelTestBase):
             global_pg = dist.new_group(ranks=[1], backend=backend)
 
         # Generate model & inputs.
-        (global_model, inputs) = _gen_model_and_input(
+        (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
             tables=tables,
             weighted_tables=weighted_tables,
@@ -252,7 +252,7 @@ class ModelParallelTest(ModelParallelTestBase):
 
         # Run single step of unsharded model to populate optimizer states.
         global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
-        cls._gen_full_pred_after_one_step(global_model, global_opt, global_input)
+        gen_full_pred_after_one_step(global_model, global_opt, global_input)
 
         # Shard model.
         local_model = model_class(
@@ -272,19 +272,17 @@ class ModelParallelTest(ModelParallelTestBase):
         local_opt = torch.optim.SGD(local_model.parameters(), lr=0.1)
 
         # Load model & optimizer states from the global model.
-        _copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        copy_state_dict(local_model.state_dict(), global_model.state_dict())
         for param_name, local_state in local_model.fused_optimizer.state_dict()[
             "state"
         ].items():
             global_state = global_model.fused_optimizer.state_dict()["state"][
                 param_name
             ]
-            _copy_state_dict(local_state, global_state)
+            copy_state_dict(local_state, global_state)
 
         # Run a single training step of the sharded model.
-        local_pred = cls._gen_full_pred_after_one_step(
-            local_model, local_opt, local_input
-        )
+        local_pred = gen_full_pred_after_one_step(local_model, local_opt, local_input)
         all_local_pred = []
         for _ in range(world_size):
             all_local_pred.append(torch.empty_like(local_pred))
@@ -292,7 +290,7 @@ class ModelParallelTest(ModelParallelTestBase):
 
         # Run second training step of the unsharded model.
         global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
-        global_pred = cls._gen_full_pred_after_one_step(
+        global_pred = gen_full_pred_after_one_step(
             global_model, global_opt, global_input
         )
 

@@ -32,8 +32,10 @@ class VariableBatchCwPooledEmbeddingSharding(
     BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards embedding bags column-wise, i.e.. a given embedding table is placed
-    on selected ranks with evenly distributed columns.
+    Shards embedding bags column-wise, i.e.. a given embedding table is partitioned
+    along its columns and placed on specified ranks.
+
+    Supports variable batch size.
     """
 
     def create_input_dist(
@@ -41,6 +43,8 @@ class VariableBatchCwPooledEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
         return VariableBatchTwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._id_list_features_per_rank(),
             self._id_score_list_features_per_rank(),
@@ -56,7 +60,6 @@ class VariableBatchCwPooledEmbeddingSharding(
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -77,6 +80,8 @@ class VariableBatchCwPooledEmbeddingSharding(
             ).to(device=device)
             callbacks = [embedding_permute_op]
         return VariableBatchTwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,

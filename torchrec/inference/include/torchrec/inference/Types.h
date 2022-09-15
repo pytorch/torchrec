@@ -17,9 +17,13 @@
 
 #include <ATen/core/ivalue.h>
 #include <ATen/cuda/CUDAEvent.h>
+#include <boost/noncopyable.hpp>
 #include <folly/ExceptionWrapper.h>
+#include <folly/container/F14Set.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
+
+#include "torchrec/inference/ResourceManager.h"
 
 namespace torchrec {
 
@@ -49,6 +53,7 @@ struct PredictionRequest {
 };
 
 struct PredictionResponse {
+  uint32_t batchSize;
   c10::IValue predictions;
   // If set, the result is an exception.
   std::optional<folly::exception_wrapper> exception;
@@ -63,5 +68,61 @@ using PredictionException = std::runtime_error;
 
 using Event = std::
     unique_ptr<at::cuda::CUDAEvent, std::function<void(at::cuda::CUDAEvent*)>>;
+
+struct BatchingMetadata {
+  std::string type;
+  std::string device;
+  folly::F14FastSet<std::string> pinned;
+};
+
+// noncopyable because we only want to move PredictionBatch around
+// as it holds a reference to ResourceManagerGuard. We wouldn't want
+// to inadvertently increase the reference count to ResourceManagerGuard
+// with copies of this struct.
+struct PredictionBatch : public boost::noncopyable {
+  std::string methodName;
+  std::vector<c10::IValue> args;
+
+  size_t batchSize;
+
+  c10::Dict<std::string, at::Tensor> forwardArgs;
+
+  std::vector<RequestContext> contexts;
+
+  std::unique_ptr<ResourceManagerGuard> resourceManagerGuard = nullptr;
+
+  std::chrono::time_point<std::chrono::steady_clock> enqueueTime =
+      std::chrono::steady_clock::now();
+
+  Event event;
+
+  // Need a constructor to use make_shared/unique with
+  // noncopyable struct and not trigger copy-constructor.
+  PredictionBatch(
+      size_t bs,
+      c10::Dict<std::string, at::Tensor> fa,
+      std::vector<RequestContext> ctxs,
+      std::unique_ptr<ResourceManagerGuard> rmg = nullptr)
+      : batchSize(bs),
+        forwardArgs(std::move(fa)),
+        contexts(std::move(ctxs)),
+        resourceManagerGuard(std::move(rmg)) {}
+
+  PredictionBatch(
+      std::string methodNameArg,
+      std::vector<c10::IValue> argsArg,
+      folly::Promise<std::unique_ptr<torchrec::PredictionResponse>> promise)
+      : methodName(std::move(methodNameArg)), args(std::move(argsArg)) {
+    contexts.push_back(RequestContext{1u, std::move(promise)});
+  }
+
+  inline size_t size() const {
+    size_t size = 0;
+    for (const auto& iter : forwardArgs) {
+      size += iter.value().storage().nbytes();
+    }
+    return size;
+  }
+};
 
 } // namespace torchrec

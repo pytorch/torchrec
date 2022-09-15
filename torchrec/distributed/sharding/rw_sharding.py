@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -17,6 +17,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSparseFeaturesDist,
     bucketize_kjt_before_all2all,
     EmbeddingSharding,
+    EmbeddingShardingInfo,
     group_tables,
     SparseFeaturesAllToAll,
 )
@@ -29,12 +30,12 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    ParameterSharding,
+    CommOp,
+    QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.streamable import Multistreamable
 
 
@@ -44,27 +45,30 @@ T = TypeVar("T")
 
 class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
     """
-    base class for row-wise sharding
+    Base class for row-wise sharding.
     """
 
     def __init__(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        need_pos: bool = False,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
+
         self._env = env
-        # pyre-ignore[11]
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         if device is None:
             device = torch.device("cpu")
         self._device = device
-        sharded_tables_per_rank = self._shard(embedding_configs)
+        sharded_tables_per_rank = self._shard(sharding_infos)
+        self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
@@ -89,42 +93,48 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
 
     def _shard(
         self,
-        embedding_configs: List[
-            Tuple[EmbeddingTableConfig, ParameterSharding, torch.Tensor]
-        ],
+        sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(self._world_size)
         ]
-        for config in embedding_configs:
+        for info in sharding_infos:
             # pyre-fixme [16]
-            shards = config[1].sharding_spec.shards
+            shards = info.param_sharding.sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
-                size=torch.Size([config[0].num_embeddings, config[0].embedding_dim]),
+                size=torch.Size(
+                    [
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ]
+                ),
             )
 
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
-                        num_embeddings=config[0].num_embeddings,
-                        embedding_dim=config[0].embedding_dim,
-                        name=config[0].name,
-                        embedding_names=config[0].embedding_names,
-                        data_type=config[0].data_type,
-                        feature_names=config[0].feature_names,
-                        pooling=config[0].pooling,
-                        is_weighted=config[0].is_weighted,
-                        has_feature_processor=config[0].has_feature_processor,
+                        num_embeddings=info.embedding_config.num_embeddings,
+                        embedding_dim=info.embedding_config.embedding_dim,
+                        name=info.embedding_config.name,
+                        embedding_names=info.embedding_config.embedding_names,
+                        data_type=info.embedding_config.data_type,
+                        feature_names=info.embedding_config.feature_names,
+                        pooling=info.embedding_config.pooling,
+                        is_weighted=info.embedding_config.is_weighted,
+                        has_feature_processor=info.embedding_config.has_feature_processor,
                         local_rows=shards[rank].shard_sizes[0],
-                        local_cols=config[0].embedding_dim,
-                        compute_kernel=EmbeddingComputeKernel(config[1].compute_kernel),
+                        local_cols=info.embedding_config.embedding_dim,
+                        compute_kernel=EmbeddingComputeKernel(
+                            info.param_sharding.compute_kernel
+                        ),
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
-                        weight_init_max=config[0].weight_init_max,
-                        weight_init_min=config[0].weight_init_min,
+                        weight_init_max=info.embedding_config.weight_init_max,
+                        weight_init_min=info.embedding_config.weight_init_min,
+                        fused_params=info.fused_params,
                     )
                 )
         return tables_per_rank
@@ -196,18 +206,18 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     collective operation.
 
     Args:
-
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         intra_pg (dist.ProcessGroup): ProcessGroup within single host group for AlltoAll
-        communication.
+            communication.
         num_id_list_features (int): total number of id list features.
         num_id_score_list_features (int): total number of id score list features
         id_list_feature_hash_sizes (List[int]): hash sizes of id list features.
-        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list features.
+        id_score_list_feature_hash_sizes (List[int]): hash sizes of id score list
+            features.
         device (Optional[torch.device]): device on which buffers will be allocated.
         is_sequence (bool): if this is for a sequence embedding.
         has_feature_processor (bool): existence of feature processor (ie. position
-        weighted features).
+            weighted features).
 
     """
 
@@ -221,6 +231,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
         has_feature_processor: bool = False,
+        need_pos: bool = False,
     ) -> None:
         super().__init__()
         self._world_size: int = pg.size()
@@ -259,6 +270,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
+        self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
     def forward(
@@ -266,7 +278,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         sparse_features: SparseFeatures,
     ) -> Awaitable[Awaitable[SparseFeatures]]:
         """
-        Bucketizes sparse feature values into  world size number of buckets, and then
+        Bucketizes sparse feature values into world size number of buckets and then
         performs AlltoAll operation.
 
         Args:
@@ -299,7 +311,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
                 num_buckets=self._world_size,
                 block_sizes=self._id_score_list_feature_block_sizes_tensor,
                 output_permute=False,
-                bucketize_pos=False,
+                bucketize_pos=self._need_pos,
             )
         else:
             id_score_list_features = None
@@ -323,9 +335,18 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsReduceScatter(pg)
+
+        self._dist = PooledEmbeddingsReduceScatter(
+            pg,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
         """
@@ -356,6 +377,8 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return RwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,
@@ -364,6 +387,7 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
             device=device if device is not None else self._device,
             is_sequence=False,
             has_feature_processor=self._has_feature_processor,
+            need_pos=self._need_pos,
         )
 
     def create_lookup(
@@ -375,7 +399,6 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -385,4 +408,9 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         self,
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[torch.Tensor]:
-        return RwPooledEmbeddingDist(self._pg)
+        return RwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._pg,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )

@@ -9,10 +9,9 @@ from typing import Any, Dict, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import SequenceEmbeddingAllToAll
+from torchrec.distributed.dist_data import SequenceEmbeddingsAllToAll
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
-    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
@@ -28,7 +27,7 @@ from torchrec.distributed.sharding.sequence_sharding import (
     BaseSequenceEmbeddingDist,
     SequenceShardingContext,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
 class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
@@ -43,13 +42,22 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
 
     def __init__(
         self,
-        # pyre-fixme[11]
         pg: dist.ProcessGroup,
         num_features: int,
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = SequenceEmbeddingAllToAll(pg, [num_features] * pg.size(), device)
+        self._dist = SequenceEmbeddingsAllToAll(
+            pg,
+            [num_features] * pg.size(),
+            device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -59,10 +67,10 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         """
         Performs AlltoAll operation on sequence embeddings tensor.
 
-        Call Args:
+        Args:
+            local_embs (torch.Tensor): tensor of values to distribute.
             sharding_ctx (SequenceShardingContext): shared context from KJTAllToAll
                 operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
@@ -81,8 +89,8 @@ class RwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]
 ):
     """
-    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly distributed
-    by rows and table slices are placed on all ranks.
+    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly
+    distributed by rows and table slices are placed on all ranks.
     """
 
     def create_input_dist(
@@ -94,6 +102,8 @@ class RwSequenceEmbeddingSharding(
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         return RwSparseFeaturesDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,
@@ -102,6 +112,7 @@ class RwSequenceEmbeddingSharding(
             device=device if device is not None else self._device,
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
+            need_pos=False,
         )
 
     def create_lookup(
@@ -112,7 +123,6 @@ class RwSequenceEmbeddingSharding(
     ) -> BaseEmbeddingLookup:
         return GroupedEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
         )
@@ -122,7 +132,10 @@ class RwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
     ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
         return RwSequenceEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             self._pg,
             self._get_id_list_features_num(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

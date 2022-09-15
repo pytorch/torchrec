@@ -6,9 +6,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from typing import cast, Dict, List, Optional, Tuple
+import itertools
+import logging
+from decimal import Decimal
+from typing import cast, Dict, List, Optional, Set, Tuple
 
 from torchrec.distributed.planner.types import Proposer, ShardingOption
+from torchrec.distributed.planner.utils import prod
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+MAX_PROPOSALS: int = int(1e4)
 
 
 class GreedyProposer(Proposer):
@@ -153,6 +161,75 @@ class UniformProposer(Proposer):
         self._proposal_index += 1
 
 
+class GridSearchProposer(Proposer):
+    def __init__(self, max_proposals: int = MAX_PROPOSALS) -> None:
+        self._max_proposals: int = max_proposals
+        self._sharding_options_by_fqn: Dict[str, List[ShardingOption]] = {}
+        self._proposal_index: int = 0
+        self._proposals: List[List[int]] = []
+
+    def load(self, search_space: List[ShardingOption]) -> None:
+        self._reset()
+        for sharding_option in search_space:
+            fqn = sharding_option.fqn
+            if fqn not in self._sharding_options_by_fqn:
+                self._sharding_options_by_fqn[fqn] = []
+            self._sharding_options_by_fqn[fqn].append(sharding_option)
+
+        for sharding_options in self._sharding_options_by_fqn.values():
+            sharding_options.sort(key=lambda x: _sharding_option_score(x))
+
+        total_proposals = prod(
+            [
+                len(sharding_options)
+                for sharding_options in self._sharding_options_by_fqn.values()
+            ]
+        )
+        if total_proposals > self._max_proposals:
+            total_proposals = (
+                "{:.2e}".format(Decimal(total_proposals))
+                if total_proposals > 1e6
+                else total_proposals
+            )
+            logger.info(
+                "Skipping grid search proposer as there are too many proposals.\n"
+                f"Total proposals to search: {total_proposals}\n"
+                f"Max proposals allowed: {self._max_proposals}\n"
+            )
+            return
+        sharding_options_by_fqn_indices = [
+            range(len(sharding_options))
+            for sharding_options in self._sharding_options_by_fqn.values()
+        ]
+        self._proposals = list(itertools.product(*sharding_options_by_fqn_indices))
+
+    def _reset(self) -> None:
+        self._sharding_options_by_fqn = {}
+        self._proposal_index = 0
+        self._proposals = []
+
+    def propose(self) -> Optional[List[ShardingOption]]:
+        if self._proposals and self._proposal_index < len(self._proposals):
+            proposal_indices = self._proposals[self._proposal_index]
+            return [
+                sharding_options[index]
+                for index, sharding_options in zip(
+                    proposal_indices, self._sharding_options_by_fqn.values()
+                )
+            ]
+        else:
+            return None
+
+    def feedback(
+        self,
+        partitionable: bool,
+        plan: Optional[List[ShardingOption]] = None,
+        perf_rating: Optional[float] = None,
+    ) -> None:
+        # static strategy, ignore feedback and just provide next proposal
+        self._proposal_index += 1
+
+
 def _sharding_option_score(
     sharding_option: ShardingOption, use_depth: bool = True
 ) -> float:
@@ -161,3 +238,34 @@ def _sharding_option_score(
         if use_depth
         else sum([cast(float, shard.perf) for shard in sharding_option.shards])
     )
+
+
+def proposers_to_proposals_list(
+    proposers_list: List[Proposer], search_space: List[ShardingOption]
+) -> List[List[ShardingOption]]:
+    """
+    only works for static_feedback proposers (the path of proposals to check is independent of the performance of the proposals)
+    """
+
+    proposals_list = []
+
+    proposal_cache: Set[Tuple[int, ...]] = set()
+
+    for proposer in proposers_list:
+        proposer.load(search_space=search_space)
+
+    for proposer in proposers_list:
+        proposal = proposer.propose()
+
+        while proposal:
+            proposal_key = tuple(sorted(map(hash, proposal)))
+            proposer.feedback(partitionable=True)
+            if proposal_key in proposal_cache:
+                proposal = proposer.propose()
+                continue
+
+            proposals_list.append(proposal)
+            proposal_cache.add(proposal_key)
+            proposal = proposer.propose()
+
+    return proposals_list

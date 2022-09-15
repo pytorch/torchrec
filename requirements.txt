@@ -7,6 +7,7 @@ Cython
 distro
 docker
 docstring-parser
+fbgemm-gpu-nightly
 filelock
 fsspec
 hypothesis
@@ -23,7 +24,7 @@ portalocker
 pyarrow
 pyDeprecate
 pyparsing
-pyre-extensions
+pyre-extensions==0.0.27
 python-dateutil
 pytz
 PyYAML
@@ -35,8 +36,8 @@ tabulate
 torchmetrics
 torchx-nightly
 tqdm
-typing
 typing-inspect
 typing_extensions
 urllib3
+usort
 websocket-client

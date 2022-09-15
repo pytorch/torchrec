@@ -50,7 +50,7 @@ We recommend using [torchx](https://pytorch.org/torchx/main/quickstart.html) to 
 ###### Infra Metrics Improvement
 
 |Number of GPUs|Local Batch Size|Global Batch Size|DDP Train Records/Second|DMP Train Records/Second|Improvements |
-| --- | --- | --- | --- | --- | --- | ---
+| --- | --- | --- | --- | --- | --- |
 |1|8|8|242.56 rec/s| 324.24 rec/s | 33.6%
 |4|8|32|757.12 rec/s| 1058.56 rec/s | 39.8%
 |8|8|64|1592.32 rec/s | 2225.28 rec/s | 39.8%

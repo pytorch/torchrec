@@ -6,13 +6,33 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Any, Dict, List, Optional, Type
+import json
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollectionInterface,
+    EmbeddingCollectionInterface,
+)
+
+
+def quantize_feature(
+    module: torch.nn.Module, inputs: Tuple[torch.Tensor, ...]
+) -> Tuple[torch.Tensor, ...]:
+    return tuple(
+        [
+            input.half()
+            if isinstance(input, torch.Tensor)
+            and input.dtype in [torch.float32, torch.float64]
+            else input
+            for input in inputs
+        ]
+    )
 
 
 def quantize_embeddings(
@@ -21,9 +41,10 @@ def quantize_embeddings(
     inplace: bool,
     additional_qconfig_spec_keys: Optional[List[Type[nn.Module]]] = None,
     additional_mapping: Optional[Dict[Type[nn.Module], Type[nn.Module]]] = None,
+    output_dtype: torch.dtype = torch.float,
 ) -> nn.Module:
     qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver,
+        activation=quant.PlaceholderObserver.with_args(dtype=output_dtype),
         weight=quant.PlaceholderObserver.with_args(dtype=dtype),
     )
     qconfig_spec: Dict[Type[nn.Module], quant.QConfig] = {
@@ -45,6 +66,20 @@ def quantize_embeddings(
     )
 
 
+@dataclass
+class BatchingMetadata:
+    """
+    Metadata class for batching, this should be kept in sync with the C++ definition.
+    """
+
+    type: str
+    # cpu or cuda
+    device: str
+    # list of tensor suffixes to deserialize to pinned memory (e.g. "lengths")
+    # use "" (empty string) to pin without suffix
+    pinned: List[str]
+
+
 class PredictFactory(abc.ABC):
     """
     Creates a model (with already learned weights) to be used inference time.
@@ -61,16 +96,43 @@ class PredictFactory(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def batching_metadata(self) -> Dict[str, str]:
+    def batching_metadata(self) -> Dict[str, BatchingMetadata]:
         """
-        Returns a dict from input name to feature type. This infomation is used for batching.
+        Returns a dict from input name to BatchingMetadata. This infomation is used for batching for input requests.
         """
         pass
+
+    def batching_metadata_json(self) -> str:
+        """
+        Serialize the batching metadata to JSON, for ease of parsing with torch::deploy environments.
+        """
+        return json.dumps(
+            {key: asdict(value) for key, value in self.batching_metadata().items()}
+        )
 
     @abc.abstractmethod
     def result_metadata(self) -> str:
         """
         Returns a string which represents the result type. This information is used for result split.
+        """
+        pass
+
+    @abc.abstractmethod
+    def run_weights_independent_tranformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that don't rely on weights of the predict module. e.g. fx tracing, model
+        split etc.
+        """
+        pass
+
+    @abc.abstractmethod
+    def run_weights_dependent_transformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that depends on weights of the predict module. e.g. lowering to a backend.
         """
         pass
 
@@ -132,3 +194,33 @@ class PredictModule(nn.Module):
     ) -> Dict[str, Any]:
         # pyre-fixme[19]: Expected 0 positional arguments.
         return self._module.state_dict(destination, prefix, keep_vars)
+
+
+def quantize_dense(
+    predict_module: PredictModule,
+    dtype: torch.dtype,
+    additional_embedding_module_type: List[Type[nn.Module]] = [],
+) -> nn.Module:
+    module = predict_module.predict_module
+    reassign = {}
+
+    for name, mod in module.named_children():
+        # both fused modules and observed custom modules are
+        # swapped as one unit
+        if not (
+            isinstance(mod, EmbeddingBagCollectionInterface)
+            or isinstance(mod, EmbeddingCollectionInterface)
+            or any([type(mod) is clazz for clazz in additional_embedding_module_type])
+        ):
+            if dtype == torch.half:
+                new_mod = mod.half()
+                # pyre-ignore [6]
+                new_mod.register_forward_pre_hook(quantize_feature)
+                reassign[name] = new_mod
+            else:
+                raise NotImplementedError(
+                    "only fp16 is supported for non-embedding module lowering"
+                )
+    for key, value in reassign.items():
+        module._modules[key] = value
+    return predict_module

@@ -5,12 +5,18 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.planner.constants import (
+    BATCH_SIZE,
+    MIN_CW_DIM,
+    POOLING_FACTOR,
+)
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
@@ -29,6 +35,9 @@ from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+
 class EmbeddingEnumerator(Enumerator):
     """
     Generates embedding sharding options for given `nn.Module`, considering user provided
@@ -36,6 +45,7 @@ class EmbeddingEnumerator(Enumerator):
 
     Args:
         topology (Topology): device topology.
+        batch_size (int): batch size.
         constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names
             to provided ParameterConstraints.
     """
@@ -43,14 +53,15 @@ class EmbeddingEnumerator(Enumerator):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
         self._compute_device: str = topology.compute_device
         self._world_size: int = topology.world_size
         self._local_world_size: int = topology.local_world_size
+        self._batch_size: int = batch_size
         self._constraints = constraints
-        self._batch_size: int = topology.batch_size
 
         if estimator:
             self._estimators: List[ShardEstimator] = (
@@ -104,6 +115,7 @@ class EmbeddingEnumerator(Enumerator):
                         name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
+
                         input_lengths = (
                             self._constraints[name].pooling_factors
                             if self._constraints and self._constraints.get(name)
@@ -149,6 +161,11 @@ class EmbeddingEnumerator(Enumerator):
                                 dependency=dependency,
                             )
                         )
+                if not sharding_options:
+                    raise RuntimeError(
+                        "No available sharding type and compute kernel combination "
+                        f"after applying user provided constraints for {name}"
+                    )
 
         for estimator in self._estimators:
             estimator.estimate(sharding_options, sharder_map)
@@ -166,28 +183,40 @@ class EmbeddingEnumerator(Enumerator):
         sharding_types = list(set(constrained_sharding_types) & set(sharding_types))
 
         if not sharding_types:
-            raise RuntimeError(
+            logger.warn(
                 f"No available sharding types after applying user provided constraints for {name}"
             )
         return sharding_types
 
     def _filter_compute_kernels(
-        self, name: str, compute_kernels: List[str]
+        self,
+        name: str,
+        compute_kernels: List[str],
     ) -> List[str]:
+
         if not self._constraints or not self._constraints.get(name):
-            return compute_kernels
-        constraints: ParameterConstraints = self._constraints[name]
-        if not constraints.compute_kernels:
-            return compute_kernels
-        constrained_compute_kernels: List[str] = constraints.compute_kernels
+            filtered_compute_kernels = compute_kernels
+        else:
+            constraints: ParameterConstraints = self._constraints[name]
+            if not constraints.compute_kernels:
+                filtered_compute_kernels = compute_kernels
+            else:
+                constrained_compute_kernels: List[str] = constraints.compute_kernels
+                filtered_compute_kernels = list(
+                    set(constrained_compute_kernels) & set(compute_kernels)
+                )
 
-        compute_kernels = list(set(constrained_compute_kernels) & set(compute_kernels))
+        if EmbeddingComputeKernel.DENSE.value in filtered_compute_kernels:
+            if (
+                EmbeddingComputeKernel.FUSED.value in filtered_compute_kernels
+            ):  # always false for data_parallel
+                filtered_compute_kernels.remove(EmbeddingComputeKernel.DENSE.value)
 
-        if not compute_kernels:
-            raise RuntimeError(
+        if not filtered_compute_kernels:
+            logger.warn(
                 f"No available compute kernels after applying user provided constraints for {name}"
             )
-        return compute_kernels
+        return filtered_compute_kernels
 
 
 def get_partition_by_type(sharding_type: str) -> str:

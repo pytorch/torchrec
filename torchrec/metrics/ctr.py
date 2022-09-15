@@ -35,7 +35,8 @@ def get_ctr_states(
 
 class CTRMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for CTR.
+    This class implementation the RecMetricComputation for CTR, i.e. Click Through Rate,
+    which is the ratio between the predicted positive examples and the total examples.
 
     The constructer arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
@@ -63,7 +64,7 @@ class CTRMetricComputation(RecMetricComputation):
         *,
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
-        weights: Optional[torch.Tensor]
+        weights: Optional[torch.Tensor],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(

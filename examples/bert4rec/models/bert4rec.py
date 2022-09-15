@@ -482,9 +482,7 @@ class BERT4Rec(nn.Module):
         Returns:
             torch.Tensor.
         """
-        dense_tensor = input["item"].to_padded_dense(
-            desired_length=self.max_len, pad_from_beginning=False
-        )
+        dense_tensor = input["item"].to_padded_dense(desired_length=self.max_len)
         mask = (
             (dense_tensor > 0)
             .unsqueeze(1)

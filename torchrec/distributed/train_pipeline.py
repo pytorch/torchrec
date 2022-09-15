@@ -26,6 +26,7 @@ from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, ShardedModuleContext
+from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -97,17 +98,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._cur_batch = cur_batch
         with torch.cuda.stream(self._memcpy_stream):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
-
-            with torch.no_grad():
-                # Init lazy modules if any.  An example lazy module is
-                # https://pytorch.org/docs/stable/generated/torch.nn.LazyLinear.html
-                model = self._model
-                model(self._cur_batch)
-
-                # Make sure we init data parallel modules if not done yet.
-                if isinstance(model, DistributedModelParallel):
-                    model.init_data_parallel()
-
         self._connected = True
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
@@ -143,7 +133,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         # Update
         if self._model.training:
             with record_function("## optimizer ##"):
-                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         return output
@@ -156,15 +145,12 @@ class Tracer(torch.fx.Tracer):
     # that, we can likely remove this line
     proxy_buffer_attributes = False
 
-    def __init__(self, unsharded_module_names: List[str]) -> None:
+    def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
         super().__init__()
-        self._unsharded_module_names = unsharded_module_names
+        self._leaf_modules: List[str] = leaf_modules if leaf_modules is not None else []
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if (
-            isinstance(m, ShardedModule)
-            or module_qualified_name in self._unsharded_module_names
-        ):
+        if isinstance(m, ShardedModule) or module_qualified_name in self._leaf_modules:
             return True
         return super().is_leaf_module(m, module_qualified_name)
 
@@ -174,6 +160,8 @@ class TrainPipelineContext:
     # pyre-ignore [4]
     input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, ShardedModuleContext] = field(default_factory=dict)
+    # pyre-ignore [4]
+    feature_processor_forwards: List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -223,10 +211,20 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
             assert isinstance(
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             data.record_stream(cur_stream)
 
             ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
+
+        if len(self._context.feature_processor_forwards) > 0:
+            with record_function("## feature_processor ##"):
+                for sparse_feature in data:
+                    if sparse_feature.id_score_list_features is not None:
+                        for fp_forward in self._context.feature_processor_forwards:
+                            sparse_feature.id_score_list_features = fp_forward(
+                                sparse_feature.id_score_list_features
+                            )
 
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
@@ -252,7 +250,11 @@ def _start_data_dist(
         forward = module.forward
         assert isinstance(forward, PipelinedForward)
 
-        # Retrieve argument.
+        # Retrieve argument for the input_dist of EBC
+        # is_getitem True means this argument could be retrieved by a list
+        # False means this argument is getting while getattr
+        # and this info was done in the _rewrite_model by tracing the
+        # entire model to get the arg_info_list
         args = []
         kwargs = {}
         for arg_info in forward.args:
@@ -269,7 +271,6 @@ def _start_data_dist(
                     args.append(arg)
             else:
                 args.append(None)
-
         # Start input distribution.
         module_ctx = module.create_context()
         context.module_contexts[forward.name] = module_ctx
@@ -278,8 +279,12 @@ def _start_data_dist(
         )
 
 
-# pyre-ignore
-def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int]:
+def _get_node_args_helper(
+    # pyre-ignore
+    arguments,
+    num_found: int,
+    feature_processor_arguments: Optional[List[Node]] = None,
+) -> Tuple[List[ArgInfo], int]:
     """
     Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
     It also counts the number of (args + kwargs) found.
@@ -298,6 +303,12 @@ def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int
             if child_node.op == "placeholder":
                 num_found += 1
                 break
+            # skip this fp node
+            elif (
+                feature_processor_arguments is not None
+                and child_node in feature_processor_arguments
+            ):
+                arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "builtins"
@@ -321,9 +332,13 @@ def _get_node_args_helper(arguments, num_found: int) -> Tuple[List[ArgInfo], int
     return arg_info_list, num_found
 
 
-def _get_node_args(node: Node) -> Tuple[List[ArgInfo], int]:
+def _get_node_args(
+    node: Node, feature_processor_nodes: Optional[List[Node]] = None
+) -> Tuple[List[ArgInfo], int]:
     num_found = 0
-    pos_arg_info_list, num_found = _get_node_args_helper(node.args, num_found)
+    pos_arg_info_list, num_found = _get_node_args_helper(
+        node.args, num_found, feature_processor_nodes
+    )
     kwargs_arg_info_list, num_found = _get_node_args_helper(
         node.kwargs.values(), num_found
     )
@@ -389,14 +404,22 @@ def _rewrite_model(  # noqa C901
 
     # Collect a list of sharded modules.
     sharded_modules = {}
+    fp_modules = {}
     for name, m in model.named_modules():
         if isinstance(m, ShardedModule):
             sharded_modules[name] = m
+        if isinstance(m, BaseGroupedFeatureProcessor):
+            fp_modules[name] = m
 
     # Trace a model.
-    tracer = Tracer(_get_unsharded_module_names(model))
+    tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
     graph = tracer.trace(model)
 
+    feature_processor_nodes = []
+    # find the fp node
+    for node in graph.nodes:
+        if node.op == "call_module" and node.target in fp_modules:
+            feature_processor_nodes.append(node)
     # Select sharded modules, which are top-level in the forward call graph,
     # i.e. which don't have input transformations, i.e.
     # rely only on 'builtins.getattr'.
@@ -406,12 +429,16 @@ def _rewrite_model(  # noqa C901
             total_num_args = len(node.args) + len(node.kwargs)
             if total_num_args == 0:
                 continue
-            arg_info_list, num_found = _get_node_args(node)
+            arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
                 child = sharded_modules[node.target]
                 child.forward = PipelinedForward(
-                    node.target, arg_info_list, child, context, dist_stream
+                    node.target,
+                    arg_info_list,
+                    child,
+                    context,
+                    dist_stream,
                 )
                 ret.append(child)
     return ret
@@ -462,25 +489,25 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
 
+    def _replace_fp_forward(self, model: torch.nn.Module) -> None:
+        for _, m in model.named_modules():
+            if isinstance(m, BaseGroupedFeatureProcessor):
+                self._context.feature_processor_forwards.append(m.forward)
+                # pyre-ignore[8]: Incompatible attribute type
+                m.forward = lambda x: x
+
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
+        self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
         # batch 1
         with torch.cuda.stream(self._memcpy_stream):
             batch_i = next(dataloader_iter)
             self._batch_i = batch_i = _to_device(
                 batch_i, self._device, non_blocking=True
             )
-            with torch.no_grad():
-                # Init lazy modules if any.
-                model = self._model
-                model(self._batch_i)
-
-                if isinstance(model, DistributedModelParallel):
-                    model.init_data_parallel()
-
-                # Try to pipeline input data dist.
-                self._pipelined_modules = _rewrite_model(
-                    model, self._context, self._data_dist_stream
-                )
+            # Try to pipeline input data dist.
+            self._pipelined_modules = _rewrite_model(
+                self._model, self._context, self._data_dist_stream
+            )
 
         with torch.cuda.stream(self._data_dist_stream):
             _wait_for_batch(batch_i, self._memcpy_stream)
@@ -540,7 +567,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
             # Update
             with record_function("## optimizer ##"):
-                # pyre-fixme[20]: Argument `closure` expected.
                 self._optimizer.step()
 
         self._batch_i = batch_ip1

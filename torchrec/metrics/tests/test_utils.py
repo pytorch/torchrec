@@ -209,6 +209,7 @@ def rec_metric_value_test_helper(
     test_clazz: Optional[Type[TestMetric]],
     fused_update_limit: int,
     compute_on_all_ranks: bool,
+    should_validate_update: bool,
     world_size: int,
     my_rank: int,
     task_names: List[str],
@@ -248,6 +249,7 @@ def rec_metric_value_test_helper(
             window_size=window_size,
             fused_update_limit=fused_update_limit,
             compute_on_all_ranks=compute_on_all_ranks,
+            should_validate_update=should_validate_update,
         )
         for i in range(nsteps):
             labels, predictions, weights = parse_task_model_outputs(
@@ -321,6 +323,7 @@ def rec_metric_value_test_launcher(
     task_names: List[str],
     fused_update_limit: int,
     compute_on_all_ranks: bool,
+    should_validate_update: bool,
     world_size: int,
     entry_point: Callable[..., None],
     test_nsteps: int = 1,
@@ -338,6 +341,7 @@ def rec_metric_value_test_launcher(
             test_clazz=None,
             fused_update_limit=fused_update_limit,
             compute_on_all_ranks=compute_on_all_ranks,
+            should_validate_update=should_validate_update,
             world_size=1,
             my_rank=0,
             task_names=task_names,
@@ -351,6 +355,7 @@ def rec_metric_value_test_launcher(
             task_names,
             fused_update_limit,
             compute_on_all_ranks,
+            should_validate_update,
         )
 
 

@@ -6,13 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-import glob
 import os
 import random
 import re
 import sys
 from datetime import date
-from subprocess import check_output
 from typing import List
 
 from setuptools import find_packages, setup
@@ -36,41 +34,19 @@ def get_nightly_version():
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec setup")
     parser.add_argument(
-        "--skip_fbgemm",
-        dest="skip_fbgemm",
-        action="store_true",
-        help="if we need to skip the fbgemm_gpu installation",
-    )
-    parser.set_defaults(skip_fbgemm=False)
-    parser.add_argument(
         "--package_name",
         type=str,
         default="torchrec",
         help="the name of this output wheel",
-    )
-    parser.add_argument(
-        "--TORCH_CUDA_ARCH_LIST",
-        type=str,
-        default="7.0;8.0",
-        help="the arch list of the torch cuda, check here for more detail: https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu",
-    )
-    parser.add_argument(
-        "--cpu_only",
-        dest="cpu_only",
-        action="store_true",
-        help="if fbgemm_gpu will be installed with cpu_only flag",
     )
     return parser.parse_known_args(argv)
 
 
 def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
-    print("args: ", args)
-    print("unknown: ", unknown)
 
     # Set up package name and version
     name = args.package_name
-    print("name: ", name)
     is_nightly = "nightly" in name
     is_test = "test" in name
 
@@ -82,50 +58,21 @@ def main(argv: List[str]) -> None:
         os.path.join(os.path.dirname(__file__), "requirements.txt"), encoding="utf8"
     ) as f:
         reqs = f.read()
+        install_requires = reqs.strip().split("\n")
+
     version = get_nightly_version() if is_nightly else get_version()
+
+    if not is_nightly:
+        if "fbgemm-gpu-nightly" in install_requires:
+            install_requires.remove("fbgemm-gpu-nightly")
+        install_requires.append("fbgemm-gpu")
+
     if is_test:
         version = (f"0.0.{random.randint(0, 1000)}",)
     print(f"-- {name} building version: {version}")
 
     packages = find_packages(exclude=("*tests",))
-    fbgemm_gpu_package_dir = []
-
-    if "clean" in unknown:
-        print("Running clean for fbgemm_gpu first")
-        out = check_output(
-            [sys.executable, "setup.py", "clean"],
-            cwd="third_party/fbgemm/fbgemm_gpu",
-        )
-    # install/build
-    else:
-        if args.skip_fbgemm:
-            print("Skipping fbgemm_gpu installation")
-        else:
-            print("Installing fbgemm_gpu")
-            print("TORCH_CUDA_ARCH_LIST: ", args.TORCH_CUDA_ARCH_LIST)
-            print(f"cpu_only: {args.cpu_only}")
-            my_env = os.environ.copy()
-            cuda_arch_arg = f"-DTORCH_CUDA_ARCH_LIST={args.TORCH_CUDA_ARCH_LIST}"
-            fbgemm_kw_args = cuda_arch_arg if not args.cpu_only else "--cpu_only"
-            out = check_output(
-                [sys.executable, "setup.py", "build", fbgemm_kw_args],
-                cwd="third_party/fbgemm/fbgemm_gpu",
-                env=my_env,
-            )
-            print(out)
-
-        # the path to find all the packages
-        fbgemm_install_base = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install"
-        )[0]
-        packages.extend(find_packages(fbgemm_install_base))
-        # to include the fbgemm_gpu.so
-        fbgemm_gpu_package_dir = glob.glob(
-            "third_party/fbgemm/fbgemm_gpu/_skbuild/*/cmake-install/fbgemm_gpu"
-        )[0]
-
     sys.argv = [sys.argv[0]] + unknown
-    print("sys.argv", sys.argv)
 
     setup(
         # Metadata
@@ -140,14 +87,9 @@ def main(argv: List[str]) -> None:
         license="BSD-3",
         keywords=["pytorch", "recommendation systems", "sharding"],
         python_requires=">=3.7",
-        install_requires=reqs.strip().split("\n"),
+        install_requires=install_requires,
         packages=packages,
-        package_dir={
-            "torchrec": "torchrec",
-            "fbgemm_gpu": fbgemm_gpu_package_dir,
-        },
         zip_safe=False,
-        package_data={"fbgemm_gpu": ["fbgemm_gpu_py.so"]},
         # PyPI package information.
         classifiers=[
             "Development Status :: 4 - Beta",
@@ -162,5 +104,4 @@ def main(argv: List[str]) -> None:
 
 
 if __name__ == "__main__":
-    print(sys.argv)
     main(sys.argv[1:])

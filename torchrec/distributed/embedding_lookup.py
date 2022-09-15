@@ -8,7 +8,7 @@
 import logging
 from abc import ABC
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -22,11 +22,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
-from torchrec.distributed.embedding_kernel import (
-    BaseEmbedding,
-    GroupedEmbedding,
-    GroupedEmbeddingBag,
-)
+from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
@@ -35,7 +31,6 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
-from torchrec.distributed.grouped_position_weighted import GroupedPositionWeightedModule
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
@@ -47,25 +42,37 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def _load_state_dict(
     emb_modules: "nn.ModuleList",
-    state_dict: "OrderedDict[str, torch.Tensor]",
+    state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor]]",
 ) -> Tuple[List[str], List[str]]:
     missing_keys = []
     unexpected_keys = list(state_dict.keys())
     for emb_module in emb_modules:
-        for key, param in emb_module.state_dict().items():
+        for key, dst_param in emb_module.state_dict().items():
             if key in state_dict:
-                if isinstance(param, ShardedTensor):
-                    assert len(param.local_shards()) == 1
-                    dst_tensor = param.local_shards()[0].tensor
+                src_param = state_dict[key]
+                if isinstance(dst_param, ShardedTensor):
+                    assert isinstance(src_param, ShardedTensor)
+                    assert len(dst_param.local_shards()) == len(
+                        src_param.local_shards()
+                    )
+                    for dst_local_shard, src_local_shard in zip(
+                        dst_param.local_shards(), src_param.local_shards()
+                    ):
+                        assert (
+                            dst_local_shard.metadata.shard_offsets
+                            == src_local_shard.metadata.shard_offsets
+                        )
+                        assert (
+                            dst_local_shard.metadata.shard_sizes
+                            == src_local_shard.metadata.shard_sizes
+                        )
+
+                        dst_local_shard.tensor.detach().copy_(src_local_shard.tensor)
                 else:
-                    dst_tensor = param
-                if isinstance(state_dict[key], ShardedTensor):
-                    # pyre-fixme[16]
-                    assert len(state_dict[key].local_shards()) == 1
-                    src_tensor = state_dict[key].local_shards()[0].tensor
-                else:
-                    src_tensor = state_dict[key]
-                dst_tensor.detach().copy_(src_tensor)
+                    assert isinstance(src_param, torch.Tensor) and isinstance(
+                        dst_param, torch.Tensor
+                    )
+                    dst_param.detach().copy_(src_param)
                 unexpected_keys.remove(key)
             else:
                 missing_keys.append(cast(str, key))
@@ -76,38 +83,21 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
-        # pyre-fixme[11]
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
         ) -> BaseEmbedding:
-            if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
+            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbedding(
                     config=config,
                     pg=pg,
                     device=device,
                 )
-            elif config.compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
+            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbedding(
                     config=config,
-                    pg=pg,
-                    device=device,
-                    fused_params=fused_params,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=False,
-                    pg=pg,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.SPARSE:
-                return GroupedEmbedding(
-                    config=config,
-                    sparse=True,
                     pg=pg,
                     device=device,
                 )
@@ -179,7 +169,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m, u = _load_state_dict(self._emb_modules, state_dict)
@@ -197,14 +187,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
 
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for emb_module in self._emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        return destination
-
 
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
     def __init__(
@@ -212,7 +194,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         grouped_configs: List[GroupedEmbeddingConfig],
         grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
@@ -220,13 +201,13 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
-            if config.compute_kernel == EmbeddingComputeKernel.BATCHED_DENSE:
+            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
                     pg=pg,
                     device=device,
                 )
-            elif config.compute_kernel == EmbeddingComputeKernel.BATCHED_FUSED:
+            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
                     config=config,
                     pg=pg,
@@ -247,6 +228,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     pg=pg,
                     sparse=True,
                     device=device,
+
                 )
             else:
                 raise ValueError(
@@ -302,12 +284,13 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             for config, emb_op, features in zip(
                 self.grouped_configs, self._emb_modules, id_list_features_by_group
             ):
+                # keep this to avoid break ads code using feature_processor, for ebc
+                # the has_feature_processor will always be false. Remove this block when
+                # finishing the migration
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
-                    and isinstance(
-                        self._feature_processor, GroupedPositionWeightedModule
-                    )
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
@@ -318,9 +301,17 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     self._id_score_list_feature_splits,
                 )
             )
-            for emb_op, features in zip(
-                self._score_emb_modules, id_score_list_features_by_group
+            for config, emb_op, features in zip(
+                self.grouped_score_configs,
+                self._score_emb_modules,
+                id_score_list_features_by_group,
             ):
+                if (
+                    config.has_feature_processor
+                    and self._feature_processor is not None
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
+                ):
+                    features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
 
         if len(embeddings) == 0:
@@ -360,7 +351,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m1, u1 = _load_state_dict(self._emb_modules, state_dict)
@@ -382,16 +373,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             yield from emb_module.named_buffers(prefix, recurse)
         for emb_module in self._score_emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for emb_module in self._emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        for emb_module in self._score_emb_modules:
-            emb_module.sparse_grad_parameter_names(destination, prefix)
-        return destination
 
 
 class MetaInferGroupedEmbeddingsLookup(
@@ -482,7 +463,7 @@ class MetaInferGroupedEmbeddingsLookup(
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m, u = _load_state_dict(self._emb_modules, state_dict)
@@ -580,9 +561,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
-                    and isinstance(
-                        self._feature_processor, GroupedPositionWeightedModule
-                    )
+                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
@@ -635,7 +614,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     #  inconsistently.
     def load_state_dict(
         self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
+        state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
         m1, u1 = _load_state_dict(self._emb_modules, state_dict)

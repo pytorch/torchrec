@@ -112,24 +112,24 @@ EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
         Storage(hbm=510144, ddr=960),
     ],
     [
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
-        Storage(hbm=512648, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=512360, ddr=1800),
     ],
     [
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1339656, ddr=2720),
-        Storage(hbm=1338840, ddr=1760),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337888, ddr=2720),
+        Storage(hbm=1337696, ddr=1760),
     ],
 ]
 
@@ -231,7 +231,7 @@ class TWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class RWSharder(EmbeddingBagCollectionSharder):
@@ -241,7 +241,7 @@ class RWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class UVMCachingRWSharder(EmbeddingBagCollectionSharder):
@@ -251,7 +251,7 @@ class UVMCachingRWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value]
+        return [EmbeddingComputeKernel.FUSED_UVM_CACHING.value]
 
 
 class TWRWSharder(EmbeddingBagCollectionSharder):
@@ -261,7 +261,7 @@ class TWRWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class CWSharder(EmbeddingBagCollectionSharder):
@@ -271,7 +271,7 @@ class CWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class TWCWSharder(EmbeddingBagCollectionSharder):
@@ -281,7 +281,7 @@ class TWCWSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_FUSED.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 class DPSharder(EmbeddingBagCollectionSharder):
@@ -291,7 +291,7 @@ class DPSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.BATCHED_DENSE.value]
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 class AllTypesSharder(EmbeddingBagCollectionSharder):
@@ -310,12 +310,10 @@ class AllTypesSharder(EmbeddingBagCollectionSharder):
     ) -> List[str]:
         return [
             EmbeddingComputeKernel.DENSE.value,
-            EmbeddingComputeKernel.SPARSE.value,
-            EmbeddingComputeKernel.BATCHED_DENSE.value,
-            EmbeddingComputeKernel.BATCHED_FUSED.value,
-            EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-            EmbeddingComputeKernel.BATCHED_FUSED_UVM_CACHING.value,
-            EmbeddingComputeKernel.BATCHED_QUANT.value,
+            EmbeddingComputeKernel.FUSED.value,
+            EmbeddingComputeKernel.FUSED_UVM.value,
+            EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            EmbeddingComputeKernel.QUANT.value,
         ]
 
 
@@ -348,11 +346,9 @@ class TestEnumerators(unittest.TestCase):
         self.constraints = {
             "table_0": ParameterConstraints(min_partition=20),
             "table_1": ParameterConstraints(min_partition=8, pooling_factors=[1, 3, 5]),
-            "table_2": ParameterConstraints(
-                min_partition=9, caching_ratio=0.36, pooling_factors=[8, 2]
-            ),
+            "table_2": ParameterConstraints(min_partition=9, pooling_factors=[8, 2]),
             "table_3": ParameterConstraints(
-                min_partition=12, caching_ratio=0.85, pooling_factors=[2, 1, 3, 7]
+                min_partition=12, pooling_factors=[2, 1, 3, 7]
             ),
         }
         self.num_tables = 4
@@ -380,8 +376,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=self.constraints,
         )
         self.tower_model = TestTowerSparseNN(
@@ -413,13 +409,14 @@ class TestEnumerators(unittest.TestCase):
             output_data_type_size = sharding_option.tensor.element_size()
 
             input_sizes, output_sizes = _calculate_dp_shard_io_sizes(
-                batch_size=self.batch_size,
+                batch_sizes=[self.batch_size] * sharding_option.num_inputs,
                 input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 num_shards=self.world_size,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 is_pooled=sharding_option.is_pooled,
+                num_poolings=[1.0] * sharding_option.num_inputs,
             )
 
             tensor_sizes = [
@@ -465,13 +462,14 @@ class TestEnumerators(unittest.TestCase):
             output_data_type_size = sharding_option.tensor.element_size()
 
             input_sizes, output_sizes = _calculate_tw_shard_io_sizes(
-                batch_size=self.batch_size,
+                batch_sizes=[self.batch_size] * sharding_option.num_inputs,
                 world_size=self.world_size,
                 input_lengths=self.constraints[sharding_option.name].pooling_factors,
                 emb_dim=sharding_option.tensor.shape[1],
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 is_pooled=sharding_option.is_pooled,
+                num_poolings=[1.0] * sharding_option.num_inputs,
             )
 
             tensor_size = (
@@ -602,9 +600,8 @@ class TestEnumerators(unittest.TestCase):
                 ShardingType.COLUMN_WISE.value,
             ],
             compute_kernels=[
-                EmbeddingComputeKernel.SPARSE.value,
-                EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-                EmbeddingComputeKernel.BATCHED_DENSE.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+                EmbeddingComputeKernel.DENSE.value,
             ],
         )
         constraints = {
@@ -619,8 +616,8 @@ class TestEnumerators(unittest.TestCase):
                 world_size=self.world_size,
                 compute_device=self.compute_device,
                 local_world_size=self.local_world_size,
-                batch_size=self.batch_size,
             ),
+            batch_size=self.batch_size,
             constraints=constraints,
         )
         sharder = cast(ModuleSharder[torch.nn.Module], AllTypesSharder())
@@ -632,9 +629,8 @@ class TestEnumerators(unittest.TestCase):
             ShardingType.COLUMN_WISE.value,
         }
         expected_compute_kernels = {
-            EmbeddingComputeKernel.SPARSE.value,
-            EmbeddingComputeKernel.BATCHED_FUSED_UVM.value,
-            EmbeddingComputeKernel.BATCHED_DENSE.value,
+            EmbeddingComputeKernel.FUSED_UVM.value,
+            EmbeddingComputeKernel.DENSE.value,
         }
         unexpected_sharding_types = (
             set(sharder.sharding_types(self.compute_device)) - expected_sharding_types

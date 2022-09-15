@@ -21,7 +21,7 @@ from torchrec.distributed.planner.constants import (
     POOLING_FACTOR,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingPlan
-from torchrec.modules.embedding_modules import EmbeddingCollection
+from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 
 # ---- TOPOLOGY ---- #
 
@@ -50,6 +50,9 @@ class Storage:
     def __hash__(self) -> int:
         return hash((self.hbm, self.ddr))
 
+    def fits_in(self, other: "Storage") -> bool:
+        return self.hbm <= other.hbm and self.ddr <= other.ddr
+
 
 @dataclass
 class DeviceHardware:
@@ -73,7 +76,6 @@ class Topology:
         local_world_size: Optional[int] = None,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
-        batch_size: int = BATCH_SIZE,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -105,11 +107,6 @@ class Topology:
         )
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
-        self._batch_size = batch_size
-
-    @property
-    def batch_size(self) -> int:
-        return self._batch_size
 
     @property
     def compute_device(self) -> str:
@@ -222,11 +219,11 @@ class ShardingOption:
 
     @property
     def is_pooled(self) -> bool:
-        if isinstance(self.module[1], EmbeddingCollection):
+        if isinstance(self.module[1], EmbeddingCollectionInterface):
             return False
         for name, module in self.module[1].named_modules():
             if self.name in name:
-                if isinstance(module, EmbeddingCollection):
+                if isinstance(module, EmbeddingCollectionInterface):
                     return False
         return True
 
@@ -258,15 +255,20 @@ class PartitionByType(Enum):
 class ParameterConstraints:
     """
     Stores user provided constraints around the sharding plan.
+
+    If provided, `pooling_factors`, `num_poolings`, and `batch_sizes` must match in
+    length, as per sample.
     """
 
     sharding_types: Optional[List[str]] = None
     compute_kernels: Optional[List[str]] = None
     min_partition: Optional[int] = None  # CW sharding
-    caching_ratio: Optional[float] = None  # UVM caching
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
-    )  # Embedding Tables
+    )  # average number of embedding lookups required per sample
+    num_poolings: Optional[List[float]] = None  # number of poolings per sample in batch
+    batch_sizes: Optional[List[int]] = None  # batch size per input feature
+    is_weighted: bool = False
 
 
 class PlannerError(Exception):
@@ -285,6 +287,7 @@ class StorageReservation(abc.ABC):
     def reserve(
         self,
         topology: Topology,
+        batch_size: int,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
@@ -331,6 +334,7 @@ class Enumerator(abc.ABC):
     def __init__(
         self,
         topology: Topology,
+        batch_size: int = BATCH_SIZE,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
     ) -> None:
@@ -402,9 +406,13 @@ class Stats(abc.ABC):
         self,
         sharding_plan: ShardingPlan,
         topology: Topology,
+        batch_size: int,
+        storage_reservation: StorageReservation,
         num_proposals: int,
         num_plans: int,
+        run_time: float,
         best_plan: List[ShardingOption],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = False,
     ) -> None:
         """

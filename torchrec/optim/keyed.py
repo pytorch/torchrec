@@ -219,10 +219,8 @@ class KeyedOptimizer(optim.Optimizer):
                     sparse_grad_parameter_names is not None
                     and key in sparse_grad_parameter_names
                 ):
-                    # pyre-ignore [16]
                     t = t.to_sparse()
-                # pyre-ignore [41]
-                # pyre-fixme[16]: `ShardedTensor` has no attribute `grad`.
+                # pyre-fixme[8, 9, 19]
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 
@@ -264,7 +262,7 @@ class CombinedOptimizer(KeyedOptimizer):
             )
 
             for param_key in opt.params.keys():
-                new_param = CombinedOptimizer._prepend_opt_key(param_key, opt_key)
+                new_param = CombinedOptimizer.prepend_opt_key(param_key, opt_key)
                 if new_param in all_keys:
                     raise ValueError(f"Duplicate param key {new_param}")
                 all_keys.add(new_param)
@@ -289,7 +287,9 @@ class CombinedOptimizer(KeyedOptimizer):
         return self._optims
 
     @staticmethod
-    def _prepend_opt_key(name: str, opt_key: str) -> str:
+    def prepend_opt_key(name: str, opt_key: str) -> str:
+        if not name:
+            return opt_key
         return opt_key + ("." if opt_key else "") + name
 
     @property
@@ -303,7 +303,7 @@ class CombinedOptimizer(KeyedOptimizer):
         ret = {}
         for opt_key, opt in self._optims:
             for param_key, param in opt.params.items():
-                ret[CombinedOptimizer._prepend_opt_key(param_key, opt_key)] = param
+                ret[CombinedOptimizer.prepend_opt_key(param_key, opt_key)] = param
         return ret
 
     @property

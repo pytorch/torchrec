@@ -5,13 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import abc
 import itertools
-import multiprocessing
-import os
 import random
 import unittest
-from typing import Any, Generator, List, Tuple, TypeVar, Union
+from typing import Generator, List, Optional, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
 import torch
@@ -23,11 +20,18 @@ from numpy.testing import assert_array_equal
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTAllToAllLengthsAwaitable,
+    PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
 )
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs,
+    QCommsConfig,
+)
+
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import get_free_port, seed_and_log
 
 
 T = TypeVar("T", int, float)
@@ -51,8 +55,8 @@ def _flatten(iterable: List[T]) -> Generator[T, None, None]:
                 iterator = new_iterator
 
 
-def _to_tensor(iterator: List[T], device_id: int, dtype: torch.dtype) -> torch.Tensor:
-    return torch.tensor(list(_flatten(iterator)), dtype=dtype).cuda(device_id)
+def _to_tensor(iterator: List[T], dtype: torch.dtype) -> torch.Tensor:
+    return torch.tensor(list(_flatten(iterator)), dtype=dtype)
 
 
 def _generate_sparse_features_batch(
@@ -89,9 +93,9 @@ def _generate_sparse_features_batch(
         in_jagged.append(
             KeyedJaggedTensor.from_lengths_sync(
                 keys=keys,
-                lengths=_to_tensor([lengths[key][i] for key in keys], i, torch.int),
-                values=_to_tensor([values[key][i] for key in keys], i, torch.int),
-                weights=_to_tensor([weights[key][i] for key in keys], i, torch.float)
+                lengths=_to_tensor([lengths[key][i] for key in keys], torch.int),
+                values=_to_tensor([values[key][i] for key in keys], torch.int),
+                weights=_to_tensor([weights[key][i] for key in keys], torch.float)
                 if weights
                 else None,
             )
@@ -106,17 +110,14 @@ def _generate_sparse_features_batch(
                 keys=out_keys,
                 lengths=_to_tensor(
                     [lengths[key][j] for key, j in key_index],
-                    i,
                     torch.int,
                 ),
                 values=_to_tensor(
                     [values[key][j] for key, j in key_index],
-                    i,
                     torch.int,
                 ),
                 weights=_to_tensor(
                     [weights[key][j] for key, j in key_index],
-                    i,
                     torch.float,
                 )
                 if weights
@@ -147,11 +148,10 @@ def _generate_pooled_embedding_batch(
         in_tensor.append(
             _to_tensor(
                 [local_emb[key][b] for b in range(B_global) for key in in_keys],
-                i,
                 torch.float,
             ).view(B_global, -1)
             if in_keys
-            else torch.empty(B_global, 0, dtype=torch.float).cuda(i)
+            else torch.empty(B_global, 0, dtype=torch.float)
         )
         out_tensor.append(
             _to_tensor(
@@ -160,7 +160,6 @@ def _generate_pooled_embedding_batch(
                     for b in range(B_offsets[i], B_offsets[i + 1])
                     for key in keys
                 ],
-                i,
                 torch.float,
             ).view(batch_size_per_rank[i], -1)
         )
@@ -168,55 +167,7 @@ def _generate_pooled_embedding_batch(
     return in_tensor, out_tensor
 
 
-class DistDataTestCase(abc.ABC, unittest.TestCase):
-    @seed_and_log
-    def setUp(self) -> None:
-        torch.use_deterministic_algorithms(True)
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
-        self.WORLD_SIZE = 2
-
-    def tearDown(self) -> None:
-        del os.environ["GLOO_DEVICE_TRANSPORT"]
-        del os.environ["NCCL_SOCKET_IFNAME"]
-        # pyre-fixme[16]
-        super().tearDown()
-
-    def _run_multi_process_test(
-        self,
-        _input: Union[List[KeyedJaggedTensor], List[torch.Tensor]],
-        output: Union[List[KeyedJaggedTensor], List[torch.Tensor]],
-        **kwargs: Any,
-    ) -> None:
-        processes = []
-        ctx = multiprocessing.get_context("spawn")
-        for rank in range(self.WORLD_SIZE):
-            p = ctx.Process(
-                target=self._run_test_dist,
-                args=(
-                    rank,
-                    self.WORLD_SIZE,
-                    _input[rank],
-                    output[rank],
-                ),
-                kwargs=kwargs,
-            )
-            p.start()
-            processes.append(p)
-
-        for p in processes:
-            p.join()
-            self.assertEqual(0, p.exitcode)
-
-    @classmethod
-    @abc.abstractmethod
-    def _run_test_dist(cls) -> None:
-        pass
-
-
-class KJTAllToAllTest(DistDataTestCase):
+class KJTAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
@@ -275,6 +226,8 @@ class KJTAllToAllTest(DistDataTestCase):
         output = output.to(device=device)
         pg = dist.group.WORLD
         lengths_a2a = KJTAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=pg,
             splits=splits,
             device=device,
@@ -307,6 +260,7 @@ class KJTAllToAllTest(DistDataTestCase):
         keys = [f"F{feature}" for feature in range(features)]
         rank0_split = random.randint(0, features)
         splits = [rank0_split, features - rank0_split]
+        world_size = 2
 
         if variable_batch_size:
             batch_size_per_rank = [random.randint(B, B + 4), random.randint(B, B + 4)]
@@ -319,16 +273,27 @@ class KJTAllToAllTest(DistDataTestCase):
             batch_size_per_rank=batch_size_per_rank,
             is_weighted=is_weighted,
         )
-        self._run_multi_process_test(
-            _input=_input,
-            output=output,
-            backend=backend,
-            splits=splits,
-            batch_size_per_rank=batch_size_per_rank,
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "backend": backend,
+                    "splits": splits,
+                    "batch_size_per_rank": batch_size_per_rank,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
 
 
-class PooledEmbeddingsAllToAllTest(DistDataTestCase):
+class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _run_test_dist(
         cls,
@@ -339,6 +304,7 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         backend: str,
         dim_sum_per_rank: List[int],
         batch_size_per_rank: List[int],
+        qcomms_config: Optional[QCommsConfig] = None,
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         pg = dist.group.WORLD
@@ -348,10 +314,16 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             device = torch.device(f"cuda:{rank}")
         _input = _input.to(device=device)
         output = output.to(device=device)
+
+        codecs = get_qcomm_codecs(qcomms_config)
+
         a2a = PooledEmbeddingsAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             pg=pg,
             dim_sum_per_rank=dim_sum_per_rank,
             device=device,
+            codecs=codecs,
         )
         _input.requires_grad = True
         if len(set(batch_size_per_rank)) > 1:
@@ -360,13 +332,24 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         else:
             res = a2a(_input).wait()
         res.backward(res)
-        assert_array_equal(
-            res.cpu().detach(),
-            output.cpu().detach(),
-        )
-        assert_array_equal(
+
+        atol, rtol = None, None
+        if qcomms_config is not None:
+            atol, rtol = 0.01, 0.01
+            if (
+                qcomms_config.forward_precision == CommType.FP8
+                or qcomms_config.backward_precision == CommType.FP8
+            ):
+                atol, rtol = 0.05, 0.05
+
+        torch.testing.assert_close(res, output, rtol=rtol, atol=atol)
+
+        torch.testing.assert_close(
             _input.cpu().detach().div_(world_size),
+            # pyre-ignore
             _input.grad.cpu().detach(),
+            atol=atol,
+            rtol=rtol,
         )
 
     @unittest.skipIf(
@@ -375,11 +358,42 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
     )
     # pyre-fixme[56]
     @given(
-        backend=st.sampled_from(["gloo", "nccl"]),
+        # backend=st.sampled_from(["gloo", "nccl"]),
+        backend=st.sampled_from(["nccl"]),
         B=st.integers(min_value=2, max_value=3),
         features=st.integers(min_value=3, max_value=4),
         is_reversed=st.booleans(),
         variable_batch_size=st.booleans(),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=128.0,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP8,
+                    backward_precision=CommType.FP8,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP8,
+                    backward_precision=CommType.BF16,
+                ),
+            ]
+        ),
     )
     @settings(max_examples=8, deadline=None)
     def test_pooled_embeddings(
@@ -389,7 +403,9 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
         features: int,
         is_reversed: bool,
         variable_batch_size: bool,
+        qcomms_config: Optional[QCommsConfig],
     ) -> None:
+        world_size = 2
         keys = [f"F{feature}" for feature in range(features)]
         dims = random.sample([8, 16, 32] * features, features)
         rank0_split = random.randint(1, features - 1)
@@ -409,16 +425,270 @@ class PooledEmbeddingsAllToAllTest(DistDataTestCase):
             splits=splits,
             batch_size_per_rank=batch_size_per_rank,
         )
-        self._run_multi_process_test(
-            _input=_input,
-            output=output,
-            backend=backend,
-            dim_sum_per_rank=dim_sum_per_rank,
-            batch_size_per_rank=batch_size_per_rank,
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "backend": backend,
+                    "dim_sum_per_rank": dim_sum_per_rank,
+                    "batch_size_per_rank": batch_size_per_rank,
+                    "qcomms_config": qcomms_config,
+                }
+            )
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
 
 
-class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
+class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
+    @classmethod
+    def _run_test_dist(
+        cls,
+        rank: int,
+        world_size: int,
+        input: torch.Tensor,
+        expected_output: torch.Tensor,
+        qcomms_config: Optional[QCommsConfig] = None,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=2, backend="nccl")
+        pg = dist.group.WORLD
+        input = input.cuda(rank)
+        input.requires_grad = True
+
+        codecs = get_qcomm_codecs(qcomms_config)
+
+        rs = PooledEmbeddingsReduceScatter(
+            # pyre-ignore
+            pg,
+            codecs=codecs,
+        ).cuda(rank)
+        actual_output = rs(input).wait()
+        s = torch.sum(actual_output)
+        s.backward()
+
+        atol, rtol = None, None
+        if qcomms_config is not None:
+            atol, rtol = 0.003, 0.004
+        torch.testing.assert_close(
+            actual_output.cpu().detach(),
+            expected_output.cpu().detach(),
+            rtol=rtol,
+            atol=atol,
+        )
+        if qcomms_config is None:
+            assert_array_equal(
+                # pyre-ignore
+                input.grad.cpu().detach(),
+                torch.ones(input.size()).div_(world_size),
+            )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @settings(deadline=30000)
+    # pyre-ignore
+    @given(
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=128,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.FP8,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP8,
+                ),
+                # FP8 is not numerically stable for reduce_scatter
+                # Not supported for now for forward case
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.FP8,
+                # ),
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.BF16,
+                # ),
+            ]
+        ),
+    )
+    def test_pooled_embedding_reduce_scatter(
+        self, qcomms_config: Optional[QCommsConfig]
+    ) -> None:
+        world_size = 2
+        embeddding_dim = 10
+        batch_size = 2
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
+        embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
+        expect_results = torch.chunk(
+            torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
+            2,
+            dim=0,
+        )
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "expected_output": expect_results[rank],
+                    "qcomms_config": qcomms_config,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
+
+
+class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
+    @classmethod
+    def _run_test_dist(
+        cls,
+        rank: int,
+        world_size: int,
+        input: torch.Tensor,
+        input_splits: List[int],
+        expected_output: torch.Tensor,
+        qcomms_config: Optional[QCommsConfig] = None,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=2, backend="nccl")
+        pg = dist.group.WORLD
+        input = input.cuda(rank)
+        input.requires_grad = True
+
+        codecs = get_qcomm_codecs(qcomms_config)
+
+        rs = PooledEmbeddingsReduceScatter(
+            # pyre-ignore
+            pg,
+            codecs=codecs,
+        ).cuda(rank)
+        actual_output = rs(input, input_splits=input_splits).wait()
+        s = torch.sum(actual_output)
+        s.backward()
+
+        atol, rtol = None, None
+        if qcomms_config is not None:
+            atol, rtol = 0.003, 0.004
+        torch.testing.assert_close(
+            actual_output.cpu().detach(),
+            expected_output.cpu().detach(),
+            rtol=rtol,
+            atol=atol,
+        )
+        if qcomms_config is None:
+            assert_array_equal(
+                # pyre-ignore
+                input.grad.cpu().detach(),
+                torch.ones(input.size()).div_(world_size),
+            )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @settings(deadline=30000)
+    # pyre-ignore
+    @given(
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=128,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.FP8,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP8,
+                ),
+                # FP8 is not numerically stable for reduce_scatter_v
+                # Not supported for now for forward case
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.FP8,
+                # ),
+                # QCommsConfig(
+                #     forward_precision=CommType.FP8,
+                #     backward_precision=CommType.BF16,
+                # ),
+            ]
+        ),
+    )
+    def test_pooled_embedding_reduce_scatter_v(
+        self, qcomms_config: Optional[QCommsConfig]
+    ) -> None:
+        world_size = 2
+        embeddding_dim = 10
+        batch_size = 2
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
+        embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
+        expect_results = torch.chunk(
+            torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
+            2,
+            dim=0,
+        )
+        input_splits = [er.size(0) for er in expect_results]
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "input_splits": input_splits,
+                    "expected_output": expect_results[rank],
+                    "qcomms_config": qcomms_config,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
+
+
+class PooledEmbeddingsAllGatherTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
@@ -429,8 +699,9 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
     ) -> None:
         assert_array_equal(actual_output.cpu().detach(), expected_output.cpu().detach())
         assert_array_equal(
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
             input.grad.cpu().detach(),
-            torch.ones(input.size()).div_(world_size),
+            torch.ones(input.size()),
         )
 
     @classmethod
@@ -445,8 +716,10 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
         pg = dist.group.WORLD
         input = input.cuda(rank)
         input.requires_grad = True
-        rs = PooledEmbeddingsReduceScatter(pg).cuda(rank)
-        actual_output = rs(input).wait()
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
+        ag = PooledEmbeddingsAllGather(pg).cuda(rank)
+        actual_output = ag(input).wait()
         s = torch.sum(actual_output)
         s.backward()
         cls._validate(actual_output, expected_output, input, world_size)
@@ -456,17 +729,26 @@ class PooledEmbeddingsReduceScatterTest(DistDataTestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_pooled_embedding_reduce_scatter(self) -> None:
+    def test_pooled_embedding_all_gather(self) -> None:
+        world_size = 2
         embeddding_dim = 10
         batch_size = 2
-        embeddings = torch.rand((batch_size * 2, embeddding_dim))
+        embeddings = torch.rand((batch_size * world_size, embeddding_dim))
         embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
-        expect_results = torch.chunk(
-            torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
-            2,
-            dim=0,
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "input": embeddings_by_rank[rank],
+                    "expected_output": embeddings,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
         )
-        self._run_multi_process_test(
-            embeddings_by_rank,
-            expect_results,
-        )
+
+
+# TODO Need testing of SequenceEmbeddingAllToAllTest!

@@ -179,6 +179,7 @@ class TestAllToAll(unittest.TestCase):
         seq_embs_out = a2a_req.wait()
         seq_embs_out.backward(seq_embs_out)
         grad = input_embeddings.grad
+        # pyre-fixme[16]: Optional type has no attribute `cpu`.
         assert torch.equal(input_embeddings.cpu().detach(), grad.cpu().detach())
         dist.destroy_process_group()
 

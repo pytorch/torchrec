@@ -146,6 +146,13 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
 
+    def test_scripting(self) -> None:
+        config = EmbeddingBagConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        ebc = EmbeddingBagCollection(tables=[config])
+        torch.jit.script(ebc)
+
     def test_duplicate_config_name_fails(self) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
@@ -269,6 +276,13 @@ class EmbeddingCollectionTest(unittest.TestCase):
         self.assertEqual(sequence_embeddings["f1"].values().size(), (3, 5))
         self.assertEqual(sequence_embeddings["f2@t1"].values().size(), (1, 5))
         self.assertEqual(sequence_embeddings["f2@t2"].values().size(), (1, 5))
+
+    def test_scripting(self) -> None:
+        config = EmbeddingConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        ec = EmbeddingCollection(tables=[config])
+        torch.jit.script(ec)
 
     def test_device(self) -> None:
         config = EmbeddingConfig(

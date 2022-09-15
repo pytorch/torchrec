@@ -18,6 +18,7 @@
 
 #include <ATen/ATen.h>
 #include <ATen/cuda/CUDAEvent.h> // @manual
+#include <boost/noncopyable.hpp>
 #include <c10/cuda/CUDAStream.h>
 #include <folly/MPMCQueue.h>
 #include <folly/Synchronized.h>
@@ -28,26 +29,11 @@
 #include <folly/io/async/EventBaseThread.h>
 #include <folly/synchronization/Baton.h>
 #include "torchrec/inference/Batching.h"
+#include "torchrec/inference/Observer.h"
+#include "torchrec/inference/ResourceManager.h"
 #include "torchrec/inference/Types.h"
 
 namespace torchrec {
-
-struct PredictionBatch {
-  size_t batchSize;
-
-  c10::Dict<std::string, at::Tensor> forwardArgs;
-
-  std::vector<RequestContext> contexts;
-
-  std::chrono::time_point<std::chrono::steady_clock> enqueueTime =
-      std::chrono::steady_clock::now();
-
-  Event event;
-
-  void cuda();
-
-  size_t size() const;
-};
 
 using BatchQueueCb = std::function<void(std::shared_ptr<PredictionBatch>)>;
 
@@ -60,7 +46,7 @@ class BatchingQueue {
     int numMemPinnerThreads = 4;
     int maxBatchSize = 2000;
     // For feature name to BatchingFunc name.
-    const std::unordered_map<std::string, std::string> batchingMetadata;
+    const std::unordered_map<std::string, BatchingMetadata> batchingMetadata;
     std::function<Event(at::DeviceIndex)> eventCreationFn;
     std::function<void()> warmupFn;
   };
@@ -71,7 +57,9 @@ class BatchingQueue {
   BatchingQueue(
       std::vector<BatchQueueCb> cbs,
       const Config& config,
-      int worldSize);
+      int worldSize,
+      std::unique_ptr<IBatchingQueueObserver> observer,
+      std::shared_ptr<ResourceManager> resourceManager = nullptr);
   ~BatchingQueue();
 
   void add(
@@ -90,17 +78,19 @@ class BatchingQueue {
   struct BatchingQueueEntry {
     std::vector<std::shared_ptr<PredictionRequest>> requests;
     std::vector<RequestContext> contexts;
+    std::chrono::time_point<std::chrono::steady_clock> addedTime;
   };
 
   void createBatch();
 
   void pinMemory(int gpuIdx);
 
+  void observeBatchCompletion(size_t batchSizeBytes, size_t numRequests);
+
   const Config config_;
 
   // Batching func name to batching func instance.
-  std::unordered_map<std::string, std::unique_ptr<torchrec::BatchingFunc>>
-      batchingFuncs_;
+  std::unordered_map<std::string, std::unique_ptr<BatchingFunc>> batchingFuncs_;
   std::vector<BatchQueueCb> cbs_;
   std::thread batchingThread_;
   std::vector<std::thread> memPinnerThreads_;
@@ -110,6 +100,8 @@ class BatchingQueue {
       batchingQueues_;
   std::atomic<bool> stopping_;
   int worldSize_;
+  std::unique_ptr<IBatchingQueueObserver> observer_;
+  std::shared_ptr<ResourceManager> resourceManager_;
 };
 
 } // namespace torchrec
