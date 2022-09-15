@@ -52,8 +52,7 @@ jobs:
       shell: bash
       run: |
         conda run -n build_binary python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-    - name: Install gcc10 and cmake
-      # use gcc10 for c++20.
+    - name: Install gcc and cmake
       shell: bash
       run: |
         conda install gxx_linux-64
