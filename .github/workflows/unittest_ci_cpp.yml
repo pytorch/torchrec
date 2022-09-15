@@ -56,20 +56,11 @@ jobs:
       # use gcc10 for c++20.
       shell: bash
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/ppa
-        sudo apt update
-        sudo apt install gcc-10 g++-10
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
-        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
-        sudo apt install cmake
-    - name: setup Path
-      run: |
-        echo /usr/local/bin >> $GITHUB_PATH
+        conda install gxx_linux-64
     - name: check gcc and cmake version
       shell: bash
       run: |
-        gcc --version
-        g++ --version
+        x86_64-conda-linux-gnu-g++ --version
         cmake --version
     - name: create build folder
       shell: bash
@@ -79,7 +70,7 @@ jobs:
       working-directory: ./build
       shell: bash
       run: |
-        cmake -DBUILD_TEST=ON ..
+        cmake -DBUILD_TEST=ON -DCMAKE_CXX_COMPILER=$(which x86_64-conda-linux-gnu-g++) ..
     - name: run make
       working-directory: ./build
       shell: bash
