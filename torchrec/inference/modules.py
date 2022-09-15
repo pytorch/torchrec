@@ -67,6 +67,11 @@ def quantize_embeddings(
 
 
 @dataclass
+class QualNameMetadata:
+    need_preproc: bool
+
+
+@dataclass
 class BatchingMetadata:
     """
     Metadata class for batching, this should be kept in sync with the C++ definition.
@@ -135,6 +140,12 @@ class PredictFactory(abc.ABC):
         Run transformations that depends on weights of the predict module. e.g. lowering to a backend.
         """
         pass
+
+    def qualname_metadata(self) -> Dict[str, QualNameMetadata]:
+        """
+        Returns a dict from qualname (method name) to QualNameMetadata. This is additional information for execution of specific methods of the model.
+        """
+        return {}
 
 
 class PredictModule(nn.Module):

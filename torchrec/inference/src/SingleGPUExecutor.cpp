@@ -8,7 +8,7 @@
 
 #include "torchrec/inference/SingleGPUExecutor.h"
 #include <c10/cuda/CUDAGuard.h>
-#include <cassert>
+#include "torchrec/inference/Assert.h"
 
 namespace torchrec {
 
@@ -27,7 +27,7 @@ SingleGPUExecutor::SingleGPUExecutor(
       roundRobinExecInfoNextIdx_(0u),
       processThread_([&]() { process(); }) {
   for (const auto& exec_info : execInfos_) {
-    assert(exec_info.interpIdx < manager_->allInstances().size());
+    TORCHREC_CHECK(exec_info.interpIdx < manager_->allInstances().size());
   }
 }
 
