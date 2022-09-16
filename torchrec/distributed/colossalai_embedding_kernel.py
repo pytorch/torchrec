@@ -7,7 +7,7 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, cast
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -22,6 +22,13 @@ from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 logger: logging.Logger = logging.getLogger(__name__)
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
+
+try:
+    from colossalai.nn.parallel.layers.cache_embedding import FreqAwareEmbeddingBag
+except ImportError:
+    print('install colossalai')
+
+from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 
 class GroupedEmbeddingBag(BaseEmbedding):
     def __init__(
@@ -45,7 +52,6 @@ class GroupedEmbeddingBag(BaseEmbedding):
 
         for embedding_config in self._config.embedding_tables:
             if use_cache:
-                from colossalai.nn.parallel.layers.cache_embedding import FreqAwareEmbeddingBag
                 emb = FreqAwareEmbeddingBag(
                         num_embeddings=embedding_config.local_rows,
                         embedding_dim=embedding_config.local_cols,
@@ -151,3 +157,54 @@ class GroupedEmbeddingBag(BaseEmbedding):
     @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
+
+
+
+# TODO implement a more efficient GroupedEmbeddingBag by fusing multiple embedding bags into a single one
+class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(config, pg, device)
+
+        # TODO() fused multiple embedding bags into a single one as self._emb_module
+        # replace fbgemm implementation with colossalai FAW
+        # Table-batched version of nn.EmbeddingBag(sparse=False)
+        # https://github.com/pytorch/FBGEMM/blob/1a61102ad65af645cdd9d4a78b6dfd6388dc7735/fbgemm_gpu/fbgemm_gpu/split_table_batched_embeddings_ops.py
+        # self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
+        #     DenseTableBatchedEmbeddingBagsCodegen(
+        #         list(zip(self._local_rows, self._local_cols)),
+        #         feature_table_map=self._feature_table_map,
+        #         pooling_mode=self._pooling,
+        #         use_cpu=device is None
+        #         or device.type == "cpu"
+        #         or not torch.cuda.is_available(),
+        #     )
+        # )
+        self._emb_module = None
+
+        self.init_parameters()
+
+    @property
+    def emb_module(
+        self,
+    ):
+        return self._emb_module
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from ()
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        combined_key = "/".join(
+            [config.name for config in self._config.embedding_tables]
+        )
+        yield append_prefix(prefix, f"{combined_key}.weight"), cast(
+            nn.Parameter, self._emb_module.weights
+        )
