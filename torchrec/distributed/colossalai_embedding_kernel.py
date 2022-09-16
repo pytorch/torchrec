@@ -30,7 +30,7 @@ except ImportError:
 
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 
-class GroupedEmbeddingBag(BaseEmbedding):
+class CAIGroupedEmbeddingBag(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -159,9 +159,8 @@ class GroupedEmbeddingBag(BaseEmbedding):
         return self._config
 
 
-
-# TODO implement a more efficient GroupedEmbeddingBag by fusing multiple embedding bags into a single one
-class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
+# TODO implement a more efficient CAIGroupedEmbeddingBag by fusing multiple embedding bags into a single one
+class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
