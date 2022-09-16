@@ -52,6 +52,7 @@ class EmbeddingComputeKernel(Enum):
     QUANT = "quant"
     QUANT_UVM = "quant_uvm"
     QUANT_UVM_CACHING = "quant_uvm_caching"
+    CAI = "colossalai"
 
 
 def compute_kernel_to_embedding_location(

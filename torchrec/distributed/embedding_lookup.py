@@ -205,21 +205,23 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                # return BatchedDenseEmbeddingBag(
-                #     config=config,
-                #     pg=pg,
-                #     device=device,
-                # )
-                return GroupedEmbeddingBag(
+                return BatchedDenseEmbeddingBag(
                     config=config,
                     pg=pg,
-                    sparse=False,
                     device=device,
                 )
+                
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
                     config=config,
                     pg=pg,
+                    device=device,
+                )
+            elif config.compute_kernel == EmbeddingComputeKernel.CAI:
+                return GroupedEmbeddingBag(
+                    config=config,
+                    pg=pg,
+                    sparse=True,
                     device=device,
                 )
             else:

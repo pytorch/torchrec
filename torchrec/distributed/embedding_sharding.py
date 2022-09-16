@@ -426,6 +426,7 @@ def group_tables(
                 fused_params_groups.append(table.fused_params)
 
         compute_kernels = [
+            EmbeddingComputeKernel.CAI,
             EmbeddingComputeKernel.DENSE,
             EmbeddingComputeKernel.FUSED,
             EmbeddingComputeKernel.QUANT,
