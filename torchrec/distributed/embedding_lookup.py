@@ -204,7 +204,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
-            print(f'GroupedPooledEmbeddingsLookup kernel type {config.compute_kernel}')
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 # return BatchedDenseEmbeddingBag(
                 #     config=config,
