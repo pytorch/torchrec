@@ -216,7 +216,29 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
                 id_score_list_feature_names.extend(grouped_config.feature_names())
         return id_score_list_feature_names
 
-    def _id_list_features_per_rank(self) -> List[int]:
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        id_list_feature_names = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            id_list_feature_names_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                id_list_feature_names_per_rank.extend(grouped_config.feature_names())
+            id_list_feature_names.append(id_list_feature_names_per_rank)
+        return id_list_feature_names
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        id_score_list_feature_names = []
+        for (
+            score_grouped_embedding_configs
+        ) in self._score_grouped_embedding_configs_per_rank:
+            id_score_list_feature_names_per_rank = []
+            for grouped_config in score_grouped_embedding_configs:
+                id_score_list_feature_names_per_rank.extend(
+                    grouped_config.feature_names()
+                )
+            id_score_list_feature_names.append(id_score_list_feature_names_per_rank)
+        return id_score_list_feature_names
+
+    def id_list_features_per_rank(self) -> List[int]:
         id_list_features_per_rank = []
         for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
             num_features = 0
@@ -225,7 +247,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
             id_list_features_per_rank.append(num_features)
         return id_list_features_per_rank
 
-    def _id_score_list_features_per_rank(self) -> List[int]:
+    def id_score_list_features_per_rank(self) -> List[int]:
         id_score_list_features_per_rank = []
         for (
             score_grouped_embedding_configs
@@ -347,8 +369,8 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -468,8 +490,8 @@ class InferTwEmbeddingSharding(
         self, device: Optional[torch.device] = None
     ) -> BaseSparseFeaturesDist[SparseFeaturesList]:
         return InferTwSparseFeaturesDist(
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             self._world_size,
         )
 

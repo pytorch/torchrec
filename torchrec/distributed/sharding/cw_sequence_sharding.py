@@ -39,8 +39,8 @@ class CwSequenceEmbeddingSharding(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -65,7 +65,7 @@ class CwSequenceEmbeddingSharding(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
+            self.id_list_features_per_rank(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

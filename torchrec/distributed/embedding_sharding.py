@@ -29,6 +29,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    FeatureShardingMixIn,
     NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -642,7 +643,7 @@ class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
         pass
 
 
-class EmbeddingSharding(abc.ABC, Generic[F, T]):
+class EmbeddingSharding(abc.ABC, Generic[F, T], FeatureShardingMixIn):
     """
     Used to implement different sharding types for `EmbeddingBagCollection`, e.g.
     table_wise.
@@ -694,11 +695,7 @@ class EmbeddingSharding(abc.ABC, Generic[F, T]):
         pass
 
     @abc.abstractmethod
-    def id_list_feature_names(self) -> List[str]:
-        pass
-
-    @abc.abstractmethod
-    def id_score_list_feature_names(self) -> List[str]:
+    def embedding_names_per_rank(self) -> List[List[str]]:
         pass
 
 

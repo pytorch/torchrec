@@ -33,6 +33,7 @@ from torchrec.distributed.sharding.tw_sequence_sharding import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    FeatureShardingMixIn,
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
@@ -352,6 +353,11 @@ class ShardedQuantEmbeddingCollection(
 
     def create_context(self) -> ShardedModuleContext:
         return EmbeddingCollectionContext(sharding_contexts=[])
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        # pyre-ignore [7]
+        return self._sharding_type_to_sharding
 
 
 class QuantEmbeddingCollectionSharder(

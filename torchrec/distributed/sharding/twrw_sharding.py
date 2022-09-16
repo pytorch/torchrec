@@ -190,6 +190,9 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
+    def embedding_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
         for grouped_config in self._grouped_embedding_configs_per_node:
