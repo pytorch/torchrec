@@ -139,5 +139,5 @@ class FusedEmbeddingCollectionSharder(BaseEmbeddingSharder[FusedEmbeddingCollect
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         else:
-            ret.append(EmbeddingComputeKernel.DENSE.value)
+            ret.append(EmbeddingComputeKernel.CAI.value)
         return ret

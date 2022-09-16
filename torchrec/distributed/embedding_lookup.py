@@ -22,6 +22,9 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
+
+from torchrec.distributed.colossalai_embedding_kernel import GroupedEmbeddingBag
+
 from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
@@ -207,10 +210,18 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     pg=pg,
                     device=device,
                 )
+                
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
                     config=config,
                     pg=pg,
+                    device=device,
+                )
+            elif config.compute_kernel == EmbeddingComputeKernel.CAI:
+                return GroupedEmbeddingBag(
+                    config=config,
+                    pg=pg,
+                    sparse=True,
                     device=device,
                 )
             else:
