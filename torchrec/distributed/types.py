@@ -434,7 +434,47 @@ class ModuleCopyMixin:
         return self.to(device)
 
 
-class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCopyMixin):
+class FeatureShardingMixIn:
+    """
+    Feature Sharding Interface to provide sharding-aware feature metadata.
+    """
+
+    def id_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+    def id_score_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+
+class ModuleShardingMixIn:
+    """
+    The interface to access a sharded module's sharding scheme.
+    """
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        raise NotImplementedError
+
+
+class ShardedModule(
+    abc.ABC,
+    nn.Module,
+    Generic[CompIn, DistOut, Out],
+    ModuleCopyMixin,
+    ModuleShardingMixIn,
+):
     """
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.

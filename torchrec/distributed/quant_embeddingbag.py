@@ -27,6 +27,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    FeatureShardingMixIn,
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
@@ -244,6 +245,11 @@ class ShardedQuantEmbeddingBagCollection(
 
     def copy(self, device: torch.device) -> nn.Module:
         return self
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        # pyre-ignore [7]
+        return self._sharding_type_to_sharding
 
 
 class QuantEmbeddingBagCollectionSharder(
