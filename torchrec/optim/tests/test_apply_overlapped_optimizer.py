@@ -7,10 +7,21 @@
 
 
 import unittest
+from unittest.mock import ANY, MagicMock, patch
 
 import torch
-from torchrec import EmbeddingBagCollection, EmbeddingBagConfig, KeyedJaggedTensor
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec import (
+    EmbeddingBagCollection,
+    EmbeddingBagConfig,
+    EmbeddingCollection,
+    EmbeddingConfig,
+    KeyedJaggedTensor,
+)
+from torchrec.optim.overlapped_optimizer_utils import (
+    apply_overlapped_optimizer,
+    apply_overlapped_optimizer_to_module,
+)
+from torchrec.test_utils.test_models import TestModel, TestSequentialModel
 
 
 class ApplyOverlappedOptimizerTest(unittest.TestCase):
@@ -94,3 +105,59 @@ class ApplyOverlappedOptimizerTest(unittest.TestCase):
         for key, state in ebc.state_dict().items():
             self.assertIn(key, expected_state_dict)
             torch.testing.assert_close(state, expected_state_dict[key])
+
+    @patch("torchrec.optim.overlapped_optimizer_utils.apply_overlapped_optimizer")
+    def test_apply_overlapped_optimizer_to_ebc_module(
+        self, apply_overlapped_optimizer_mock: MagicMock
+    ) -> None:
+        ebc = EmbeddingBagCollection(
+            tables=[
+                EmbeddingBagConfig(
+                    name="t1", embedding_dim=4, num_embeddings=2, feature_names=["f1"]
+                ),
+                EmbeddingBagConfig(
+                    name="t2", embedding_dim=4, num_embeddings=2, feature_names=["f2"]
+                ),
+            ]
+        )
+
+        model = TestModel(ebc)
+        apply_overlapped_optimizer_to_module(
+            torch.optim.SGD,
+            model,
+            optimizer_kwargs={"lr": 1.0},
+        )
+
+        assert apply_overlapped_optimizer_mock.call_count == 2
+        apply_overlapped_optimizer_mock.assert_called_with(
+            torch.optim.SGD, ANY, {"lr": 1.0}
+        )
+
+    @patch("torchrec.optim.overlapped_optimizer_utils.apply_overlapped_optimizer")
+    def test_apply_overlapped_optimizer_ec_module(
+        self, apply_overlapped_optimizer_mock: MagicMock
+    ) -> None:
+
+        ec = EmbeddingCollection(
+            tables=[
+                EmbeddingConfig(
+                    name="t1", embedding_dim=4, num_embeddings=2, feature_names=["f1"]
+                ),
+                EmbeddingConfig(
+                    name="t2", embedding_dim=4, num_embeddings=2, feature_names=["f2"]
+                ),
+            ]
+        )
+
+        model = TestSequentialModel(ec)
+
+        apply_overlapped_optimizer_to_module(
+            torch.optim.SGD,
+            model,
+            optimizer_kwargs={"lr": 1.0},
+        )
+
+        assert apply_overlapped_optimizer_mock.call_count == 2
+        apply_overlapped_optimizer_mock.assert_called_with(
+            torch.optim.SGD, ANY, {"lr": 1.0}
+        )

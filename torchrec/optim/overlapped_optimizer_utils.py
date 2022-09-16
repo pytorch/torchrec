@@ -8,6 +8,10 @@
 from typing import Any, Dict, Iterable, Type
 
 import torch
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingCollection,
+)
 
 
 def apply_overlapped_optimizer(
@@ -78,3 +82,44 @@ def apply_overlapped_optimizer(
 
     for param in params:
         _apply_overlapped_optimizer_to_param(param)
+
+
+def apply_overlapped_optimizer_to_module(
+    optimizer_class: Type[torch.optim.Optimizer],
+    module: torch.nn.Module,
+    optimizer_kwargs: Dict[str, Any],
+) -> None:
+    """
+    Recursively apply overlapped optimizer to all EmbeddingBagCollection and EmbeddingCollection in the module.
+    """
+    if isinstance(module, EmbeddingBagCollection):
+        for emb_bag_module in module.embedding_bags.values():
+            apply_overlapped_optimizer(
+                optimizer_class, emb_bag_module.parameters(), optimizer_kwargs
+            )
+        return
+    elif isinstance(module, EmbeddingCollection):
+        for emb_module in module.embeddings.values():
+            apply_overlapped_optimizer(
+                optimizer_class, emb_module.parameters(), optimizer_kwargs
+            )
+        return
+
+    def apply_children() -> None:
+        for _, child_module in module.named_children():
+            if isinstance(child_module, EmbeddingBagCollection):
+                for emb_bag_module in child_module.embedding_bags.values():
+                    apply_overlapped_optimizer(
+                        optimizer_class, emb_bag_module.parameters(), optimizer_kwargs
+                    )
+            elif isinstance(child_module, EmbeddingCollection):
+                for emb_module in child_module.embeddings.values():
+                    apply_overlapped_optimizer(
+                        optimizer_class, emb_module.parameters(), optimizer_kwargs
+                    )
+            else:
+                apply_overlapped_optimizer_to_module(
+                    optimizer_class, child_module, optimizer_kwargs
+                )
+
+    apply_children()

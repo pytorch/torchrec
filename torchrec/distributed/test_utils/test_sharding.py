@@ -41,8 +41,8 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.overlapped_optimizer_utils import apply_overlapped_optimizer
 from typing_extensions import Protocol
 
 

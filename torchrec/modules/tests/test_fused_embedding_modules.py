@@ -17,7 +17,6 @@ import torch.fx
 import torchrec
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from hypothesis import given, settings
-from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
@@ -29,47 +28,11 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.test_utils.test_models import TestModel, TestSequentialModel
 
 devices: List[torch.device] = [torch.device("cpu")]
 if torch.cuda.device_count() > 1:
     devices.append(torch.device("cuda"))
-
-
-class TestModel(torch.nn.Module):
-    def __init__(self, ebc: EmbeddingBagCollection) -> None:
-        super().__init__()
-        self.ebc = ebc
-        self.over_arch = torch.nn.Linear(
-            4,
-            1,
-        )
-
-    def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
-        ebc_output = self.ebc.forward(kjt).to_dict()
-        sparse_features = []
-        for key in kjt.keys():
-            sparse_features.append(ebc_output[key])
-        sparse_features = torch.cat(sparse_features, dim=0)
-        return self.over_arch(sparse_features)
-
-
-class TestSequentialModel(torch.nn.Module):
-    def __init__(self, ec: EmbeddingCollection) -> None:
-        super().__init__()
-        self.ec = ec
-        self.over_arch = torch.nn.Linear(
-            ec.embedding_dim(),
-            1,
-        )
-
-    def forward(self, kjt: KeyedJaggedTensor) -> torch.Tensor:
-        ec_output = self.ec.forward(kjt)
-        sparse_features = []
-        for key in kjt.keys():
-            sparse_features.extend(ec_output[key].to_dense())
-        sparse_features = torch.Tensor(sparse_features)
-        sparse_features = torch.sum(sparse_features)
-        return self.over_arch(sparse_features)
 
 
 class FusedEmbeddingBagCollectionTest(unittest.TestCase):
