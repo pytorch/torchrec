@@ -108,7 +108,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from([False]),
+        apply_overlapped_optimizer_config=st.sampled_from([None]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
         # apply_overlapped_optimizer_config=st.booleans(),
     )
@@ -254,8 +254,9 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         super().setUp()
 
         num_features = 4
+        shared_features = 2
 
-        self.tables = [
+        initial_tables = [
             EmbeddingConfig(
                 num_embeddings=(i + 1) * 11,
                 embedding_dim=16,
@@ -264,8 +265,28 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             )
             for i in range(num_features)
         ]
+
+        shared_features_tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 11,
+                embedding_dim=16,
+                name="table_" + str(i + num_features),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(shared_features)
+        ]
+
+        self.tables = initial_tables + shared_features_tables
+        self.shared_features = [f"feature_{i}" for i in range(shared_features)]
+
         self.embedding_groups = {
-            "group_0": ["feature_" + str(i) for i in range(num_features)]
+            "group_0": [
+                f"{feature}@{table.name}"
+                if feature in self.shared_features
+                else feature
+                for table in self.tables
+                for feature in table.feature_names
+            ]
         }
 
     def _test_sharding(
