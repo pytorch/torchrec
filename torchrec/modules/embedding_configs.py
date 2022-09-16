@@ -82,6 +82,14 @@ def pooling_type_to_str(pooling_type: PoolingType) -> str:
     else:
         raise ValueError(f"Unsupported pooling type {pooling_type}")
 
+def pooling_mode_to_str(pooling_mode: PoolingMode) -> str:
+    if pooling_mode == PoolingMode.SUM:
+        return "sum"
+    elif pooling_mode == PoolingMode.MEAN:
+        return "mean"
+    else:
+        raise ValueError(f"Unsupported pooling mode {pooling_mode}")
+
 
 def data_type_to_sparse_type(data_type: DataType) -> SparseType:
     if data_type == DataType.FP32:

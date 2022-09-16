@@ -295,7 +295,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         return self.emb_module(
-            indices=features.values().long(),
+            features.values().long(),
             offsets=features.offsets().long(),
         )
 
@@ -517,7 +517,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         if weights is not None and not torch.is_floating_point(weights):
             weights = None
         return self.emb_module(
-            indices=features.values().long(),
+            features.values().long(),
             offsets=features.offsets().long(),
             per_sample_weights=weights,
         )

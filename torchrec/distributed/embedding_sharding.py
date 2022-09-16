@@ -427,6 +427,7 @@ def group_tables(
 
         compute_kernels = [
             EmbeddingComputeKernel.CAI,
+            EmbeddingComputeKernel.CAI_BATCH,
             EmbeddingComputeKernel.DENSE,
             EmbeddingComputeKernel.FUSED,
             EmbeddingComputeKernel.QUANT,

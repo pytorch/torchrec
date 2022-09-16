@@ -29,6 +29,7 @@ except ImportError:
     print('install colossalai')
 
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
+from torchrec.modules.embedding_configs import pooling_mode_to_str
 
 class CAIGroupedEmbeddingBag(BaseEmbedding):
     def __init__(
@@ -166,6 +167,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        cache_ratio : float = 0.01, 
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -183,9 +185,32 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         #         or not torch.cuda.is_available(),
         #     )
         # )
-        self._emb_module = None
 
-        self.init_parameters()
+
+        num_embeddings = sum(self._num_embeddings)
+        assert all(x == self._local_cols[0] for x in self._local_cols), "local col should be consistent in all embeddings"
+        embedding_dim = self._local_cols[0]
+        pool_str = pooling_mode_to_str(self._pooling)
+
+        self._emb_module = FreqAwareEmbeddingBag(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            mode=pool_str,
+            include_last_offset=True,
+            _weight=torch.empty(
+                num_embeddings,
+                embedding_dim,
+                device='cpu',
+            ).uniform_(
+                min(self._weight_init_mins),
+                max(self._weight_init_maxs),
+            ),
+            cuda_row_num = int(num_embeddings * cache_ratio),
+        )
+
+        # TODO() not support split_embedding_weights currently
+        # init parameter by uniformly init the _weight
+        # self.init_parameters()
 
     @property
     def emb_module(
