@@ -500,7 +500,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
         # batch 1
         with torch.cuda.stream(self._memcpy_stream):
-            batch_i = next(dataloader_iter)
+            if dataloader_iter is not None:
+                batch_i = next(dataloader_iter)
             self._batch_i = batch_i = _to_device(
                 batch_i, self._device, non_blocking=True
             )
@@ -515,7 +516,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # batch 2
         with torch.cuda.stream(self._memcpy_stream):
-            batch_ip1 = next(dataloader_iter)
+            if dataloader_iter is not None:
+                batch_ip1 = next(dataloader_iter)
             self._batch_ip1 = batch_ip1 = _to_device(
                 batch_ip1, self._device, non_blocking=True
             )
@@ -531,10 +533,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
-                batch_ip2 = next(dataloader_iter)
-                self._batch_ip2 = batch_ip2 = _to_device(
-                    batch_ip2, self._device, non_blocking=True
-                )
+                if dataloader_iter is not None:
+                    batch_ip2 = next(dataloader_iter)
+                    self._batch_ip2 = batch_ip2 = _to_device(
+                        batch_ip2, self._device, non_blocking=True
+                    )
         batch_i = cast(In, self._batch_i)
         batch_ip1 = cast(In, self._batch_ip1)
 
@@ -570,6 +573,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 self._optimizer.step()
 
         self._batch_i = batch_ip1
-        self._batch_ip1 = batch_ip2
+        self._batch_ip1 = self._batch_ip2
 
         return output
