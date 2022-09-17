@@ -638,7 +638,7 @@ def _merge_weights_or_none(
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) keyed jagged tensor.
 
-    A `JaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
+    A `KeyedJaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
