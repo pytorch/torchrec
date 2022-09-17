@@ -199,6 +199,7 @@ def create_sharding_infos_by_sharding(
 def _construct_jagged_tensors(
     embeddings: torch.Tensor,
     features: KeyedJaggedTensor,
+    embedding_names: List[str],
     need_indices: bool = False,
     features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
 ) -> Dict[str, JaggedTensor]:
@@ -213,7 +214,7 @@ def _construct_jagged_tensors(
     values_list = torch.split(values, length_per_key) if need_indices else None
 
     key_indices = defaultdict(list)
-    for i, key in enumerate(features.keys()):
+    for i, key in enumerate(embedding_names):
         key_indices[key].append(i)
     for key, indices in key_indices.items():
         # combines outputs in correct order for CW sharding
@@ -253,6 +254,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
         self,
         awaitables_per_sharding: List[Awaitable[torch.Tensor]],
         features_per_sharding: List[KeyedJaggedTensor],
+        embedding_names_per_sharding: List[List[str]],
         need_indices: bool = False,
         features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
     ) -> None:
@@ -261,17 +263,20 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
         self._features_per_sharding = features_per_sharding
         self._need_indices = need_indices
         self._features_to_permute_indices = features_to_permute_indices
+        self._embedding_names_per_sharding = embedding_names_per_sharding
 
     def _wait_impl(self) -> Dict[str, JaggedTensor]:
         jt_dict: Dict[str, JaggedTensor] = {}
-        for w, f in zip(
+        for w, f, e in zip(
             self._awaitables_per_sharding,
             self._features_per_sharding,
+            self._embedding_names_per_sharding,
         ):
             jt_dict.update(
                 _construct_jagged_tensors(
                     embeddings=w.wait(),
                     features=f,
+                    embedding_names=e,
                     need_indices=self._need_indices,
                     features_to_permute_indices=self._features_to_permute_indices,
                 )
@@ -346,6 +351,9 @@ class ShardedEmbeddingCollection(
                     optims.append(("", m.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
         self._embedding_dim: int = module.embedding_dim()
+        self._embedding_names_per_sharding: List[List[str]] = []
+        for sharding in self._sharding_type_to_sharding.values():
+            self._embedding_names_per_sharding.append(sharding.embedding_names())
         self._local_embedding_dim: int = self._embedding_dim
         self._features_to_permute_indices: Dict[str, List[int]] = {}
         if ShardingType.COLUMN_WISE.value in self._sharding_type_to_sharding:
@@ -384,6 +392,14 @@ class ShardedEmbeddingCollection(
             # To get the correct order from output_ranks -> shard_ranks
             permute_indices = [0, 2, 1]
         """
+        shared_feature: Dict[str, bool] = {}
+        for table in embedding_configs:
+            for feature_name in table.feature_names:
+                if feature_name not in shared_feature:
+                    shared_feature[feature_name] = False
+                else:
+                    shared_feature[feature_name] = True
+
         for table in embedding_configs:
             sharding = table_name_to_parameter_sharding[table.name]
             if sharding.sharding_type != ShardingType.COLUMN_WISE.value:
@@ -394,7 +410,12 @@ class ShardedEmbeddingCollection(
                 rank_to_indices[rank].append(i)
             permute_indices = [rank_to_indices[rank].popleft() for rank in ranks]
             for feature_name in table.feature_names:
-                self._features_to_permute_indices[feature_name] = permute_indices
+                if shared_feature[feature_name]:
+                    self._features_to_permute_indices[
+                        feature_name + "@" + table.name
+                    ] = permute_indices
+                else:
+                    self._features_to_permute_indices[feature_name] = permute_indices
 
     def _create_input_dist(
         self,
@@ -548,6 +569,7 @@ class ShardedEmbeddingCollection(
         return EmbeddingCollectionAwaitable(
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
+            embedding_names_per_sharding=self._embedding_names_per_sharding,
             need_indices=self._need_indices,
             features_to_permute_indices=self._features_to_permute_indices,
         )
@@ -579,6 +601,7 @@ class ShardedEmbeddingCollection(
         return EmbeddingCollectionAwaitable(
             awaitables_per_sharding=awaitables_per_sharding,
             features_per_sharding=features_before_all2all_per_sharding,
+            embedding_names_per_sharding=self._embedding_names_per_sharding,
             need_indices=self._need_indices,
             features_to_permute_indices=self._features_to_permute_indices,
         )

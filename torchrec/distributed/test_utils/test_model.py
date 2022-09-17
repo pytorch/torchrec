@@ -53,14 +53,17 @@ class ModelInput(Pipelineable):
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
-        idlist_features = [
-            feature for table in tables for feature in table.feature_names
-        ]
+        idlist_features_to_num_embeddings = {}
+        for table in tables:
+            for feature in table.feature_names:
+                idlist_features_to_num_embeddings[feature] = table.num_embeddings
+
+        idlist_features = list(idlist_features_to_num_embeddings.keys())
         idscore_features = [
             feature for table in weighted_tables for feature in table.feature_names
         ]
 
-        idlist_ind_ranges = [table.num_embeddings for table in tables]
+        idlist_ind_ranges = list(idlist_features_to_num_embeddings.values())
         idscore_ind_ranges = [table.num_embeddings for table in weighted_tables]
 
         # Generate global batch.
