@@ -677,7 +677,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
         lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
         offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
-        keys: List[int] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
+        keys: List[str] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
         index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}  # index for each key
         offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
     """
