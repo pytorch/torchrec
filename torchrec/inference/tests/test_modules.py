@@ -23,3 +23,12 @@ class Simple(torch.nn.Module):
 
     def set_weight(self, weight: torch.Tensor) -> None:
         self.weight[:] = torch.nn.Parameter(weight)
+
+
+class Nested(torch.nn.Module):
+    def __init__(self, N: int, M: int) -> None:
+        super().__init__()
+        self.simple = Simple(N, M)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.simple(input)

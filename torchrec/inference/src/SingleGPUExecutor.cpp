@@ -8,6 +8,7 @@
 
 #include "torchrec/inference/SingleGPUExecutor.h"
 #include <c10/cuda/CUDAGuard.h>
+#include <folly/String.h>
 #include "torchrec/inference/Assert.h"
 
 namespace torchrec {
@@ -74,6 +75,17 @@ std::vector<c10::IValue> toDevice(
   return args;
 }
 
+const std::pair<std::string, std::string> splitQualname(
+    const std::string& qualname) {
+  auto idx = qualname.rfind('.');
+  auto submodulePath = idx == std::string::npos ? "" : qualname.substr(0, idx);
+  auto methodName = idx == std::string::npos
+      ? qualname
+      : qualname.substr(idx + 1, qualname.size());
+
+  return {submodulePath, methodName};
+}
+
 } // namespace
 
 void SingleGPUExecutor::process() {
@@ -92,25 +104,35 @@ void SingleGPUExecutor::process() {
       break;
     }
 
-    const size_t exec_info_idx = roundRobinExecInfoNextIdx_;
+    const size_t execInfoIdx = roundRobinExecInfoNextIdx_;
     roundRobinExecInfoNextIdx_ =
         (roundRobinExecInfoNextIdx_ + 1) % execInfos_.size();
 
-    const auto& execInfo = execInfos_[exec_info_idx];
+    const auto& execInfo = execInfos_[execInfoIdx];
 
     const auto device = c10::Device(c10::kCUDA, execInfo.gpuIdx);
     at::cuda::CUDAGuard device_guard(device);
 
-    auto& model = execInfo.model;
-    auto I =
-        model.acquireSession(&manager_->allInstances().at(execInfo.interpIdx));
+    const auto [submodulePath, methodName] = splitQualname(request->methodName);
+
+    auto I = execInfo.model.acquireSession(
+        &manager_->allInstances().at(execInfo.interpIdx));
+
+    std::vector<std::string> names;
+    folly::split(".", submodulePath, names);
+    auto m = I.fromMovable(execInfo.model);
+    for (const auto& name : names) {
+      if (name == "") {
+        break;
+      }
+      m = m.attr(name.c_str());
+    }
 
     request->event = Event(
         new at::cuda::CUDAEvent(cudaEventBlockingSync | cudaEventDisableTiming),
         [](at::cuda::CUDAEvent* event) { delete event; });
 
-    // TODO: Support methodName as "model.submodule.method"
-    auto out = I.self.attr(request->methodName.c_str())
+    auto out = I.self.attr(methodName.c_str())
                    .callKwargs(toDevice(request->args, device), {})
                    .toIValue();
     auto result = toDevice(out, resultDevice_);

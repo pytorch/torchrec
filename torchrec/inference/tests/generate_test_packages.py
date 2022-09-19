@@ -17,9 +17,9 @@ import torch
 from torch.package import PackageExporter
 
 try:
-    from .test_modules import Simple
+    from .test_modules import Simple, Nested
 except ImportError:
-    from test_modules import Simple  # pyre-ignore
+    from test_modules import Simple, Nested  # pyre-ignore
 
 
 def save(
@@ -31,6 +31,11 @@ def save(
         e.save_pickle("model", "model.pkl", model)
         if eg:
             e.save_pickle("model", "example.pkl", eg)
+
+
+def post_process(model: torch.nn.Module) -> None:
+    for param in model.parameters():
+        param.requires_grad = False
 
 
 parser = argparse.ArgumentParser(description="Generate Examples")
@@ -45,7 +50,10 @@ if __name__ == "__main__":
         p = Path(args.install_dir)
 
     simple = Simple(10, 20)
-    for param in simple.parameters():
-        param.requires_grad = False
+    post_process(simple)
+
+    nested = Nested(10, 20)
+    post_process(nested)
 
     save("simple", simple, (torch.rand(10, 20),))
+    save("nested", nested, (torch.rand(10, 20),))
