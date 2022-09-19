@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.11.0 FATAL_ERROR)
 
 project(TorchRec
-        VERSION 0.2.0
         LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)

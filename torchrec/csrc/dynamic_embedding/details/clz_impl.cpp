@@ -1,6 +1,6 @@
 #include <torchrec/csrc/dynamic_embedding/details/bits_op.h>
 
-namespace torchrec::dynamic_embedding::details::bits_impl {
+namespace torchrec::bits_impl {
 
 template <typename T>
 inline static bool get_bit(T n, int k) {
@@ -26,8 +26,6 @@ struct ClzImpl {
     return result;
   }
 };
-
-#if defined(__GNUC__) || defined(__clang__)
 
 template <>
 struct ClzImpl<unsigned int> {
@@ -71,8 +69,6 @@ struct ClzImpl<long long> {
   }
 };
 
-#endif
-
 template <typename T>
 int Clz<T>::operator()(T v) const {
   ClzImpl<T> clz;
@@ -89,4 +85,4 @@ template struct Clz<unsigned long long>;
 // only for unittests
 template struct Clz<int8_t>;
 template struct Clz<uint8_t>;
-} // namespace torchrec::dynamic_embedding::details::bits_impl
+} // namespace torchrec::bits_impl

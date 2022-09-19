@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace torchrec::dynamic_embedding::details {
+namespace torchrec {
 
 namespace bits_impl {
 template <typename T>
@@ -19,6 +19,7 @@ struct Ctz {
 /**
  * Returns the number of leading 0-bits in t, starting at the most significant
  * bit position. If t is 0, the result is undefined.
+ * clz stands for counting leading zeros.
  */
 template <typename T>
 inline int clz(T t) {
@@ -29,6 +30,7 @@ inline int clz(T t) {
 /**
  * Returns the number of trailing 0-bits in t, starting at the least significant
  * bit position. If t is 0, the result is undefined.
+ * ctz stands for counting trailing zeros.
  */
 template <typename T>
 inline int ctz(T t) {
@@ -36,4 +38,4 @@ inline int ctz(T t) {
   return ctz(t);
 }
 
-} // namespace torchrec::dynamic_embedding::details
+} // namespace torchrec

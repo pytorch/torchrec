@@ -1,6 +1,6 @@
 #include <torchrec/csrc/dynamic_embedding/details/bits_op.h>
 
-namespace torchrec::dynamic_embedding::details::bits_impl {
+namespace torchrec::bits_impl {
 
 template <typename T>
 struct CtzImpl {
@@ -20,8 +20,6 @@ struct CtzImpl {
     return result;
   }
 };
-
-#if defined(__GNUC__) || defined(__clang__)
 
 template <>
 struct CtzImpl<unsigned int> {
@@ -65,8 +63,6 @@ struct CtzImpl<long long> {
   }
 };
 
-#endif
-
 template <typename T>
 int Ctz<T>::operator()(T v) const {
   CtzImpl<T> ctz;
@@ -83,4 +79,4 @@ template struct Ctz<unsigned long long>;
 // only for unittests
 template struct Ctz<int8_t>;
 template struct Ctz<uint8_t>;
-} // namespace torchrec::dynamic_embedding::details::bits_impl
+} // namespace torchrec::bits_impl
