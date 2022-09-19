@@ -253,6 +253,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         return torch.cat(output+[offset_hold], 0)
     
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        batch_size = len(features._lengths)//len(features._keys)
         values_list: List[torch.Tensor] = []
         offsets_list: List[torch.Tensor] = []
         weights_list: List[torch.Tensor] = []
@@ -280,5 +281,5 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         if len(weights_full) == 0:
             weights_full = None
         output = self.emb_module(values_full.type(torch.int), offsets_full.type(torch.int), weights_full)
-        output = output.reshape(1,-1)
+        output = output.reshape(batch_size,-1)
         return output
