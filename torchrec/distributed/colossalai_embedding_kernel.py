@@ -169,7 +169,6 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         cache_ratio : float = 0.01, 
     ) -> None:
         super().__init__(config, pg, device)
-        print("CAIBatchedDenseEmbeddingBag init")
         #  fused multiple embedding bags into a single one as self._emb_module
         # replace fbgemm implementation with colossalai FAW
         # Table-batched version of nn.EmbeddingBag(sparse=False)
