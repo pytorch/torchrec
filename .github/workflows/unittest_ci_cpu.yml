@@ -114,15 +114,15 @@ jobs:
     - name: create build folder
       shell: bash
       run: |
-        mkdir build
+        mkdir cpp-build
     - name: compile tests
-      working-directory: ./build
+      working-directory: ./cpp-build
       shell: bash
       run: |
         cmake -DBUILD_TEST=ON -DCMAKE_CXX_COMPILER=$(which x86_64-conda-linux-gnu-g++) ..
         make -j
     - name: Test
-      working-directory: ./build
+      working-directory: ./cpp-build
       shell: bash
       run: |
         ctest -v .
