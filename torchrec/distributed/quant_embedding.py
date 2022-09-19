@@ -8,7 +8,7 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, cast, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
@@ -37,7 +37,6 @@ from torchrec.distributed.types import (
     LazyAwaitable,
     ParameterSharding,
     ShardedModule,
-    ShardedModuleContext,
     ShardingEnv,
 )
 from torchrec.distributed.utils import filter_state_dict
@@ -78,7 +77,7 @@ class SequenceShardingContext(Multistreamable):
 
 
 @dataclass
-class EmbeddingCollectionContext(ShardedModuleContext):
+class EmbeddingCollectionContext(Multistreamable):
     sharding_contexts: List[SequenceShardingContext]
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
@@ -158,7 +157,10 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
 
 class ShardedQuantEmbeddingCollection(
     ShardedModule[
-        ListOfSparseFeaturesList, List[List[torch.Tensor]], Dict[str, JaggedTensor]
+        ListOfSparseFeaturesList,
+        List[List[torch.Tensor]],
+        Dict[str, JaggedTensor],
+        EmbeddingCollectionContext,
     ],
 ):
     """
@@ -274,14 +276,13 @@ class ShardedQuantEmbeddingCollection(
             return ListOfSparseFeaturesListAwaitable(awaitables)
 
     def compute(
-        self, ctx: ShardedModuleContext, dist_input: ListOfSparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, dist_input: ListOfSparseFeaturesList
     ) -> List[List[torch.Tensor]]:
         ret: List[List[torch.Tensor]] = []
         for lookup, features in zip(
             self._lookups,
             dist_input,
         ):
-            # pyre-ignore [16]
             ctx.sharding_contexts.append(
                 SequenceShardingContext(
                     features=[feature.id_list_features for feature in features],
@@ -291,14 +292,14 @@ class ShardedQuantEmbeddingCollection(
         return ret
 
     def output_dist(
-        self, ctx: ShardedModuleContext, output: List[List[torch.Tensor]]
+        self, ctx: EmbeddingCollectionContext, output: List[List[torch.Tensor]]
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         awaitables_per_sharding: List[Awaitable[List[torch.Tensor]]] = []
         features_per_sharding: List[List[KeyedJaggedTensor]] = []
         for odist, embeddings, sharding_ctx in zip(
             self._output_dists,
             output,
-            cast(EmbeddingCollectionContext, ctx).sharding_contexts,
+            ctx.sharding_contexts,
         ):
             awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
             features_per_sharding.append(sharding_ctx.features)
@@ -309,7 +310,7 @@ class ShardedQuantEmbeddingCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: ShardedModuleContext, input: ListOfSparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         return self.output_dist(ctx, self.compute(ctx, input))
 
@@ -351,7 +352,7 @@ class ShardedQuantEmbeddingCollection(
     def copy(self, device: torch.device) -> nn.Module:
         return self
 
-    def create_context(self) -> ShardedModuleContext:
+    def create_context(self) -> EmbeddingCollectionContext:
         return EmbeddingCollectionContext(sharding_contexts=[])
 
     @property
