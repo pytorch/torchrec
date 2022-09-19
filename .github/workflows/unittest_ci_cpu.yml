@@ -109,11 +109,11 @@ jobs:
     - name: Install gcc and cmake
       # for C++20
       run: |
-        conda install gxx_linux-64
-        x86_64-conda-linux-gnu-g++ --version
+        conda install -n build_binary gxx_linux-64
+        conda run -n build_binary x86_64-conda-linux-gnu-g++ --version
         conda run -n build_binary python -m pip install cmake
-        cmake --version
-    - name: create build folder
+        conda run -n build_binary cmake --version
+    - name: create cpp build folder
       shell: bash
       run: |
         mkdir cpp-build
@@ -121,10 +121,10 @@ jobs:
       working-directory: ./cpp-build
       shell: bash
       run: |
-        cmake -DBUILD_TEST=ON -DCMAKE_CXX_COMPILER=$(which x86_64-conda-linux-gnu-g++) ..
-        make -j
+        conda run -n build_binary cmake -DBUILD_TEST=ON -DCMAKE_CXX_COMPILER=$(which x86_64-conda-linux-gnu-g++) ..
+        conda run -n build_binary make -j
     - name: Test
       working-directory: ./cpp-build
       shell: bash
       run: |
-        ctest -v .
+        conda run -n build_binary ctest -v .
