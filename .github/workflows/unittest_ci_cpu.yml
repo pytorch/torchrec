@@ -106,11 +106,13 @@ jobs:
           python -m pip install pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
-    - name: Install gcc
+    - name: Install gcc and cmake
       # for C++20
       run: |
         conda install gxx_linux-64
         x86_64-conda-linux-gnu-g++ --version
+        conda run -n build_binary python -m pip install cmake
+        cmake --version
     - name: create build folder
       shell: bash
       run: |
