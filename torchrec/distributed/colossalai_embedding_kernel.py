@@ -159,7 +159,7 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
     @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
-s
+
 class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
         self,
