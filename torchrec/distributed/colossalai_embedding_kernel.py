@@ -159,20 +159,18 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
     @property
     def config(self) -> GroupedEmbeddingConfig:
         return self._config
-
-
-# TODO implement a more efficient CAIGroupedEmbeddingBag by fusing multiple embedding bags into a single one
+s
 class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        cache_ratio : float = 1.0, 
+        cache_ratio : float = 0.01, 
     ) -> None:
         super().__init__(config, pg, device)
 
-        # TODO() fused multiple embedding bags into a single one as self._emb_module
+        #  fused multiple embedding bags into a single one as self._emb_module
         # replace fbgemm implementation with colossalai FAW
         # Table-batched version of nn.EmbeddingBag(sparse=False)
         # https://github.com/pytorch/FBGEMM/blob/1a61102ad65af645cdd9d4a78b6dfd6388dc7735/fbgemm_gpu/fbgemm_gpu/split_table_batched_embeddings_ops.py
