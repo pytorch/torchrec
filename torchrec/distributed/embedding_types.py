@@ -73,6 +73,8 @@ def compute_kernel_to_embedding_location(
     elif compute_kernel in [
         EmbeddingComputeKernel.FUSED_UVM_CACHING,
         EmbeddingComputeKernel.QUANT_UVM_CACHING,
+        EmbeddingComputeKernel.CAI,
+        EmbeddingComputeKernel.CAI_BATCH,
     ]:
         return EmbeddingLocation.MANAGED_CACHING
     else:
@@ -275,6 +277,11 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         ret = [
             EmbeddingComputeKernel.DENSE.value,
         ]
+        if compute_device_type in {"cuda"}:
+            ret += [
+                EmbeddingComputeKernel.CAI.value,
+                EmbeddingComputeKernel.CAI_BATCH.value,
+            ]
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
                 EmbeddingComputeKernel.FUSED.value,
