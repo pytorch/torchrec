@@ -170,20 +170,6 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         cache_ratio : float = 0.01, 
     ) -> None:
         super().__init__(config, pg, device)
-        #  fused multiple embedding bags into a single one as self._emb_module
-        # replace fbgemm implementation with colossalai FAW
-        # Table-batched version of nn.EmbeddingBag(sparse=False)
-        # https://github.com/pytorch/FBGEMM/blob/1a61102ad65af645cdd9d4a78b6dfd6388dc7735/fbgemm_gpu/fbgemm_gpu/split_table_batched_embeddings_ops.py
-        # self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
-        #     DenseTableBatchedEmbeddingBagsCodegen(
-        #         list(zip(self._local_rows, self._local_cols)),
-        #         feature_table_map=self._feature_table_map,
-        #         pooling_mode=self._pooling,
-        #         use_cpu=device is None
-        #         or device.type == "cpu"
-        #         or not torch.cuda.is_available(),
-        #     )
-        # )
 
         num_embeddings = sum(self._num_embeddings)
         assert all(x == self._local_cols[0] for x in self._local_cols), "local col should be consistent in all embeddings"
@@ -208,7 +194,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             mode=pool_str,
             include_last_offset=True,
             _weight=torch.cat(self._weight_list, 0),
-            cuda_row_num = int(num_embeddings * cache_ratio),
+            cache_ratio = cache_ratio,
         )
         # prepare for features concatenation
         self._table_idx_offset_list = np.cumsum([0] + self._num_embeddings[:-1])
