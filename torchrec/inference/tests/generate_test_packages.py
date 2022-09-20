@@ -17,9 +17,9 @@ import torch
 from torch.package import PackageExporter
 
 try:
-    from .test_modules import Simple, Nested
+    from .test_modules import Nested, Simple
 except ImportError:
-    from test_modules import Simple, Nested  # pyre-ignore
+    from test_modules import Nested, Simple  # pyre-ignore
 
 
 def save(
