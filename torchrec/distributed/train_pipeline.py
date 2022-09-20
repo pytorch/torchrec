@@ -25,7 +25,7 @@ import torch
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable, ShardedModuleContext
+from torchrec.distributed.types import Awaitable
 from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -34,8 +34,6 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 In = TypeVar("In", bound=Pipelineable)
 Out = TypeVar("Out")
-DistIn = TypeVar("DistIn", bound=Multistreamable)
-DistOut = TypeVar("DistOut")
 
 
 class TrainPipeline(abc.ABC, Generic[In, Out]):
@@ -159,7 +157,7 @@ class Tracer(torch.fx.Tracer):
 class TrainPipelineContext:
     # pyre-ignore [4]
     input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
-    module_contexts: Dict[str, ShardedModuleContext] = field(default_factory=dict)
+    module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
     # pyre-ignore [4]
     feature_processor_forwards: List[Any] = field(default_factory=list)
 
@@ -176,12 +174,12 @@ class ArgInfo:
     name: Optional[str]
 
 
-class PipelinedForward(Generic[DistIn, DistOut, Out]):
+class PipelinedForward:
     def __init__(
         self,
         name: str,
         args: List[ArgInfo],
-        module: ShardedModule[DistIn, DistOut, Out],
+        module: ShardedModule,
         context: TrainPipelineContext,
         dist_stream: Optional[torch.cuda.streams.Stream],
     ) -> None:
@@ -191,8 +189,8 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
         self._context = context
         self._dist_stream = dist_stream
 
-    # pyre-ignore [2]
-    def __call__(self, *input, **kwargs) -> Awaitable[Out]:
+    # pyre-ignore [2, 24]
+    def __call__(self, *input, **kwargs) -> Awaitable:
         assert self._name in self._context.input_dist_requests
         request = self._context.input_dist_requests[self._name]
         assert isinstance(request, Awaitable)

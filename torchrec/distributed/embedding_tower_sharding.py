@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar
 
 import torch
@@ -32,11 +32,12 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
+    EmptyShardedModuleContext,
     LazyAwaitable,
+    Multistreamable,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardedModule,
-    ShardedModuleContext,
     ShardingEnv,
     ShardingType,
 )
@@ -88,8 +89,8 @@ class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
 
 
 @dataclass
-class EmbeddingTowerCollectionContext(ShardedModuleContext):
-    embedding_contexts: List[ShardedModuleContext]
+class EmbeddingTowerCollectionContext(Multistreamable):
+    embedding_contexts: List[EmptyShardedModuleContext] = field(default_factory=list)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.embedding_contexts:
@@ -101,6 +102,7 @@ class ShardedEmbeddingTower(
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
+        EmptyShardedModuleContext,
     ],
     FusedOptimizerModule,
 ):
@@ -228,10 +230,10 @@ class ShardedEmbeddingTower(
             self._device,
         )
 
-    # pyre-ignore [14]
+    # pyre-ignore[14]
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
+        ctx: EmptyShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[SparseFeaturesList]:
@@ -278,7 +280,7 @@ class ShardedEmbeddingTower(
             return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
 
     def compute(
-        self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
+        self, ctx: EmptyShardedModuleContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
         kjt_features = dist_input[0].id_list_features
         wkjt_features = dist_input[0].id_score_list_features
@@ -304,7 +306,7 @@ class ShardedEmbeddingTower(
         return output
 
     def _create_output_dist(
-        self, ctx: ShardedModuleContext, output: torch.Tensor
+        self, ctx: EmptyShardedModuleContext, output: torch.Tensor
     ) -> None:
         # Determine the output_dist splits and the all_to_all output size
         assert len(output.shape) == 2
@@ -345,7 +347,7 @@ class ShardedEmbeddingTower(
         )
 
     def output_dist(
-        self, ctx: ShardedModuleContext, output: torch.Tensor
+        self, ctx: EmptyShardedModuleContext, output: torch.Tensor
     ) -> LazyAwaitable[torch.Tensor]:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(ctx, output)
@@ -445,12 +447,16 @@ class ShardedEmbeddingTower(
     ) -> Iterator[Tuple[str, nn.Module]]:
         yield from [(prefix, self)]
 
+    def create_context(self) -> EmptyShardedModuleContext:
+        return EmptyShardedModuleContext()
+
 
 class ShardedEmbeddingTowerCollection(
     ShardedModule[
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
+        EmbeddingTowerCollectionContext,
     ],
     FusedOptimizerModule,
 ):
@@ -694,7 +700,6 @@ class ShardedEmbeddingTowerCollection(
                     )
             return SparseFeaturesListAwaitable(input_dists)
 
-    # pyre-ignore [14]
     def compute(
         self, ctx: EmbeddingTowerCollectionContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
@@ -766,7 +771,6 @@ class ShardedEmbeddingTowerCollection(
             else None,
         )
 
-    # pyre-ignore [14]
     def output_dist(
         self, ctx: EmbeddingTowerCollectionContext, output: torch.Tensor
     ) -> LazyAwaitable[torch.Tensor]:
