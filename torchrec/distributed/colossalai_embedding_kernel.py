@@ -169,7 +169,6 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         cache_ratio : float = 0.01, 
     ) -> None:
         super().__init__(config, pg, device)
-
         #  fused multiple embedding bags into a single one as self._emb_module
         # replace fbgemm implementation with colossalai FAW
         # Table-batched version of nn.EmbeddingBag(sparse=False)
@@ -238,46 +237,16 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             nn.Parameter, self._emb_module.weight
         )
 
-    def concatenate_offsets(self, offsets_list: List[torch.Tensor]) -> torch.Tensor:
-        # assert include last offset
-        offset_hold = 0
-        output: List[torch.Tensor] = []
-        for offsets in offsets_list:
-            offsets = torch.add(offsets, offset_hold)
-            offset_hold = offsets[-1]
-            output.append(offsets[:-1])
-        offset_hold = torch.tensor([offset_hold], dtype= offsets_list[0].dtype,
-                                   device=offsets_list[0].device)
-        return torch.cat(output+[offset_hold], 0)
-    
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         batch_size = len(features._lengths)//len(features._keys)
-        values_list: List[torch.Tensor] = []
-        offsets_list: List[torch.Tensor] = []
-        weights_list: List[torch.Tensor] = []
-        for i, embedding_config in enumerate(self._config.embedding_tables):
-            values_in_table = torch.empty(0,device=torch.cuda.current_device())
-            offsets_in_table = torch.empty(0,device=torch.cuda.current_device())
-            weights_in_table = torch.empty(0,device=torch.cuda.current_device())
-            for feature_name in embedding_config.feature_names:
-                values_in_table = torch.cat((values_in_table,features[feature_name].values()))
-                offsets_in_table = torch.cat((offsets_in_table,features[feature_name].offsets()))
-                weights = features[feature_name].weights_or_none()
-                if weights is not None and not torch.is_floating_point(weights):
-                    weights = None
-                if weights is not None:
-                    weights_in_table = torch.cat((weights_in_table, weights))
-            values_list.append(values_in_table.add(self._table_idx_offset_list[i]))
-            offsets_list.append(offsets_in_table)
-            weights_list.append(weights_in_table)
-            
-        values_full = torch.cat(values_list)
-        offsets_full = self.concatenate_offsets(offsets_list)
-        weights_full = torch.cat(weights_list)
-        # TODO: pad weights
-        assert len(weights_full) == 0 or len(weights_full) == len(values_full)
-        if len(weights_full) == 0:
-            weights_full = None
-        output = self.emb_module(values_full.type(torch.int), offsets_full.type(torch.int), weights_full)
-        output = output.reshape(batch_size,-1)
-        return output
+        values = features.values().long()
+        offsets = features.offsets().long()
+        weights = features.weights_or_none()
+        if weights is not None and not torch.is_floating_point(weights):
+            weights = None
+        for i in range(len(features._keys)):
+            start_pos = offsets[i * batch_size]
+            end_pos = offsets[i * batch_size + batch_size]
+            values[start_pos:end_pos] += self._table_idx_offset_list[i]
+        output = self.emb_module(values, offsets, weights)
+        return torch.cat(output.split(batch_size),1)
