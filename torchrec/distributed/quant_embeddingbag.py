@@ -249,6 +249,9 @@ class ShardedQuantEmbeddingBagCollection(
         )
 
     def copy(self, device: torch.device) -> nn.Module:
+        if self._has_uninitialized_output_dist:
+            self._create_output_dist(device)
+            self._has_uninitialized_output_dist = False
         return self
 
     @property
