@@ -126,6 +126,9 @@ class InferenceModelParallelTestBase(unittest.TestCase):
             init_data_parallel=False,
         )
 
+        # materialize inference sharded model on one device for dense part
+        local_model = local_model.copy(cuda_device)
+
         # Load model state from the global model.
         copy_state_dict(local_model.state_dict(), global_model.state_dict())
 
