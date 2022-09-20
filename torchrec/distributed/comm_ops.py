@@ -59,7 +59,6 @@ class Request(Awaitable[W]):
     def __init__(self, pg: dist.ProcessGroup, device: torch.device) -> None:
         super().__init__()
         self.pg: dist.ProcessGroup = pg
-        # pyre-fixme[11]: Annotation dist.Work is not defined as a type.
         self.req: Optional[dist.Work] = None
         self.tensor: Optional[W] = None
         self.a2ai = None  # type: ignore
@@ -712,6 +711,7 @@ class All2All_Pooled_Req(Function):
         my_rank = dist.get_rank(pg)
         myreq = ctx.myreq
         a2ai = myreq.a2ai
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         grad_output = myreq.tensor
@@ -742,6 +742,7 @@ class All2All_Pooled_Wait(Function):
         my_rank = dist.get_rank(pg)
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
+        assert myreq.req is not None
         myreq.req.wait()
         sharded_output_embeddings = myreq.tensor
         myreq.req = None
@@ -896,6 +897,7 @@ class All2All_Seq_Req(Function):
         permuted_lengths_after_sparse_data_all2all = (
             a2ai.permuted_lengths_after_sparse_data_all2all
         )
+        assert myreq.req is not None
         myreq.req.wait()
         sharded_grad_input = myreq.tensor
         if a2ai.codecs is not None:
@@ -929,6 +931,7 @@ class All2All_Seq_Req_Wait(Function):
         a2ai = myreq.a2ai
         D = a2ai.embedding_dim
         ctx.a2ai = a2ai
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         sharded_output_embeddings = myreq.tensor
@@ -1046,6 +1049,7 @@ class All2Allv_Wait(Function):
     ) -> Tuple[Tensor]:
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         output = myreq.tensor
@@ -1127,6 +1131,7 @@ class ReduceScatter_Req(Function):
     # pyre-fixme[2]: Parameter must be annotated.
     def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
         myreq = ctx.myreq
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         grad_inputs = list(myreq.tensor)
@@ -1154,6 +1159,7 @@ class ReduceScatter_Wait(Function):
         myreq: Request[Tensor],
         *dummy_tensor: Tensor,
     ) -> Tensor:
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         output = myreq.tensor
@@ -1252,6 +1258,7 @@ class ReduceScatterBase_Wait(Function):
         myreq: Request[Tensor],
         *dummy_Tensor: Tensor,
     ) -> Tensor:
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         output = myreq.tensor
@@ -1317,6 +1324,7 @@ class AllGatherBase_Req(Function):
     # pyre-fixme[2]: Parameter must be annotated.
     def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
         myreq = ctx.myreq
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         agi = myreq.agi
@@ -1342,6 +1350,7 @@ class AllGatherBase_Wait(Function):
         myreq: Request[Tensor],
         *dummy_tensor: Tensor,
     ) -> Tensor:
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         outputs = myreq.tensor
@@ -1418,6 +1427,7 @@ class ReduceScatterV_Req(Function):
     # pyre-fixme[2]: Parameter must be annotated.
     def backward(ctx, *unused: Tensor) -> Tuple[Optional[Tensor], ...]:
         myreq = ctx.myreq
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         grad_input = myreq.tensor
@@ -1439,6 +1449,7 @@ class ReduceScatterV_Wait(Function):
         myreq: Request[Tensor],
         *dummy_tensor: Tensor,
     ) -> Tensor:
+        assert myreq.req is not None
         myreq.req.wait()
         myreq.req = None
         # pyre-ignore

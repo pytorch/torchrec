@@ -160,9 +160,6 @@ class CommOp(Enum):
 
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
-Out = TypeVar("Out")
-CompIn = TypeVar("CompIn", bound=Multistreamable)
-DistOut = TypeVar("DistOut")
 
 
 class Awaitable(abc.ABC, Generic[W]):
@@ -373,12 +370,7 @@ class ParameterSharding:
     sharding_spec: Optional[ShardingSpec] = None
 
 
-@dataclass
-class ShardedModuleContext(Multistreamable):
-    pass
-
-
-class EmptyContext(ShardedModuleContext):
+class EmptyShardedModuleContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
 
@@ -468,10 +460,16 @@ class ModuleShardingMixIn:
         raise NotImplementedError
 
 
+Out = TypeVar("Out")
+CompIn = TypeVar("CompIn", bound=Multistreamable)
+DistOut = TypeVar("DistOut")
+ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+
 class ShardedModule(
     abc.ABC,
     nn.Module,
-    Generic[CompIn, DistOut, Out],
+    Generic[CompIn, DistOut, Out, ShrdCtx],
     ModuleCopyMixin,
     ModuleShardingMixIn,
 ):
@@ -499,8 +497,9 @@ class ShardedModule(
             qcomm_codecs_registry = {}
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
-    def create_context(self) -> ShardedModuleContext:
-        return EmptyContext()
+    @abc.abstractmethod
+    def create_context(self) -> ShrdCtx:
+        pass
 
     @property
     def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
@@ -509,7 +508,7 @@ class ShardedModule(
     @abc.abstractmethod
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
+        ctx: ShrdCtx,
         # pyre-ignore[2]
         *input,
         # pyre-ignore[2]
@@ -518,17 +517,15 @@ class ShardedModule(
         pass
 
     @abc.abstractmethod
-    def compute(self, ctx: ShardedModuleContext, dist_input: CompIn) -> DistOut:
+    def compute(self, ctx: ShrdCtx, dist_input: CompIn) -> DistOut:
         pass
 
     @abc.abstractmethod
-    def output_dist(
-        self, ctx: ShardedModuleContext, output: DistOut
-    ) -> LazyAwaitable[Out]:
+    def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
         pass
 
     def compute_and_output_dist(
-        self, ctx: ShardedModuleContext, input: CompIn
+        self, ctx: ShrdCtx, input: CompIn
     ) -> LazyAwaitable[Out]:
         """
         In case of multiple output distributions it makes sense to override this method
@@ -590,7 +587,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> ShardedModule[Any, Any, Any]:
+    ) -> ShardedModule[Any, Any, Any, Any]:
         """
         Does the actual sharding. It will allocate parameters on the requested locations
         as specified by corresponding ParameterSharding.

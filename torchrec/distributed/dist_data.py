@@ -196,7 +196,6 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
             dtype=in_values.dtype,
         )
         with record_function("## all2all_data:indices ##"):
-            # pyre-fixme[11]: Annotation `Work` is not defined as a type.
             self._values_awaitable: dist.Work = dist.all_to_all_single(
                 output=out_values,
                 input=in_values,
