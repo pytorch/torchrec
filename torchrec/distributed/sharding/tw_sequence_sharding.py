@@ -29,6 +29,8 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.sequence_sharding import (
     BaseSequenceEmbeddingDist,
+    InferBaseSequenceEmbeddingDist,
+    InferSequenceShardingContext,
     SequenceShardingContext,
 )
 from torchrec.distributed.sharding.tw_sharding import (
@@ -37,44 +39,6 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
-
-
-class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]):
-    """
-    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
-    operation.
-
-    Args:
-        device (torch.device): device on which the tensors will be communicated to.
-        world_size (int): number of devices in the topology.
-    """
-
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-    ) -> None:
-        super().__init__()
-        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
-
-    # pyre-ignore [15]
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: SequenceShardingContext,
-    ) -> Awaitable[List[torch.Tensor]]:
-        """
-        Performs AlltoOne operation on sequence embeddings tensor.
-
-        Args:
-            sharding_ctx (SequenceShardingContext): shared context from KJTAllToOne
-                operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
-        """
-        return self._dist.forward(local_embs)
 
 
 class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
@@ -179,6 +143,44 @@ class TwSequenceEmbeddingSharding(
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
+
+
+class InferTwSequenceEmbeddingDist(InferBaseSequenceEmbeddingDist[List[torch.Tensor]]):
+    """
+    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
+    operation.
+
+    Args:
+        device (torch.device): device on which the tensors will be communicated to.
+        world_size (int): number of devices in the topology.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
+
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+        sharding_ctx: InferSequenceShardingContext,
+    ) -> Awaitable[List[torch.Tensor]]:
+        """
+        Performs AlltoOne operation on sequence embeddings tensor.
+
+        Args:
+            local_embs (List[orch.Tensor]): tensor of values to distribute.
+            sharding_ctx (InferSequenceShardingContext): shared context from KJTAllToOne
+                operation.
+
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
+        """
+        return self._dist.forward(local_embs)
 
 
 class InferTwSequenceEmbeddingSharding(

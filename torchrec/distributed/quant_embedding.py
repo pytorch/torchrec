@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
+from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
 )
@@ -58,27 +59,8 @@ except OSError:
 
 
 @dataclass
-class SequenceShardingContext(Multistreamable):
-    """
-    Stores inference context and reuses it in sequence embedding output_dist or result return.
-
-    Attributes:
-        features (Optional[List[KeyedJaggedTensor]]): stores the original
-            shards of KJT after input dist.
-    """
-
-    features: Optional[List[KeyedJaggedTensor]] = None
-
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        if self.features is not None:
-            # pyre-ignore [16]
-            for feature in self.features:
-                feature.record_stream(stream)
-
-
-@dataclass
 class EmbeddingCollectionContext(Multistreamable):
-    sharding_contexts: List[SequenceShardingContext]
+    sharding_contexts: List[InferSequenceShardingContext]
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.sharding_contexts:
@@ -284,7 +266,7 @@ class ShardedQuantEmbeddingCollection(
             dist_input,
         ):
             ctx.sharding_contexts.append(
-                SequenceShardingContext(
+                InferSequenceShardingContext(
                     features=[feature.id_list_features for feature in features],
                 )
             )

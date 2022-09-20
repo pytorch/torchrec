@@ -51,6 +51,25 @@ class SequenceShardingContext(Multistreamable):
             self.lengths_after_input_dist.record_stream(stream)
 
 
+@dataclass
+class InferSequenceShardingContext(Multistreamable):
+    """
+    Stores inference context and reuses it in sequence embedding output_dist or result return.
+
+    Attributes:
+        features (Optional[List[KeyedJaggedTensor]]): stores the original
+            shards of KJT after input dist.
+    """
+
+    features: Optional[List[KeyedJaggedTensor]] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        if self.features is not None:
+            # pyre-ignore [16]
+            for feature in self.features:
+                feature.record_stream(stream)
+
+
 T = TypeVar("T")
 
 
@@ -66,4 +85,20 @@ class BaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
         local_embs: T,
         sharding_ctx: SequenceShardingContext,
     ) -> Awaitable[torch.Tensor]:
+        pass
+
+
+class InferBaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
+    """
+    Base class for converting output of the sequence embedding lookup from
+    model-parallel to data-parallel for inference.
+    """
+
+    @abc.abstractmethod
+    # pyre-ignore[15]
+    def forward(
+        self,
+        local_embs: T,
+        sharding_ctx: InferSequenceShardingContext,
+    ) -> Awaitable[List[torch.Tensor]]:
         pass
