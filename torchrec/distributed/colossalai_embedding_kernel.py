@@ -23,11 +23,12 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 logger: logging.Logger = logging.getLogger(__name__)
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 import numpy as np
+from torch.profiler import record_function
 
 try:
     from colossalai.nn.parallel.layers.cache_embedding import FreqAwareEmbeddingBag
 except ImportError: 
-    print('install colossalai')
+    print('please pip install colossalai')
 
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 from torchrec.modules.embedding_configs import pooling_mode_to_str
@@ -238,15 +239,16 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        batch_size = len(features._lengths)//len(features._keys)
-        values = features.values().long()
-        offsets = features.offsets().long()
-        weights = features.weights_or_none()
-        if weights is not None and not torch.is_floating_point(weights):
-            weights = None
-        for i in range(len(features._keys)):
-            start_pos = offsets[i * batch_size]
-            end_pos = offsets[i * batch_size + batch_size]
-            values[start_pos:end_pos] += self._table_idx_offset_list[i]
+        with record_function("add id offsets"):
+            batch_size = len(features._lengths)//len(features._keys)
+            values = features.values().long()
+            offsets = features.offsets().long()
+            weights = features.weights_or_none()
+            if weights is not None and not torch.is_floating_point(weights):
+                weights = None
+            for i in range(len(features._keys)):
+                start_pos = offsets[i * batch_size]
+                end_pos = offsets[i * batch_size + batch_size]
+                values[start_pos:end_pos] += self._table_idx_offset_list[i]
         output = self.emb_module(values, offsets, weights)
         return torch.cat(output.split(batch_size),1)
