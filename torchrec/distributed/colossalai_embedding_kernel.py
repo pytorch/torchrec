@@ -194,18 +194,30 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         embedding_dim = self._local_cols[0]
         self.pool_str = pooling_mode_to_str(self._pooling)
 
+        weight_list = []
+        for embedding_config in self._config.embedding_tables:
+            weight_list.append(torch.empty(
+                embedding_config.local_rows,
+                embedding_config.local_cols,
+                device='cpu',
+            ).uniform_(
+                embedding_config.get_weight_init_min(),
+                embedding_config.get_weight_init_max(),
+            ))
         self._emb_module = FreqAwareEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             mode=self.pool_str,
             include_last_offset=True,
-            _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
-                min(self._weight_init_mins), max(self._weight_init_maxs)),
+            # _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
+            #     min(self._weight_init_mins), max(self._weight_init_maxs)),
+            _weight=torch.cat(weight_list,0),
             warmup_ratio=0.7,
             cuda_row_num=int(num_embeddings * cache_ratio),
         )
         self._table_idx_offset_list = np.cumsum(
             [0] + self._num_embeddings)
+        
     @property
     def emb_module(
         self,
