@@ -4,6 +4,14 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    ComputeDevice,
+    DenseTableBatchedEmbeddingBagsCodegen,
+    EmbeddingLocation,
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+    PoolingMode,
+    SplitTableBatchedEmbeddingBagsCodegen,
+)
 from torchrec.modules.embedding_configs import pooling_mode_to_str
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 from torch.profiler import record_function
@@ -37,11 +45,11 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
-        sparse: bool,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         use_cache: bool = True,
         cache_ratio: float = 1.0,
+        sparse: bool = False
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(
@@ -184,50 +192,38 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         assert all(x == self._local_cols[0]
                    for x in self._local_cols), "local col should be consistent in all embeddings"
         embedding_dim = self._local_cols[0]
-        pool_str = pooling_mode_to_str(self._pooling)
+        self.pool_str = pooling_mode_to_str(self._pooling)
 
-        # self._weight_list: List[torch.Tensor] = []
-        # for embedding_config in self._config.embedding_tables:
-        #     self._weight_list.append(torch.empty(
-        #         embedding_config.local_rows,
-        #         embedding_config.local_cols,
-        #         device='cpu',
-        #     ).uniform_(
-        #         embedding_config.get_weight_init_min(),
-        #         embedding_config.get_weight_init_max(),
-        #     )
-        #     )
-
+        weight_list = []
+        for embedding_config in self._config.embedding_tables:
+            weight_list.append(torch.empty(
+                embedding_config.local_rows,
+                embedding_config.local_cols,
+                device='cpu',
+            ).uniform_(
+                embedding_config.get_weight_init_min(),
+                embedding_config.get_weight_init_max(),
+            ))
         self._emb_module = FreqAwareEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            mode=pool_str,
+            mode=self.pool_str,
             include_last_offset=True,
-            # _weight=torch.cat(self._weight_list, 0),
-            _weight=torch.empty(
-                num_embeddings,
-                embedding_dim,
-                device='cpu',
-            ).uniform_(
-                min(self._weight_init_mins),
-                max(self._weight_init_maxs),
-            ),
+            # _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
+            #     min(self._weight_init_mins), max(self._weight_init_maxs)),
+            _weight=torch.cat(weight_list,0),
+            warmup_ratio=0.7,
             cuda_row_num=int(num_embeddings * cache_ratio),
         )
-        # prepare for features concatenation
         self._table_idx_offset_list = np.cumsum(
-            [0] + self._num_embeddings[:-1])
-
-        # TODO() not support split_embedding_weights currently
-        # init parameter by uniformly init the _weight
-        # self.init_parameters()
-
+            [0] + self._num_embeddings)
+        
     @property
     def emb_module(
         self,
     ):
         return self._emb_module
-
+    
     def named_buffers(
         self, prefix: str = "", recurse: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
@@ -240,20 +236,21 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             [config.name for config in self._config.embedding_tables]
         )
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
-            nn.Parameter, self._emb_module.weight
+            nn.Parameter, self._emb_module.cache_weight_mgr.cuda_cached_weight
         )
-
+        
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        with record_function("add id offsets"):
-            batch_size = len(features._lengths)//len(features._keys)
-            values = features.values().long()
-            offsets = features.offsets().long()
-            weights = features.weights_or_none()
-            if weights is not None and not torch.is_floating_point(weights):
-                weights = None
-            with record_function("indices calibrate"):
+        with torch.no_grad():
+            with record_function("add id offsets"):
+                batch_size = len(features.offsets())//len(features.keys())
+                values = features.values().long()
+                offsets = features.offsets().long()
+                weights = features.weights_or_none()
+                if weights is not None and not torch.is_floating_point(weights):
+                    weights = None
                 split_view = torch.tensor_split(values, features.offset_per_key()[1:-1])
                 for i, chunk in enumerate(split_view):
-                    torch.add(chunk, self._table_idx_offset_list[i],out=chunk)
-        output = self.emb_module(values, offsets, weights)
-        return torch.cat(output.split(batch_size), 1)
+                    torch.add(chunk, self._table_idx_offset_list[i], out=chunk)
+        output = self._emb_module(values, offsets, weights)
+        ret =  torch.cat(output.split(batch_size), 1)
+        return ret
