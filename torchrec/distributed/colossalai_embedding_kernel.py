@@ -192,12 +192,12 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         assert all(x == self._local_cols[0]
                    for x in self._local_cols), "local col should be consistent in all embeddings"
         embedding_dim = self._local_cols[0]
-        pool_str = pooling_mode_to_str(self._pooling)
-        
+        self.pool_str = pooling_mode_to_str(self._pooling)
+
         self._emb_module = FreqAwareEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            mode=pool_str,
+            mode=self.pool_str,
             include_last_offset=True,
             _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
                 min(self._weight_init_mins), max(self._weight_init_maxs)),
@@ -226,7 +226,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
             nn.Parameter, self._emb_module.cache_weight_mgr.cuda_cached_weight
         )
-
+        
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         with torch.no_grad():
             with record_function("add id offsets"):
