@@ -13,6 +13,7 @@
 #include <torch/cuda.h> // @manual
 #include <torch/script.h>
 #include <torch/torch.h> // @manual
+#include "torchrec/inference/Observer.h"
 #include "torchrec/inference/Types.h"
 
 int main(int argc, char* argv[]) {
@@ -241,4 +242,53 @@ TEST(TorchDeployGPUTest, NestedModelSingleGPU) {
   auto inputs = example_inputs;
   auto result = execute(*executor, "simple.forward", example_inputs).toTensor();
   assert_tensors_eq(expected_forward0, result);
+}
+
+class TestSingleGPUExecutorObserver
+    : public torchrec::EmptySingleGPUExecutorObserver {
+ public:
+  double requestCount = 0.f;
+  void addRequestsCount(double value) override {
+    requestCount += value;
+  }
+};
+
+TEST(TorchDeployGPUTest, SimpleModelSingleGPUObserver) {
+  if (!torch::cuda::is_available()) {
+    GTEST_SKIP();
+  }
+
+  const char* model_filename = path("TORCH_PACKAGE_NESTED", "/tmp/simple");
+
+  auto device = c10::Device(c10::kCUDA, 0);
+
+  auto manager = std::make_shared<torch::deploy::InterpreterManager>(1);
+  torch::deploy::Package p = manager->loadPackage(model_filename);
+  auto model = p.loadPickle("model", "model.pkl");
+  {
+    auto M = model.acquireSession();
+    M.self.attr("to")({device});
+  }
+
+  std::vector<at::IValue> example_inputs;
+  {
+    auto I = p.acquireSession();
+    example_inputs = get_input_example(I);
+  }
+  auto example_input0 = example_inputs[0].toTensor();
+
+  auto observer = std::make_shared<TestSingleGPUExecutorObserver>();
+
+  auto executor = std::make_unique<torchrec::SingleGPUExecutor>(
+      manager,
+      torchrec::SingleGPUExecutor::ExecInfos{{0u, 0u, std::move(model)}},
+      1u /* numGPUs */,
+      observer);
+
+  auto expected_forward0 = example_input0 + at::ones(example_input0.sizes());
+
+  auto inputs = example_inputs;
+  auto result = execute(*executor, "forward", example_inputs).toTensor();
+  assert_tensors_eq(expected_forward0, result);
+  ASSERT_EQ(observer->requestCount, 1.0f);
 }

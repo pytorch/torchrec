@@ -148,6 +148,37 @@ class IGPUExecutorObserver {
   virtual ~IGPUExecutorObserver() {}
 };
 
+class ISingleGPUExecutorObserver {
+ public:
+  virtual void addRequestsCount(double value) = 0;
+  virtual void addRequestProcessingExceptionCount(double value) = 0;
+  virtual void recordQueueLatency(
+      double value,
+      std::chrono::steady_clock::time_point =
+          std::chrono::steady_clock::now()) = 0;
+
+  virtual void recordRequestProcessingLatency(
+      double value,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
+
+  virtual ~ISingleGPUExecutorObserver() = default;
+};
+
+class EmptySingleGPUExecutorObserver : public ISingleGPUExecutorObserver {
+  void addRequestsCount(double) override {}
+  void addRequestProcessingExceptionCount(double) override {}
+  void recordQueueLatency(
+      double,
+      std::chrono::steady_clock::time_point =
+          std::chrono::steady_clock::now()) override {}
+
+  void recordRequestProcessingLatency(
+      double,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) override {}
+};
+
 // Can be used for testing or for opt-ing out of observation.
 class EmptyGPUExecutorObserver : public IGPUExecutorObserver {
  public:

@@ -10,6 +10,7 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <folly/String.h>
 #include "torchrec/inference/Assert.h"
+#include "torchrec/inference/Observer.h"
 
 namespace torchrec {
 
@@ -17,11 +18,13 @@ SingleGPUExecutor::SingleGPUExecutor(
     std::shared_ptr<torch::deploy::InterpreterManager> manager,
     ExecInfos execInfos,
     size_t numGpu,
+    std::shared_ptr<ISingleGPUExecutorObserver> observer,
     c10::Device resultDevice)
     : manager_(manager),
       execInfos_(std::move(execInfos)),
       numGpu_(numGpu),
       resultDevice_(resultDevice),
+      observer_(observer),
       requests_(kQUEUE_CAPACITY),
       completionExecutor_(
           std::make_unique<folly::CPUThreadPoolExecutor>(execInfos_.size())),
@@ -30,6 +33,7 @@ SingleGPUExecutor::SingleGPUExecutor(
   for (const auto& exec_info : execInfos_) {
     TORCHREC_CHECK(exec_info.interpIdx < manager_->allInstances().size());
   }
+  TORCHREC_CHECK(observer_);
 }
 
 SingleGPUExecutor::~SingleGPUExecutor() {
@@ -104,6 +108,9 @@ void SingleGPUExecutor::process() {
       break;
     }
 
+    auto timeInQueue = getTimeElapsedMS(request->enqueueTime);
+    observer_->recordQueueLatency(timeInQueue.count());
+
     const size_t execInfoIdx = roundRobinExecInfoNextIdx_;
     roundRobinExecInfoNextIdx_ =
         (roundRobinExecInfoNextIdx_ + 1) % execInfos_.size();
@@ -113,29 +120,44 @@ void SingleGPUExecutor::process() {
     const auto device = c10::Device(c10::kCUDA, execInfo.gpuIdx);
     at::cuda::CUDAGuard device_guard(device);
 
-    const auto [submodulePath, methodName] = splitQualname(request->methodName);
+    c10::IValue result;
+    try {
+      observer_->addRequestsCount(1.0f);
+      const auto requestProcessStart = std::chrono::steady_clock::now();
 
-    auto I = execInfo.model.acquireSession(
-        &manager_->allInstances().at(execInfo.interpIdx));
+      const auto [submodulePath, methodName] =
+          splitQualname(request->methodName);
 
-    std::vector<std::string> names;
-    folly::split(".", submodulePath, names);
-    auto m = I.fromMovable(execInfo.model);
-    for (const auto& name : names) {
-      if (name == "") {
-        break;
+      auto I = execInfo.model.acquireSession(
+          &manager_->allInstances().at(execInfo.interpIdx));
+
+      std::vector<std::string> names;
+      folly::split(".", submodulePath, names);
+      auto m = I.fromMovable(execInfo.model);
+      for (const auto& name : names) {
+        if (name == "") {
+          break;
+        }
+        m = m.attr(name.c_str());
       }
-      m = m.attr(name.c_str());
+
+      request->event = Event(
+          new at::cuda::CUDAEvent(
+              cudaEventBlockingSync | cudaEventDisableTiming),
+          [](at::cuda::CUDAEvent* event) { delete event; });
+
+      auto out = I.self.attr(methodName.c_str())
+                     .callKwargs(toDevice(request->args, device), {})
+                     .toIValue();
+      result = toDevice(out, resultDevice_);
+
+      observer_->recordRequestProcessingLatency(
+          getTimeElapsedMS(requestProcessStart).count());
+    } catch (const std::exception& ex) {
+      observer_->addRequestProcessingExceptionCount(1.0f);
+      LOG_EVERY_N(ERROR, 100)
+          << "Exception during request process, msg: " << ex.what();
     }
-
-    request->event = Event(
-        new at::cuda::CUDAEvent(cudaEventBlockingSync | cudaEventDisableTiming),
-        [](at::cuda::CUDAEvent* event) { delete event; });
-
-    auto out = I.self.attr(methodName.c_str())
-                   .callKwargs(toDevice(request->args, device), {})
-                   .toIValue();
-    auto result = toDevice(out, resultDevice_);
     request->event->record();
 
     completionExecutor_->add(
