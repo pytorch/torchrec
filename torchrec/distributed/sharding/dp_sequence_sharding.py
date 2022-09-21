@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 import torch
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
@@ -21,14 +22,13 @@ from torchrec.distributed.sharding.dp_sharding import (
     BaseDpEmbeddingSharding,
     DpSparseFeaturesDist,
 )
-from torchrec.distributed.sharding.sequence_sharding import (
-    BaseSequenceEmbeddingDist,
-    SequenceShardingContext,
-)
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import Awaitable, NoWait
 
 
-class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
+class DpSequenceEmbeddingDist(
+    BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Distributes sequence embeddings to be data-parallel.
     """
@@ -39,7 +39,7 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: SequenceShardingContext,
+        sharding_ctx: Optional[SequenceShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         No-op as sequence embeddings are already distributed in data-parallel fashion.
@@ -55,7 +55,9 @@ class DpSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
 
 
 class DpSequenceEmbeddingSharding(
-    BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseDpEmbeddingSharding[
+        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards sequence (unpooled) embedding data-parallel, with no table sharding i.e.. a
@@ -82,5 +84,5 @@ class DpSequenceEmbeddingSharding(
 
     def create_output_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]:
         return DpSequenceEmbeddingDist()

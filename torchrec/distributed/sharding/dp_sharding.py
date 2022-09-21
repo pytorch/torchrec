@@ -15,6 +15,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSparseFeaturesDist,
     EmbeddingSharding,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
     group_tables,
 )
 from torchrec.distributed.embedding_types import (
@@ -28,11 +29,13 @@ from torchrec.distributed.types import Awaitable, NoWait, ShardingEnv, ShardMeta
 from torchrec.streamable import Multistreamable
 
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseDpEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for data-parallel sharding.
     """
@@ -166,7 +169,9 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return NoWait(cast(Awaitable[SparseFeatures], NoWait(sparse_features)))
 
 
-class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class DpPooledEmbeddingDist(
+    BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Distributes pooled embeddings to be data-parallel.
     """
@@ -174,7 +179,11 @@ class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmptyShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
         """
         No-op as pooled embeddings are already distributed in data-parallel fashion.
 
@@ -188,7 +197,11 @@ class DpPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         return NoWait(local_embs)
 
 
-class DpPooledEmbeddingSharding(BaseDpEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class DpPooledEmbeddingSharding(
+    BaseDpEmbeddingSharding[
+        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
+):
     """
     Shards embedding bags data-parallel, with no table sharding i.e.. a given embedding
     table is replicated across all ranks.
@@ -216,5 +229,5 @@ class DpPooledEmbeddingSharding(BaseDpEmbeddingSharding[SparseFeatures, torch.Te
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
         return DpPooledEmbeddingDist()

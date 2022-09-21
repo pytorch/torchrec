@@ -613,8 +613,19 @@ class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
         return ListOfSparseFeaturesList([w.wait() for w in self.awaitables])
 
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
+
+
+class EmptyShardingContext(Multistreamable):
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        pass
+
+    # pyre-ignore [2]
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise NotImplementedError()
 
 
 class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
@@ -630,7 +641,7 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
         pass
 
 
-class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
+class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[C, T, W]):
     """
     Converts output of EmbeddingLookup from model-parallel to data-parallel.
     """
@@ -639,11 +650,12 @@ class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[T]):
     def forward(
         self,
         local_embs: T,
-    ) -> Awaitable[torch.Tensor]:
+        sharding_ctx: Optional[C] = None,
+    ) -> Awaitable[W]:
         pass
 
 
-class EmbeddingSharding(abc.ABC, Generic[F, T], FeatureShardingMixIn):
+class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
     """
     Used to implement different sharding types for `EmbeddingBagCollection`, e.g.
     table_wise.
@@ -670,7 +682,7 @@ class EmbeddingSharding(abc.ABC, Generic[F, T], FeatureShardingMixIn):
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[T]:
+    ) -> BaseEmbeddingDist[C, T, W]:
         pass
 
     @abc.abstractmethod

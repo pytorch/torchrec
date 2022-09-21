@@ -12,6 +12,7 @@ from torch import nn
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
     ListOfSparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
@@ -51,7 +52,9 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
-) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
+) -> EmbeddingSharding[
+    EmptyShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
+]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     else:
@@ -86,7 +89,13 @@ class ShardedQuantEmbeddingBagCollection(
             module, table_name_to_parameter_sharding, "embedding_bags.", fused_params
         )
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
+            str,
+            EmbeddingSharding[
+                EmptyShardingContext,
+                SparseFeaturesList,
+                List[torch.Tensor],
+                torch.Tensor,
+            ],
         ] = {
             sharding_type: create_infer_embedding_bag_sharding(
                 sharding_type, embedding_confings, env

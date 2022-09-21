@@ -28,8 +28,6 @@ from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
-    BaseSequenceEmbeddingDist,
-    InferBaseSequenceEmbeddingDist,
     InferSequenceShardingContext,
     SequenceShardingContext,
 )
@@ -41,7 +39,9 @@ from torchrec.distributed.sharding.tw_sharding import (
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
-class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
+class TwSequenceEmbeddingDist(
+    BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes sequence embedding tensor in TW fashion with an AlltoAll operation.
 
@@ -74,7 +74,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: SequenceShardingContext,
+        sharding_ctx: Optional[SequenceShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on sequence embeddings tensor.
@@ -88,6 +88,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
 
+        assert sharding_ctx is not None
         return self._dist(
             local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,
@@ -98,7 +99,9 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
 
 
 class TwSequenceEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwEmbeddingSharding[
+        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
@@ -134,10 +137,9 @@ class TwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]:
+        assert self._pg is not None
         return TwSequenceEmbeddingDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self.id_list_features_per_rank(),
             device if device is not None else self._device,
@@ -145,7 +147,11 @@ class TwSequenceEmbeddingSharding(
         )
 
 
-class InferTwSequenceEmbeddingDist(InferBaseSequenceEmbeddingDist[List[torch.Tensor]]):
+class InferTwSequenceEmbeddingDist(
+    BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]
+):
     """
     Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
     operation.
@@ -166,7 +172,7 @@ class InferTwSequenceEmbeddingDist(InferBaseSequenceEmbeddingDist[List[torch.Ten
     def forward(
         self,
         local_embs: List[torch.Tensor],
-        sharding_ctx: InferSequenceShardingContext,
+        sharding_ctx: Optional[InferSequenceShardingContext] = None,
     ) -> Awaitable[List[torch.Tensor]]:
         """
         Performs AlltoOne operation on sequence embeddings tensor.
@@ -184,7 +190,12 @@ class InferTwSequenceEmbeddingDist(InferBaseSequenceEmbeddingDist[List[torch.Ten
 
 
 class InferTwSequenceEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
+    BaseTwEmbeddingSharding[
+        InferSequenceShardingContext,
+        SparseFeaturesList,
+        List[torch.Tensor],
+        List[torch.Tensor],
+    ]
 ):
     """
     Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
@@ -215,7 +226,9 @@ class InferTwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[List[torch.Tensor]]:
+    ) -> BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]:
         device = device if device is not None else self._device
         return InferTwSequenceEmbeddingDist(
             # pyre-fixme [6]

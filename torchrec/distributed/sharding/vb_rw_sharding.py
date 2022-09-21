@@ -14,6 +14,7 @@ import torch.distributed as dist
 from torchrec.distributed.dist_data import PooledEmbeddingsReduceScatter
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     bucketize_kjt_before_all2all,
@@ -24,10 +25,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.rw_sharding import BaseRwEmbeddingSharding
-from torchrec.distributed.sharding.vb_sharding import (
-    BaseVariableBatchEmbeddingDist,
-    VariableBatchShardingContext,
-)
+from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
 from torchrec.distributed.types import Awaitable
 
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -165,7 +163,9 @@ class VariableBatchRwEmbeddingDistAwaitable(Awaitable[torch.Tensor]):
         return embedding
 
 
-class VariableBatchRwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Tensor]):
+class VariableBatchRwPooledEmbeddingDist(
+    BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]
+):
     def __init__(
         self,
         pg: dist.ProcessGroup,
@@ -178,8 +178,9 @@ class VariableBatchRwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: VariableBatchShardingContext,
+        sharding_ctx: Optional[VariableBatchShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
+        assert sharding_ctx is not None
         batch_size_per_rank = sharding_ctx.batch_size_per_rank
         batch_size = batch_size_per_rank[self._rank]
 
@@ -191,7 +192,9 @@ class VariableBatchRwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
 
 
 class VariableBatchRwPooledEmbeddingSharding(
-    BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseRwEmbeddingSharding[
+        VariableBatchShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards pooled embeddings row-wise, i.e.. a given embedding table is evenly
@@ -237,7 +240,7 @@ class VariableBatchRwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseVariableBatchEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
         # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
         #  `Optional[ProcessGroup]`.
         return VariableBatchRwPooledEmbeddingDist(self._pg)

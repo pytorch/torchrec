@@ -30,10 +30,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.twrw_sharding import BaseTwRwEmbeddingSharding
-from torchrec.distributed.sharding.vb_sharding import (
-    BaseVariableBatchEmbeddingDist,
-    VariableBatchShardingContext,
-)
+from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
 from torchrec.distributed.types import Awaitable
 
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -233,7 +230,7 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
 
 
 class VariableBatchTwRwPooledEmbeddingDist(
-    BaseVariableBatchEmbeddingDist[torch.Tensor]
+    BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]
 ):
     def __init__(
         self,
@@ -258,9 +255,9 @@ class VariableBatchTwRwPooledEmbeddingDist(
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: VariableBatchShardingContext,
+        sharding_ctx: Optional[VariableBatchShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
-
+        assert sharding_ctx is not None
         # preprocess batch_size_per_rank
         (
             batch_size_per_rank_by_cross_group,
@@ -308,7 +305,9 @@ class VariableBatchTwRwPooledEmbeddingDist(
 
 
 class VariableBatchTwRwPooledEmbeddingSharding(
-    BaseTwRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwRwEmbeddingSharding[
+        VariableBatchShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards embedding bags table-wise then row-wise.
@@ -359,7 +358,7 @@ class VariableBatchTwRwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
         return VariableBatchTwRwPooledEmbeddingDist(
             rank=self._rank,
             cross_pg=cast(dist.ProcessGroup, self._cross_pg),

@@ -18,6 +18,7 @@ from torchrec.distributed.embedding_sharding import (
     bucketize_kjt_before_all2all,
     EmbeddingSharding,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
     group_tables,
     SparseFeaturesAllToAll,
 )
@@ -39,11 +40,13 @@ from torchrec.distributed.types import (
 from torchrec.streamable import Multistreamable
 
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for row-wise sharding.
     """
@@ -326,7 +329,9 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(bucketized_sparse_features)
 
 
-class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class RwPooledEmbeddingDist(
+    BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes pooled embedding tensor in RW fashion by performing a reduce-scatter
     operation.
@@ -351,7 +356,11 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
             else None,
         )
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmptyShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs reduce-scatter pooled operation on pooled embeddings tensor.
 
@@ -365,7 +374,11 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         return self._dist(local_embs)
 
 
-class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class RwPooledEmbeddingSharding(
+    BaseRwEmbeddingSharding[
+        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
+):
     """
     Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
     by rows and table slices are placed on all ranks.
@@ -410,7 +423,7 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
         return RwPooledEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.

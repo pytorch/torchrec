@@ -98,7 +98,9 @@ def create_embedding_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
+) -> EmbeddingSharding[
+    SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwSequenceEmbeddingSharding(
             sharding_infos,
@@ -315,7 +317,10 @@ class ShardedEmbeddingCollection(
             fused_params,
         )
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[SparseFeatures, torch.Tensor]
+            str,
+            EmbeddingSharding[
+                SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+            ],
         ] = {
             sharding_type: create_embedding_sharding(
                 sharding_type,

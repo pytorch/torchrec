@@ -13,6 +13,7 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
+    EmptyShardingContext,
     SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
@@ -99,7 +100,10 @@ class ShardedEmbeddingBagCollection(
         )
         need_pos = _check_need_pos(module)
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[SparseFeatures, torch.Tensor]
+            str,
+            EmbeddingSharding[
+                EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+            ],
         ] = {
             sharding_type: create_embedding_bag_sharding(
                 sharding_type,

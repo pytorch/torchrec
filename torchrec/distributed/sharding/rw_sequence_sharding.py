@@ -12,6 +12,7 @@ import torch.distributed as dist
 from torchrec.distributed.dist_data import SequenceEmbeddingsAllToAll
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
@@ -23,14 +24,13 @@ from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     RwSparseFeaturesDist,
 )
-from torchrec.distributed.sharding.sequence_sharding import (
-    BaseSequenceEmbeddingDist,
-    SequenceShardingContext,
-)
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
-class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
+class RwSequenceEmbeddingDist(
+    BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes sequence embedding tensor in RW fashion with an AlltoAll operation.
 
@@ -62,7 +62,7 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: SequenceShardingContext,
+        sharding_ctx: Optional[SequenceShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on sequence embeddings tensor.
@@ -75,7 +75,7 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
-
+        assert sharding_ctx is not None
         return self._dist(
             local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,
@@ -86,7 +86,9 @@ class RwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
 
 
 class RwSequenceEmbeddingSharding(
-    BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseRwEmbeddingSharding[
+        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly
@@ -130,7 +132,7 @@ class RwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]:
         return RwSequenceEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.

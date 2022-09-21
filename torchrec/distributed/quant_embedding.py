@@ -72,7 +72,12 @@ def create_infer_embedding_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
-) -> EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]:
+) -> EmbeddingSharding[
+    InferSequenceShardingContext,
+    SparseFeaturesList,
+    List[torch.Tensor],
+    List[torch.Tensor],
+]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
@@ -161,7 +166,13 @@ class ShardedQuantEmbeddingCollection(
             module, table_name_to_parameter_sharding, fused_params
         )
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
+            str,
+            EmbeddingSharding[
+                InferSequenceShardingContext,
+                SparseFeaturesList,
+                List[torch.Tensor],
+                List[torch.Tensor],
+            ],
         ] = {
             sharding_type: create_infer_embedding_sharding(
                 sharding_type, embedding_confings, env

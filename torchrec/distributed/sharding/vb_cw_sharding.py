@@ -13,6 +13,7 @@ from fbgemm_gpu.permute_pooled_embedding_modules_split import (
 )
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
@@ -21,7 +22,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.cw_sharding import BaseCwEmbeddingSharding
-from torchrec.distributed.sharding.vb_sharding import BaseVariableBatchEmbeddingDist
+from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
 from torchrec.distributed.sharding.vb_tw_sharding import (
     VariableBatchTwPooledEmbeddingDist,
     VariableBatchTwSparseFeaturesDist,
@@ -29,7 +30,9 @@ from torchrec.distributed.sharding.vb_tw_sharding import (
 
 
 class VariableBatchCwPooledEmbeddingSharding(
-    BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseCwEmbeddingSharding[
+        VariableBatchShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards embedding bags column-wise, i.e.. a given embedding table is partitioned
@@ -68,7 +71,7 @@ class VariableBatchCwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseVariableBatchEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
         callbacks = None
         if self._permute_embeddings and self._embedding_order != list(
             range(len(self._embedding_order))
