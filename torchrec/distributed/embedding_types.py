@@ -308,6 +308,8 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         if compute_kernel in {
             EmbeddingComputeKernel.FUSED_UVM.value,
             EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            EmbeddingComputeKernel.CAI.value,
+            EmbeddingComputeKernel.CAI_BATCH.value,
         }:
             assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
