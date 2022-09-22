@@ -208,7 +208,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             embedding_dim=embedding_dim,
             mode=self.pool_str,
             include_last_offset=True,
-            sparse=False,
+            sparse=True,
             # _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
             #     min(self._weight_init_mins), max(self._weight_init_maxs)),
             _weight=torch.cat(weight_list,0),
