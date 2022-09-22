@@ -179,9 +179,13 @@ def gen_model_and_input(
 def copy_state_dict(
     loc: Dict[str, Union[torch.Tensor, ShardedTensor]],
     glob: Dict[str, torch.Tensor],
+    exclude_predfix: Optional[str] = None,
 ) -> None:
     for name, tensor in loc.items():
-        assert name in glob
+        if exclude_predfix is not None and name.startswith(exclude_predfix):
+            continue
+        else:
+            assert name in glob, name
         global_tensor = glob[name]
         if isinstance(global_tensor, ShardedTensor):
             global_tensor = global_tensor.local_shards()[0].tensor
