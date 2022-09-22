@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 import torch
 from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
@@ -18,13 +19,15 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.cw_sharding import BaseCwEmbeddingSharding
-from torchrec.distributed.sharding.sequence_sharding import BaseSequenceEmbeddingDist
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import TwSequenceEmbeddingDist
 from torchrec.distributed.sharding.tw_sharding import TwSparseFeaturesDist
 
 
 class CwSequenceEmbeddingSharding(
-    BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseCwEmbeddingSharding[
+        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards sequence (unpooled) embeddings column-wise, i.e.. a given embedding is
@@ -35,9 +38,8 @@ class CwSequenceEmbeddingSharding(
         self,
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
+        assert self._pg is not None
         return TwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
@@ -60,10 +62,9 @@ class CwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]:
+        assert self._pg is not None
         return TwSequenceEmbeddingDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self.id_list_features_per_rank(),
             device if device is not None else self._device,

@@ -15,6 +15,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
     SparseFeaturesListAwaitable,
 )
 from torchrec.distributed.embedding_types import (
@@ -92,7 +93,9 @@ def create_embedding_bag_sharding(
     permute_embeddings: bool = False,
     need_pos: bool = False,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-) -> EmbeddingSharding[SparseFeatures, torch.Tensor]:
+) -> EmbeddingSharding[
+    EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+]:
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
@@ -285,7 +288,10 @@ class ShardedEmbeddingBagCollection(
         )
         need_pos = _check_need_pos(module)
         self._sharding_type_to_sharding: Dict[
-            str, EmbeddingSharding[SparseFeatures, torch.Tensor]
+            str,
+            EmbeddingSharding[
+                EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+            ],
         ] = {
             sharding_type: create_embedding_bag_sharding(
                 sharding_type,
@@ -629,7 +635,7 @@ class ShardedEmbeddingBag(
             )
 
         self._embedding_sharding: EmbeddingSharding[
-            SparseFeatures, torch.Tensor
+            EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
         ] = create_embedding_bag_sharding(
             sharding_type=self.parameter_sharding.sharding_type,
             sharding_infos=[

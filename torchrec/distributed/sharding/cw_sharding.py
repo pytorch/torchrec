@@ -18,6 +18,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
@@ -38,11 +39,13 @@ from torchrec.distributed.types import (
 )
 from torchrec.streamable import Multistreamable
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
+class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
     """
     Base class for column-wise sharding.
     """
@@ -190,7 +193,11 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[F, T]):
         )
 
 
-class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class CwPooledEmbeddingSharding(
+    BaseCwEmbeddingSharding[
+        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
+):
     """
     Shards embedding bags column-wise, i.e.. a given embedding table is partitioned
     along its columns and placed on specified ranks.
@@ -200,9 +207,8 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
         self,
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
+        assert self._pg is not None
         return TwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
@@ -226,7 +232,7 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
         device = device if device is not None else self._device
         embedding_permute_op: Optional[PermutePooledEmbeddingsSplit] = None
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None
@@ -239,10 +245,8 @@ class CwPooledEmbeddingSharding(BaseCwEmbeddingSharding[SparseFeatures, torch.Te
                 self._embedding_order,
             ).to(device=device)
             callbacks = [embedding_permute_op]
-
+        assert self._pg is not None
         return TwPooledEmbeddingDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device,

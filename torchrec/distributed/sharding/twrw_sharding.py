@@ -24,6 +24,7 @@ from torchrec.distributed.embedding_sharding import (
     bucketize_kjt_before_all2all,
     EmbeddingSharding,
     EmbeddingShardingInfo,
+    EmptyShardingContext,
     group_tables,
     SparseFeaturesAllToAll,
 )
@@ -44,11 +45,13 @@ from torchrec.distributed.types import (
 )
 from torchrec.streamable import Multistreamable
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for table wise row wise sharding.
     """
@@ -448,7 +451,9 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         ]
 
 
-class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class TwRwPooledEmbeddingDist(
+    BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes pooled embedding tensor in TWRW fashion by performing a reduce-scatter
     operation row wise on the host level and then an AlltoAll operation table wise on
@@ -492,7 +497,11 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
             else None,
         )
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmptyShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs reduce-scatter pooled operation on pooled embeddings tensor followed by
         AlltoAll pooled operation.
@@ -508,7 +517,9 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
 
 
 class TwRwPooledEmbeddingSharding(
-    BaseTwRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwRwEmbeddingSharding[
+        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards embedding bags table-wise then row-wise.
@@ -558,7 +569,7 @@ class TwRwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
         return TwRwPooledEmbeddingDist(
             cross_pg=cast(dist.ProcessGroup, self._cross_pg),
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
