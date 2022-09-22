@@ -212,7 +212,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             (pooling, data_type) = key
             embedding_specs = []
             weight_lists = []
-            for table in emb_configs:
+            feature_table_map: List[int] = []
+
+            for idx, table in enumerate(emb_configs):
                 embedding_specs.append(
                     (
                         table.name,
@@ -223,6 +225,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     )
                 )
                 weight_lists.append(table_name_to_quantized_weights[table.name])
+                feature_table_map.extend([idx] * table.num_features())
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=embedding_specs,
@@ -231,6 +234,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=16,
+                feature_table_map=feature_table_map,
             )
             self._emb_modules.append(emb_module)
 
