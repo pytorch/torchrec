@@ -254,10 +254,9 @@ int main(int argc, char* argv[]) {
               .toIValue();
       for (const auto& iter : batchingMetadata.toGenericDict()) {
         torchrec::BatchingMetadata metadata;
-        metadata.type = iter.value().toString()->string();
+        metadata.type = iter.value().toStringRef();
         metadata.device = "cuda";
-        batchingMetadataMap[iter.key().toString()->string()] =
-            std::move(metadata);
+        batchingMetadataMap[iter.key().toStringRef()] = std::move(metadata);
       }
     }
 
