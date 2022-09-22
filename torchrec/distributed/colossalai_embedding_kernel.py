@@ -70,8 +70,7 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
                         embedding_config.get_weight_init_min(),
                         embedding_config.get_weight_init_max(),
                     ),
-                    cuda_row_num=int(
-                        embedding_config.local_rows * cache_ratio),
+                    cache_ratio=cache_ratio,
                 )
                 self._emb_modules.append(
                     emb
@@ -203,6 +202,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             embedding_dim=embedding_dim,
             mode=pool_str,
             include_last_offset=True,
+            sparse=True,
             # _weight=torch.cat(self._weight_list, 0),
             _weight=torch.empty(
                 num_embeddings,
@@ -212,7 +212,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 min(self._weight_init_mins),
                 max(self._weight_init_maxs),
             ),
-            cuda_row_num=int(num_embeddings * cache_ratio),
+            cache_ratio=cache_ratio,
         )
         # prepare for features concatenation
         self._table_idx_offset_list = np.cumsum(
@@ -240,7 +240,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             [config.name for config in self._config.embedding_tables]
         )
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
-            nn.Parameter, self._emb_module.weight
+            nn.Parameter, self._emb_module.cache_weight_mgr.cuda_cached_weight
         )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
