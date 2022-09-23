@@ -370,6 +370,9 @@ class ParameterSharding:
     sharding_spec: Optional[ShardingSpec] = None
 
 
+ShardedModuleContext = Multistreamable
+
+
 class EmptyShardedModuleContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
