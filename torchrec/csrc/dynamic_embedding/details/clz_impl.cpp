@@ -20,8 +20,6 @@ template <typename T>
 struct ClzImpl {
   /**
    * Naive implementation for no __builtin_clz
-   * @param v
-   * @return
    */
   int operator()(T v) const {
     int result = 0;
