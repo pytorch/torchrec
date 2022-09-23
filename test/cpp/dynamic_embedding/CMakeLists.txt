@@ -11,3 +11,4 @@ function(add_tde_test NAME)
 endfunction()
 
 add_tde_test(bits_op_test bits_op_test.cpp)
+add_tde_test(move_only_function_test move_only_function_test.cpp)
