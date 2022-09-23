@@ -244,18 +244,7 @@ class ShardedQuantEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: EmptyShardedModuleContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(lookup(features))
-                for lookup, dist, features in zip(
-                    self._lookups,
-                    self._output_dists,
-                    input,
-                )
-            ],
-            embedding_dims=self._embedding_dims,
-            embedding_names=self._embedding_names,
-        )
+        return self.output_dist(ctx, self.compute(ctx, input))
 
     def copy(self, device: torch.device) -> nn.Module:
         if self._has_uninitialized_output_dist:
