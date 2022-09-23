@@ -642,8 +642,8 @@ class BinaryCriteoUtils:
             val_train_path = os.path.join(
                 output_dir_shuffled, f"day_{days-1}_{part}.npy"
             )
-            shutil.copyfile(path_to_original, val_train_path)
             print(f"Copying over {path_to_original} to {val_train_path}")
+            shutil.copyfile(path_to_original, val_train_path)
 
 
 class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
