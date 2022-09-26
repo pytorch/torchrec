@@ -10,3 +10,6 @@ add_library(tde_cpp_objs
             details/ctz_impl.cpp)
 
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
+target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
+target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})
+target_compile_options(tde_cpp_objs PUBLIC -fPIC)
