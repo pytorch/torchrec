@@ -121,9 +121,10 @@ jobs:
       working-directory: ./cpp-build
       shell: bash
       run: |
-        conda activate build_binary && \
-        cmake -DBUILD_TEST=ON -DCMAKE_PREFIX_PATH=`python -c 'import torch;print(torch.utils.cmake_prefix_path)'` -DCMAKE_CXX_COMPILER=$(which x86_64-conda-linux-gnu-g++) .. && \
-        make -j
+        conda run -n build_binary cmake \
+            -DBUILD_TEST=ON \
+            -DCMAKE_PREFIX_PATH=/home/ec2-user/miniconda/envs/build_binary/lib/python3.7/site-packages/torch/share/cmake ..
+        conda run -n build_binary make -j
     - name: Test
       working-directory: ./cpp-build
       shell: bash
