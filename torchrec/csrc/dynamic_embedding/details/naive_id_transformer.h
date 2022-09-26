@@ -8,7 +8,7 @@
 
 #pragma once
 #include <c10/util/flat_hash_map.h>
-#include <torchrec/csrc/dynamic_embedding/details/move_only_function.h>
+#include <torchrec/csrc/dynamic_embedding/details/bitmap.h>
 #include <memory>
 #include <optional>
 #include <span>
@@ -28,25 +28,6 @@ inline LXURecord no_update(
 inline void no_fetch(int64_t global_id, int64_t cache_id) {}
 
 } // namespace transform_default
-
-template <typename T = uint32_t>
-struct Bitmap {
-  explicit Bitmap(int64_t num_bits);
-  Bitmap(const Bitmap&) = delete;
-  Bitmap(Bitmap&&) noexcept = default;
-
-  int64_t next_free_bit();
-  void free_bit(int64_t offset);
-  bool full() const;
-
-  static constexpr int64_t num_bits_per_value = sizeof(T) * 8;
-
-  const int64_t num_total_bits_;
-  const int64_t num_values_;
-  std::unique_ptr<T[]> values_;
-
-  int64_t next_free_bit_;
-};
 
 template <typename LXURecord>
 struct TransformerRecord {
@@ -117,7 +98,7 @@ class NaiveIDTransformer {
    *
    * @return the iterator created.
    */
-  MoveOnlyFunction<std::optional<record_t>()> iterator() const;
+  std::function<std::optional<record_t>()> iterator() const;
 
  private:
   struct CacheValue {
