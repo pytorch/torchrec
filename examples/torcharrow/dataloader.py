@@ -99,7 +99,7 @@ def get_dataloader(
     def criteo_collate(df):
         dense_features, kjt, labels = df.to_tensor(
             {
-                "dense_features": tap.rec.Dense(batch_first=True),
+                "dense_features": tap.rec.Dense(batch_first=False),
                 "sparse_features": _JaggedTensorConversion(),
                 "label": _Scalar(),
             }
