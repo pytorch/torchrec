@@ -143,7 +143,8 @@ void BatchingQueue::createBatch() {
           startTime = front.addedTime;
         }
 
-        if (batchSize + front.request->batch_size > config_.maxBatchSize) {
+        if (batchSize > 0 &&
+            (batchSize + front.request->batch_size > config_.maxBatchSize)) {
           full = true;
           break;
         }
