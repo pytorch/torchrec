@@ -95,4 +95,45 @@ TEST(BatchingQueueTest, Basic) {
       value->forwardArgs.at("cpu_features")));
 }
 
+TEST(BatchingQueueTest, MaxBatchSize) {
+  int device_cnt;
+  cudaGetDeviceCount(&device_cnt);
+  if (device_cnt == 0) {
+    GTEST_SKIP();
+  }
+
+  folly::Synchronized<std::shared_ptr<PredictionBatch>> res;
+  std::vector<BatchQueueCb> batchQueueCbs;
+  batchQueueCbs.push_back(
+      [&](std::shared_ptr<PredictionBatch> batch) { res = batch; });
+  std::unique_ptr<IBatchingQueueObserver> batchingQueueObserver =
+      std::make_unique<EmptyBatchingQueueObserver>();
+  BatchingQueue queue(
+      batchQueueCbs,
+      BatchingQueue::Config{
+          .batchingMetadata =
+              {{"cpu_features",
+                BatchingMetadata{.type = "dense", .device = "cpu"}}},
+          .maxBatchSize = 1},
+      /* worldSize */ 1,
+      std::move(batchingQueueObserver));
+
+  queue.add(
+      createRequest(2, 2),
+      folly::Promise<std::unique_ptr<PredictionResponse>>());
+
+  auto value = std::shared_ptr<PredictionBatch>();
+  while (true) {
+    value = res.exchange(nullptr);
+    if (value) {
+      break;
+    }
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+
+  ASSERT_EQ(2 * 2, value->forwardArgs.at("cpu_features").numel());
+  ASSERT_EQ(value->forwardArgs.at("cpu_features").device(), at::kCPU);
+}
+
 } // namespace torchrec
