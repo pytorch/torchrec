@@ -307,8 +307,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.sparse">
-<span id="torchrec-sparse"></span><h1>torchrec.sparse<a class="headerlink" href="#module-torchrec.sparse" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-sparse">
+<h1>torchrec.sparse<a class="headerlink" href="#torchrec-sparse" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Jagged Tensors</p>
 <p>It has 3 classes: JaggedTensor, KeyedJaggedTensor, KeyedTensor.</p>
 <p>JaggedTensor</p>
@@ -325,7 +325,7 @@ further information.</p>
 Keyed dimension can be variable length (length_per_key). Common use cases uses include storage
 of pooled embeddings of different dimensions. Please refer to KeyedTensor docstring for full
 example and further information.</p>
-<section id="module-torchrec.sparse.jagged_tensor">
+<span class="target" id="module-torchrec.sparse"></span><section id="module-torchrec.sparse.jagged_tensor">
 <span id="torchrec-sparse-jagged-tensor"></span><h2>torchrec.sparse.jagged_tensor<a class="headerlink" href="#module-torchrec.sparse.jagged_tensor" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor">
@@ -838,8 +838,8 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 </dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Jagged Tensors</p>
 <p>It has 3 classes: JaggedTensor, KeyedJaggedTensor, KeyedTensor.</p>
 <p>JaggedTensor</p>
@@ -856,7 +856,7 @@ further information.</p>
 Keyed dimension can be variable length (length_per_key). Common use cases uses include storage
 of pooled embeddings of different dimensions. Please refer to KeyedTensor docstring for full
 example and further information.</p>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -901,8 +901,71 @@ example and further information.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.sparse</a><ul>
-<li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor"><code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.empty()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.from_dense()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.from_dense_lengths()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.lengths()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.lengths_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.offsets()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.offsets_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.record_stream()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to_dense()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to_padded_dense()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.values"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.values()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.weights()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.weights_or_none()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensorMeta"><code class="docutils literal notranslate"><span class="pre">JaggedTensorMeta</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.concat()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.device()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty_like"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty_like()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_lengths_sync()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_offsets_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_offsets_sync()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.keys()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.length_per_key()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.length_per_key_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.lengths()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.lengths_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offset_per_key()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offset_per_key_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offsets()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offsets_or_none()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.permute"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.permute()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.pin_memory()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.record_stream()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.split()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.stride()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.sync()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.to()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to_dict"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.to_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.values"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.values()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.weights()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.weights_or_none()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor"><code class="docutils literal notranslate"><span class="pre">KeyedTensor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.from_tensor_list"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.from_tensor_list()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.key_dim"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.key_dim()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.keys"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.keys()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.length_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.length_per_key()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.offset_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.offset_per_key()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.record_stream()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.regroup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.regroup_as_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.to()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to_dict"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.to_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.values"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.values()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -925,6 +988,7 @@ example and further information.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.distributed.planner">
-<span id="torchrec-distributed-planner"></span><h1>torchrec.distributed.planner<a class="headerlink" href="#module-torchrec.distributed.planner" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-distributed-planner">
+<h1>torchrec.distributed.planner<a class="headerlink" href="#torchrec-distributed-planner" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Planner</p>
 <p>The planner provides the specifications necessary for a module to be sharded,
 considering the possible options to build an optimized plan.</p>
@@ -324,7 +324,7 @@ modeling.</p></li>
 </ul>
 </dd>
 </dl>
-<section id="module-torchrec.distributed.planner.constants">
+<span class="target" id="module-torchrec.distributed.planner"></span><section id="module-torchrec.distributed.planner.constants">
 <span id="torchrec-distributed-planner-constants"></span><h2>torchrec.distributed.planner.constants<a class="headerlink" href="#module-torchrec.distributed.planner.constants" title="Permalink to this heading">¶</a></h2>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.constants.kernel_bw_lookup">
@@ -1308,17 +1308,211 @@ to store the shard with an estimation ‘perf’.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.distributed.planner</a><ul>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.constants">torchrec.distributed.planner.constants</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.enumerators">torchrec.distributed.planner.enumerators</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.partitioners">torchrec.distributed.planner.partitioners</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.perf_models">torchrec.distributed.planner.perf_models</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.planners">torchrec.distributed.planner.planners</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.proposers">torchrec.distributed.planner.proposers</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.shard_estimators">torchrec.distributed.planner.shard_estimators</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.stats">torchrec.distributed.planner.stats</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.storage_reservations">torchrec.distributed.planner.storage_reservations</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.types">torchrec.distributed.planner.types</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.utils">torchrec.distributed.planner.utils</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.constants">torchrec.distributed.planner.constants</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.constants.kernel_bw_lookup"><code class="docutils literal notranslate"><span class="pre">kernel_bw_lookup()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.enumerators">torchrec.distributed.planner.enumerators</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.EmbeddingEnumerator"><code class="docutils literal notranslate"><span class="pre">EmbeddingEnumerator</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.EmbeddingEnumerator.enumerate"><code class="docutils literal notranslate"><span class="pre">EmbeddingEnumerator.enumerate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.calculate_shard_sizes_and_offsets"><code class="docutils literal notranslate"><span class="pre">calculate_shard_sizes_and_offsets()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.get_partition_by_type"><code class="docutils literal notranslate"><span class="pre">get_partition_by_type()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.partitioners">torchrec.distributed.planner.partitioners</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner"><code class="docutils literal notranslate"><span class="pre">GreedyPerfPartitioner</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner.partition"><code class="docutils literal notranslate"><span class="pre">GreedyPerfPartitioner.partition()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.sharding_options"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup.sharding_options</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.storage_sum"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup.storage_sum</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.perf_models">torchrec.distributed.planner.perf_models</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.perf_models.NoopPerfModel"><code class="docutils literal notranslate"><span class="pre">NoopPerfModel</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.perf_models.NoopPerfModel.rate"><code class="docutils literal notranslate"><span class="pre">NoopPerfModel.rate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.planners">torchrec.distributed.planner.planners</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.collective_plan"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner.collective_plan()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner.plan()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.proposers">torchrec.distributed.planner.proposers</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer"><code class="docutils literal notranslate"><span class="pre">GreedyProposer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.feedback"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.feedback()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.load"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.load()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.propose"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.propose()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.feedback"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.feedback()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.load"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.load()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.propose"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.propose()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer"><code class="docutils literal notranslate"><span class="pre">UniformProposer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.feedback"><code class="docutils literal notranslate"><span class="pre">UniformProposer.feedback()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.load"><code class="docutils literal notranslate"><span class="pre">UniformProposer.load()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.propose"><code class="docutils literal notranslate"><span class="pre">UniformProposer.propose()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.proposers_to_proposals_list"><code class="docutils literal notranslate"><span class="pre">proposers_to_proposals_list()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.shard_estimators">torchrec.distributed.planner.shard_estimators</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator"><code class="docutils literal notranslate"><span class="pre">EmbeddingPerfEstimator</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">EmbeddingPerfEstimator.estimate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator"><code class="docutils literal notranslate"><span class="pre">EmbeddingStorageEstimator</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">EmbeddingStorageEstimator.estimate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.calculate_shard_storages"><code class="docutils literal notranslate"><span class="pre">calculate_shard_storages()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.perf_func_emb_wall_time"><code class="docutils literal notranslate"><span class="pre">perf_func_emb_wall_time()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.stats">torchrec.distributed.planner.stats</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.stats.EmbeddingStats"><code class="docutils literal notranslate"><span class="pre">EmbeddingStats</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.stats.EmbeddingStats.log"><code class="docutils literal notranslate"><span class="pre">EmbeddingStats.log()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.storage_reservations">torchrec.distributed.planner.storage_reservations</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.FixedPercentageReservation"><code class="docutils literal notranslate"><span class="pre">FixedPercentageReservation</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.FixedPercentageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">FixedPercentageReservation.reserve()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.HeuristicalStorageReservation"><code class="docutils literal notranslate"><span class="pre">HeuristicalStorageReservation</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.HeuristicalStorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">HeuristicalStorageReservation.reserve()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation"><code class="docutils literal notranslate"><span class="pre">InferenceStorageReservation</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">InferenceStorageReservation.reserve()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.types">torchrec.distributed.planner.types</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware"><code class="docutils literal notranslate"><span class="pre">DeviceHardware</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.perf"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.perf</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.rank"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.rank</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.storage"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.storage</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator"><code class="docutils literal notranslate"><span class="pre">Enumerator</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator.enumerate"><code class="docutils literal notranslate"><span class="pre">Enumerator.enumerate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.batch_sizes"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.batch_sizes</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.compute_kernels</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.is_weighted"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.is_weighted</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.min_partition"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.min_partition</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.num_poolings"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.num_poolings</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.pooling_factors"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.pooling_factors</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.sharding_types"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.sharding_types</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType"><code class="docutils literal notranslate"><span class="pre">PartitionByType</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.DEVICE"><code class="docutils literal notranslate"><span class="pre">PartitionByType.DEVICE</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.HOST"><code class="docutils literal notranslate"><span class="pre">PartitionByType.HOST</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.UNIFORM"><code class="docutils literal notranslate"><span class="pre">PartitionByType.UNIFORM</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner"><code class="docutils literal notranslate"><span class="pre">Partitioner</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner.partition"><code class="docutils literal notranslate"><span class="pre">Partitioner.partition()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PerfModel"><code class="docutils literal notranslate"><span class="pre">PerfModel</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PerfModel.rate"><code class="docutils literal notranslate"><span class="pre">PerfModel.rate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerError"><code class="docutils literal notranslate"><span class="pre">PlannerError</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer"><code class="docutils literal notranslate"><span class="pre">Proposer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.feedback"><code class="docutils literal notranslate"><span class="pre">Proposer.feedback()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.load"><code class="docutils literal notranslate"><span class="pre">Proposer.load()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.propose"><code class="docutils literal notranslate"><span class="pre">Proposer.propose()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard"><code class="docutils literal notranslate"><span class="pre">Shard</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.offset"><code class="docutils literal notranslate"><span class="pre">Shard.offset</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.perf"><code class="docutils literal notranslate"><span class="pre">Shard.perf</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.rank"><code class="docutils literal notranslate"><span class="pre">Shard.rank</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.size"><code class="docutils literal notranslate"><span class="pre">Shard.size</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.storage"><code class="docutils literal notranslate"><span class="pre">Shard.storage</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator"><code class="docutils literal notranslate"><span class="pre">ShardEstimator</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">ShardEstimator.estimate()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption"><code class="docutils literal notranslate"><span class="pre">ShardingOption</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.batch_size"><code class="docutils literal notranslate"><span class="pre">ShardingOption.batch_size</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.compute_kernel"><code class="docutils literal notranslate"><span class="pre">ShardingOption.compute_kernel</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.dependency"><code class="docutils literal notranslate"><span class="pre">ShardingOption.dependency</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.downstream_modules"><code class="docutils literal notranslate"><span class="pre">ShardingOption.downstream_modules</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.fqn"><code class="docutils literal notranslate"><span class="pre">ShardingOption.fqn</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.input_lengths"><code class="docutils literal notranslate"><span class="pre">ShardingOption.input_lengths</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled"><code class="docutils literal notranslate"><span class="pre">ShardingOption.is_pooled</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.module"><code class="docutils literal notranslate"><span class="pre">ShardingOption.module</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.name"><code class="docutils literal notranslate"><span class="pre">ShardingOption.name</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_inputs"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_inputs</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_shards"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_shards</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.partition_by"><code class="docutils literal notranslate"><span class="pre">ShardingOption.partition_by</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.path"><code class="docutils literal notranslate"><span class="pre">ShardingOption.path</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.sharding_type"><code class="docutils literal notranslate"><span class="pre">ShardingOption.sharding_type</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.shards"><code class="docutils literal notranslate"><span class="pre">ShardingOption.shards</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.tensor"><code class="docutils literal notranslate"><span class="pre">ShardingOption.tensor</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.total_storage"><code class="docutils literal notranslate"><span class="pre">ShardingOption.total_storage</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.upstream_modules"><code class="docutils literal notranslate"><span class="pre">ShardingOption.upstream_modules</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Stats"><code class="docutils literal notranslate"><span class="pre">Stats</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Stats.log"><code class="docutils literal notranslate"><span class="pre">Stats.log()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage"><code class="docutils literal notranslate"><span class="pre">Storage</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.ddr"><code class="docutils literal notranslate"><span class="pre">Storage.ddr</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.fits_in"><code class="docutils literal notranslate"><span class="pre">Storage.fits_in()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.hbm"><code class="docutils literal notranslate"><span class="pre">Storage.hbm</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation"><code class="docutils literal notranslate"><span class="pre">StorageReservation</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">StorageReservation.reserve()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology"><code class="docutils literal notranslate"><span class="pre">Topology</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.compute_device"><code class="docutils literal notranslate"><span class="pre">Topology.compute_device</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.devices"><code class="docutils literal notranslate"><span class="pre">Topology.devices</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.inter_host_bw"><code class="docutils literal notranslate"><span class="pre">Topology.inter_host_bw</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.intra_host_bw"><code class="docutils literal notranslate"><span class="pre">Topology.intra_host_bw</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.local_world_size"><code class="docutils literal notranslate"><span class="pre">Topology.local_world_size</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.world_size"><code class="docutils literal notranslate"><span class="pre">Topology.world_size</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.utils">torchrec.distributed.planner.utils</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_gb"><code class="docutils literal notranslate"><span class="pre">bytes_to_gb()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_mb"><code class="docutils literal notranslate"><span class="pre">bytes_to_mb()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.gb_to_bytes"><code class="docutils literal notranslate"><span class="pre">gb_to_bytes()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.prod"><code class="docutils literal notranslate"><span class="pre">prod()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.sharder_name"><code class="docutils literal notranslate"><span class="pre">sharder_name()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1341,6 +1535,7 @@ to store the shard with an estimation ‘perf’.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.modules">
-<span id="torchrec-modules"></span><h1>torchrec.modules<a class="headerlink" href="#module-torchrec.modules" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-modules">
+<h1>torchrec.modules<a class="headerlink" href="#torchrec-modules" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Common Modules</p>
 <p>The torchrec modules contain a collection of various modules.</p>
 <dl class="simple">
@@ -326,10 +326,10 @@ passed to provided interaction module.</p></li>
 </ul>
 </dd>
 </dl>
-<section id="module-torchrec.modules.activation">
-<span id="torchrec-modules-activation"></span><h2>torchrec.modules.activation<a class="headerlink" href="#module-torchrec.modules.activation" title="Permalink to this heading">¶</a></h2>
+<span class="target" id="module-torchrec.modules"></span><section id="torchrec-modules-activation">
+<h2>torchrec.modules.activation<a class="headerlink" href="#torchrec-modules-activation" title="Permalink to this heading">¶</a></h2>
 <p>Activation Modules</p>
-<dl class="py class">
+<span class="target" id="module-torchrec.modules.activation"></span><dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.activation.SwishLayerNorm">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.activation.</span></span><span class="sig-name descname"><span class="pre">SwishLayerNorm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.activation.SwishLayerNorm" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
@@ -372,10 +372,10 @@ input_dim=[d2, d3] will do the layer normalization on last two dimensions.</p></
 </dd></dl>
 
 </section>
-<section id="module-torchrec.modules.crossnet">
-<span id="torchrec-modules-crossnet"></span><h2>torchrec.modules.crossnet<a class="headerlink" href="#module-torchrec.modules.crossnet" title="Permalink to this heading">¶</a></h2>
+<section id="torchrec-modules-crossnet">
+<h2>torchrec.modules.crossnet<a class="headerlink" href="#torchrec-modules-crossnet" title="Permalink to this heading">¶</a></h2>
 <p>CrossNet API</p>
-<dl class="py class">
+<span class="target" id="module-torchrec.modules.crossnet"></span><dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.crossnet.CrossNet">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">CrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.CrossNet" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
@@ -613,15 +613,15 @@ the number of learnable parameters.</p>
 </dd></dl>
 
 </section>
-<section id="module-torchrec.modules.deepfm">
-<span id="torchrec-modules-deepfm"></span><h2>torchrec.modules.deepfm<a class="headerlink" href="#module-torchrec.modules.deepfm" title="Permalink to this heading">¶</a></h2>
+<section id="torchrec-modules-deepfm">
+<h2>torchrec.modules.deepfm<a class="headerlink" href="#torchrec-modules-deepfm" title="Permalink to this heading">¶</a></h2>
 <p>Deep Factorization-Machine Modules</p>
 <p>The following modules are based off the <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">Deep Factorization-Machine (DeepFM) paper</a></p>
 <ul class="simple">
 <li><p>Class DeepFM implents the DeepFM Framework</p></li>
 <li><p>Class FactorizationMachine implements FM as noted in the above paper.</p></li>
 </ul>
-<dl class="py class">
+<span class="target" id="module-torchrec.modules.deepfm"></span><dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.deepfm.DeepFM">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.deepfm.</span></span><span class="sig-name descname"><span class="pre">DeepFM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.deepfm.DeepFM" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
@@ -1806,8 +1806,8 @@ copies of the provided module and reinitializing the Linear layers.</p>
 <dd></dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Common Modules</p>
 <p>The torchrec modules contain a collection of various modules.</p>
 <dl class="simple">
@@ -1824,7 +1824,7 @@ passed to provided interaction module.</p></li>
 </ul>
 </dd>
 </dl>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -1871,16 +1871,197 @@ passed to provided interaction module.</p></li>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.modules</a><ul>
-<li><a class="reference internal" href="#module-torchrec.modules.activation">torchrec.modules.activation</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.crossnet">torchrec.modules.crossnet</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.deepfm">torchrec.modules.deepfm</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.embedding_configs">torchrec.modules.embedding_configs</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.embedding_modules">torchrec.modules.embedding_modules</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.feature_processor">torchrec.modules.feature_processor</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.lazy_extension">torchrec.modules.lazy_extension</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.mlp">torchrec.modules.mlp</a></li>
-<li><a class="reference internal" href="#module-torchrec.modules.utils">torchrec.modules.utils</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#torchrec-modules-activation">torchrec.modules.activation</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.activation.SwishLayerNorm"><code class="docutils literal notranslate"><span class="pre">SwishLayerNorm</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.activation.SwishLayerNorm.forward"><code class="docutils literal notranslate"><span class="pre">SwishLayerNorm.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.activation.SwishLayerNorm.training"><code class="docutils literal notranslate"><span class="pre">SwishLayerNorm.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec-modules-crossnet">torchrec.modules.crossnet</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.CrossNet"><code class="docutils literal notranslate"><span class="pre">CrossNet</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.CrossNet.forward"><code class="docutils literal notranslate"><span class="pre">CrossNet.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.CrossNet.training"><code class="docutils literal notranslate"><span class="pre">CrossNet.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankCrossNet"><code class="docutils literal notranslate"><span class="pre">LowRankCrossNet</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankCrossNet.forward"><code class="docutils literal notranslate"><span class="pre">LowRankCrossNet.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankCrossNet.training"><code class="docutils literal notranslate"><span class="pre">LowRankCrossNet.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet"><code class="docutils literal notranslate"><span class="pre">LowRankMixtureCrossNet</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet.forward"><code class="docutils literal notranslate"><span class="pre">LowRankMixtureCrossNet.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.LowRankMixtureCrossNet.training"><code class="docutils literal notranslate"><span class="pre">LowRankMixtureCrossNet.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.VectorCrossNet"><code class="docutils literal notranslate"><span class="pre">VectorCrossNet</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.VectorCrossNet.forward"><code class="docutils literal notranslate"><span class="pre">VectorCrossNet.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.crossnet.VectorCrossNet.training"><code class="docutils literal notranslate"><span class="pre">VectorCrossNet.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec-modules-deepfm">torchrec.modules.deepfm</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.DeepFM"><code class="docutils literal notranslate"><span class="pre">DeepFM</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.DeepFM.forward"><code class="docutils literal notranslate"><span class="pre">DeepFM.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.DeepFM.training"><code class="docutils literal notranslate"><span class="pre">DeepFM.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.FactorizationMachine"><code class="docutils literal notranslate"><span class="pre">FactorizationMachine</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.FactorizationMachine.forward"><code class="docutils literal notranslate"><span class="pre">FactorizationMachine.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.deepfm.FactorizationMachine.training"><code class="docutils literal notranslate"><span class="pre">FactorizationMachine.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.embedding_configs">torchrec.modules.embedding_configs</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.data_type"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.data_type</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.embedding_dim"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.embedding_dim</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.feature_names"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.feature_names</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_max"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.get_weight_init_max()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_min"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.get_weight_init_min()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.name"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.name</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.need_pos"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.need_pos</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_embeddings"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.num_embeddings</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_features"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.num_features()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_max"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.weight_init_max</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_min"><code class="docutils literal notranslate"><span class="pre">BaseEmbeddingConfig.weight_init_min</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType"><code class="docutils literal notranslate"><span class="pre">DataType</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType.FP16"><code class="docutils literal notranslate"><span class="pre">DataType.FP16</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType.FP32"><code class="docutils literal notranslate"><span class="pre">DataType.FP32</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType.INT2"><code class="docutils literal notranslate"><span class="pre">DataType.INT2</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType.INT4"><code class="docutils literal notranslate"><span class="pre">DataType.INT4</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.DataType.INT8"><code class="docutils literal notranslate"><span class="pre">DataType.INT8</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagConfig</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig.pooling"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagConfig.pooling</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig"><code class="docutils literal notranslate"><span class="pre">EmbeddingConfig</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig.embedding_dim"><code class="docutils literal notranslate"><span class="pre">EmbeddingConfig.embedding_dim</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig.feature_names"><code class="docutils literal notranslate"><span class="pre">EmbeddingConfig.feature_names</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig.num_embeddings"><code class="docutils literal notranslate"><span class="pre">EmbeddingConfig.num_embeddings</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig"><code class="docutils literal notranslate"><span class="pre">EmbeddingTableConfig</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.embedding_names"><code class="docutils literal notranslate"><span class="pre">EmbeddingTableConfig.embedding_names</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.has_feature_processor"><code class="docutils literal notranslate"><span class="pre">EmbeddingTableConfig.has_feature_processor</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.is_weighted"><code class="docutils literal notranslate"><span class="pre">EmbeddingTableConfig.is_weighted</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingTableConfig.pooling"><code class="docutils literal notranslate"><span class="pre">EmbeddingTableConfig.pooling</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType"><code class="docutils literal notranslate"><span class="pre">PoolingType</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType.MEAN"><code class="docutils literal notranslate"><span class="pre">PoolingType.MEAN</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType.NONE"><code class="docutils literal notranslate"><span class="pre">PoolingType.NONE</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType.SUM"><code class="docutils literal notranslate"><span class="pre">PoolingType.SUM</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.data_type_to_dtype"><code class="docutils literal notranslate"><span class="pre">data_type_to_dtype()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.data_type_to_sparse_type"><code class="docutils literal notranslate"><span class="pre">data_type_to_sparse_type()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.dtype_to_data_type"><code class="docutils literal notranslate"><span class="pre">dtype_to_data_type()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.pooling_type_to_pooling_mode"><code class="docutils literal notranslate"><span class="pre">pooling_type_to_pooling_mode()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_configs.pooling_type_to_str"><code class="docutils literal notranslate"><span class="pre">pooling_type_to_str()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.embedding_modules">torchrec.modules.embedding_modules</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.embedding_bag_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.embedding_bag_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.is_weighted"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.is_weighted()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.embedding_bag_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface.embedding_bag_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.is_weighted"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface.is_weighted()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionInterface.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_dim"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_dim()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_names_by_table"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_names_by_table()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.need_indices"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.need_indices()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollection.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.embedding_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.embedding_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.embedding_dim"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.embedding_dim()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.embedding_names_by_table"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.embedding_names_by_table()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.need_indices"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.need_indices()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.EmbeddingCollectionInterface.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollectionInterface.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.embedding_modules.get_embedding_names_by_table"><code class="docutils literal notranslate"><span class="pre">get_embedding_names_by_table()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.feature_processor">torchrec.modules.feature_processor</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseFeatureProcessor"><code class="docutils literal notranslate"><span class="pre">BaseFeatureProcessor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseFeatureProcessor.forward"><code class="docutils literal notranslate"><span class="pre">BaseFeatureProcessor.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseFeatureProcessor.training"><code class="docutils literal notranslate"><span class="pre">BaseFeatureProcessor.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.forward"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.sparse_grad_parameter_names"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.sparse_grad_parameter_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.training"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedModule"><code class="docutils literal notranslate"><span class="pre">PositionWeightedModule</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedModule.forward"><code class="docutils literal notranslate"><span class="pre">PositionWeightedModule.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedModule.training"><code class="docutils literal notranslate"><span class="pre">PositionWeightedModule.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.forward"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.named_buffers"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.named_buffers()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.sparse_grad_parameter_names"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.sparse_grad_parameter_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.state_dict"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.training"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.lazy_extension">torchrec.modules.lazy_extension</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.lazy_extension.LazyModuleExtensionMixin"><code class="docutils literal notranslate"><span class="pre">LazyModuleExtensionMixin</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.lazy_extension.LazyModuleExtensionMixin.apply"><code class="docutils literal notranslate"><span class="pre">LazyModuleExtensionMixin.apply()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.lazy_extension.lazy_apply"><code class="docutils literal notranslate"><span class="pre">lazy_apply()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.mlp">torchrec.modules.mlp</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.mlp.MLP"><code class="docutils literal notranslate"><span class="pre">MLP</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.mlp.MLP.forward"><code class="docutils literal notranslate"><span class="pre">MLP.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.mlp.MLP.training"><code class="docutils literal notranslate"><span class="pre">MLP.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.modules.mlp.Perceptron"><code class="docutils literal notranslate"><span class="pre">Perceptron</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.modules.mlp.Perceptron.forward"><code class="docutils literal notranslate"><span class="pre">Perceptron.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.mlp.Perceptron.training"><code class="docutils literal notranslate"><span class="pre">Perceptron.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.modules.utils">torchrec.modules.utils</a><ul>
+<li><a class="reference internal" href="#torchrec.modules.utils.check_module_output_dimension"><code class="docutils literal notranslate"><span class="pre">check_module_output_dimension()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.utils.construct_modulelist_from_single_module"><code class="docutils literal notranslate"><span class="pre">construct_modulelist_from_single_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.utils.convert_list_of_modules_to_modulelist"><code class="docutils literal notranslate"><span class="pre">convert_list_of_modules_to_modulelist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.utils.extract_module_or_tensor_callable"><code class="docutils literal notranslate"><span class="pre">extract_module_or_tensor_callable()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.utils.get_module_output_dimension"><code class="docutils literal notranslate"><span class="pre">get_module_output_dimension()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.modules.utils.init_mlp_weights_xavier_uniform"><code class="docutils literal notranslate"><span class="pre">init_mlp_weights_xavier_uniform()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -1903,6 +2084,7 @@ passed to provided interaction module.</p></li>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
          <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
      
 

@@ -1658,13 +1658,207 @@ redistribute.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.distributed.sharding</a><ul>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.cw_sharding">torchrec.distributed.sharding.cw_sharding</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.dist_data">torchrec.distributed.dist_data</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.dp_sharding">torchrec.distributed.sharding.dp_sharding</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.rw_sharding">torchrec.distributed.sharding.rw_sharding</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.tw_sharding">torchrec.distributed.sharding.tw_sharding</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.twcw_sharding">torchrec.distributed.sharding.twcw_sharding</a></li>
-<li><a class="reference internal" href="#module-torchrec.distributed.sharding.twrw_sharding">torchrec.distributed.sharding.twrw_sharding</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.cw_sharding">torchrec.distributed.sharding.cw_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">BaseCwEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.embedding_dims"><code class="docutils literal notranslate"><span class="pre">BaseCwEmbeddingSharding.embedding_dims()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.embedding_names"><code class="docutils literal notranslate"><span class="pre">BaseCwEmbeddingSharding.embedding_names()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.CwPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">CwPooledEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.CwPooledEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">CwPooledEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.CwPooledEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">CwPooledEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.cw_sharding.CwPooledEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">CwPooledEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.dist_data">torchrec.distributed.dist_data</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.EmbeddingsAllToOne"><code class="docutils literal notranslate"><span class="pre">EmbeddingsAllToOne</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.EmbeddingsAllToOne.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingsAllToOne.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.EmbeddingsAllToOne.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingsAllToOne.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTAllToAll"><code class="docutils literal notranslate"><span class="pre">KJTAllToAll</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTAllToAll.forward"><code class="docutils literal notranslate"><span class="pre">KJTAllToAll.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTAllToAll.training"><code class="docutils literal notranslate"><span class="pre">KJTAllToAll.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTAllToAllIndicesAwaitable"><code class="docutils literal notranslate"><span class="pre">KJTAllToAllIndicesAwaitable</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTAllToAllLengthsAwaitable"><code class="docutils literal notranslate"><span class="pre">KJTAllToAllLengthsAwaitable</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTOneToAll"><code class="docutils literal notranslate"><span class="pre">KJTOneToAll</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTOneToAll.forward"><code class="docutils literal notranslate"><span class="pre">KJTOneToAll.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.KJTOneToAll.training"><code class="docutils literal notranslate"><span class="pre">KJTOneToAll.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllGather"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllGather</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllGather.forward"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllGather.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllGather.training"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllGather.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllToAll</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.callbacks"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllToAll.callbacks</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.forward"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllToAll.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.training"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAllToAll.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAwaitable</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable.callbacks"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsAwaitable.callbacks</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsReduceScatter</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter.forward"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsReduceScatter.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter.training"><code class="docutils literal notranslate"><span class="pre">PooledEmbeddingsReduceScatter.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SeqEmbeddingsAllToOne"><code class="docutils literal notranslate"><span class="pre">SeqEmbeddingsAllToOne</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SeqEmbeddingsAllToOne.forward"><code class="docutils literal notranslate"><span class="pre">SeqEmbeddingsAllToOne.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SeqEmbeddingsAllToOne.training"><code class="docutils literal notranslate"><span class="pre">SeqEmbeddingsAllToOne.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll"><code class="docutils literal notranslate"><span class="pre">SequenceEmbeddingsAllToAll</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward"><code class="docutils literal notranslate"><span class="pre">SequenceEmbeddingsAllToAll.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.training"><code class="docutils literal notranslate"><span class="pre">SequenceEmbeddingsAllToAll.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable"><code class="docutils literal notranslate"><span class="pre">SequenceEmbeddingsAwaitable</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.dp_sharding">torchrec.distributed.sharding.dp_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.embedding_dims"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.embedding_dims()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.embedding_names"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.embedding_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.embedding_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.embedding_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.embedding_shard_metadata"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.embedding_shard_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.id_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.id_list_feature_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.id_score_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseDpEmbeddingSharding.id_score_list_feature_names()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist.forward"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist.training"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">DpPooledEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist"><code class="docutils literal notranslate"><span class="pre">DpSparseFeaturesDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist.forward"><code class="docutils literal notranslate"><span class="pre">DpSparseFeaturesDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist.training"><code class="docutils literal notranslate"><span class="pre">DpSparseFeaturesDist.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.rw_sharding">torchrec.distributed.sharding.rw_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.embedding_dims"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.embedding_dims()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.embedding_names"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.embedding_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.embedding_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.embedding_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.embedding_shard_metadata"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.embedding_shard_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.id_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.id_list_feature_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.id_score_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseRwEmbeddingSharding.id_score_list_feature_names()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist.forward"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist.training"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">RwPooledEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwSparseFeaturesDist"><code class="docutils literal notranslate"><span class="pre">RwSparseFeaturesDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwSparseFeaturesDist.forward"><code class="docutils literal notranslate"><span class="pre">RwSparseFeaturesDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.rw_sharding.RwSparseFeaturesDist.training"><code class="docutils literal notranslate"><span class="pre">RwSparseFeaturesDist.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.tw_sharding">torchrec.distributed.sharding.tw_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.embedding_dims"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.embedding_dims()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.embedding_names"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.embedding_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.embedding_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.embedding_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.embedding_shard_metadata"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.embedding_shard_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_list_feature_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_feature_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_list_feature_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_features_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_list_features_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_score_list_feature_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_feature_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_score_list_feature_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_features_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwEmbeddingSharding.id_score_list_features_per_rank()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">InferTwEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">InferTwEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">InferTwEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">InferTwEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwPooledEmbeddingDist"><code class="docutils literal notranslate"><span class="pre">InferTwPooledEmbeddingDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwPooledEmbeddingDist.forward"><code class="docutils literal notranslate"><span class="pre">InferTwPooledEmbeddingDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwPooledEmbeddingDist.training"><code class="docutils literal notranslate"><span class="pre">InferTwPooledEmbeddingDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwSparseFeaturesDist"><code class="docutils literal notranslate"><span class="pre">InferTwSparseFeaturesDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwSparseFeaturesDist.forward"><code class="docutils literal notranslate"><span class="pre">InferTwSparseFeaturesDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.InferTwSparseFeaturesDist.training"><code class="docutils literal notranslate"><span class="pre">InferTwSparseFeaturesDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingDist"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingDist.forward"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingDist.training"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwPooledEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">TwPooledEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwSparseFeaturesDist"><code class="docutils literal notranslate"><span class="pre">TwSparseFeaturesDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwSparseFeaturesDist.forward"><code class="docutils literal notranslate"><span class="pre">TwSparseFeaturesDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.tw_sharding.TwSparseFeaturesDist.training"><code class="docutils literal notranslate"><span class="pre">TwSparseFeaturesDist.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.twcw_sharding">torchrec.distributed.sharding.twcw_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twcw_sharding.TwCwPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">TwCwPooledEmbeddingSharding</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.sharding.twrw_sharding">torchrec.distributed.sharding.twrw_sharding</a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.embedding_dims"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.embedding_dims()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.embedding_names"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.embedding_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.embedding_names_per_rank"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.embedding_names_per_rank()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.embedding_shard_metadata"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.embedding_shard_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.id_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.id_list_feature_names()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.id_score_list_feature_names"><code class="docutils literal notranslate"><span class="pre">BaseTwRwEmbeddingSharding.id_score_list_feature_names()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist.forward"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist.training"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingDist.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingSharding"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingSharding</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingSharding.create_input_dist"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingSharding.create_input_dist()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingSharding.create_lookup"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingSharding.create_lookup()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingSharding.create_output_dist"><code class="docutils literal notranslate"><span class="pre">TwRwPooledEmbeddingSharding.create_output_dist()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwSparseFeaturesDist"><code class="docutils literal notranslate"><span class="pre">TwRwSparseFeaturesDist</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwSparseFeaturesDist.forward"><code class="docutils literal notranslate"><span class="pre">TwRwSparseFeaturesDist.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.sharding.twrw_sharding.TwRwSparseFeaturesDist.training"><code class="docutils literal notranslate"><span class="pre">TwRwSparseFeaturesDist.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1687,6 +1881,7 @@ redistribute.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

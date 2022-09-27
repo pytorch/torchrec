@@ -308,15 +308,15 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.optim">
-<span id="torchrec-optim"></span><h1>torchrec.optim<a class="headerlink" href="#module-torchrec.optim" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-optim">
+<h1>torchrec.optim<a class="headerlink" href="#torchrec-optim" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Optimizers</p>
 <p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
 torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
 <p>It also contains
 - several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
 - Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc</p>
-<section id="module-torchrec.optim.clipping">
+<span class="target" id="module-torchrec.optim"></span><section id="module-torchrec.optim.clipping">
 <span id="torchrec-optim-clipping"></span><h2>torchrec.optim.clipping<a class="headerlink" href="#module-torchrec.optim.clipping" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.clipping.GradientClipping">
@@ -844,15 +844,15 @@ returns the loss. Optional for most optimizers.</p>
 </dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Optimizers</p>
 <p>Torchrec contains a special optimizer called KeyedOptimizer. KeyedOptimizer exposes the state_dict with meaningful keys- it enables  loading both
 torch.tensor and <a class="reference external" href="https://github.com/pytorch/pytorch/issues/55207">ShardedTensor</a> in place, and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.</p>
 <p>It also contains
 - several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
 - Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc</p>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -899,11 +899,96 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.optim</a><ul>
-<li><a class="reference internal" href="#module-torchrec.optim.clipping">torchrec.optim.clipping</a></li>
-<li><a class="reference internal" href="#module-torchrec.optim.fused">torchrec.optim.fused</a></li>
-<li><a class="reference internal" href="#module-torchrec.optim.keyed">torchrec.optim.keyed</a></li>
-<li><a class="reference internal" href="#module-torchrec.optim.warmup">torchrec.optim.warmup</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#module-torchrec.optim.clipping">torchrec.optim.clipping</a><ul>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping"><code class="docutils literal notranslate"><span class="pre">GradientClipping</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.NONE"><code class="docutils literal notranslate"><span class="pre">GradientClipping.NONE</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.NORM"><code class="docutils literal notranslate"><span class="pre">GradientClipping.NORM</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.VALUE"><code class="docutils literal notranslate"><span class="pre">GradientClipping.VALUE</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClippingOptimizer"><code class="docutils literal notranslate"><span class="pre">GradientClippingOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClippingOptimizer.step"><code class="docutils literal notranslate"><span class="pre">GradientClippingOptimizer.step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.optim.fused">torchrec.optim.fused</a><ul>
+<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.step()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.zero_grad()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizerModule"><code class="docutils literal notranslate"><span class="pre">FusedOptimizerModule</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizerModule.fused_optimizer"><code class="docutils literal notranslate"><span class="pre">FusedOptimizerModule.fused_optimizer</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.optim.keyed">torchrec.optim.keyed</a><ul>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.optimizers"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.optimizers</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.param_groups"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.param_groups</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.params"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.params</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.post_load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.prepend_opt_key"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.prepend_opt_key()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.save_param_groups"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.save_param_groups()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.state"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.state</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.step()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.zero_grad()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.add_param_group"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.add_param_group()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.init_state"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.init_state()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.load_state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.post_load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.save_param_groups"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.save_param_groups()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.state_dict()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.step"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper.step()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.zero_grad"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper.zero_grad()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.add_param_group"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.add_param_group()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.load_state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.post_load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.save_param_groups"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.save_param_groups()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.step"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.step()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.zero_grad"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.zero_grad()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.optim.warmup">torchrec.optim.warmup</a><ul>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer.post_load_state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer.step"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer.step()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.CONSTANT"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.CONSTANT</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.INVSQRT"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.INVSQRT</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.LINEAR"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.LINEAR</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.NONE"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.NONE</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.POLY"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.POLY</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.STEP"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.STEP</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage"><code class="docutils literal notranslate"><span class="pre">WarmupStage</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.decay_iters"><code class="docutils literal notranslate"><span class="pre">WarmupStage.decay_iters</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.lr_scale"><code class="docutils literal notranslate"><span class="pre">WarmupStage.lr_scale</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.max_iters"><code class="docutils literal notranslate"><span class="pre">WarmupStage.max_iters</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.policy"><code class="docutils literal notranslate"><span class="pre">WarmupStage.policy</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.value"><code class="docutils literal notranslate"><span class="pre">WarmupStage.value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -926,6 +1011,7 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

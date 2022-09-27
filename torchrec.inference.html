@@ -310,7 +310,7 @@
               
   <section id="torchrec-inference">
 <h1>torchrec.inference<a class="headerlink" href="#torchrec-inference" title="Permalink to this heading">¶</a></h1>
-<span class="target" id="module-torchrec.inference"></span><p>Torchrec Inference</p>
+<p>Torchrec Inference</p>
 <p>Torchrec inference provides a Torch.Deploy based library for GPU inference.</p>
 <dl class="simple">
 <dt>These includes:</dt><dd><ul class="simple">
@@ -338,7 +338,7 @@
 </ul>
 </dd>
 </dl>
-<section id="torchrec-inference-model-packager">
+<span class="target" id="module-torchrec.inference"></span><section id="torchrec-inference-model-packager">
 <h2>torchrec.inference.model_packager<a class="headerlink" href="#torchrec-inference-model-packager" title="Permalink to this heading">¶</a></h2>
 <span class="target" id="module-torchrec.inference.model_packager"></span><dl class="py class">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager">
@@ -619,8 +619,8 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <dd></dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Inference</p>
 <p>Torchrec inference provides a Torch.Deploy based library for GPU inference.</p>
 <dl class="simple">
@@ -649,7 +649,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 </ul>
 </dd>
 </dl>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -696,9 +696,52 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.inference</a><ul>
-<li><a class="reference internal" href="#torchrec-inference-model-packager">torchrec.inference.model_packager</a></li>
-<li><a class="reference internal" href="#torchrec-inference-modules">torchrec.inference.modules</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#torchrec-inference-model-packager">torchrec.inference.model_packager</a><ul>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.PredictFactoryPackager"><code class="docutils literal notranslate"><span class="pre">PredictFactoryPackager</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.PredictFactoryPackager.save_predict_factory"><code class="docutils literal notranslate"><span class="pre">PredictFactoryPackager.save_predict_factory()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules"><code class="docutils literal notranslate"><span class="pre">PredictFactoryPackager.set_extern_modules()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules"><code class="docutils literal notranslate"><span class="pre">PredictFactoryPackager.set_mocked_modules()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.load_config_text"><code class="docutils literal notranslate"><span class="pre">load_config_text()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.model_packager.load_pickle_config"><code class="docutils literal notranslate"><span class="pre">load_pickle_config()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec-inference-modules">torchrec.inference.modules</a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.BatchingMetadata"><code class="docutils literal notranslate"><span class="pre">BatchingMetadata</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.BatchingMetadata.device"><code class="docutils literal notranslate"><span class="pre">BatchingMetadata.device</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.BatchingMetadata.pinned"><code class="docutils literal notranslate"><span class="pre">BatchingMetadata.pinned</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.BatchingMetadata.type"><code class="docutils literal notranslate"><span class="pre">BatchingMetadata.type</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory"><code class="docutils literal notranslate"><span class="pre">PredictFactory</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata_json"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata_json()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.create_predict_module"><code class="docutils literal notranslate"><span class="pre">PredictFactory.create_predict_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.qualname_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.qualname_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.result_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.result_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.run_weights_dependent_transformations"><code class="docutils literal notranslate"><span class="pre">PredictFactory.run_weights_dependent_transformations()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.run_weights_independent_tranformations"><code class="docutils literal notranslate"><span class="pre">PredictFactory.run_weights_independent_tranformations()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule"><code class="docutils literal notranslate"><span class="pre">PredictModule</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule.forward"><code class="docutils literal notranslate"><span class="pre">PredictModule.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule.predict_forward"><code class="docutils literal notranslate"><span class="pre">PredictModule.predict_forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule.predict_module"><code class="docutils literal notranslate"><span class="pre">PredictModule.predict_module</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule.state_dict"><code class="docutils literal notranslate"><span class="pre">PredictModule.state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictModule.training"><code class="docutils literal notranslate"><span class="pre">PredictModule.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.inference.modules.QualNameMetadata"><code class="docutils literal notranslate"><span class="pre">QualNameMetadata</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.QualNameMetadata.need_preproc"><code class="docutils literal notranslate"><span class="pre">QualNameMetadata.need_preproc</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.inference.modules.quantize_dense"><code class="docutils literal notranslate"><span class="pre">quantize_dense()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.quantize_embeddings"><code class="docutils literal notranslate"><span class="pre">quantize_embeddings()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.quantize_feature"><code class="docutils literal notranslate"><span class="pre">quantize_feature()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -721,6 +764,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

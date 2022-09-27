@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.datasets">
-<span id="torchrec-datasets"></span><h1>torchrec.datasets<a class="headerlink" href="#module-torchrec.datasets" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-datasets">
+<h1>torchrec.datasets<a class="headerlink" href="#torchrec-datasets" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Datasets</p>
 <p>Torchrec contains two popular recys datasets, the <a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">Kaggle/Criteo Display Advertising</a> Dataset
 and the <a class="reference external" href="https://grouplens.org/datasets/movielens/20m/">MovieLens 20M</a> Dataset.</p>
@@ -325,7 +325,7 @@ and the <a class="reference external" href="https://grouplens.org/datasets/movie
 <span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
 </pre></div>
 </div>
-<section id="module-torchrec.datasets.criteo">
+<span class="target" id="module-torchrec.datasets"></span><section id="module-torchrec.datasets.criteo">
 <span id="torchrec-datasets-criteo"></span><h2>torchrec.datasets.criteo<a class="headerlink" href="#module-torchrec.datasets.criteo" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils">
@@ -911,10 +911,52 @@ and train_perc. Use the same value across calls to generate consistent splits.</
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.datasets</a><ul>
-<li><a class="reference internal" href="#module-torchrec.datasets.criteo">torchrec.datasets.criteo</a></li>
-<li><a class="reference internal" href="#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a></li>
-<li><a class="reference internal" href="#module-torchrec.datasets.random">torchrec.datasets.random</a></li>
-<li><a class="reference internal" href="#module-torchrec.datasets.utils">torchrec.datasets.utils</a></li>
+<li><a class="reference internal" href="#module-torchrec.datasets.criteo">torchrec.datasets.criteo</a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_file_idx_to_row_range"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.get_file_idx_to_row_range()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_shape_from_npy"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.get_shape_from_npy()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.load_npy_range()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.shuffle()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.sparse_to_contiguous()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.tsv_to_npys"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.tsv_to_npys()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.CriteoIterDataPipe"><code class="docutils literal notranslate"><span class="pre">CriteoIterDataPipe</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.InMemoryBinaryCriteoIterDataPipe"><code class="docutils literal notranslate"><span class="pre">InMemoryBinaryCriteoIterDataPipe</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.criteo_kaggle"><code class="docutils literal notranslate"><span class="pre">criteo_kaggle()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.criteo.criteo_terabyte"><code class="docutils literal notranslate"><span class="pre">criteo_terabyte()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.movielens.movielens_20m"><code class="docutils literal notranslate"><span class="pre">movielens_20m()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.movielens.movielens_25m"><code class="docutils literal notranslate"><span class="pre">movielens_25m()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.datasets.random">torchrec.datasets.random</a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.random.RandomRecDataset"><code class="docutils literal notranslate"><span class="pre">RandomRecDataset</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.datasets.utils">torchrec.datasets.utils</a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch"><code class="docutils literal notranslate"><span class="pre">Batch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.dense_features"><code class="docutils literal notranslate"><span class="pre">Batch.dense_features</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.labels"><code class="docutils literal notranslate"><span class="pre">Batch.labels</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.pin_memory"><code class="docutils literal notranslate"><span class="pre">Batch.pin_memory()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.record_stream"><code class="docutils literal notranslate"><span class="pre">Batch.record_stream()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.sparse_features"><code class="docutils literal notranslate"><span class="pre">Batch.sparse_features</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.to"><code class="docutils literal notranslate"><span class="pre">Batch.to()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.Limit"><code class="docutils literal notranslate"><span class="pre">Limit</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.LoadFiles"><code class="docutils literal notranslate"><span class="pre">LoadFiles</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.ParallelReadConcat"><code class="docutils literal notranslate"><span class="pre">ParallelReadConcat</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.ReadLinesFromCSV"><code class="docutils literal notranslate"><span class="pre">ReadLinesFromCSV</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.idx_split_train_val"><code class="docutils literal notranslate"><span class="pre">idx_split_train_val()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.rand_split_train_val"><code class="docutils literal notranslate"><span class="pre">rand_split_train_val()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.safe_cast"><code class="docutils literal notranslate"><span class="pre">safe_cast()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.train_filter"><code class="docutils literal notranslate"><span class="pre">train_filter()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.datasets.utils.val_filter"><code class="docutils literal notranslate"><span class="pre">val_filter()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -937,6 +979,7 @@ and train_perc. Use the same value across calls to generate consistent splits.</
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

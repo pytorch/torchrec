@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.models">
-<span id="torchrec-models"></span><h1>torchrec.models<a class="headerlink" href="#module-torchrec.models" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-models">
+<h1>torchrec.models<a class="headerlink" href="#torchrec-models" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Models</p>
 <p>Torchrec provides the architecture for two popular recsys models;
 <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">DeepFM</a> and <a class="reference external" href="https://arxiv.org/abs/1906.00091">DLRM (Deep Learning Recommendation Model)</a>.</p>
@@ -323,7 +323,7 @@ provided (e.g. <cite>SparseArch</cite>, <cite>DenseArch</cite>, <cite>Interactio
 <li><p>B: batch size</p></li>
 <li><p>num_features: number of dense features</p></li>
 </ul>
-<section id="module-torchrec.models.deepfm">
+<span class="target" id="module-torchrec.models"></span><section id="module-torchrec.models.deepfm">
 <span id="torchrec-models-deepfm"></span><h2>torchrec.models.deepfm<a class="headerlink" href="#module-torchrec.models.deepfm" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.models.deepfm.DenseArch">
@@ -1337,8 +1337,8 @@ pooled embeddings.</p>
 </dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Models</p>
 <p>Torchrec provides the architecture for two popular recsys models;
 <a class="reference external" href="https://arxiv.org/pdf/1703.04247.pdf">DeepFM</a> and <a class="reference external" href="https://arxiv.org/abs/1906.00091">DLRM (Deep Learning Recommendation Model)</a>.</p>
@@ -1352,7 +1352,7 @@ provided (e.g. <cite>SparseArch</cite>, <cite>DenseArch</cite>, <cite>Interactio
 <li><p>B: batch size</p></li>
 <li><p>num_features: number of dense features</p></li>
 </ul>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -1399,9 +1399,90 @@ provided (e.g. <cite>SparseArch</cite>, <cite>DenseArch</cite>, <cite>Interactio
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.models</a><ul>
-<li><a class="reference internal" href="#module-torchrec.models.deepfm">torchrec.models.deepfm</a></li>
-<li><a class="reference internal" href="#module-torchrec.models.dlrm">torchrec.models.dlrm</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#module-torchrec.models.deepfm">torchrec.models.deepfm</a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.DenseArch"><code class="docutils literal notranslate"><span class="pre">DenseArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.DenseArch.forward"><code class="docutils literal notranslate"><span class="pre">DenseArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.DenseArch.training"><code class="docutils literal notranslate"><span class="pre">DenseArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.FMInteractionArch"><code class="docutils literal notranslate"><span class="pre">FMInteractionArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.FMInteractionArch.forward"><code class="docutils literal notranslate"><span class="pre">FMInteractionArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.FMInteractionArch.training"><code class="docutils literal notranslate"><span class="pre">FMInteractionArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.OverArch"><code class="docutils literal notranslate"><span class="pre">OverArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.OverArch.forward"><code class="docutils literal notranslate"><span class="pre">OverArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.OverArch.training"><code class="docutils literal notranslate"><span class="pre">OverArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SimpleDeepFMNN"><code class="docutils literal notranslate"><span class="pre">SimpleDeepFMNN</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SimpleDeepFMNN.forward"><code class="docutils literal notranslate"><span class="pre">SimpleDeepFMNN.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SimpleDeepFMNN.training"><code class="docutils literal notranslate"><span class="pre">SimpleDeepFMNN.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SparseArch"><code class="docutils literal notranslate"><span class="pre">SparseArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SparseArch.forward"><code class="docutils literal notranslate"><span class="pre">SparseArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.deepfm.SparseArch.training"><code class="docutils literal notranslate"><span class="pre">SparseArch.training</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-torchrec.models.dlrm">torchrec.models.dlrm</a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM"><code class="docutils literal notranslate"><span class="pre">DLRM</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM.forward"><code class="docutils literal notranslate"><span class="pre">DLRM.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM.training"><code class="docutils literal notranslate"><span class="pre">DLRM.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRMTrain"><code class="docutils literal notranslate"><span class="pre">DLRMTrain</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRMTrain.forward"><code class="docutils literal notranslate"><span class="pre">DLRMTrain.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRMTrain.training"><code class="docutils literal notranslate"><span class="pre">DLRMTrain.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_DCN"><code class="docutils literal notranslate"><span class="pre">DLRM_DCN</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_DCN.sparse_arch"><code class="docutils literal notranslate"><span class="pre">DLRM_DCN.sparse_arch</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_DCN.training"><code class="docutils literal notranslate"><span class="pre">DLRM_DCN.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_Projection"><code class="docutils literal notranslate"><span class="pre">DLRM_Projection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_Projection.sparse_arch"><code class="docutils literal notranslate"><span class="pre">DLRM_Projection.sparse_arch</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DLRM_Projection.training"><code class="docutils literal notranslate"><span class="pre">DLRM_Projection.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DenseArch"><code class="docutils literal notranslate"><span class="pre">DenseArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DenseArch.forward"><code class="docutils literal notranslate"><span class="pre">DenseArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.DenseArch.training"><code class="docutils literal notranslate"><span class="pre">DenseArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionArch"><code class="docutils literal notranslate"><span class="pre">InteractionArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionArch.forward"><code class="docutils literal notranslate"><span class="pre">InteractionArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionArch.training"><code class="docutils literal notranslate"><span class="pre">InteractionArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionDCNArch"><code class="docutils literal notranslate"><span class="pre">InteractionDCNArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionDCNArch.forward"><code class="docutils literal notranslate"><span class="pre">InteractionDCNArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionDCNArch.training"><code class="docutils literal notranslate"><span class="pre">InteractionDCNArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionProjectionArch"><code class="docutils literal notranslate"><span class="pre">InteractionProjectionArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionProjectionArch.forward"><code class="docutils literal notranslate"><span class="pre">InteractionProjectionArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.InteractionProjectionArch.training"><code class="docutils literal notranslate"><span class="pre">InteractionProjectionArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.OverArch"><code class="docutils literal notranslate"><span class="pre">OverArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.OverArch.forward"><code class="docutils literal notranslate"><span class="pre">OverArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.OverArch.training"><code class="docutils literal notranslate"><span class="pre">OverArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.SparseArch"><code class="docutils literal notranslate"><span class="pre">SparseArch</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.models.dlrm.SparseArch.forward"><code class="docutils literal notranslate"><span class="pre">SparseArch.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.SparseArch.sparse_feature_names"><code class="docutils literal notranslate"><span class="pre">SparseArch.sparse_feature_names</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.SparseArch.training"><code class="docutils literal notranslate"><span class="pre">SparseArch.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.models.dlrm.choose"><code class="docutils literal notranslate"><span class="pre">choose()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -1424,6 +1505,7 @@ provided (e.g. <cite>SparseArch</cite>, <cite>DenseArch</cite>, <cite>Interactio
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   

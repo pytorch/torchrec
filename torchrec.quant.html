@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.quant">
-<span id="torchrec-quant"></span><h1>torchrec.quant<a class="headerlink" href="#module-torchrec.quant" title="Permalink to this heading">¶</a></h1>
+  <section id="torchrec-quant">
+<h1>torchrec.quant<a class="headerlink" href="#torchrec-quant" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Quantization</p>
 <p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
 It relies on fbgemm quantized ops.
@@ -334,7 +334,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
 </pre></div>
 </div>
-<section id="module-torchrec.quant.embedding_modules">
+<span class="target" id="module-torchrec.quant"></span><section id="module-torchrec.quant.embedding_modules">
 <span id="torchrec-quant-embedding-modules"></span><h2>torchrec.quant.embedding_modules<a class="headerlink" href="#module-torchrec.quant.embedding_modules" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection">
@@ -612,8 +612,8 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <dd></dd></dl>
 
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
+<section id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this heading">¶</a></h2>
 <p>Torchrec Quantization</p>
 <p>Torchrec provides a quantized version of EmbeddingBagCollection for inference.
 It relies on fbgemm quantized ops.
@@ -638,7 +638,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">)</span>
 </pre></div>
 </div>
-</section>
+<span class="target" id="module-0"></span></section>
 </section>
 
 
@@ -685,8 +685,32 @@ This reduces the size of the model weights and speeds up model execution.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.quant</a><ul>
-<li><a class="reference internal" href="#module-torchrec.quant.embedding_modules">torchrec.quant.embedding_modules</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#module-torchrec.quant.embedding_modules">torchrec.quant.embedding_modules</a><ul>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.embedding_bag_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.from_float"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.from_float()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.is_weighted"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.is_weighted()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.output_dtype"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.output_dtype()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_configs()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_dim"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_dim()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_names_by_table"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_names_by_table()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.from_float"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.from_float()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.need_indices"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.need_indices()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.output_dtype"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.output_dtype()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.state_dict"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.state_dict()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.training"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.training</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.quantize_state_dict"><code class="docutils literal notranslate"><span class="pre">quantize_state_dict()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -709,6 +733,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/sphinx_highlight.js"></script>
      
 
   
