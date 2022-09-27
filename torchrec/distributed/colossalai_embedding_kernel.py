@@ -214,10 +214,11 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             _weight=torch.cat(weight_list,0).pin_memory(),
             warmup_ratio=0.7,
             cache_ratio = cache_ratio,
+
         )
         self._table_idx_offset_list = np.cumsum(
             [0] + self._num_embeddings)
-        
+        self._already_linearized = False
     @property
     def emb_module(
         self,
@@ -240,17 +241,27 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         )
         
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        with torch.no_grad():
-            with record_function("add id offsets"):
-                batch_size = len(features.offsets())//len(features.keys())
-                values = features.values().long()
-                offsets = features.offsets().long()
-                weights = features.weights_or_none()
-                if weights is not None and not torch.is_floating_point(weights):
-                    weights = None
-                split_view = torch.tensor_split(values, features.offset_per_key()[1:-1])
-                for i, chunk in enumerate(split_view):
-                    torch.add(chunk, self._table_idx_offset_list[i], out=chunk)
+        offsets = features.offsets().long()
+        weights = features.weights_or_none()
+        batch_size = len(features.offsets())//len(features.keys())
+        if not self._already_linearized:
+            values = self.linearize_features(features)
+        else:
+            values = features.values().long()
         output = self._emb_module(values, offsets, weights)
         ret =  torch.cat(output.split(batch_size), 1)
         return ret
+    
+    def linearize_features(self, features: KeyedJaggedTensor):
+        # apply table offset to values 
+        with torch.no_grad():
+            with record_function("add id offsets"):
+                values = features.values().long()
+                split_view = torch.tensor_split(
+                    values, features.offset_per_key()[1:-1])
+                for i, chunk in enumerate(split_view):
+                    torch.add(chunk, self._table_idx_offset_list[i], out=chunk)
+        return values
+    
+    def set_already_linearized(self, linearized = False):
+        self._already_linearized = linearized
