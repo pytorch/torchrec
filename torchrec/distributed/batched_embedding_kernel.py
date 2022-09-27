@@ -430,6 +430,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
     ) -> None:
         super().__init__(config, pg, device)
 
+        weights_precision = data_type_to_sparse_type(config.data_type)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -438,6 +439,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
                 use_cpu=device is None
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
+                weights_precision=weights_precision,
             )
         )
 
@@ -657,6 +659,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     ) -> None:
         super().__init__(config, pg, device)
 
+        weights_precision = data_type_to_sparse_type(config.data_type)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -665,6 +668,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 use_cpu=device is None
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
+                weights_precision=weights_precision,
             )
         )
 
