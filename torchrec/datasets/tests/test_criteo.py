@@ -345,6 +345,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 )
             )
 
+    # self._test_dataset([1] * 20, 4, 2)
     def _test_dataset(
         self, rows_per_file: List[int], batch_size: int, world_size: int
     ) -> None:
@@ -355,9 +356,16 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
             ]
             hashes = [i + 1 for i in range(CAT_FEATURE_COUNT)]
 
+            total_rows = sum(rows_per_file)
+
+            incomplete_last_batch_size = total_rows // world_size % batch_size
+            rank_segment_length = total_rows // world_size // batch_size + (
+                incomplete_last_batch_size != 0
+            )
             lens = []
             for rank in range(world_size):
                 datapipe = InMemoryBinaryCriteoIterDataPipe(
+                    stage="train",
                     dense_paths=[f[0] for f in files],
                     sparse_paths=[f[1] for f in files],
                     labels_paths=[f[2] for f in files],
@@ -370,7 +378,10 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
 
                 len_ = 0
                 for x in datapipe:
-                    self._validate_batch(x, batch_size=batch_size)
+                    if len_ < rank_segment_length - 1:
+                        self._validate_batch(x, batch_size=batch_size)
+                    else:
+                        self._validate_batch(x, batch_size=incomplete_last_batch_size)
                     len_ += 1
 
                 # Check that dataset __len__ matches true length.
