@@ -78,8 +78,7 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
                         embedding_config.get_weight_init_min(),
                         embedding_config.get_weight_init_max(),
                     ),
-                    cuda_row_num=int(
-                        embedding_config.local_rows * cache_ratio),
+                    cache_ratio=cache_ratio,
                 )
                 self._emb_modules.append(
                     emb
@@ -209,11 +208,13 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             embedding_dim=embedding_dim,
             mode=self.pool_str,
             include_last_offset=True,
+            sparse=True,
             # _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
             #     min(self._weight_init_mins), max(self._weight_init_maxs)),
-            _weight=torch.cat(weight_list,0),
+            _weight=torch.cat(weight_list,0).pin_memory(),
             warmup_ratio=0.7,
-            cache_ratio=cache_ratio,
+            cache_ratio = cache_ratio,
+
         )
         self._table_idx_offset_list = np.cumsum(
             [0] + self._num_embeddings)
