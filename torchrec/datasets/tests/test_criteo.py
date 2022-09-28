@@ -345,7 +345,6 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 )
             )
 
-    # self._test_dataset([1] * 20, 4, 2)
     def _test_dataset(
         self, rows_per_file: List[int], batch_size: int, world_size: int
     ) -> None:
@@ -359,7 +358,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
             total_rows = sum(rows_per_file)
 
             incomplete_last_batch_size = total_rows // world_size % batch_size
-            rank_segment_length = total_rows // world_size // batch_size + (
+            num_batches = total_rows // world_size // batch_size + (
                 incomplete_last_batch_size != 0
             )
             lens = []
@@ -378,7 +377,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
 
                 len_ = 0
                 for x in datapipe:
-                    if len_ < rank_segment_length - 1:
+                    if len_ < num_batches - 1 or incomplete_last_batch_size == 0:
                         self._validate_batch(x, batch_size=batch_size)
                     else:
                         self._validate_batch(x, batch_size=incomplete_last_batch_size)
