@@ -308,8 +308,8 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="torchrec-distributed">
-<h1>torchrec.distributed<a class="headerlink" href="#torchrec-distributed" title="Permalink to this heading">¶</a></h1>
+  <section id="module-torchrec.distributed">
+<span id="torchrec-distributed"></span><h1>torchrec.distributed<a class="headerlink" href="#module-torchrec.distributed" title="Permalink to this heading">¶</a></h1>
 <p>Torchrec Distributed</p>
 <p>Torchrec distributed provides the necessary modules and operations to enable model parallelism.</p>
 <p>These include:</p>
@@ -335,10 +335,10 @@ device transfer (copy to GPU), inter*device communications (input_dist), and
 computation (forward, backward) for increased performance.</p></li>
 <li><p>quantization support for reduced precision training and inference.</p></li>
 </ul>
-<span class="target" id="module-torchrec.distributed"></span><section id="torchrec-distributed-collective-utils">
-<h2>torchrec.distributed.collective_utils<a class="headerlink" href="#torchrec-distributed-collective-utils" title="Permalink to this heading">¶</a></h2>
+<section id="module-torchrec.distributed.collective_utils">
+<span id="torchrec-distributed-collective-utils"></span><h2>torchrec.distributed.collective_utils<a class="headerlink" href="#module-torchrec.distributed.collective_utils" title="Permalink to this heading">¶</a></h2>
 <p>This file contains utilities for constructing collective based control flows.</p>
-<span class="target" id="module-torchrec.distributed.collective_utils"></span><dl class="py function">
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.collective_utils.invoke_on_rank_and_broadcast_result">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.collective_utils.</span></span><span class="sig-name descname"><span class="pre">invoke_on_rank_and_broadcast_result</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">func</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrec.distributed.collective_utils.invoke_on_rank_and_broadcast_result" title="Permalink to this definition">¶</a></dt>
 <dd><p>Invokes a function on the designated rank and broadcasts the result to all
@@ -6254,7 +6254,7 @@ used to configure the embedding lookup kernel</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.distributed</a><ul>
-<li><a class="reference internal" href="#torchrec-distributed-collective-utils">torchrec.distributed.collective_utils</a><ul>
+<li><a class="reference internal" href="#module-torchrec.distributed.collective_utils">torchrec.distributed.collective_utils</a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.collective_utils.invoke_on_rank_and_broadcast_result"><code class="docutils literal notranslate"><span class="pre">invoke_on_rank_and_broadcast_result()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.collective_utils.is_leader"><code class="docutils literal notranslate"><span class="pre">is_leader()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.collective_utils.run_on_leader"><code class="docutils literal notranslate"><span class="pre">run_on_leader()</span></code></a></li>
