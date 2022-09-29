@@ -6,8 +6,7 @@ cmake
 Cython
 distro
 docker
-docstring-parser
-fbgemm-gpu-nightly
+docstring-parser==0.8.1
 filelock
 fsspec
 hypothesis

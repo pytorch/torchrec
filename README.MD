@@ -2,6 +2,10 @@
 [Docs](https://pytorch.org/torchrec/)
 
 TorchRec is a PyTorch domain library built to provide common sparsity & parallelism primitives needed for large-scale recommender systems (RecSys). It allows authors to train models with large embedding tables sharded across many GPUs.
+# Torchrec installation on ROCM 
+- fbgemm_gpu cannot be installed as python package(no pip install) on rocm
+- build fbgemm_gpu from source 
+- pytorch version > 1.12 
 
 ## TorchRec contains:
 - Parallelism primitives that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism/model-parallelism.
