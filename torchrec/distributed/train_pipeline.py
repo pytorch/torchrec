@@ -701,7 +701,7 @@ class PipelinedForwardNoWait(PipelinedForward[DistIn, DistOut, Out]):
         dist_stream: Optional[torch.cuda.streams.Stream],
     ) -> None:
         super().__init__(name, args, module, context, dist_stream)
-    def __call__(self, data) -> Awaitable[Out]:
+    def __call__(self, data, *input, **kwargs) -> Awaitable[Out]:
         # data: KeyedJaggedTensor
         sparse_feature_list = SparseFeaturesList(
             [SparseFeatures(id_list_features=data)])
@@ -755,55 +755,53 @@ class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         # prepare prefetch_num iterations.
         self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
-        with torch.cuda.stream(self._memcpy_stream):
-            # self._pipelined_modules = _rewrite_model(self._model, self._context, self._data_dist_stream)
-            # modify _rewrite_model
-            model = self._model
-            context = self._context
-            dist_stream = self._data_dist_stream
+        # self._pipelined_modules = modified _rewrite_model:
+        model = self._model
+        context = self._context
+        dist_stream = self._data_dist_stream
+        if isinstance(model, DistributedModelParallel):
+            model = model.module
+        sharded_modules = {}
+        fp_modules = {}
+        for name, m in model.named_modules():
+            if isinstance(m, ShardedModule):
+                sharded_modules[name] = m
+            if isinstance(m, BaseGroupedFeatureProcessor):
+                fp_modules[name] = m
+        tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
+        graph = tracer.trace(model)
+        feature_processor_nodes = []
+        for node in graph.nodes:
+            if node.op == "call_module" and node.target in fp_modules:
+                feature_processor_nodes.append(node)
+        self._pipelined_modules = []
+        self._pipelined_wait = []
+        for node in graph.nodes:
+            if node.op == "call_module" and node.target in sharded_modules:
+                total_num_args = len(node.args) + len(node.kwargs)
+                if total_num_args == 0:
+                    continue
+                arg_info_list, num_found = _get_node_args(
+                    node, feature_processor_nodes)
+                if num_found == total_num_args:
+                    logger.info(f"Module '{node.target}'' will be pipelined")
+                    child = sharded_modules[node.target]
+                    child.forward = PipelinedForwardNoWait(
+                        node.target,
+                        arg_info_list,
+                        child,
+                        context,
+                        dist_stream,
+                    )
+                    self._pipelined_modules.append(child)
+                    self._pipelined_wait.append(PipelinedWait(
+                        node.target,
+                        arg_info_list,
+                        child,
+                        context,
+                        dist_stream,
+                    ))
 
-            if isinstance(model, DistributedModelParallel):
-                model = model.module
-            sharded_modules = {}
-            fp_modules = {}
-            for name, m in model.named_modules():
-                if isinstance(m, ShardedModule):
-                    sharded_modules[name] = m
-                if isinstance(m, BaseGroupedFeatureProcessor):
-                    fp_modules[name] = m
-            tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
-            graph = tracer.trace(model)
-            feature_processor_nodes = []
-            for node in graph.nodes:
-                if node.op == "call_module" and node.target in fp_modules:
-                    feature_processor_nodes.append(node)
-            self._pipelined_modules = []
-            self._pipelined_wait = []
-            for node in graph.nodes:
-                if node.op == "call_module" and node.target in sharded_modules:
-                    total_num_args = len(node.args) + len(node.kwargs)
-                    if total_num_args == 0:
-                        continue
-                    arg_info_list, num_found = _get_node_args(
-                        node, feature_processor_nodes)
-                    if num_found == total_num_args:
-                        logger.info(f"Module '{node.target}'' will be pipelined")
-                        child = sharded_modules[node.target]
-                        child.forward = PipelinedForwardNoWait(
-                            node.target,
-                            arg_info_list,
-                            child,
-                            context,
-                            dist_stream,
-                        )
-                        self._pipelined_modules.append(child)
-                        self._pipelined_wait.append(PipelinedWait(
-                            node.target,
-                            arg_info_list,
-                            child,
-                            context,
-                            dist_stream,
-                        ))
         for i in range(self.prefetch_num):
             # batch 1
             with torch.cuda.stream(self._memcpy_stream):
@@ -843,13 +841,13 @@ class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
             _wait_for_batch(self._cur_batch_list[(
                 self._iter_count) % self.prefetch_num], self._data_dist_stream)
         batch_ip1 = cast(In, self._batch_ip1)
-        
+
         # fetch distributed data
         sparse_data = self._pipelined_wait[0].get_request_data()
         self._distributed_sparse_data_list[(self._iter_count - 1) % self.prefetch_num] = sparse_data[0].id_list_features
         if self._iter_count % self.prefetch_num == 0:
             # prepare ids
-            with record_function("prefetch cache"):
+            with record_function("## prefetch cache ##"):
                 raw_id_list = []
                 raw_id_length_list = []
                 for sparse_data in self._distributed_sparse_data_list:
@@ -883,7 +881,6 @@ class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
         # Data Distribution
         with record_function("## sparse_data_dist ##"):
             with torch.cuda.stream(self._data_dist_stream):
-                
                 # starting data dist
                 if self._data_dist_stream:
                     # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
