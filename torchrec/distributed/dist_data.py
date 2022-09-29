@@ -172,6 +172,7 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
         batch_size_per_rank: List[int],
     ) -> None:
         super().__init__()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._workers: int = pg.size()
         self._device: torch.device = input.values().device
         self._recat = recat
@@ -263,6 +264,7 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
                 else:
                     lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
                         self._recat,
+                        # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
                         lengths.view(self._workers * self._splits[self._pg.rank()], -1),
                         values,
                         weights,
@@ -311,6 +313,7 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._workers: int = pg.size()
         self._pg: dist.ProcessGroup = pg
         self._device: torch.device = input.values().device
@@ -321,6 +324,7 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
         self._recat: torch.Tensor = recat
         self._in_lengths_per_worker: List[int] = []
         self._variable_batch_size = variable_batch_size
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
         dim_0 = splits[pg.rank()]
         dim_1 = input.stride()
         self._batch_size_per_rank: List[int] = [dim_1] * self._workers
@@ -491,6 +495,7 @@ class KJTAllToAll(nn.Module):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         assert len(splits) == pg.size()
         self._pg: dist.ProcessGroup = pg
         self._splits = splits
@@ -501,6 +506,7 @@ class KJTAllToAll(nn.Module):
         self.register_buffer(
             "_recat",
             _get_recat(
+                # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
                 local_split=splits[pg.rank()],
                 num_splits=len(splits),
                 stagger=stagger,
@@ -525,6 +531,8 @@ class KJTAllToAll(nn.Module):
 
         with torch.no_grad():
             assert len(input.keys()) == sum(self._splits)
+            # pyre-fixme[6]: For 1st param expected
+            #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
             rank = dist.get_rank(self._pg)
             local_keys = input.keys()[
                 self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
@@ -687,6 +695,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         """
 
         if local_embs.numel() == 0:
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
             local_embs.view(local_embs.size(0) * self._pg.size(), 0)
         if batch_size_per_rank is None:
             B_global = local_embs.size(0)
@@ -1000,7 +1009,9 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         self._pg = pg
 
         forward_recat = []
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         for j in range(self._pg.size()):
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
             for i in range(features_per_rank[self._pg.rank()]):
                 forward_recat.append(j + i * self._pg.size())
         self.register_buffer(

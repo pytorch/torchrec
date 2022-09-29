@@ -75,7 +75,10 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
-            intra_pg.size() if intra_pg else get_local_size(self._world_size)
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+            intra_pg.size()
+            if intra_pg
+            else get_local_size(self._world_size)
         )
 
         sharded_tables_per_rank = self._shard(sharding_infos)
@@ -322,7 +325,9 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     ) -> None:
         super().__init__()
         assert (
-            pg.size() % intra_pg.size() == 0
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+            pg.size() % intra_pg.size()
+            == 0
         ), "currently group granularity must be node"
 
         self._world_size: int = pg.size()
