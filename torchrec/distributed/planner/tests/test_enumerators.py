@@ -7,6 +7,7 @@
 
 import unittest
 from typing import cast, List
+from unittest.mock import patch
 
 import torch
 from torchrec.distributed.embedding_tower_sharding import (
@@ -386,6 +387,12 @@ class TestEnumerators(unittest.TestCase):
         self.tower_collection_model = TestTowerCollectionSparseNN(
             tables=tables, weighted_tables=weighted_tables
         )
+        _get_optimizer_multipler_patcher = patch(
+            "torchrec.distributed.planner.shard_estimators._get_optimizer_multipler",
+            return_value=0,
+        )
+        self.addCleanup(_get_optimizer_multipler_patcher.stop)
+        self._get_optimizer_multipler_mock = _get_optimizer_multipler_patcher.start()
 
     def test_dp_sharding(self) -> None:
         sharding_options = self.enumerator.enumerate(
@@ -424,15 +431,12 @@ class TestEnumerators(unittest.TestCase):
                 * sharding_option.tensor.element_size()
             ] * self.world_size
 
-            optimizer_sizes = [tensor_size * 2 for tensor_size in tensor_sizes]
-
             storage_sizes = [
-                input_size + tensor_size + output_size + optimizer_size
-                for input_size, tensor_size, output_size, optimizer_size in zip(
+                input_size + tensor_size + output_size
+                for input_size, tensor_size, output_size in zip(
                     input_sizes,
                     tensor_sizes,
                     output_sizes,
-                    optimizer_sizes,
                 )
             ]
 
