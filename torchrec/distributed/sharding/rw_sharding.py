@@ -240,6 +240,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         need_pos: bool = False,
     ) -> None:
         super().__init__()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._world_size: int = pg.size()
         self._num_id_list_features = num_id_list_features
         self._num_id_score_list_features = num_id_score_list_features
