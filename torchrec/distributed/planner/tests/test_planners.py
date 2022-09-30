@@ -108,7 +108,7 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=4096,
-                embedding_dim=128,
+                embedding_dim=64,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
