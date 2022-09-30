@@ -11,8 +11,17 @@ from typing import Any, Dict, List, Optional, Set, Type, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torch import nn
 from torchrec import optim as trec_optim
-from torchrec.distributed.types import ShardedModule
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.types import (
+    HBM,
+    ParameterSharding,
+    ShardedModule,
+    ShardingType,
+    UVM,
+    UVM_CACHING,
+)
 
 
 def append_prefix(prefix: str, name: str) -> str:
@@ -245,3 +254,39 @@ def merge_fused_params(
     _fused_params = copy.deepcopy(fused_params)
     _fused_params.update(param_fused_params)
     return _fused_params
+
+
+def set_compute_kernel(
+    parameter_sharding: ParameterSharding,
+    param: nn.Parameter,
+    table_name: str,
+    fused_params: Dict[str, Any],
+) -> None:
+    # if compute_kernel is not explicitly set in the sharding plan, we can derive it from the properties of the module.
+    # Set it in place in parameter_sharding
+    if (
+        parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value
+        or not hasattr(param, "_optimizer_class")
+    ):
+        parameter_sharding.compute_kernel = EmbeddingComputeKernel.DENSE.value
+        if parameter_sharding.placement is not None:
+            raise ValueError(
+                f"Table {table_name} cannot be placed on {parameter_sharding.placement}, unless it has an optimizer in backwards and is not data_parallel."
+            )
+    else:
+        # TODO we should refactor backend to not pass around compute_kernel anymore, instead pass around placement
+        parameter_sharding.compute_kernel = EmbeddingComputeKernel.FUSED.value
+        if parameter_sharding.placement is not None:
+            if isinstance(parameter_sharding.placement, HBM):
+                pass
+            elif isinstance(parameter_sharding.placement, UVM):
+                parameter_sharding.compute_kernel = (
+                    EmbeddingComputeKernel.FUSED_UVM.value
+                )
+            elif isinstance(parameter_sharding.placement, UVM_CACHING):
+                parameter_sharding.compute_kernel = (
+                    EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                )
+                fused_params[
+                    "caching_ratio"
+                ] = parameter_sharding.placement.caching_ratio

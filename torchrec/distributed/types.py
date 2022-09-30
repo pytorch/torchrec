@@ -85,6 +85,35 @@ class ParameterStorage(Enum):
     DDR = "ddr"
 
 
+@dataclass(repr=True)
+class ParameterLocation:
+    pass
+
+
+@dataclass
+class HBM(ParameterLocation):
+    # placed on GPU memory, when device=cuda
+    pass
+
+
+@dataclass
+class DDR(ParameterLocation):
+    # placed on CPU, when device=cpu
+    pass
+
+
+@dataclass
+class UVM(ParameterLocation):
+    # placed on disk
+    pass
+
+
+@dataclass
+class UVM_CACHING(ParameterLocation):
+    # placed on both GPU and disk, most frequently values (caching ratio) are stored in GPU memory
+    caching_ratio: float
+
+
 @unique
 class ComputeKernel(Enum):
     DEFAULT = "default"
@@ -352,6 +381,7 @@ class ParameterSharding:
         sharding_type (str): how this parameter is sharded. See ShardingType for well-known
             types.
         compute_kernel (str): compute kernel to be used by this parameter.
+        placement (str): Placement strategy for the parameter
         ranks (Optional[List[int]]): rank of each shard.
         sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
 
@@ -366,6 +396,7 @@ class ParameterSharding:
 
     sharding_type: str
     compute_kernel: str
+    placement: Optional[ParameterLocation] = None
     ranks: Optional[List[int]] = None
     sharding_spec: Optional[ShardingSpec] = None
 

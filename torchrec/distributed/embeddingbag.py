@@ -34,6 +34,7 @@ from torchrec.distributed.types import (
     Awaitable,
     EmptyShardedModuleContext,
     EnumerableShardingSpec,
+    HBM,
     LazyAwaitable,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -41,12 +42,15 @@ from torchrec.distributed.types import (
     ShardedTensor,
     ShardingEnv,
     ShardingType,
+    UVM,
+    UVM_CACHING,
 )
 from torchrec.distributed.utils import (
     append_prefix,
     filter_state_dict,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
+    set_compute_kernel,
 )
 from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import (
@@ -174,12 +178,7 @@ def create_sharding_infos_by_sharding(
         table_name = config.name
         assert table_name in table_name_to_parameter_sharding
         parameter_sharding = table_name_to_parameter_sharding[table_name]
-        if parameter_sharding.compute_kernel not in [
-            kernel.value for kernel in EmbeddingComputeKernel
-        ]:
-            raise ValueError(
-                f"Compute kernel not supported {parameter_sharding.compute_kernel}"
-            )
+
         embedding_names: List[str] = []
         for feature_name in config.feature_names:
             if shared_feature[feature_name]:
@@ -201,6 +200,16 @@ def create_sharding_infos_by_sharding(
                 optimizer_class
             )
         fused_params = merge_fused_params(fused_params, optimizer_params)
+
+        if parameter_sharding.compute_kernel is None:
+            set_compute_kernel(parameter_sharding, param, table_name, fused_params)
+
+        if parameter_sharding.compute_kernel not in [
+            kernel.value for kernel in EmbeddingComputeKernel
+        ]:
+            raise ValueError(
+                f"Compute kernel not supported {parameter_sharding.compute_kernel}"
+            )
 
         sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
             EmbeddingShardingInfo(
