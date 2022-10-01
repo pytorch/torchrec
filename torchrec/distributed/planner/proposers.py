@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
 import itertools
 import logging
 from decimal import Decimal
@@ -56,12 +55,10 @@ class GreedyProposer(Proposer):
 
     def propose(self) -> Optional[List[ShardingOption]]:
         if self._current_proposal:
-            return copy.deepcopy(
-                [
-                    self._sharding_options_by_fqn[fqn][index]
-                    for fqn, index in self._current_proposal.items()
-                ]
-            )
+            return [
+                self._sharding_options_by_fqn[fqn][index]
+                for fqn, index in self._current_proposal.items()
+            ]
         else:
             return None
 
@@ -147,7 +144,7 @@ class UniformProposer(Proposer):
 
     def propose(self) -> Optional[List[ShardingOption]]:
         if self._proposal_index < len(self._grouped_sharding_options):
-            return copy.deepcopy(self._grouped_sharding_options[self._proposal_index])
+            return self._grouped_sharding_options[self._proposal_index]
         else:
             return None
 

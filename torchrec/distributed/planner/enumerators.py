@@ -147,8 +147,6 @@ class EmbeddingEnumerator(Enumerator):
                                 name=name,
                                 tensor=param,
                                 module=(child_path, child_module),
-                                upstream_modules=[],
-                                downstream_modules=[],
                                 input_lengths=input_lengths,
                                 batch_size=self._batch_size,
                                 compute_kernel=compute_kernel,
