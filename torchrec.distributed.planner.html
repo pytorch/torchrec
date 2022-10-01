@@ -1055,37 +1055,12 @@ to store the shard with an estimation ‘perf’.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ShardingOption</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">name:</span> <span class="pre">str,</span> <span class="pre">tensor:</span> <span class="pre">~torch.Tensor,</span> <span class="pre">module:</span> <span class="pre">~typing.Tuple[str,</span> <span class="pre">~torch.nn.modules.module.Module],</span> <span class="pre">upstream_modules:</span> <span class="pre">~typing.List[~typing.Tuple[str,</span> <span class="pre">~torch.nn.modules.module.Module]],</span> <span class="pre">downstream_modules:</span> <span class="pre">~typing.List[~typing.Tuple[str,</span> <span class="pre">~torch.nn.modules.module.Module]],</span> <span class="pre">input_lengths:</span> <span class="pre">~typing.List[float],</span> <span class="pre">batch_size:</span> <span class="pre">int,</span> <span class="pre">sharding_type:</span> <span class="pre">str,</span> <span class="pre">partition_by:</span> <span class="pre">str,</span> <span class="pre">compute_kernel:</span> <span class="pre">str,</span> <span class="pre">shards:</span> <span class="pre">~typing.List[~torchrec.distributed.planner.types.Shard]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">dependency:</span> <span class="pre">~typing.Optional[str]</span> <span class="pre">=</span> <span class="pre">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ShardingOption</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">partition_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard"><span class="pre">Shard</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>One way of sharding an embedding table.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.batch_size">
-<span class="sig-name descname"><span class="pre">batch_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.batch_size" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.compute_kernel">
-<span class="sig-name descname"><span class="pre">compute_kernel</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.compute_kernel" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.dependency">
-<span class="sig-name descname"><span class="pre">dependency</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.dependency" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.downstream_modules">
-<span class="sig-name descname"><span class="pre">downstream_modules</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.downstream_modules" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.fqn">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fqn</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.fqn" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.input_lengths">
-<span class="sig-name descname"><span class="pre">input_lengths</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.input_lengths" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -1093,14 +1068,9 @@ to store the shard with an estimation ‘perf’.</p>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_pooled</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
-<dl class="py attribute">
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.module">
-<span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.module" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.name">
-<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.name" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.module" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -1113,39 +1083,19 @@ to store the shard with an estimation ‘perf’.</p>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_shards</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.num_shards" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.partition_by">
-<span class="sig-name descname"><span class="pre">partition_by</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.partition_by" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.path">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.path" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.sharding_type">
-<span class="sig-name descname"><span class="pre">sharding_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.sharding_type" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.shards">
-<span class="sig-name descname"><span class="pre">shards</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard"><span class="pre">Shard</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.shards" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
+<dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.tensor">
-<span class="sig-name descname"><span class="pre">tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.tensor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.tensor" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.total_storage">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">total_storage</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.total_storage" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.upstream_modules">
-<span class="sig-name descname"><span class="pre">upstream_modules</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.upstream_modules" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1460,24 +1410,14 @@ to store the shard with an estimation ‘perf’.</p>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption"><code class="docutils literal notranslate"><span class="pre">ShardingOption</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.batch_size"><code class="docutils literal notranslate"><span class="pre">ShardingOption.batch_size</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.compute_kernel"><code class="docutils literal notranslate"><span class="pre">ShardingOption.compute_kernel</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.dependency"><code class="docutils literal notranslate"><span class="pre">ShardingOption.dependency</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.downstream_modules"><code class="docutils literal notranslate"><span class="pre">ShardingOption.downstream_modules</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.fqn"><code class="docutils literal notranslate"><span class="pre">ShardingOption.fqn</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.input_lengths"><code class="docutils literal notranslate"><span class="pre">ShardingOption.input_lengths</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled"><code class="docutils literal notranslate"><span class="pre">ShardingOption.is_pooled</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.module"><code class="docutils literal notranslate"><span class="pre">ShardingOption.module</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.name"><code class="docutils literal notranslate"><span class="pre">ShardingOption.name</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_inputs"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_inputs</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_shards"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_shards</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.partition_by"><code class="docutils literal notranslate"><span class="pre">ShardingOption.partition_by</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.path"><code class="docutils literal notranslate"><span class="pre">ShardingOption.path</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.sharding_type"><code class="docutils literal notranslate"><span class="pre">ShardingOption.sharding_type</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.shards"><code class="docutils literal notranslate"><span class="pre">ShardingOption.shards</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.tensor"><code class="docutils literal notranslate"><span class="pre">ShardingOption.tensor</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.total_storage"><code class="docutils literal notranslate"><span class="pre">ShardingOption.total_storage</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.upstream_modules"><code class="docutils literal notranslate"><span class="pre">ShardingOption.upstream_modules</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.Stats"><code class="docutils literal notranslate"><span class="pre">Stats</span></code></a><ul>
