@@ -141,18 +141,17 @@ class GreedyPerfPartitioner(Partitioner):
         """
 
         _topology: Topology = copy.deepcopy(storage_constraint)
-        plan = copy.deepcopy(proposal)
         _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
-        uniform_sharding_options = _get_uniform_sharding_options(plan)
+        uniform_sharding_options = _get_uniform_sharding_options(proposal)
         GreedyPerfPartitioner._uniform_partition(
             uniform_sharding_options, _topology.devices
         )
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
-        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(plan)
+        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(proposal)
 
         for sharding_option_group in sharding_option_groups:
             if (
@@ -178,7 +177,7 @@ class GreedyPerfPartitioner(Partitioner):
                 )
         # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
         self._topology: Topology = _topology
-        return plan
+        return proposal
 
     @staticmethod
     def _device_partition(

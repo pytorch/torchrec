@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 from functools import reduce
 from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
@@ -232,7 +233,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 self._num_proposals += 1
                 try:
                     plan = self._partitioner.partition(
-                        proposal=proposal,
+                        proposal=copy.deepcopy(proposal),
                         storage_constraint=storage_constraint,
                     )
                     self._num_plans += 1

@@ -304,8 +304,6 @@ class TestProposers(unittest.TestCase):
                     tensor=torch.zeros(1),
                     # pyre-ignore
                     module=("model", None),
-                    upstream_modules=[],
-                    downstream_modules=[],
                     input_lengths=[],
                     batch_size=8,
                     sharding_type="row_wise",
