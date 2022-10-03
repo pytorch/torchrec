@@ -13,8 +13,12 @@ import torch
 from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
-from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.model_parallel import (
+    bind_copy_to_device,
+    DistributedModelParallel,
+)
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+from torchrec.distributed.shard_embedding_modules import shard_embedding_modules
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     ModelInput,
@@ -284,6 +288,73 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         torch.testing.assert_close(
             dmp(local_batch[0].to(device)).cpu(),
             dmp_copy(local_batch[0].to(device)).cpu(),
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]
+    @given(
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_quant_pred_shard_embedding_modules(self, output_type: torch.dtype) -> None:
+        device = torch.device("cuda:0")
+        device_1 = torch.device("cuda:1")
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=device,
+            sparse_device=torch.device("meta"),
+        )
+        quant_model = _quantize(model, inplace=True, output_type=output_type)
+
+        sharded_model, _sharded_params = shard_embedding_modules(
+            module=quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantEBCSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ],
+            device=device,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+        )
+
+        sharded_model = sharded_model.to(device)
+
+        bind_copy_to_device(sharded_model)
+
+        # pyre-ignore
+        sharded_model_copy = sharded_model.copy(
+            current_device=device, to_device=device_1
+        )
+
+        self._recursive_device_check(
+            sharded_model, sharded_model_copy, device, device_1
+        )
+
+        _, local_batch = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+
+        torch.testing.assert_close(
+            sharded_model(local_batch[0].to(device)).cpu(),
+            sharded_model_copy(local_batch[0].to(device_1)).cpu(),
         )
 
     # pyre-fixme[56]
