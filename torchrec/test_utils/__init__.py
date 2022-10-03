@@ -93,6 +93,8 @@ def init_distributed_single_host(
     os.environ["LOCAL_WORLD_SIZE"] = str(local_size if local_size else world_size)
     os.environ["LOCAL_RANK"] = str(rank % local_size if local_size else rank)
     dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+    # pyre-fixme[7]: Expected `ProcessGroup` but got
+    #  `Optional[_distributed_c10d.ProcessGroup]`.
     return dist.group.WORLD
 
 
