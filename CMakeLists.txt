@@ -9,11 +9,15 @@ cmake_minimum_required(VERSION 3.11.0 FATAL_ERROR)
 project(TorchRec
         LANGUAGES CXX C)
 
+find_package(Torch REQUIRED)
+
 set(CMAKE_CXX_STANDARD 20)
 
 include(FetchContent)
 
 option(BUILD_TEST "Build C++ test binaries (need gtest and gbenchmark)" OFF)
+
+add_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
 
 add_subdirectory(torchrec/csrc)
 
@@ -34,5 +38,6 @@ if (BUILD_TEST)
     FetchContent_MakeAvailable(googletest google_benchmark)
 
     enable_testing()
+    add_subdirectory(benchmarks/cpp)
     add_subdirectory(test/cpp)
 endif()

@@ -14,8 +14,6 @@ template <typename T>
 struct CtzImpl {
   /**
    * Naive implementation for no __builtin_ctz
-   * @param v
-   * @return
    */
   int operator()(T v) const {
     if (v == 0)
