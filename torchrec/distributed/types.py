@@ -90,10 +90,13 @@ class ComputeKernel(Enum):
     DEFAULT = "default"
 
 
+QuantizationContext = TypeVar("QuantizationContext")
+
+
 # Once we only support python3.8+ use
 # from typing import protocol.
 # We can't use from typing_extensions import Protocol due to torch.deploy restrictions.
-class QuantizedCommCodec:
+class QuantizedCommCodec(Generic[QuantizationContext]):
     """
     Provide an implementation to quantized, or apply mixed precision, to the tensors used in collective calls (pooled_all_to_all, reduce_scatter, etc).
     The dtype is the dtype of the tensor called from encode.
@@ -110,10 +113,14 @@ class QuantizedCommCodec:
 
     """
 
-    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+    def encode(
+        self, input_tensor: torch.Tensor, ctx: Optional[QuantizationContext] = None
+    ) -> torch.Tensor:
         ...
 
-    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+    def decode(
+        self, input_grad: torch.Tensor, ctx: Optional[QuantizationContext] = None
+    ) -> torch.Tensor:
         ...
 
     def quantized_dtype(self) -> torch.dtype:
@@ -122,20 +129,58 @@ class QuantizedCommCodec:
         """
         ...
 
+    def calc_quantized_size(
+        self,
+        input_len: int,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> int:
+        """
+        Given the length of input tensor, returns the length of tensor after
+        quantization. Used by INT8 codecs where the quantized tensor have
+        some additional parameters. For other cases, the quantized tensor should
+        have the same length with input.
+        """
+        ...
 
-class NoOpQuantizedCommCodec:
+    def create_context(self) -> Optional[QuantizationContext]:
+        """
+        Create a context object that can be used to carry session-based
+        parameters between encoder and decoder.
+        """
+        ...
+
+
+class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
     """
     Default No-Op implementation of QuantizedCommCodec
     """
 
-    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+    def encode(
+        self,
+        input_tensor: torch.Tensor,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> torch.Tensor:
         return input_tensor
 
-    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+    def decode(
+        self,
+        input_grad: torch.Tensor,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> torch.Tensor:
         return input_grad
 
     def quantized_dtype(self) -> torch.dtype:
         return torch.float
+
+    def calc_quantized_size(
+        self,
+        input_len: int,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> int:
+        return input_len
+
+    def create_context(self) -> Optional[QuantizationContext]:
+        return None
 
 
 @dataclass

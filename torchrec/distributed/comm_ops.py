@@ -10,6 +10,8 @@ from typing import Any, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
+
+from pyre_extensions import none_throws
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.profiler import record_function
@@ -62,6 +64,7 @@ class Request(Awaitable[W]):
         self.req: Optional[dist.Work] = None
         self.tensor: Optional[W] = None
         self.a2ai = None  # type: ignore
+        self.qcomm_ctx = None  # type: ignore
         self.rsi = None  # type: ignore
         self.agi = None  # type: ignore
         self.wait_function = None  # type: ignore
@@ -673,12 +676,35 @@ class All2All_Pooled_Req(Function):
         D_global_sum = sum(dim_sum_per_rank)
 
         if a2ai.codecs is not None:
-            sharded_input_embeddings = a2ai.codecs.forward.encode(
-                sharded_input_embeddings
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.forward.create_context()
+            sharded_input_embeddings = codecs.forward.encode(
+                sharded_input_embeddings,
+                qcomm_ctx,
             )
+            output_split_sizes = [
+                codecs.forward.calc_quantized_size(
+                    B_local * D_rank_sum,
+                    qcomm_ctx,
+                )
+                for D_rank_sum in dim_sum_per_rank
+            ]
+            input_split_sizes = [
+                codecs.forward.calc_quantized_size(
+                    D_local_sum * B_rank,
+                    qcomm_ctx,
+                )
+                for B_rank in batch_size_per_rank
+            ]
+        else:
+            output_split_sizes = [
+                B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
+            ]
+            input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
+            qcomm_ctx = None
 
         sharded_output_embeddings = torch.empty(
-            B_local * D_global_sum,
+            sum(output_split_sizes),
             dtype=sharded_input_embeddings.dtype,
             device=sharded_input_embeddings.device,
         )
@@ -687,18 +713,15 @@ class All2All_Pooled_Req(Function):
             req = dist.all_to_all_single(
                 output=sharded_output_embeddings,
                 input=sharded_input_embeddings,
-                output_split_sizes=[
-                    B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
-                ],
-                input_split_sizes=[
-                    D_local_sum * B_rank for B_rank in batch_size_per_rank
-                ],
+                output_split_sizes=output_split_sizes,
+                input_split_sizes=input_split_sizes,
                 group=pg,
                 async_op=True,
             )
 
         myreq.req = req
         myreq.tensor = sharded_output_embeddings
+        myreq.qcomm_ctx = qcomm_ctx
         myreq.a2ai = a2ai
         myreq.wait_function = All2All_Pooled_Wait
         ctx.myreq = myreq
@@ -721,9 +744,12 @@ class All2All_Pooled_Req(Function):
         batch_size_per_rank = a2ai.batch_size_per_rank
         D_local_sum = dim_sum_per_rank[my_rank]
         B_global = sum(batch_size_per_rank)
-        grad_input = grad_output.view(B_global, D_local_sum)
         if a2ai.codecs is not None:
-            grad_input = a2ai.codecs.backward.decode(grad_input)
+            codecs = none_throws(a2ai.codecs)
+            grad_input = codecs.backward.decode(grad_output, myreq.qcomm_ctx)
+            grad_input = grad_input.view(B_global, D_local_sum)
+        else:
+            grad_input = grad_output.view(B_global, D_local_sum)
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
         myreq.tensor = None
@@ -758,8 +784,10 @@ class All2All_Pooled_Wait(Function):
         B_local = batch_size_per_rank[my_rank]
 
         if a2ai.codecs is not None:
-            sharded_output_embeddings = a2ai.codecs.forward.decode(
-                sharded_output_embeddings
+            codecs = none_throws(a2ai.codecs)
+            sharded_output_embeddings = codecs.forward.decode(
+                sharded_output_embeddings,
+                myreq.qcomm_ctx,
             )
 
         outputs_by_rank = sharded_output_embeddings.split(
@@ -793,29 +821,52 @@ class All2All_Pooled_Wait(Function):
         )
 
         if a2ai.codecs is not None:
-            sharded_grad_output = a2ai.codecs.backward.encode(sharded_grad_output)
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.backward.create_context()
+            sharded_grad_output = codecs.backward.encode(
+                sharded_grad_output,
+                qcomm_ctx,
+            )
+            input_split_sizes = [
+                codecs.backward.calc_quantized_size(
+                    B_local * D_rank_sum,
+                    qcomm_ctx,
+                )
+                for D_rank_sum in dim_sum_per_rank
+            ]
+            output_split_sizes = [
+                codecs.backward.calc_quantized_size(
+                    D_local_sum * B_rank,
+                    qcomm_ctx,
+                )
+                for B_rank in batch_size_per_rank
+            ]
+        else:
+            qcomm_ctx = None
+            input_split_sizes = [
+                B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
+            ]
+            output_split_sizes = [
+                D_local_sum * B_rank for B_rank in batch_size_per_rank
+            ]
 
         sharded_grad_input = torch.empty(
-            sharded_grad_input_sizes,
+            sum(output_split_sizes),
             device=sharded_grad_output.device,
             dtype=sharded_grad_output.dtype,
         )
-        output_split_sizes = [
-            D_local_sum * B_rank for B_rank in a2ai.batch_size_per_rank
-        ]
         with record_function("## alltoall_bwd_single ##"):
             req = dist.all_to_all_single(
                 output=sharded_grad_input,
                 input=sharded_grad_output,
                 output_split_sizes=output_split_sizes,
-                input_split_sizes=[
-                    B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
-                ],
+                input_split_sizes=input_split_sizes,
                 group=pg,
                 async_op=True,
             )
         myreq.req = req
         myreq.tensor = sharded_grad_input
+        myreq.qcomm_ctx = qcomm_ctx
 
         return (None, None, myreq.dummy_tensor)
 

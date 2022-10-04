@@ -15,7 +15,10 @@ from typing import cast, Dict, List, Optional
 
 import torch
 
-from fbgemm_gpu.quantize_comm import QuantizedCommCodec as FbgemmQuantizedCommCodec
+from fbgemm_gpu.quantize_comm import (
+    QuantizationContext,
+    QuantizedCommCodec as FbgemmQuantizedCommCodec,
+)
 from fbgemm_gpu.split_embedding_configs import SparseType
 from torchrec.distributed.types import CommOp, QuantizedCommCodec, QuantizedCommCodecs
 
@@ -28,6 +31,7 @@ class CommType(Enum):
     FP16 = "fp16"
     BF16 = "bf16"
     FP8 = "fp8"
+    INT8 = "int8"
 
     def __str__(self) -> str:
         return self.value
@@ -39,6 +43,7 @@ def comm_type_to_sparse_type(comm_type: CommType) -> SparseType:
         CommType.FP16: SparseType.FP16,
         CommType.BF16: SparseType.BF16,
         CommType.FP8: SparseType.FP8,
+        CommType.INT8: SparseType.INT8,
     }[comm_type]
 
 
@@ -62,7 +67,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
     codecs = QuantizedCommCodecs()
     if qcomms_config is not None:
         codecs.forward = cast(
-            QuantizedCommCodec,
+            QuantizedCommCodec[QuantizationContext],
             FbgemmQuantizedCommCodec(
                 comm_precision=comm_type_to_sparse_type(
                     qcomms_config.forward_precision
@@ -71,7 +76,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
             ),
         )
         codecs.backward = cast(
-            QuantizedCommCodec,
+            QuantizedCommCodec[QuantizationContext],
             FbgemmQuantizedCommCodec(
                 comm_precision=comm_type_to_sparse_type(
                     qcomms_config.backward_precision
