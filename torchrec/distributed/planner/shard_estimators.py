@@ -1004,7 +1004,7 @@ def _get_optimizer_multipler(
     shape: torch.Size,
 ) -> float:
     if not optimizer_class:
-        return 1.0
+        return 0.0
     if optimizer_class in [torch.optim.SGD, torchrec.optim.SGD]:
         return 0
     elif optimizer_class in [torch.optim.Adam, torchrec.optim.Adam]:
