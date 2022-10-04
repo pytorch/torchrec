@@ -17,7 +17,7 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 
 # Installation
 
-Torchrec requires Python >= 3.7 and CUDA >= 11.0 (CUDA is highly recommended for performance but not required). The example below shows how to install with CUDA 11.3. This setup assumes you have conda installed.
+Torchrec requires Python >= 3.7 and CUDA >= 11.0 (CUDA is highly recommended for performance but not required). The example below shows how to install with CUDA 11.6. This setup assumes you have conda installed.
 
 ## Binaries
 
@@ -29,12 +29,12 @@ TO use the library without cuda, use the *-cpu fbgemm installations. However, th
 
 Nightly
 
-conda install pytorch cudatoolkit=11.3 -c pytorch-nightly
+conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
 pip install torchrec_nightly
 
 Stable
 
-conda install pytorch cudatoolkit=11.3 -c pytorch
+conda install pytorch cudatoolkit=11.6 -c pytorch -c conda-forge
 pip install torchrec
 
 If you have no CUDA device:
@@ -63,7 +63,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
 
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/)
    ```
-   conda install pytorch cudatoolkit=11.3 -c pytorch
+   conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
    ```
 
 2. Install Requirements
