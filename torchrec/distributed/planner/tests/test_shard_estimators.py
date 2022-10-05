@@ -218,7 +218,7 @@ def calculate_storage_specific_size_data_provider():
         {
             "sharding_type": ShardingType.TABLE_ROW_WISE,
             "optimizer_class": None,
-            "expected_storage": [100, 100],
+            "expected_storage": [50, 50],
         },
         {
             "sharding_type": ShardingType.DATA_PARALLEL,
