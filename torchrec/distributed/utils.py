@@ -7,12 +7,30 @@
 
 import copy
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Set, Type, Union
+from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torchrec import optim as trec_optim
 from torchrec.distributed.types import ShardedModule
+
+
+_T = TypeVar("_T")
+
+
+"""
+torch.package safe functions from pyre_extensions. However, pyre_extensions is
+not safe to use in code that will be torch.packaged, as it requires sys for
+version checks
+"""
+
+
+def none_throws(optional: Optional[_T], message: str = "Unexpected `None`") -> _T:
+    """Convert an optional to its value. Raises an `AssertionError` if the
+    value is `None`"""
+    if optional is None:
+        raise AssertionError(message)
+    return optional
 
 
 def append_prefix(prefix: str, name: str) -> str:
