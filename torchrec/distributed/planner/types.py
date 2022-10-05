@@ -302,8 +302,24 @@ class ParameterConstraints:
     is_weighted: bool = False
 
 
+class PlannerErrorType(Enum):
+    """
+    Classify PlannerError based on the following cases.
+    """
+
+    INSUFFICIENT_STORAGE = "insufficient_storage"
+    PARTITION = "partition"
+    OTHER = "other"
+
+
 class PlannerError(Exception):
-    ...
+    def __init__(
+        self,
+        message: str,
+        error_type: PlannerErrorType = PlannerErrorType.OTHER,
+    ) -> None:
+        self.error_type = error_type
+        super().__init__(message)
 
 
 # ---- PLANNER COMPONENTS ---- #
