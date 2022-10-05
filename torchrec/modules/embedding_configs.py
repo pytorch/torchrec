@@ -105,6 +105,8 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float16
     elif data_type == DataType.INT8:
         return torch.int8
+    elif data_type == DataType.INT4:
+        return torch.quint4x2
     else:
         raise ValueError(f"DataType {data_type} cannot be converted to dtype")
 
