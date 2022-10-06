@@ -73,16 +73,9 @@ class MultiProcessContext:
     # pyre-ignore
     def __exit__(self, exc_type, exc_instance, traceback) -> None:
         if _INTRA_PG is not None:
-            # pyre-fixme[6]: For 1st param expected
-            #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
             dist.destroy_process_group(_INTRA_PG)
         if _CROSS_PG is not None:
-            # pyre-fixme[6]: For 1st param expected
-            #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
             dist.destroy_process_group(_CROSS_PG)
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         dist.destroy_process_group(self.pg)
         torch.use_deterministic_algorithms(False)
         if torch.cuda.is_available():
