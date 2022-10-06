@@ -124,6 +124,19 @@ class TestProposers(unittest.TestCase):
 
         self.assertEqual(expected_output, output)
 
+        # Test threshold for early_stopping
+        self.greedy_proposer._threshold = 10
+        self.greedy_proposer.load(search_space)
+
+        # With early stopping, after berf_perf_rating is assigned, after 10 iterations with
+        # consecutive worse perf_rating, the returned proposal should be None.
+        proposal = None
+        for i in range(13):
+            proposal = cast(List[ShardingOption], self.greedy_proposer.propose())
+            self.greedy_proposer.feedback(partitionable=True, perf_rating=100 + i)
+        self.assertEqual(self.greedy_proposer._best_perf_rating, 100)
+        self.assertEqual(proposal, None)
+
     def test_uniform_three_table(self) -> None:
         tables = [
             EmbeddingBagConfig(
