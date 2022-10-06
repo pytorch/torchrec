@@ -15,13 +15,15 @@ from torch.utils.data import IterableDataset
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.random import RandomRecDataset
 from torchrec.distributed import TrainPipelineSparseDist
+from torchrec.distributed.fbgemm_qcomm_codec import get_qcomm_codecs_registry, QCommsConfig, CommType
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
+from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from tqdm import tqdm
 
 
@@ -49,6 +51,8 @@ def train(
     dense_arch_layer_sizes: Optional[List[int]] = None,
     over_arch_layer_sizes: Optional[List[int]] = None,
     learning_rate: float = 0.1,
+    qcomm_forward_precision: CommType = CommType.FP16,
+    qcomm_backward_precision: CommType = CommType.BF16,
 ) -> None:
     """
     Constructs and trains a DLRM model (using random dummy data). Each script is run on each process (rank) in SPMD fashion.
@@ -91,19 +95,25 @@ def train(
     )
     train_model = DLRMTrain(dlrm_model)
 
-    # Enable optimizer fusion
-    model = fuse_embedding_optimizer(
-        train_model,
-        optimizer_type=RowWiseAdagrad,
-        optimizer_kwargs={
-            "lr": learning_rate,
-        },
-        device=torch.device("meta"),
+    apply_overlapped_optimizer(
+        RowWiseAdagrad,
+        train_model.model.sparse_arch.parameters(),
+        {"lr": learning_rate}
+    )
+
+    sharder = EmbeddingBagCollectionSharder(
+        qcomm_codecs_registry=get_qcomm_codecs_registry(
+            qcomms_config=QCommsConfig(
+                forward_precision=qcomm_forward_precision,
+                backward_precision=qcomm_backward_precision,
+            )
+        )
     )
 
     model = DistributedModelParallel(
         module=train_model,
         device=device,
+        sharders=[sharder]
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
