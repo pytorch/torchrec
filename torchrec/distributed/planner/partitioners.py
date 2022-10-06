@@ -14,6 +14,7 @@ from torchrec.distributed.planner.types import (
     PartitionByType,
     Partitioner,
     PlannerError,
+    PlannerErrorType,
     ShardingOption,
     Storage,
     Topology,
@@ -195,7 +196,8 @@ class GreedyPerfPartitioner(Partitioner):
                     break
             if not success:
                 raise PlannerError(
-                    f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}"
+                    error_type=PlannerErrorType.PARTITION,
+                    message=f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}",
                 )
 
     @staticmethod
@@ -244,7 +246,8 @@ class GreedyPerfPartitioner(Partitioner):
                     device.perf = device_copy.perf
                 return
         raise PlannerError(
-            f"can't find a host for sharding option group {sharding_option_group}"
+            error_type=PlannerErrorType.PARTITION,
+            message=f"can't find a host for sharding option group {sharding_option_group}",
         )
 
     @staticmethod
@@ -271,7 +274,8 @@ class GreedyPerfPartitioner(Partitioner):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)
                 if not storage_needed.fits_in(devices[i].storage):
                     raise PlannerError(
-                        f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}."
+                        error_type=PlannerErrorType.PARTITION,
+                        message=f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}.",
                     )
                 else:
                     sharding_option.shards[i].rank = devices[i].rank

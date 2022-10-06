@@ -13,7 +13,7 @@ from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
-from torchrec.distributed.planner.types import PlannerError, Topology
+from torchrec.distributed.planner.types import PlannerError, PlannerErrorType, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -99,8 +99,11 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
 
-        with self.assertRaises(PlannerError):
+        with self.assertRaises(PlannerError) as context:
             self.planner.plan(module=model, sharders=[TWvsRWSharder()])
+        self.assertEqual(
+            context.exception.error_type, PlannerErrorType.INSUFFICIENT_STORAGE
+        )
 
         self.assertEqual(self.planner._num_proposals, 4)
 
@@ -116,8 +119,9 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
 
-        with self.assertRaises(PlannerError):
+        with self.assertRaises(PlannerError) as context:
             self.planner.plan(module=model, sharders=[TWSharder()])
+        self.assertEqual(context.exception.error_type, PlannerErrorType.OTHER)
 
         sharding_plan = self.planner.plan(module=model, sharders=[TWvsRWSharder()])
         expected_ranks = [[0, 1]]
