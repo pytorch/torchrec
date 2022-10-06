@@ -149,10 +149,7 @@ class KeyedOptimizer(optim.Optimizer):
                         raise ValueError(
                             f"Different number of shards {num_shards} vs {num_new_shards} for {param_key}/{state_key}"
                         )
-                    for shard, new_shard in zip(
-                        state_val.local_shards(), new_state_val.local_shards()
-                    ):
-                        shard.tensor.detach().copy_(new_shard.tensor)
+                    state_val.detach().copy_(new_state_val)
                 elif isinstance(state_val, torch.Tensor):
                     assert isinstance(new_state_val, torch.Tensor)
                     state_val.detach().copy_(new_state_val)
