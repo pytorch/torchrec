@@ -11,11 +11,11 @@ from typing import Any, List, Optional, Tuple, TypeVar
 import torch
 import torch.distributed as dist
 
-from pyre_extensions import none_throws
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.profiler import record_function
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
+from torchrec.distributed.utils import none_throws
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
