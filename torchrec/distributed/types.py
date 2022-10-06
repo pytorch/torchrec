@@ -451,8 +451,6 @@ class ShardingEnv:
         NOTE:
             Typically used during training.
         """
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
 
     @classmethod
