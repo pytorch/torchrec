@@ -980,8 +980,30 @@ length, as per sample.</p>
 
 <dl class="py exception">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.PlannerError">
-<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">PlannerError</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerError" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">PlannerError</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType" title="torchrec.distributed.planner.types.PlannerErrorType"><span class="pre">PlannerErrorType</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">PlannerErrorType.OTHER</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerError" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.PlannerErrorType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">PlannerErrorType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerErrorType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>Classify PlannerError based on the following cases.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE">
+<span class="sig-name descname"><span class="pre">INSUFFICIENT_STORAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'insufficient_storage'</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.PlannerErrorType.OTHER">
+<span class="sig-name descname"><span class="pre">OTHER</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'other'</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerErrorType.OTHER" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.PlannerErrorType.PARTITION">
+<span class="sig-name descname"><span class="pre">PARTITION</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'partition'</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.PlannerErrorType.PARTITION" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -1391,6 +1413,12 @@ to store the shard with an estimation ‘perf’.</p>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerError"><code class="docutils literal notranslate"><span class="pre">PlannerError</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.INSUFFICIENT_STORAGE</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.OTHER"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.OTHER</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.PARTITION"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.PARTITION</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer"><code class="docutils literal notranslate"><span class="pre">Proposer</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.feedback"><code class="docutils literal notranslate"><span class="pre">Proposer.feedback()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.load"><code class="docutils literal notranslate"><span class="pre">Proposer.load()</span></code></a></li>
