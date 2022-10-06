@@ -6224,6 +6224,13 @@ used to configure the embedding lookup kernel</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.utils.none_throws">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">none_throws</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optional</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">_T</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'Unexpected</span> <span class="pre">`None`'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_T</span></span></span><a class="headerlink" href="#torchrec.distributed.utils.none_throws" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert an optional to its value. Raises an <cite>AssertionError</cite> if the
+value is <cite>None</cite></p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.utils.optimizer_type_to_emb_opt_type">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">optimizer_type_to_emb_opt_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">Optimizer</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">EmbOptimType</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.utils.optimizer_type_to_emb_opt_type" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -7053,6 +7060,7 @@ used to configure the embedding lookup kernel</p>
 <li><a class="reference internal" href="#torchrec.distributed.utils.filter_state_dict"><code class="docutils literal notranslate"><span class="pre">filter_state_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.get_unsharded_module_names"><code class="docutils literal notranslate"><span class="pre">get_unsharded_module_names()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.merge_fused_params"><code class="docutils literal notranslate"><span class="pre">merge_fused_params()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.utils.none_throws"><code class="docutils literal notranslate"><span class="pre">none_throws()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.optimizer_type_to_emb_opt_type"><code class="docutils literal notranslate"><span class="pre">optimizer_type_to_emb_opt_type()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.sharded_model_copy"><code class="docutils literal notranslate"><span class="pre">sharded_model_copy</span></code></a></li>
 </ul>
