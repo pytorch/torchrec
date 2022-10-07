@@ -90,7 +90,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),
@@ -188,7 +188,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),
@@ -272,7 +272,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),

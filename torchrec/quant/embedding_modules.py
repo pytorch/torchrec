@@ -84,7 +84,9 @@ def quantize_state_dict(
                 scale_shift = None
         else:
             if tensor.dtype == torch.float or tensor.dtype == torch.float16:
-                if tensor.dtype == torch.float16 and data_type == DataType.FP16:
+                if data_type == DataType.FP16:
+                    if tensor.dtype == torch.float:
+                        tensor = tensor.half()
                     quant_res = tensor.view(torch.uint8)
                 else:
                     quant_res = (
