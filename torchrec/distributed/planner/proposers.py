@@ -25,12 +25,22 @@ class GreedyProposer(Proposer):
     Sorts sharding options for each shardable parameter by perf.
     On each iteration, finds parameter with largest current storage usage and tries its
     next sharding option.
+
+    Args:
+        use_depth (bool): When enabled, sharding_options of a fqn are sorted based on
+            `max(shard.perf)`, otherwise sharding_options are sorted by `sum(shard.perf)`.
+        threshold (Optional[int]): Threshold for early stopping. When specified, the
+            proposer stops proposing when the proposals have consecutive worse perf_rating
+            than best_perf_rating.
     """
 
-    def __init__(self, use_depth: bool = True) -> None:
+    def __init__(self, use_depth: bool = True, threshold: Optional[int] = None) -> None:
         self._use_depth: bool = use_depth
+        self._threshold: Optional[int] = threshold if threshold else None
         self._sharding_options_by_fqn: Dict[str, List[ShardingOption]] = {}
         self._current_proposal: Dict[str, int] = {}
+        self._best_perf_rating: float = float("inf")
+        self._num_inferior_perf: int = 0
 
     def load(self, search_space: List[ShardingOption]) -> None:
         self._reset()
@@ -68,6 +78,17 @@ class GreedyProposer(Proposer):
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
     ) -> None:
+        # When threshold is passed, observe the perf_rating trend. If the perf_rating
+        # of the newly proposed plans have worse perf_rating, stop proposing.
+        if self._threshold and perf_rating:
+            self._num_inferior_perf += 1
+            if perf_rating < self._best_perf_rating:
+                self._best_perf_rating = perf_rating
+                self._num_inferior_perf = 0
+            # pyre-fixme [58]: `>` is not supported for operand types `int` and `Optional[int]`.
+            if self._num_inferior_perf > self._threshold:
+                self._current_proposal = {}
+                return
         # static strategy, ignore feedback and just provide next proposal
         largest_fqn: Optional[str] = None
         largest_storage: Tuple[float, float, float, float] = (0, 0, 0, 0)
