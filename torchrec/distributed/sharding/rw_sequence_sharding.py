@@ -50,6 +50,7 @@ class RwSequenceEmbeddingDist(
         super().__init__()
         self._dist = SequenceEmbeddingsAllToAll(
             pg,
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
             [num_features] * pg.size(),
             device,
             codecs=qcomm_codecs_registry.get(
