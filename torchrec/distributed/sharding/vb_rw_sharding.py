@@ -26,7 +26,8 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.rw_sharding import BaseRwEmbeddingSharding
 from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
+
 
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
@@ -170,13 +171,21 @@ class VariableBatchRwPooledEmbeddingDist(
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
         # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._workers: int = pg.size()
         # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
         self._rank: int = pg.rank()
-        self._dist = PooledEmbeddingsReduceScatter(pg)
+        self._dist = PooledEmbeddingsReduceScatter(
+            pg,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -244,6 +253,9 @@ class VariableBatchRwPooledEmbeddingSharding(
         self,
         device: Optional[torch.device] = None,
     ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
-        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-        #  `Optional[ProcessGroup]`.
-        return VariableBatchRwPooledEmbeddingDist(self._pg)
+        return VariableBatchRwPooledEmbeddingDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._pg,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )

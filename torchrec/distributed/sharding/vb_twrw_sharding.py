@@ -31,7 +31,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.twrw_sharding import BaseTwRwEmbeddingSharding
 from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
@@ -241,17 +241,30 @@ class VariableBatchTwRwPooledEmbeddingDist(
         intra_pg: dist.ProcessGroup,
         dim_sum_per_node: List[int],
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
         self._rank = rank
         self._intra_pg: dist.ProcessGroup = intra_pg
         self._cross_pg: dist.ProcessGroup = cross_pg
         self._device: Optional[torch.device] = device
-        self._intra_dist = PooledEmbeddingsReduceScatter(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatter(
+            intra_pg,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,
             device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
         )
 
     def forward(
@@ -368,4 +381,5 @@ class VariableBatchTwRwPooledEmbeddingSharding(
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
             device=device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
