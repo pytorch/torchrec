@@ -308,6 +308,7 @@ class PlannerErrorType(Enum):
     """
 
     INSUFFICIENT_STORAGE = "insufficient_storage"
+    STRICT_CONSTRAINTS = "strict_constraints"
     PARTITION = "partition"
     OTHER = "other"
 

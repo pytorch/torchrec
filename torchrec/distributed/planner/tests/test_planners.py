@@ -121,7 +121,9 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
 
         with self.assertRaises(PlannerError) as context:
             self.planner.plan(module=model, sharders=[TWSharder()])
-        self.assertEqual(context.exception.error_type, PlannerErrorType.OTHER)
+        self.assertEqual(
+            context.exception.error_type, PlannerErrorType.STRICT_CONSTRAINTS
+        )
 
         sharding_plan = self.planner.plan(module=model, sharders=[TWvsRWSharder()])
         expected_ranks = [[0, 1]]
