@@ -325,7 +325,7 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
                 )
             else:
                 raise PlannerError(
-                    error_type=PlannerErrorType.OTHER,
-                    message="Unable to find a plan for this model because of too restricted constraints. \n"
+                    error_type=PlannerErrorType.STRICT_CONSTRAINTS,
+                    message="Unable to find a plan for this model because of the strict constraints. \n"
                     + no_plan_solution,
                 )
