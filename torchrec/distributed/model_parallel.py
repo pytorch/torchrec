@@ -327,6 +327,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         process, since some modules needs to use the original references (like
         `ShardedModule` for inference).
         """
+        assert isinstance(device, torch.device)
         with sharded_model_copy(device=None):
             copy_dmp = copy.deepcopy(self)
         copy_module = copy_dmp._copy(copy_dmp.module, device)
