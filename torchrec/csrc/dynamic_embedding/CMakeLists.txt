@@ -7,7 +7,9 @@
 add_library(tde_cpp_objs
             OBJECT
             details/clz_impl.cpp
-            details/ctz_impl.cpp)
+            details/ctz_impl.cpp
+            details/random_bits_generator.cpp
+            details/mixed_lfu_lru_strategy.cpp)
 
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
