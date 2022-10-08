@@ -23,7 +23,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.tw_sharding import BaseTwEmbeddingSharding
 from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
 class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
@@ -84,9 +84,20 @@ class VariableBatchTwPooledEmbeddingDist(
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
+        self._dist = PooledEmbeddingsAllToAll(
+            pg,
+            dim_sum_per_rank,
+            device,
+            callbacks,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
         self,
@@ -149,4 +160,5 @@ class VariableBatchTwPooledEmbeddingSharding(
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

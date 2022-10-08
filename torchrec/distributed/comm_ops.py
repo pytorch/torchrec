@@ -1465,6 +1465,10 @@ class ReduceScatterV_Req(Function):
         # pyre-fixme[6]: For 1st param expected
         #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
+
+        if rsi.codecs is not None:
+            input = rsi.codecs.forward.encode(input)
+
         output = input.new_empty(rsi.input_sizes[my_rank])
 
         # Use dist._reduce_scatter_base when a vector reduce-scatter is not needed
@@ -1498,6 +1502,9 @@ class ReduceScatterV_Req(Function):
         myreq.req.wait()
         myreq.req = None
         grad_input = myreq.tensor
+        rsi = myreq.rsi
+        if rsi.codecs is not None:
+            grad_input = rsi.codecs.backward.decode(grad_input)
         # Make it equivalent to running on a single rank.
         if GRADIENT_DIVISION:
             grad_input.div_(dist.get_world_size(ctx.pg))
@@ -1526,6 +1533,10 @@ class ReduceScatterV_Wait(Function):
         ctx.myreq = myreq
         ctx.pg = pg
 
+        rsi = myreq.rsi
+        if rsi.codecs is not None:
+            output = rsi.codecs.forward.decode(output)
+
         return output
 
     @staticmethod
@@ -1534,6 +1545,8 @@ class ReduceScatterV_Wait(Function):
     def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
         myreq = ctx.myreq
         rsi = myreq.rsi
+        if rsi.codecs is not None:
+            grad_output = rsi.codecs.backward.encode(grad_output)
         grad_input = grad_output.new_empty(rsi.total_input_size)
 
         if rsi.equal_splits:

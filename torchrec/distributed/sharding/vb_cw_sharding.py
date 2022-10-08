@@ -90,4 +90,5 @@ class VariableBatchCwPooledEmbeddingSharding(
             device if device is not None else self._device,
             # pyre-ignore [6]
             callbacks,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
