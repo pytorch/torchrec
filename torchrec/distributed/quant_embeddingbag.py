@@ -105,9 +105,9 @@ class ShardedQuantEmbeddingBagCollection(
 
         self._is_weighted: bool = module.is_weighted()
         self._input_dists: List[nn.Module] = []
-        self._lookups: List[nn.Module] = []
+        self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups(fused_params)
-        self._output_dists: List[nn.Module] = []
+        self._output_dists: nn.ModuleList = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []

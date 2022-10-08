@@ -180,7 +180,7 @@ class ShardedQuantEmbeddingCollection(
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
-        self._input_dists: nn.ModuleList = nn.ModuleList()
+        self._input_dists: List[nn.Module] = []
         self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups(fused_params)
         self._output_dists: nn.ModuleList = nn.ModuleList()
