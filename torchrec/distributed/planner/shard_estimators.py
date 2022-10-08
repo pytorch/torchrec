@@ -9,7 +9,7 @@ import math
 from typing import cast, Dict, List, Optional, Tuple, Type
 
 import torch
-import torchrec
+import torchrec.optim as trec_optim
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
@@ -1005,11 +1005,11 @@ def _get_optimizer_multipler(
 ) -> float:
     if not optimizer_class:
         return 0.0
-    if optimizer_class in [torch.optim.SGD, torchrec.optim.SGD]:
+    if optimizer_class in [torch.optim.SGD, trec_optim.SGD]:
         return 0
-    elif optimizer_class in [torch.optim.Adam, torchrec.optim.Adam]:
+    elif optimizer_class in [torch.optim.Adam, trec_optim.Adam]:
         return 2
-    elif optimizer_class == torchrec.optim.RowWiseAdagrad:
+    elif optimizer_class == trec_optim.RowWiseAdagrad:
         return 1 / shape[-1]
     else:
         return 1
