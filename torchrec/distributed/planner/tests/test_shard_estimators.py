@@ -9,22 +9,17 @@ import unittest
 from typing import cast
 
 import torch
-import torchrec
-
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.shard_estimators import (
-    _calculate_storage_specific_sizes,
-    EmbeddingPerfEstimator,
-)
+from torchrec.distributed.planner.shard_estimators import EmbeddingPerfEstimator
 from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.tests.test_quant_model_parallel import _quantize
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import ModuleSharder
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 
 
@@ -200,44 +195,3 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         }
 
         self.assertEqual(perfs, expected_perfs)
-
-
-# pyre-ignore[3]
-def calculate_storage_specific_size_data_provider():
-    return (
-        {
-            "sharding_type": ShardingType.TABLE_ROW_WISE,
-            "optimizer_class": torch.optim.SGD,
-            "expected_storage": [50, 50],
-        },
-        {
-            "sharding_type": ShardingType.COLUMN_WISE,
-            "optimizer_class": torch.optim.Adam,
-            "expected_storage": [150, 150],
-        },
-        {
-            "sharding_type": ShardingType.TABLE_ROW_WISE,
-            "optimizer_class": None,
-            "expected_storage": [50, 50],
-        },
-        {
-            "sharding_type": ShardingType.DATA_PARALLEL,
-            "optimizer_class": torchrec.optim.RowWiseAdagrad,
-            "expected_storage": [134, 134],
-        },
-    )
-
-
-class TestEmbeddingStorageEstimator(unittest.TestCase):
-    def test_calculate_storage_specific_sizes(self) -> None:
-        for inputs in calculate_storage_specific_size_data_provider():
-            sharding_type, optimizer_class, expected_storage = inputs.values()
-            estimates = _calculate_storage_specific_sizes(
-                storage=100,
-                shape=torch.Size((10, 5, 3)),
-                shard_sizes=[[5, 5, 3], [5, 5, 3]],
-                sharding_type=sharding_type.value,
-                optimizer_class=optimizer_class,
-            )
-
-            self.assertEqual(estimates, expected_storage)
