@@ -4,22 +4,12 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
-    ComputeDevice,
-    DenseTableBatchedEmbeddingBagsCodegen,
-    EmbeddingLocation,
-    IntNBitTableBatchedEmbeddingBagsCodegen,
-    PoolingMode,
-    SplitTableBatchedEmbeddingBagsCodegen,
-)
 from torchrec.modules.embedding_configs import pooling_mode_to_str
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 from torch.profiler import record_function
 import numpy as np
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
-import abc
 import logging
-from collections import defaultdict, OrderedDict
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, cast
 import torch
 import torch.distributed as dist
@@ -29,7 +19,6 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
 )
-from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import pooling_type_to_str
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -40,6 +29,7 @@ try:
 except ImportError:
     print('please pip install colossalai')
 
+from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType, SparseType
 
 class CAIGroupedEmbeddingBag(BaseEmbedding):
     def __init__(
@@ -183,7 +173,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        cache_ratio: float = 0.01,
+        cache_ratio: float = 0.05,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -216,9 +206,11 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             cache_ratio = cache_ratio,
 
         )
-        self._table_idx_offset_list = np.cumsum(
-            [0] + self._num_embeddings)
+        self._table_idx_offsets = torch.tensor(np.cumsum(
+            [0] + self._num_embeddings), dtype=torch.long, device="cuda")
         self._already_linearized = False
+        # count different idx num
+        self._idx_input_record = torch.ones(num_embeddings)
     @property
     def emb_module(
         self,
@@ -251,17 +243,25 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         output = self._emb_module(values, offsets, weights)
         ret =  torch.cat(output.split(batch_size), 1)
         return ret
+
     
     def linearize_features(self, features: KeyedJaggedTensor):
         # apply table offset to values 
+        
         with torch.no_grad():
             with record_function("add id offsets"):
                 values = features.values().long()
                 split_view = torch.tensor_split(
                     values, features.offset_per_key()[1:-1])
                 for i, chunk in enumerate(split_view):
-                    torch.add(chunk, self._table_idx_offset_list[i], out=chunk)
+                    torch.add(chunk, self._table_idx_offsets[i], out=chunk)
         return values
-    
+        
+        # # alternative approach
+        # return torch.ops.fbgemm.linearize_cache_indices(
+        #     self._table_idx_offsets,
+        #     features.values(),
+        #     torch.tensor(features.offset_per_key(), dtype=torch.int, device="cuda")
+        # )
     def set_already_linearized(self, linearized = False):
         self._already_linearized = linearized
