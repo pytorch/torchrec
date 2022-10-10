@@ -55,12 +55,17 @@ def train(
     dense_arch_layer_sizes: Optional[List[int]] = None,
     over_arch_layer_sizes: Optional[List[int]] = None,
     learning_rate: float = 0.1,
-    qcomm_forward_precision: CommType = CommType.FP16,
-    qcomm_backward_precision: CommType = CommType.BF16,
+    qcomm_forward_precision: Optional[CommType] = CommType.FP16,
+    qcomm_backward_precision: Optional[CommType] = CommType.BF16,
 ) -> None:
     """
     Constructs and trains a DLRM model (using random dummy data). Each script is run on each process (rank) in SPMD fashion.
     The embedding layers will be sharded across available ranks
+
+    qcomm_forward_precision: Compression used in forwards pass. FP16 is the recommended usage. INT8 and FP8 are in development, but feel free to try them out.
+    qcomm_backward_precision: Compression used in backwards pass. We recommend using BF16 to ensure training stability.
+
+    The effects of quantized comms will be most apparent in large training jobs across multiple nodes where inter host communication is expensive.
     """
     if dense_arch_layer_sizes is None:
         dense_arch_layer_sizes = [64, 128]
