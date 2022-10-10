@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
+from torch.nn.modules.module import _addindent
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
@@ -105,9 +106,9 @@ class ShardedQuantEmbeddingBagCollection(
 
         self._is_weighted: bool = module.is_weighted()
         self._input_dists: List[nn.Module] = []
-        self._lookups: nn.ModuleList = nn.ModuleList()
+        self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params)
-        self._output_dists: nn.ModuleList = nn.ModuleList()
+        self._output_dists: List[nn.Module] = []
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
@@ -259,6 +260,23 @@ class ShardedQuantEmbeddingBagCollection(
 
     def create_context(self) -> EmptyShardedModuleContext:
         return EmptyShardedModuleContext()
+
+    def extra_repr(self) -> str:
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        return "\n  ".join(
+            loop("_lookup", self._lookups)
+            + loop("_input_dist", self._input_dists)
+            + loop("_output_dist", self._output_dists)
+        )
 
 
 class QuantEmbeddingBagCollectionSharder(
