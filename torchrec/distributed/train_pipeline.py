@@ -29,6 +29,7 @@ from torchrec.distributed.types import Awaitable, ShardedModuleContext
 from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.streamable import Multistreamable, Pipelineable
 from torchrec.distributed.colossalai_embedding_kernel import CAIBatchedDenseEmbeddingBag
+from torchrec.distributed.embedding_types import SparseFeatures, SparseFeaturesList
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -163,7 +164,6 @@ class TrainPipelineContext:
     # pyre-ignore [4]
     feature_processor_forwards: List[Any] = field(default_factory=list)
 
-
 @dataclass
 class ArgInfo:
     # attributes of input batch, e.g. batch.attr1.attr2 call
@@ -176,7 +176,29 @@ class ArgInfo:
     name: Optional[str]
 
 
-class PipelinedForward(Generic[DistIn, DistOut, Out]):
+class PipelinedForwardBase(Generic[DistIn, DistOut, Out]):
+    def __init__(
+        self,
+        name: str,
+        args: List[ArgInfo],
+        module: ShardedModule[DistIn, DistOut, Out],
+        context: TrainPipelineContext,
+        dist_stream: Optional[torch.cuda.streams.Stream],
+    ) -> None:
+        self._name = name
+        self._args = args
+        self._module = module
+        self._context = context
+        self._dist_stream = dist_stream
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def args(self) -> List[ArgInfo]:
+        return self._args
+
+class PipelinedWait(Generic[DistIn, DistOut, Out]):
     def __init__(
         self,
         name: str,
@@ -191,8 +213,7 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
         self._context = context
         self._dist_stream = dist_stream
 
-    # pyre-ignore [2]
-    def __call__(self, *input, **kwargs) -> Awaitable[Out]:
+    def get_request_data(self):
         assert self._name in self._context.input_dist_requests
         request = self._context.input_dist_requests[self._name]
         assert isinstance(request, Awaitable)
@@ -201,21 +222,34 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
             # in case some delayed stream scheduling happens during the wait() call.
             with torch.cuda.stream(self._dist_stream):
                 data = request.wait()
-        # Make sure that both result of input_dist and context
-        # are properly transferred to the current stream.
+        return data
+
+class PipelinedForwardNoWait(PipelinedForwardBase[DistIn, DistOut, Out]):
+    # forwarding call get data from parameters
+    def __init__(
+        self,
+        name: str,
+        args: List[ArgInfo],
+        module: ShardedModule[DistIn, DistOut, Out],
+        context: TrainPipelineContext,
+        dist_stream: Optional[torch.cuda.streams.Stream],
+    ) -> None:
+        super().__init__(name, args, module, context, dist_stream)
+
+    def _wrap_kjt_data(self, data):
+        return SparseFeaturesList([SparseFeatures(id_list_features=data)])
+
+    def _forward(self, data) -> Awaitable[Out]:
         if self._dist_stream is not None:
             torch.cuda.current_stream().wait_stream(self._dist_stream)
             cur_stream = torch.cuda.current_stream()
-
             assert isinstance(
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
             # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             data.record_stream(cur_stream)
-
             ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
-
         if len(self._context.feature_processor_forwards) > 0:
             with record_function("## feature_processor ##"):
                 for sparse_feature in data:
@@ -224,19 +258,30 @@ class PipelinedForward(Generic[DistIn, DistOut, Out]):
                             sparse_feature.id_score_list_features = fp_forward(
                                 sparse_feature.id_score_list_features
                             )
-
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
         )
 
-    @property
-    def name(self) -> str:
-        return self._name
+    def __call__(self, data, *input, **kwargs) -> Awaitable[Out]:
+        # data: KeyedJaggedTensor
+        data = self._wrap_kjt_data(data)
+        return self._forward(data)
 
-    @property
-    def args(self) -> List[ArgInfo]:
-        return self._args
+class PipelinedForward(PipelinedWait[DistIn, DistOut, Out], PipelinedForwardNoWait[DistIn, DistOut, Out]):
+    # forwarding call get data from input_dist_requests. wait for data
+    def __init__(
+        self,
+        name: str,
+        args: List[ArgInfo],
+        module: ShardedModule[DistIn, DistOut, Out],
+        context: TrainPipelineContext,
+        dist_stream: Optional[torch.cuda.streams.Stream],
+    ) -> None:
+        super().__init__(name, args, module, context, dist_stream)
 
+    def __call__(self, *input, **kwargs) -> Awaitable[Out]:
+        data = self.get_request_data()
+        return self._forward(data)
 
 def _start_data_dist(
     pipelined_modules: List[ShardedModule],
@@ -247,7 +292,7 @@ def _start_data_dist(
     context.module_contexts.clear()
     for module in pipelined_modules:
         forward = module.forward
-        assert isinstance(forward, PipelinedForward)
+        assert isinstance(forward, PipelinedForwardBase)
 
         # Retrieve argument for the input_dist of EBC
         # is_getitem True means this argument could be retrieved by a list
@@ -395,6 +440,7 @@ def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
     context: TrainPipelineContext,
     dist_stream: Optional[torch.cuda.streams.Stream],
+    split_wait = True
 ) -> List[ShardedModule]:
 
     # Get underlying nn.Module
@@ -422,7 +468,8 @@ def _rewrite_model(  # noqa C901
     # Select sharded modules, which are top-level in the forward call graph,
     # i.e. which don't have input transformations, i.e.
     # rely only on 'builtins.getattr'.
-    ret = []
+    ret_pipelined_modules = []
+    ret_pipelined_wait = []
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
             total_num_args = len(node.args) + len(node.kwargs)
@@ -432,15 +479,35 @@ def _rewrite_model(  # noqa C901
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
                 child = sharded_modules[node.target]
-                child.forward = PipelinedForward(
-                    node.target,
-                    arg_info_list,
-                    child,
-                    context,
-                    dist_stream,
-                )
-                ret.append(child)
-    return ret
+                if split_wait:
+                    child.forward = PipelinedForward(
+                        node.target,
+                        arg_info_list,
+                        child,
+                        context,
+                        dist_stream,
+                    )
+                else :
+                    child.forward = PipelinedForwardNoWait(
+                        node.target,
+                        arg_info_list,
+                        child,
+                        context,
+                        dist_stream,
+                    )
+                    ret_pipelined_wait.append(
+                        PipelinedWait(
+                            node.target,
+                            arg_info_list,
+                            child,
+                            context,
+                            dist_stream,)
+                    )
+                ret_pipelined_modules.append(child)
+    if split_wait:
+        return ret_pipelined_modules
+    else:
+        return ret_pipelined_modules, ret_pipelined_wait
 
 
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):
@@ -505,7 +572,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             )
             # Try to pipeline input data dist.
             self._pipelined_modules = _rewrite_model(
-                self._model, self._context, self._data_dist_stream
+                self._model, self._context, self._data_dist_stream, split_wait=True
             )
 
         with torch.cuda.stream(self._data_dist_stream):
@@ -663,71 +730,6 @@ class TrainPipelinePrefetch(TrainPipelineBase[In, Out]):
         self._iter_count += 1
         return output
 
-from torchrec.distributed.embedding_types import SparseFeatures, SparseFeaturesList
-
-class PipelinedWait(Generic[DistIn, DistOut, Out]):
-    def __init__(
-        self,
-        name: str,
-        args: List[ArgInfo],
-        module: ShardedModule[DistIn, DistOut, Out],
-        context: TrainPipelineContext,
-        dist_stream: Optional[torch.cuda.streams.Stream],
-    ) -> None:
-        self._name = name
-        self._args = args
-        self._module = module
-        self._context = context
-        self._dist_stream = dist_stream
-
-    def get_request_data(self):
-        assert self._name in self._context.input_dist_requests
-        request = self._context.input_dist_requests[self._name]
-        assert isinstance(request, Awaitable)
-        with record_function("## wait_sparse_data_dist ##"):
-            # Finish waiting on the dist_stream,
-            # in case some delayed stream scheduling happens during the wait() call.
-            with torch.cuda.stream(self._dist_stream):
-                data = request.wait()
-        return data
-    
-class PipelinedForwardNoWait(PipelinedForward[DistIn, DistOut, Out]):
-    def __init__(
-        self,
-        name: str,
-        args: List[ArgInfo],
-        module: ShardedModule[DistIn, DistOut, Out],
-        context: TrainPipelineContext,
-        dist_stream: Optional[torch.cuda.streams.Stream],
-    ) -> None:
-        super().__init__(name, args, module, context, dist_stream)
-    def __call__(self, data, *input, **kwargs) -> Awaitable[Out]:
-        # data: KeyedJaggedTensor
-        sparse_feature_list = SparseFeaturesList(
-            [SparseFeatures(id_list_features=data)])
-        assert self._name in self._context.input_dist_requests
-        if self._dist_stream is not None:
-            torch.cuda.current_stream().wait_stream(self._dist_stream)
-            cur_stream = torch.cuda.current_stream()
-            assert isinstance(
-                sparse_feature_list, (torch.Tensor, Multistreamable)
-            ), f"{type(sparse_feature_list)} must implement Multistreamable interface"
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
-            sparse_feature_list.record_stream(cur_stream)
-            ctx = self._context.module_contexts[self._name]
-            ctx.record_stream(cur_stream)
-        if len(self._context.feature_processor_forwards) > 0:
-            with record_function("## feature_processor ##"):
-                for sparse_feature in sparse_feature_list:
-                    if sparse_feature.id_score_list_features is not None:
-                        for fp_forward in self._context.feature_processor_forwards:
-                            sparse_feature.id_score_list_features = fp_forward(
-                                sparse_feature.id_score_list_features
-                            )
-        return self._module.compute_and_output_dist(
-            self._context.module_contexts[self._name], sparse_feature_list
-        )
-    
 class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
     def __init__(
         self,
@@ -755,52 +757,9 @@ class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         # prepare prefetch_num iterations.
         self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
-        # self._pipelined_modules = modified _rewrite_model:
-        model = self._model
-        context = self._context
-        dist_stream = self._data_dist_stream
-        if isinstance(model, DistributedModelParallel):
-            model = model.module
-        sharded_modules = {}
-        fp_modules = {}
-        for name, m in model.named_modules():
-            if isinstance(m, ShardedModule):
-                sharded_modules[name] = m
-            if isinstance(m, BaseGroupedFeatureProcessor):
-                fp_modules[name] = m
-        tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
-        graph = tracer.trace(model)
-        feature_processor_nodes = []
-        for node in graph.nodes:
-            if node.op == "call_module" and node.target in fp_modules:
-                feature_processor_nodes.append(node)
-        self._pipelined_modules = []
-        self._pipelined_wait = []
-        for node in graph.nodes:
-            if node.op == "call_module" and node.target in sharded_modules:
-                total_num_args = len(node.args) + len(node.kwargs)
-                if total_num_args == 0:
-                    continue
-                arg_info_list, num_found = _get_node_args(
-                    node, feature_processor_nodes)
-                if num_found == total_num_args:
-                    logger.info(f"Module '{node.target}'' will be pipelined")
-                    child = sharded_modules[node.target]
-                    child.forward = PipelinedForwardNoWait(
-                        node.target,
-                        arg_info_list,
-                        child,
-                        context,
-                        dist_stream,
-                    )
-                    self._pipelined_modules.append(child)
-                    self._pipelined_wait.append(PipelinedWait(
-                        node.target,
-                        arg_info_list,
-                        child,
-                        context,
-                        dist_stream,
-                    ))
+        self._pipelined_modules, self._pipelined_wait = _rewrite_model(
+            self._model, self._context, self._data_dist_stream, split_wait=False
+        )
 
         for i in range(self.prefetch_num):
             # batch 1
