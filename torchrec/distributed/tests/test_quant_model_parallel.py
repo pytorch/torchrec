@@ -282,7 +282,8 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             tables=self.tables,
             weighted_tables=self.weighted_tables,
         )
-
+        print(dmp_copy.state_dict().keys())
+        print(dmp.state_dict().keys())
         # pyre-ignore
         dmp_copy.load_state_dict(dmp.state_dict())
         torch.testing.assert_close(
