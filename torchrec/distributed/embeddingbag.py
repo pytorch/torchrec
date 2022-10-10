@@ -490,11 +490,11 @@ class ShardedEmbeddingBagCollection(
                 yield name
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for lookup in self._lookups:
             yield from lookup.named_buffers(
-                append_prefix(prefix, "embedding_bags"), recurse
+                append_prefix(prefix, "embedding_bags"), recurse, remove_duplicate
             )
 
     # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
@@ -744,8 +744,9 @@ class ShardedEmbeddingBag(
                 yield append_prefix(prefix, name.split(".")[-1])
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        # TODO: add remove_duplicate
         for name, buffer in self._lookup.named_buffers("", recurse):
             yield append_prefix(prefix, name.split(".")[-1]), buffer
 

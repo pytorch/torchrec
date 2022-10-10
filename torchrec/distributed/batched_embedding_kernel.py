@@ -337,8 +337,11 @@ class BaseBatchedEmbedding(BaseEmbedding):
         pass
 
     def named_split_embedding_weights(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, param in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -404,13 +407,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         return self._optim
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         """
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse)
+        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -452,7 +455,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         return self._emb_module
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 
@@ -562,8 +565,11 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         pass
 
     def named_split_embedding_weights(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, param in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -633,13 +639,13 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         return self._optim
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         """
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse)
+        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -681,7 +687,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         return self._emb_module
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 
