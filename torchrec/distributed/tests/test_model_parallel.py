@@ -17,7 +17,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torchrec.distributed as trec_dist
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import given, settings, Verbosity
+from hypothesis import assume, given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
@@ -96,6 +96,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -107,7 +108,12 @@ class ModelParallelTest(ModelParallelTestShared):
         apply_overlapped_optimizer_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             sharders=[
                 cast(
@@ -118,12 +124,14 @@ class ModelParallelTest(ModelParallelTestShared):
                         kernel_type,
                         qcomms_config=qcomms_config,
                         device=torch.device("cuda"),
+                        variable_batch_size=variable_batch_size,
                     ),
                 ),
             ],
             qcomms_config=qcomms_config,
             backend="nccl",
             apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -211,6 +219,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
@@ -222,7 +231,12 @@ class ModelParallelTest(ModelParallelTestShared):
         apply_overlapped_optimizer_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -232,6 +246,7 @@ class ModelParallelTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
+                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
@@ -241,6 +256,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 for table in self.tables
             },
             apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -284,6 +300,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
@@ -295,7 +312,12 @@ class ModelParallelTest(ModelParallelTestShared):
         apply_overlapped_optimizer_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -305,11 +327,13 @@ class ModelParallelTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
+                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
             apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            variable_batch_size=variable_batch_size,
         )
 
     # pyre-fixme[56]

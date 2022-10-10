@@ -14,8 +14,8 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
-    EmptyShardingContext,
     group_tables,
 )
 from torchrec.distributed.embedding_types import (
@@ -170,7 +170,7 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
 
 class DpPooledEmbeddingDist(
-    BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]
+    BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]
 ):
     """
     Distributes pooled embeddings to be data-parallel.
@@ -182,7 +182,7 @@ class DpPooledEmbeddingDist(
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: Optional[EmptyShardingContext] = None,
+        sharding_ctx: Optional[EmbeddingShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         No-op as pooled embeddings are already distributed in data-parallel fashion.
@@ -199,7 +199,7 @@ class DpPooledEmbeddingDist(
 
 class DpPooledEmbeddingSharding(
     BaseDpEmbeddingSharding[
-        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -229,5 +229,5 @@ class DpPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         return DpPooledEmbeddingDist()
