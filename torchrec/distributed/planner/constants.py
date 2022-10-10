@@ -56,20 +56,22 @@ def kernel_bw_lookup(
     caching_ratio = caching_ratio if caching_ratio else UVM_CACHING_RATIO
     lookup = {
         # CPU
-        # TODO() how to set CAI and CAI_BATCH
-        ("cpu", EmbeddingComputeKernel.CAI.value): 0.5 * DDR_MEM_BW,
-        ("cpu", EmbeddingComputeKernel.CAI_BATCH.value): 0.5 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.DENSE.value): 0.5 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.FUSED.value): 1 * DDR_MEM_BW,
         ("cpu", EmbeddingComputeKernel.QUANT.value): 1 * DDR_MEM_BW,
         # CUDA
-        # TODO() 
-        ("cuda", EmbeddingComputeKernel.CAI.value): 0.5 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.CAI_BATCH.value): 0.5 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.DENSE.value): 0.5 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.FUSED.value): 1 * HBM_MEM_BW,
         ("cuda", EmbeddingComputeKernel.FUSED_UVM.value): DDR_MEM_BW / 10,
         ("cuda", EmbeddingComputeKernel.FUSED_UVM_CACHING.value): (
+            caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
+        )
+        / 10,
+        ("cuda", EmbeddingComputeKernel.CAI.value): (
+            caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
+        )
+        / 10,
+        ("cuda", EmbeddingComputeKernel.CAI_BATCH.value): (
             caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
         )
         / 10,
