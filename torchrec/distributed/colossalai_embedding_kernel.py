@@ -7,7 +7,6 @@
 from torchrec.modules.embedding_configs import pooling_mode_to_str
 from .batched_embedding_kernel import BaseBatchedEmbeddingBag
 from torch.profiler import record_function
-import numpy as np
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 import logging
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, cast
@@ -206,11 +205,11 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             cache_ratio = cache_ratio,
 
         )
-        self._table_idx_offsets = torch.tensor(np.cumsum(
-            [0] + self._num_embeddings), dtype=torch.long, device="cuda")
+        self._table_idx_offsets = torch.cumsum(torch.tensor(
+            [0] + self._num_embeddings, device="cuda"), 0, dtype=torch.long)
         self._already_linearized = False
-        # count different idx num
-        self._idx_input_record = torch.ones(num_embeddings)
+        # TODO count different idx num
+        # self._idx_input_record = torch.zeros(num_embeddings)
     @property
     def emb_module(
         self,
