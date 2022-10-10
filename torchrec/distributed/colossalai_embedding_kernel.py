@@ -206,7 +206,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
 
         )
         self._table_idx_offsets = torch.cumsum(torch.tensor(
-            [0] + self._num_embeddings, device="cuda"), 0, dtype=torch.long)
+            [0] + self._num_embeddings, device= torch.cuda.current_device()), 0, dtype=torch.long)
         self._already_linearized = False
         # TODO count different idx num
         # self._idx_input_record = torch.zeros(num_embeddings)
