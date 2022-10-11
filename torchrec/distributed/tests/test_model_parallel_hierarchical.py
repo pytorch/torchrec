@@ -72,6 +72,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_twrw(
@@ -84,11 +85,16 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         apply_overlapped_optimizer_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
             apply_overlapped_optimizer_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
         )
         self._test_sharding(
             # pyre-ignore[6]
@@ -99,6 +105,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
+                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
@@ -106,6 +113,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             local_size=local_size,
             qcomms_config=qcomms_config,
             apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(

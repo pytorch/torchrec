@@ -60,6 +60,7 @@ def create_test_sharder(
     fused_params: Optional[Dict[str, Any]] = None,
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
+    variable_batch_size: bool = False,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
@@ -74,7 +75,11 @@ def create_test_sharder(
         )
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
         return TestEBCSharder(
-            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+            sharding_type,
+            kernel_type,
+            fused_params,
+            qcomm_codecs_registry,
+            variable_batch_size,
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(
@@ -100,6 +105,7 @@ class ModelInputCallable(Protocol):
         dedup_tables: Optional[
             Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
         ] = None,
+        variable_batch_size: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         ...
 
@@ -112,6 +118,7 @@ def generate_inputs(
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     batch_size: int = 4,
     num_float_features: int = 16,
+    variable_batch_size: bool = False,
 ) -> Tuple[ModelInput, List[ModelInput]]:
     return generate(
         batch_size=batch_size,
@@ -120,6 +127,7 @@ def generate_inputs(
         tables=tables,
         dedup_tables=dedup_tables,
         weighted_tables=weighted_tables or [],
+        variable_batch_size=variable_batch_size,
     )
 
 
@@ -135,6 +143,7 @@ def gen_model_and_input(
     sparse_device: Optional[torch.device] = None,
     dedup_feature_names: Optional[List[str]] = None,
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
+    variable_batch_size: bool = False,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -171,6 +180,7 @@ def gen_model_and_input(
             generate=generate,
             weighted_tables=weighted_tables,
             num_float_features=num_float_features,
+            variable_batch_size=variable_batch_size,
         )
     ]
     return (model, inputs)
@@ -229,6 +239,7 @@ def sharding_single_rank_test(
     apply_overlapped_optimizer_config: Optional[
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
+    variable_batch_size: bool = False,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -240,6 +251,7 @@ def sharding_single_rank_test(
             embedding_groups=embedding_groups,
             world_size=world_size,
             num_float_features=16,
+            variable_batch_size=variable_batch_size,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)

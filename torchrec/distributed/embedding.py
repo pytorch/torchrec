@@ -535,9 +535,54 @@ class ShardedEmbeddingCollection(
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
     ) -> Awaitable[SparseFeaturesList]:
-        lengths_awaitables = self.lengths_dist(ctx, features)
-        indices_awaitables = lengths_awaitables.wait()
-        return SparseFeaturesListAwaitable(indices_awaitables)
+        if self._has_uninitialized_input_dist:
+            self._create_input_dist(input_feature_names=features.keys())
+            self._has_uninitialized_input_dist = False
+        with torch.no_grad():
+            if self._features_order:
+                features = features.permute(
+                    self._features_order,
+                    # pyre-ignore [6]
+                    self._features_order_tensor,
+                )
+            features_by_shards = features.split(
+                self._feature_splits,
+            )
+            # save input splits and output splits in sharding context which
+            # will be reused in sequence embedding all2all
+            awaitables = []
+            for module, features in zip(self._input_dists, features_by_shards):
+                lengths_awaitable = module(
+                    SparseFeatures(
+                        id_list_features=features,
+                        id_score_list_features=None,
+                    )
+                )
+                indices_awaitable = lengths_awaitable.wait()  # finish lengths all2all
+                input_splits = []
+                output_splits = []
+                if isinstance(indices_awaitable, SparseFeaturesIndicesAwaitable):
+                    assert indices_awaitable._id_list_features_awaitable is not None
+                    input_splits = (
+                        # pyre-fixme[16]
+                        indices_awaitable._id_list_features_awaitable._in_lengths_per_worker
+                    )
+                    output_splits = (
+                        # pyre-fixme[16]
+                        indices_awaitable._id_list_features_awaitable._out_lengths_per_worker
+                    )
+                ctx.sharding_contexts.append(
+                    SequenceShardingContext(
+                        features_before_input_dist=features,
+                        input_splits=input_splits,
+                        output_splits=output_splits,
+                        unbucketize_permute_tensor=module.unbucketize_permute_tensor
+                        if isinstance(module, RwSparseFeaturesDist)
+                        else None,
+                    )
+                )
+                awaitables.append(indices_awaitable)
+            return SparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: SparseFeaturesList

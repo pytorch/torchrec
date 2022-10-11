@@ -32,9 +32,9 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
-    EmptyShardedModuleContext,
     LazyAwaitable,
     Multistreamable,
+    NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardedModule,
@@ -90,7 +90,7 @@ class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
 
 @dataclass
 class EmbeddingTowerCollectionContext(Multistreamable):
-    embedding_contexts: List[EmptyShardedModuleContext] = field(default_factory=list)
+    embedding_contexts: List[NullShardedModuleContext] = field(default_factory=list)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.embedding_contexts:
@@ -102,7 +102,7 @@ class ShardedEmbeddingTower(
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
-        EmptyShardedModuleContext,
+        NullShardedModuleContext,
     ],
     FusedOptimizerModule,
 ):
@@ -252,7 +252,7 @@ class ShardedEmbeddingTower(
     # pyre-ignore[14]
     def input_dist(
         self,
-        ctx: EmptyShardedModuleContext,
+        ctx: NullShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[SparseFeaturesList]:
@@ -299,7 +299,7 @@ class ShardedEmbeddingTower(
             return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
 
     def compute(
-        self, ctx: EmptyShardedModuleContext, dist_input: SparseFeaturesList
+        self, ctx: NullShardedModuleContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
         kjt_features = dist_input[0].id_list_features
         wkjt_features = dist_input[0].id_score_list_features
@@ -325,7 +325,7 @@ class ShardedEmbeddingTower(
         return output
 
     def _create_output_dist(
-        self, ctx: EmptyShardedModuleContext, output: torch.Tensor
+        self, ctx: NullShardedModuleContext, output: torch.Tensor
     ) -> None:
         # Determine the output_dist splits and the all_to_all output size
         assert len(output.shape) == 2
@@ -369,7 +369,7 @@ class ShardedEmbeddingTower(
         )
 
     def output_dist(
-        self, ctx: EmptyShardedModuleContext, output: torch.Tensor
+        self, ctx: NullShardedModuleContext, output: torch.Tensor
     ) -> LazyAwaitable[torch.Tensor]:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(ctx, output)
@@ -469,8 +469,8 @@ class ShardedEmbeddingTower(
     ) -> Iterator[Tuple[str, nn.Module]]:
         yield from [(prefix, self)]
 
-    def create_context(self) -> EmptyShardedModuleContext:
-        return EmptyShardedModuleContext()
+    def create_context(self) -> NullShardedModuleContext:
+        return NullShardedModuleContext()
 
 
 class ShardedEmbeddingTowerCollection(

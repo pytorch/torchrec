@@ -9,11 +9,12 @@ from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
+from torch.nn.modules.module import _addindent
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    EmptyShardingContext,
     ListOfSparseFeaturesListAwaitable,
+    NullShardingContext,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
@@ -28,9 +29,9 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
-    EmptyShardedModuleContext,
     FeatureShardingMixIn,
     LazyAwaitable,
+    NullShardedModuleContext,
     ParameterSharding,
     ShardedModule,
     ShardingEnv,
@@ -53,7 +54,7 @@ def create_infer_embedding_bag_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
 ) -> EmbeddingSharding[
-    EmptyShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
+    NullShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
 ]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
@@ -66,7 +67,7 @@ class ShardedQuantEmbeddingBagCollection(
         ListOfSparseFeaturesList,
         List[List[torch.Tensor]],
         KeyedTensor,
-        EmptyShardedModuleContext,
+        NullShardedModuleContext,
     ],
 ):
     """
@@ -91,7 +92,7 @@ class ShardedQuantEmbeddingBagCollection(
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
-                EmptyShardingContext,
+                NullShardingContext,
                 SparseFeaturesList,
                 List[torch.Tensor],
                 torch.Tensor,
@@ -105,9 +106,9 @@ class ShardedQuantEmbeddingBagCollection(
 
         self._is_weighted: bool = module.is_weighted()
         self._input_dists: List[nn.Module] = []
-        self._lookups: nn.ModuleList = nn.ModuleList()
+        self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params)
-        self._output_dists: nn.ModuleList = nn.ModuleList()
+        self._output_dists: List[nn.Module] = []
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
@@ -186,7 +187,7 @@ class ShardedQuantEmbeddingBagCollection(
 
     # pyre-ignore [14]
     def input_dist(
-        self, ctx: EmptyShardedModuleContext, features: KeyedJaggedTensor
+        self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
     ) -> Awaitable[ListOfSparseFeaturesList]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
@@ -223,14 +224,14 @@ class ShardedQuantEmbeddingBagCollection(
 
     def compute(
         self,
-        ctx: EmptyShardedModuleContext,
+        ctx: NullShardedModuleContext,
         dist_input: ListOfSparseFeaturesList,
     ) -> List[List[torch.Tensor]]:
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
     def output_dist(
         self,
-        ctx: EmptyShardedModuleContext,
+        ctx: NullShardedModuleContext,
         output: List[List[torch.Tensor]],
     ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingBagCollectionAwaitable(
@@ -242,7 +243,7 @@ class ShardedQuantEmbeddingBagCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: EmptyShardedModuleContext, input: ListOfSparseFeaturesList
+        self, ctx: NullShardedModuleContext, input: ListOfSparseFeaturesList
     ) -> LazyAwaitable[KeyedTensor]:
         return self.output_dist(ctx, self.compute(ctx, input))
 
@@ -257,8 +258,25 @@ class ShardedQuantEmbeddingBagCollection(
         # pyre-ignore [7]
         return self._sharding_type_to_sharding
 
-    def create_context(self) -> EmptyShardedModuleContext:
-        return EmptyShardedModuleContext()
+    def create_context(self) -> NullShardedModuleContext:
+        return NullShardedModuleContext()
+
+    def extra_repr(self) -> str:
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        return "\n  ".join(
+            loop("_lookup", self._lookups)
+            + loop("_input_dist", self._input_dists)
+            + loop("_output_dist", self._output_dists)
+        )
 
 
 class QuantEmbeddingBagCollectionSharder(

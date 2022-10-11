@@ -19,9 +19,10 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
-    EmptyShardingContext,
     group_tables,
+    NullShardingContext,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
 )
@@ -62,6 +63,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -86,6 +88,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
         ] = self._score_grouped_embedding_configs_per_rank[self._rank]
+        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -282,6 +285,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._dist = SparseFeaturesAllToAll(
@@ -289,6 +293,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
+            variable_batch_size=variable_batch_size,
         )
 
     def forward(
@@ -309,7 +314,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
 
 class TwPooledEmbeddingDist(
-    BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]
+    BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]
 ):
     """
     Redistributes pooled embedding tensor with an AlltoAll collective operation for
@@ -332,10 +337,10 @@ class TwPooledEmbeddingDist(
     ) -> None:
         super().__init__()
         self._dist = PooledEmbeddingsAllToAll(
-            pg,
-            dim_sum_per_rank,
-            device,
-            callbacks,
+            pg=pg,
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=device,
+            callbacks=callbacks,
             codecs=qcomm_codecs_registry.get(
                 CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
             )
@@ -346,7 +351,7 @@ class TwPooledEmbeddingDist(
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: Optional[EmptyShardingContext] = None,
+        sharding_ctx: Optional[EmbeddingShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on pooled embeddings tensor.
@@ -357,13 +362,17 @@ class TwPooledEmbeddingDist(
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings.
         """
-
-        return self._dist(local_embs)
+        if sharding_ctx is None:
+            return self._dist(local_embs)
+        else:
+            return self._dist(
+                local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
+            )
 
 
 class TwPooledEmbeddingSharding(
     BaseTwEmbeddingSharding[
-        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -381,6 +390,7 @@ class TwPooledEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
+            self._variable_batch_size,
         )
 
     def create_lookup(
@@ -400,7 +410,7 @@ class TwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         assert self._pg is not None
         return TwPooledEmbeddingDist(
             self._pg,
@@ -453,7 +463,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
 
 
 class InferTwPooledEmbeddingDist(
-    BaseEmbeddingDist[EmptyShardingContext, List[torch.Tensor], torch.Tensor]
+    BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
 ):
     """
     Merges pooled embedding tensor from each device for inference.
@@ -474,7 +484,7 @@ class InferTwPooledEmbeddingDist(
     def forward(
         self,
         local_embs: List[torch.Tensor],
-        sharding_ctx: Optional[EmptyShardingContext] = None,
+        sharding_ctx: Optional[NullShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoOne operation on pooled embedding tensors.
@@ -492,7 +502,7 @@ class InferTwPooledEmbeddingDist(
 
 class InferTwEmbeddingSharding(
     BaseTwEmbeddingSharding[
-        EmptyShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
+        NullShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
     ]
 ):
     """
@@ -524,7 +534,7 @@ class InferTwEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[EmptyShardingContext, List[torch.Tensor], torch.Tensor]:
+    ) -> BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]:
         device = device if device is not None else self._device
         assert device is not None
         return InferTwPooledEmbeddingDist(
