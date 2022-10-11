@@ -830,7 +830,7 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             happens within.
         codecs (Optional[QuantizedCommCodecs]): Quantization codec
 
-    Example::
+     Example::
 
         init_distributed(rank=rank, size=2, backend="nccl")
         pg = dist.new_group(backend="nccl")

@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torch
@@ -619,13 +619,17 @@ T = TypeVar("T")
 W = TypeVar("W")
 
 
-class EmptyShardingContext(Multistreamable):
+class NullShardingContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
 
-    # pyre-ignore [2]
-    def __setattr__(self, key: str, value: Any) -> None:
-        raise NotImplementedError()
+
+@dataclass
+class EmbeddingShardingContext(Multistreamable):
+    batch_size_per_rank: List[int] = field(default_factory=list)
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        pass
 
 
 class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):

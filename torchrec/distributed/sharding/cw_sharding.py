@@ -17,8 +17,8 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
-    EmptyShardingContext,
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
@@ -57,12 +57,14 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(
             sharding_infos,
             env,
             device,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            variable_batch_size=variable_batch_size,
         )
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
@@ -195,7 +197,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
 
 class CwPooledEmbeddingSharding(
     BaseCwEmbeddingSharding[
-        EmptyShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -213,6 +215,7 @@ class CwPooledEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
+            self._variable_batch_size,
         )
 
     def create_lookup(
@@ -232,7 +235,7 @@ class CwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[EmptyShardingContext, torch.Tensor, torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         device = device if device is not None else self._device
         embedding_permute_op: Optional[PermutePooledEmbeddingsSplit] = None
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None

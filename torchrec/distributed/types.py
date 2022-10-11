@@ -418,7 +418,7 @@ class ParameterSharding:
 ShardedModuleContext = Multistreamable
 
 
-class EmptyShardedModuleContext(Multistreamable):
+class NullShardedModuleContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
 
