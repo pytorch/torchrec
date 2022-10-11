@@ -232,8 +232,11 @@ class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
             yield key, cast(nn.Parameter, weight)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_buffers"
         for table, param in zip(self._embedding_tables, self.split_embedding_weights()):
             name = f"{table.name}.weight"
             key = f"{prefix}.{name}" if (prefix and name) else (prefix + name)

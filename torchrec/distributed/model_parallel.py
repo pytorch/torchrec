@@ -550,14 +550,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         gen = self._named_buffers(self.module, prefix, recurse)
         memo = set()
         for key, param in gen:
             if param in memo:
                 continue
-            memo.add(param)
+            if remove_duplicate:
+                memo.add(param)
             yield key, param
 
     @property
