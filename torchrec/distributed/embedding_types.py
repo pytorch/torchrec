@@ -12,7 +12,7 @@ from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
-from torch import nn
+from torch import fx, nn
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
@@ -88,6 +88,17 @@ class SparseFeatures(Multistreamable):
         if self.id_score_list_features is not None:
             self.id_score_list_features.record_stream(stream)
 
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            SparseFeatures,
+            args=(
+                tracer.create_arg(self.id_list_features),
+                tracer.create_arg(self.id_score_list_features),
+            ),
+            kwargs={},
+        )
+
 
 class SparseFeaturesList(Multistreamable):
     def __init__(self, features: List[SparseFeatures]) -> None:
@@ -109,6 +120,14 @@ class SparseFeaturesList(Multistreamable):
         for feature in self.features:
             feature.record_stream(stream)
 
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            SparseFeaturesList,
+            args=(tracer.create_arg(self.features),),
+            kwargs={},
+        )
+
 
 class ListOfSparseFeaturesList(Multistreamable):
     def __init__(self, features: List[SparseFeaturesList]) -> None:
@@ -129,6 +148,14 @@ class ListOfSparseFeaturesList(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features_list:
             feature.record_stream(stream)
+
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            ListOfSparseFeaturesList,
+            args=(tracer.create_arg(self.features_list),),
+            kwargs={},
+        )
 
 
 @dataclass
