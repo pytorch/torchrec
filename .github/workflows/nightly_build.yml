@@ -186,11 +186,11 @@ jobs:
       run: |
         rm -r dist || true
         conda run -n build_binary python -m pip install *.whl
-    - name: Test torchrec installation
-      shell: bash
-      run: |
-        conda run -n build_binary \
-          python -c "import torchrec"
+    # - name: Test torchrec installation
+    #   shell: bash
+    #   run: |
+    #     conda run -n build_binary \
+    #       python -c "import torchrec"
     - name: Push TorchRec Binary to PYPI
       env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
