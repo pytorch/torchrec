@@ -574,38 +574,3 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
-
-
-def copy_to_device(
-    module: nn.Module,
-    current_device: torch.device,
-    to_device: torch.device,
-) -> nn.Module:
-
-    with sharded_model_copy(device=None):
-        copy_module = copy.deepcopy(module)
-
-    # Copy only weights with matching device.
-    def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
-        if tensor.device == current_device:
-            return tensor.to(to_device)
-        return tensor
-
-    # if this is a sharded module, customize the copy
-    if isinstance(copy_module, ModuleCopyMixin):
-        return copy_module.copy(to_device)
-
-    for child_name, child in copy_module.named_children():
-        if not any(
-            [isinstance(submodule, ModuleCopyMixin) for submodule in child.modules()]
-        ):
-            child_copy = child._apply(_copy_if_device_match)
-        else:
-            child_copy = copy_to_device(child, current_device, to_device)
-        copy_module.register_module(child_name, child_copy)
-    return copy_module
-
-
-def bind_copy_to_device(module: nn.Module) -> None:
-    # pyre-ignore
-    module.copy = types.MethodType(copy_to_device, module)
