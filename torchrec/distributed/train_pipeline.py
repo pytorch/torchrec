@@ -769,9 +769,9 @@ class TrainPipelineSparseDistPrefetch(TrainPipelineSparseDist[In, Out]):
                 self._cur_batch_list[i] = batch_i
                 # Try to pipeline input data dist.
             with torch.cuda.stream(self._data_dist_stream):
-                _wait_for_batch(self._cur_batch_list[0], self._memcpy_stream)
+                _wait_for_batch(self._cur_batch_list[i], self._memcpy_stream)
                 _start_data_dist(self._pipelined_modules,
-                                 self._cur_batch_list[0], self._context)
+                                 self._cur_batch_list[i], self._context)
             sparse_data = self._pipelined_wait[0].get_request_data()
             self._distributed_sparse_data_list[i] = sparse_data[0].id_list_features
             
