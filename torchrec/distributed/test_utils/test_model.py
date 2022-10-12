@@ -343,6 +343,61 @@ class TestOverArch(nn.Module):
         return self.linear(torch.cat(ret_list, dim=1))
 
 
+@torch.fx.wrap
+def _post_sparsenn_forward(
+    ebc: KeyedTensor,
+    fp_ebc: KeyedTensor,
+    w_ebc: KeyedTensor,
+    batch_size: Optional[int] = None,
+) -> KeyedTensor:
+    if batch_size is None or ebc.values().size(0) == batch_size:
+        ebc_values = ebc.values()
+        fp_ebc_values = fp_ebc.values() if fp_ebc is not None else None
+        w_ebc_values = w_ebc.values()
+    else:
+        ebc_values = torch.zeros(
+            batch_size,
+            ebc.values().size(1),
+            dtype=ebc.values().dtype,
+            device=ebc.values().device,
+        )
+        ebc_values[: ebc.values().size(0), :] = ebc.values()
+        if fp_ebc is not None:
+            fp_ebc_values = torch.zeros(
+                batch_size,
+                fp_ebc.values().size(1),
+                dtype=fp_ebc.values().dtype,
+                device=fp_ebc.values().device,
+            )
+            fp_ebc_values[: fp_ebc.values().size(0), :] = fp_ebc.values()
+        else:
+            fp_ebc_values = None
+        w_ebc_values = torch.zeros(
+            batch_size,
+            w_ebc.values().size(1),
+            dtype=w_ebc.values().dtype,
+            device=w_ebc.values().device,
+        )
+        w_ebc_values[: w_ebc.values().size(0), :] = w_ebc.values()
+    result = (
+        KeyedTensor(
+            keys=ebc.keys() + w_ebc.keys(),
+            length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
+            values=torch.cat([ebc_values, w_ebc_values], dim=1),
+        )
+        if fp_ebc is None
+        else KeyedTensor(
+            keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
+            length_per_key=ebc.length_per_key()
+            + fp_ebc.length_per_key()
+            + w_ebc.length_per_key(),
+            # pyre-ignore[6]
+            values=torch.cat([ebc_values, fp_ebc_values, w_ebc_values], dim=1),
+        )
+    )
+    return result
+
+
 class TestSparseArch(nn.Module):
     """
     Basic nn.Module for testing
@@ -427,51 +482,7 @@ class TestSparseArch(nn.Module):
         ebc = self.ebc(features)
         fp_ebc = self.fp_ebc(fp_features) if self.fp_ebc is not None else None
         w_ebc = self.weighted_ebc(weighted_features)
-
-        if batch_size is None or ebc.values().size(0) == batch_size:
-            ebc_values = ebc.values()
-            fp_ebc_values = fp_ebc.values() if self.fp_ebc is not None else None
-            w_ebc_values = w_ebc.values()
-        else:
-            ebc_values = torch.zeros(
-                batch_size,
-                ebc.values().size(1),
-                dtype=ebc.values().dtype,
-                device=ebc.values().device,
-            )
-            ebc_values[: ebc.values().size(0), :] = ebc.values()
-            if self.fp_ebc is not None:
-                fp_ebc_values = torch.zeros(
-                    batch_size,
-                    fp_ebc.values().size(1),
-                    dtype=fp_ebc.values().dtype,
-                    device=fp_ebc.values().device,
-                )
-                fp_ebc_values[: fp_ebc.values().size(0), :] = fp_ebc.values()
-            else:
-                fp_ebc_values = None
-            w_ebc_values = torch.zeros(
-                batch_size,
-                w_ebc.values().size(1),
-                dtype=w_ebc.values().dtype,
-                device=w_ebc.values().device,
-            )
-            w_ebc_values[: w_ebc.values().size(0), :] = w_ebc.values()
-        result = (
-            KeyedTensor(
-                keys=ebc.keys() + w_ebc.keys(),
-                length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
-                values=torch.cat([ebc_values, w_ebc_values], dim=1),
-            )
-            if self.fp_ebc is None
-            else KeyedTensor(
-                keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
-                length_per_key=ebc.length_per_key()
-                + fp_ebc.length_per_key()
-                + w_ebc.length_per_key(),
-                values=torch.cat([ebc_values, fp_ebc_values, w_ebc_values], dim=1),
-            )
-        )
+        result = _post_sparsenn_forward(ebc, fp_ebc, w_ebc, batch_size)
         return result
 
 
