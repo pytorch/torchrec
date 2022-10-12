@@ -15,12 +15,13 @@ from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.test_utils.test_model import TestSparseNNBase
+from torchrec.distributed.shard_embedding_modules import shard_embedding_modules
+from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     InferenceModelParallelTestBase,
 )
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
-from torchrec.distributed.types import ShardingType
+from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.quant.embedding_modules import (
@@ -128,3 +129,52 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
             sharders=sharders,
             quantize_callable=_quantize,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]
+    @given(
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_quant_pred_shard_embedding_modules(self, output_type: torch.dtype) -> None:
+        device = torch.device("cuda:0")
+
+        # wrap in sequential because _quantize only applies to submodules...
+        model = nn.Sequential(EmbeddingCollection(tables=self.tables, device=device))
+
+        quant_model = _quantize(model)
+
+        sharded_quant_model, _sharded_params = shard_embedding_modules(
+            module=quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantECSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ],
+            device=device,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+        )
+
+        sharded_quant_model.load_state_dict(sharded_quant_model.state_dict())
+
+        local_batch, _ = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=[],
+        )
+        local_batch = local_batch.to(device)
+        sharded_quant_model(local_batch.idlist_features)
