@@ -50,6 +50,7 @@ from torch.distributed._shard.sharding_spec import (  # noqa
     ShardingSpec,
     ShardMetadata,
 )
+from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
 
 
@@ -547,6 +548,10 @@ class ShardedModule(
             qcomm_codecs_registry = {}
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
+        self._input_dists: List[nn.Module] = []
+        self._lookups: List[nn.Module] = []
+        self._output_dists: List[nn.Module] = []
+
     @abc.abstractmethod
     def create_context(self) -> ShrdCtx:
         pass
@@ -612,6 +617,28 @@ class ShardedModule(
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for key, _ in self.named_parameters(prefix):
             yield key
+
+    def extra_repr(self) -> str:
+        """
+        Pretty prints representation of the module's lookup modules, input_dists and output_dists
+        """
+
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        rep = []
+        rep.extend(loop("lookups", self._lookups))
+        rep.extend(loop("_input_dists", self._input_dists))
+        rep.extend(loop("_output_dists", self._output_dists))
+
+        return "\n ".join(rep)
 
 
 class ModuleSharder(abc.ABC, Generic[M]):
