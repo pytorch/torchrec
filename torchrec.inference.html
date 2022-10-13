@@ -443,6 +443,22 @@ def my_abstract_classmethod(cls, …):</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.inference.modules.CopyableMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">CopyableMixin</span></span><a class="headerlink" href="#torchrec.inference.modules.CopyableMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.CopyableMixin.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.CopyableMixin.copy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.inference.modules.CopyableMixin.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.inference.modules.CopyableMixin.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">PredictFactory</span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
@@ -620,6 +636,11 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.inference.modules.copy_to_device">
+<span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">copy_to_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.copy_to_device" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.inference.modules.quantize_dense">
 <span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">quantize_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">predict_module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.inference.modules.PredictModule" title="torchrec.inference.modules.PredictModule"><span class="pre">PredictModule</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_embedding_module_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.quantize_dense" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -730,6 +751,11 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <li><a class="reference internal" href="#torchrec.inference.modules.BatchingMetadata.type"><code class="docutils literal notranslate"><span class="pre">BatchingMetadata.type</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#torchrec.inference.modules.CopyableMixin"><code class="docutils literal notranslate"><span class="pre">CopyableMixin</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.inference.modules.CopyableMixin.copy"><code class="docutils literal notranslate"><span class="pre">CopyableMixin.copy()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.CopyableMixin.training"><code class="docutils literal notranslate"><span class="pre">CopyableMixin.training</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory"><code class="docutils literal notranslate"><span class="pre">PredictFactory</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata_json"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata_json()</span></code></a></li>
@@ -752,6 +778,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <li><a class="reference internal" href="#torchrec.inference.modules.QualNameMetadata.need_preproc"><code class="docutils literal notranslate"><span class="pre">QualNameMetadata.need_preproc</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#torchrec.inference.modules.copy_to_device"><code class="docutils literal notranslate"><span class="pre">copy_to_device()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.quantize_dense"><code class="docutils literal notranslate"><span class="pre">quantize_dense()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.quantize_embeddings"><code class="docutils literal notranslate"><span class="pre">quantize_embeddings()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.quantize_feature"><code class="docutils literal notranslate"><span class="pre">quantize_feature()</span></code></a></li>
