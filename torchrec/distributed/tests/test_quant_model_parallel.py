@@ -13,10 +13,7 @@ import torch
 from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
-from torchrec.distributed.model_parallel import (
-    bind_copy_to_device,
-    DistributedModelParallel,
-)
+from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard_embedding_modules import shard_embedding_modules
 from torchrec.distributed.test_utils.test_model import (
@@ -333,8 +330,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
 
         sharded_model = sharded_model.to(device)
 
-        bind_copy_to_device(sharded_model)
-
         # pyre-ignore
         sharded_model_copy = sharded_model.copy(
             current_device=device, to_device=device_1
@@ -373,9 +368,9 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             sparse_device=torch.device("meta"),
         )
         # pyre-ignore [16]
-        model.copy = CopyModule()
+        model.copy_module = CopyModule()
         # pyre-ignore [16]
-        model.no_copy = NoCopyModule()
+        model.no_copy_module = NoCopyModule()
         quant_model = _quantize(model, inplace=True)
         dmp = DistributedModelParallel(
             quant_model,
@@ -395,6 +390,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
 
         dmp_1 = dmp.copy(device_1)
         # pyre-ignore [16]
-        self.assertEqual(dmp_1.module.copy.tensor.device, device_1)
+        self.assertEqual(dmp_1.module.copy_module.tensor.device, device_1)
         # pyre-ignore [16]
-        self.assertEqual(dmp_1.module.no_copy.tensor.device, torch.device("cpu"))
+        self.assertEqual(dmp_1.module.no_copy_module.tensor.device, torch.device("cpu"))
