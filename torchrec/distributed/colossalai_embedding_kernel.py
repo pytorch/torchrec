@@ -183,7 +183,6 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        cache_ratio: float = 0.01,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -192,6 +191,9 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                    for x in self._local_cols), "local col should be consistent in all embeddings"
         embedding_dim = self._local_cols[0]
         self.pool_str = pooling_mode_to_str(self._pooling)
+
+        cache_ratio = config.fused_params["cache_load_factor"]
+        print(f"CAIBatchedDenseEmbeddingBag cache ratio {cache_ratio}")
 
         weight_list = []
         for embedding_config in self._config.embedding_tables:
