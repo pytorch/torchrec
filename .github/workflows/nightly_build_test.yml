@@ -69,8 +69,6 @@ jobs:
             --python-tag=${{ matrix.python-tag }}
 
   test_on_gpu:
-    env:
-      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
