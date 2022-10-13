@@ -38,7 +38,7 @@ jobs:
            python-tag: "py39"
            cuda-tag: "cu11"
 
-    uses: /pytorch/test-infra/github/workflows/linux_job.yml
+    uses: /pytorch/test-infra/.github/workflows/linux_job.yml
     with:
       runner: ${{ matrix.os }}
       timeout: 60
@@ -77,7 +77,7 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
         cuda-tag: ["cu11"]
     needs: build_on_cpu
-    uses: /pytorch/test-infra/github/workflows/linux_job.yml
+    uses: /pytorch/test-infra/.github/workflows/linux_job.yml
     with:
       runner: ${{ matrix.os }}
       timeout: 60
