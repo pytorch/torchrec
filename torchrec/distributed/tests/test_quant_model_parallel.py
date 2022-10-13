@@ -331,9 +331,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         sharded_model = sharded_model.to(device)
 
         # pyre-ignore
-        sharded_model_copy = sharded_model.copy(
-            current_device=device, to_device=device_1
-        )
+        sharded_model_copy = sharded_model.copy(device_1)
 
         self._recursive_device_check(
             sharded_model, sharded_model_copy, device, device_1
