@@ -69,6 +69,8 @@ jobs:
             --python-tag=${{ matrix.python-tag }}
 
   test_on_gpu:
+    env:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
@@ -115,7 +117,7 @@ jobs:
         conda run -n build_binary \
           python -m twine upload \
             --username __token__ \
-            --password "${{ secrets.PYPI_TOKEN }}" \
+            --password "${{ env.PYPI_TOKEN }}" \
             --skip-existing \
             torchrec_nightly-*.whl \
             --verbose
