@@ -304,7 +304,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
-            if global_storage_constraints < lowest_storage:
+            if not lowest_storage.fits_in(global_storage_constraints):
                 raise PlannerError(
                     error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
                     message="Unable to find a plan for this model because of insufficient storage. \n"
