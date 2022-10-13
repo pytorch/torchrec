@@ -14,7 +14,7 @@ namespace torchrec {
  *
  * It evict infrequence elements first, then evict least recent usage elements.
  *
- * The frequency is record as the power number of 2. i.e., The freq_power is 1,
+ * The frequency is recorded as the power number of 2. i.e., The freq_power is 1,
  * then the global id is used approximately 2 times. And the freq_power is 10,
  * then the global id is used approximately 1024 times.
  *
@@ -22,7 +22,7 @@ namespace torchrec {
  * generate n bits. If all these n bits are zero, then the freq_power++.
  *
  * All LFU/LRU information uses uint32_t to record. The uint32_t should be
- * record in IDTransformer's map/dictionary.
+ * recorded in IDTransformer's map/dictionary.
  *
  * Use `update_time` to update logical timer for LRU. It only uses lower 27 bits
  * of time.
