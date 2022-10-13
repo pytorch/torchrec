@@ -1,0 +1,31 @@
+name: Run simple workflow
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-cpu:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.2xlarge
+      gpu-arch-type: cpu
+      gpu-arch-version: ""
+      script: |
+        export PATH="/opt/python/cp38-cp38/bin:${PATH}"
+        python3 -m pip install --extra-index-url https://download.pytorch.org/whl/nightly/cpu --pre torch
+        # Can import pytorch
+        python3 -c 'import torch'
+  test-gpu:
+    env:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.4xlarge.nvidia.gpu
+      gpu-arch-type: cuda
+      gpu-arch-version: 11.6
+      script: |
+        export PATH="/opt/python/cp38-cp38/bin:${PATH}"
+        python3 -m pip install --extra-index-url https://download.pytorch.org/whl/nightly/cpu --pre torch
+        # Can import pytorch
+        python3 -c 'import torch;assert(torch.cuda.is_available())'
