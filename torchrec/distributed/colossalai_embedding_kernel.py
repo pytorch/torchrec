@@ -36,7 +36,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 logger: logging.Logger = logging.getLogger(__name__)
 
 try:
-    from colossalai.nn.parallel.layers.cache_embedding import FreqAwareEmbeddingBag
+    from colossalai.nn.parallel.layers.cache_embedding import CachedEmbeddingBag
 except ImportError:
     print('please pip install colossalai')
 
@@ -64,7 +64,7 @@ class CAIGroupedEmbeddingBag(BaseEmbedding):
 
         for embedding_config in self._config.embedding_tables:
             if use_cache:
-                emb = FreqAwareEmbeddingBag(
+                emb = CachedEmbeddingBag(
                     num_embeddings=embedding_config.local_rows,
                     embedding_dim=embedding_config.local_cols,
                     mode=pooling_type_to_str(embedding_config.pooling),
@@ -205,7 +205,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 embedding_config.get_weight_init_min(),
                 embedding_config.get_weight_init_max(),
             ))
-        self._emb_module = FreqAwareEmbeddingBag(
+        self._emb_module = CachedEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             mode=self.pool_str,
