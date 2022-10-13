@@ -5358,15 +5358,6 @@ completes.</p>
 <dd></dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.extra_repr">
-<span class="sig-name descname"><span class="pre">extra_repr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.extra_repr" title="Permalink to this definition">¶</a></dt>
-<dd><p>Set the extra representation of the module</p>
-<p>To print customized extra information, you should re-implement
-this method in your own modules. Both single-line and multi-line
-strings are acceptable.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.input_dist">
 <span class="sig-name descname"><span class="pre">input_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.types.NullShardedModuleContext" title="torchrec.distributed.types.NullShardedModuleContext"><span class="pre">NullShardedModuleContext</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.embedding_types.ListOfSparseFeaturesList" title="torchrec.distributed.embedding_types.ListOfSparseFeaturesList"><span class="pre">ListOfSparseFeaturesList</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.input_dist" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -5979,6 +5970,12 @@ completes.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.create_context">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">create_context</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ShrdCtx</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule.create_context" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.extra_repr">
+<span class="sig-name descname"><span class="pre">extra_repr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule.extra_repr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pretty prints representation of the module’s lookup modules, input_dists and output_dists</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule.forward">
@@ -6944,7 +6941,6 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.compute_and_output_dist"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.compute_and_output_dist()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.copy"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.copy()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.create_context"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.create_context()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.extra_repr"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.extra_repr()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.input_dist"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.input_dist()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.output_dist"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.output_dist()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.shardings"><code class="docutils literal notranslate"><span class="pre">ShardedQuantEmbeddingBagCollection.shardings</span></code></a></li>
@@ -7080,6 +7076,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.compute"><code class="docutils literal notranslate"><span class="pre">ShardedModule.compute()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.compute_and_output_dist"><code class="docutils literal notranslate"><span class="pre">ShardedModule.compute_and_output_dist()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.create_context"><code class="docutils literal notranslate"><span class="pre">ShardedModule.create_context()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.extra_repr"><code class="docutils literal notranslate"><span class="pre">ShardedModule.extra_repr()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.forward"><code class="docutils literal notranslate"><span class="pre">ShardedModule.forward()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.input_dist"><code class="docutils literal notranslate"><span class="pre">ShardedModule.input_dist()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardedModule.output_dist"><code class="docutils literal notranslate"><span class="pre">ShardedModule.output_dist()</span></code></a></li>
