@@ -633,10 +633,12 @@ class BinaryCriteoUtils:
             curr_first_row = curr_last_row
 
         # Directly copy over the last day's files since they will be used for validation and testing.
-        for part in ["dense", "sparse", "labels"]:
-            path_to_original = os.path.join(
-                input_dir_sparse, f"day_{days-1}_{part}.npy"
-            )
+        for (part, input_dir) in [
+            ("sparse", input_dir_sparse),
+            ("dense", input_dir_labels_and_dense),
+            ("labels", input_dir_labels_and_dense),
+        ]:
+            path_to_original = os.path.join(input_dir, f"day_{days-1}_{part}.npy")
             val_train_path = os.path.join(
                 output_dir_shuffled, f"day_{days-1}_{part}.npy"
             )
