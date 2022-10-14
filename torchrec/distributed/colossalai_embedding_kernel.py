@@ -181,6 +181,9 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         embedding_dim = self._local_cols[0]
         self.pool_str = pooling_mode_to_str(self._pooling)
         
+        cache_ratio = config.fused_params["cache_load_factor"]
+        print(f"CAIBatchedDenseEmbeddingBag cache ratio {cache_ratio}")
+        
         weight_malloc = torch.empty(num_embeddings, embedding_dim, device='cpu',)
         weight_split_rows = []
         # for embedding_config in self._config.embedding_tables:
@@ -199,7 +202,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
              weight_list[i].uniform_(
                 embedding_config.get_weight_init_min(),
                 embedding_config.get_weight_init_max(),)
-        self._emb_module = FreqAwareEmbeddingBag(
+        self._emb_module = CachedEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             mode=self.pool_str,
