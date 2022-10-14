@@ -184,8 +184,7 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         cache_ratio = config.fused_params["cache_load_factor"]
         print(f"CAIBatchedDenseEmbeddingBag cache ratio {cache_ratio}")
         
-        weight_malloc = torch.empty(num_embeddings, embedding_dim, device='cpu',)
-        weight_split_rows = []
+        # weight_list = []
         # for embedding_config in self._config.embedding_tables:
         #     weight_list.append(torch.empty(
         #         embedding_config.local_rows,
@@ -195,9 +194,13 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         #         embedding_config.get_weight_init_min(),
         #         embedding_config.get_weight_init_max(),
         #     ))
+            
+        weight_malloc = torch.empty(
+            num_embeddings, embedding_dim, device='cpu',).pin_memory()
+        weight_split_rows = []
         for embedding_config in self._config.embedding_tables:
             weight_split_rows.append(embedding_config.local_rows)
-        weight_list = torch.split(weight_malloc, weight_split_rows)
+        weight_list = torch.split(weight_malloc, weight_split_rows, 0)
         for i, embedding_config in enumerate(self._config.embedding_tables):
              weight_list[i].uniform_(
                 embedding_config.get_weight_init_min(),
@@ -208,7 +211,8 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
             mode=self.pool_str,
             include_last_offset=True,
             sparse=True,
-            _weight=weight_malloc.pin_memory(),
+            _weight=weight_malloc,
+            # _weight=torch.cat(weight_list, 0).pin_memory(),
             warmup_ratio=0.7,
             cache_ratio = cache_ratio,
 
