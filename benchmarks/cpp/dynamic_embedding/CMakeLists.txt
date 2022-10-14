@@ -10,3 +10,6 @@ function(add_tde_benchmark NAME)
 endfunction()
 
 add_tde_benchmark(naive_id_transformer_benchmark naive_id_transformer_benchmark.cpp)
+add_tde_benchmark(random_bits_generator_benchmark random_bits_generator_benchmark.cpp)
+add_tde_benchmark(mixed_lfu_lru_strategy_benchmark mixed_lfu_lru_strategy_benchmark.cpp)
+add_tde_benchmark(mixed_lfu_lru_strategy_evict_benchmark mixed_lfu_lru_strategy_evict_benchmark.cpp)
