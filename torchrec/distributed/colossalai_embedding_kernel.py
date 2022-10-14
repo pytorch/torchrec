@@ -181,26 +181,32 @@ class CAIBatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                    for x in self._local_cols), "local col should be consistent in all embeddings"
         embedding_dim = self._local_cols[0]
         self.pool_str = pooling_mode_to_str(self._pooling)
-
-        weight_list = []
+        
+        weight_malloc = torch.empty(num_embeddings, embedding_dim, device='cpu',)
+        weight_split_rows = []
+        # for embedding_config in self._config.embedding_tables:
+        #     weight_list.append(torch.empty(
+        #         embedding_config.local_rows,
+        #         embedding_config.local_cols,
+        #         device='cpu',
+        #     ).uniform_(
+        #         embedding_config.get_weight_init_min(),
+        #         embedding_config.get_weight_init_max(),
+        #     ))
         for embedding_config in self._config.embedding_tables:
-            weight_list.append(torch.empty(
-                embedding_config.local_rows,
-                embedding_config.local_cols,
-                device='cpu',
-            ).uniform_(
+            weight_split_rows.append(embedding_config.local_rows)
+        weight_list = torch.split(weight_malloc, weight_split_rows)
+        for i, embedding_config in enumerate(self._config.embedding_tables):
+             weight_list[i].uniform_(
                 embedding_config.get_weight_init_min(),
-                embedding_config.get_weight_init_max(),
-            ))
+                embedding_config.get_weight_init_max(),)
         self._emb_module = FreqAwareEmbeddingBag(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             mode=self.pool_str,
             include_last_offset=True,
             sparse=True,
-            # _weight=torch.empty(num_embeddings, embedding_dim, device='cpu',).uniform_(
-            #     min(self._weight_init_mins), max(self._weight_init_maxs)),
-            _weight=torch.cat(weight_list,0).pin_memory(),
+            _weight=weight_malloc.pin_memory(),
             warmup_ratio=0.7,
             cache_ratio = cache_ratio,
 
