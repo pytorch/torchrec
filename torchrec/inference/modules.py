@@ -190,6 +190,12 @@ class PredictFactory(abc.ABC):
         """
         return {}
 
+    def model_inputs_data(self) -> Dict[str, Any]:
+        """
+        Returns a dict of various data for benchmarking input generation.
+        """
+        return {}
+
 
 class PredictModule(nn.Module):
     """
