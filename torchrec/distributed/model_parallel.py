@@ -48,13 +48,30 @@ from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 _DDP_STATE_DICT_PREFIX = "module."
 
 
-def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
+def get_default_sharders(
+    fused_params: Optional[Dict[str, Any]] = None
+) -> List[ModuleSharder[nn.Module]]:
     return [
-        cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], FusedEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
+        cast(
+            ModuleSharder[nn.Module],
+            EmbeddingBagCollectionSharder(fused_params=fused_params),
+        ),
+        cast(
+            ModuleSharder[nn.Module],
+            FusedEmbeddingBagCollectionSharder(fused_params=fused_params),
+        ),
+        cast(
+            ModuleSharder[nn.Module],
+            EmbeddingCollectionSharder(fused_params=fused_params),
+        ),
+        cast(
+            ModuleSharder[nn.Module],
+            QuantEmbeddingBagCollectionSharder(fused_params=fused_params),
+        ),
+        cast(
+            ModuleSharder[nn.Module],
+            QuantEmbeddingCollectionSharder(fused_params=fused_params),
+        ),
     ]
 
 
