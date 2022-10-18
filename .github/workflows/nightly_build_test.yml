@@ -120,13 +120,15 @@ jobs:
   upload_package:
     runs-on: linux.2xlarge
     needs: test_on_gpu
-    env:
-      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-    run: |
-        conda run -n build_binary \
-          python -m twine upload \
-            --username __token__ \
-            --password "$PYPI_TOKEN" \
-            --skip-existing \
-            torchrec_nightly-*.whl \
-            --verbose
+    steps:
+    - name: Push TorchRec Binary to PYPI
+      env:
+        PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      run: |
+          conda run -n build_binary \
+            python -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              torchrec_nightly-*.whl \
+              --verbose
