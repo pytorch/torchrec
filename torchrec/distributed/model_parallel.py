@@ -249,6 +249,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._init_dmp(
             fused_optims=fused_optims,
         )
+
+        if init_parameters:
+            self._init_parameters(self.module)
+
         if init_data_parallel:
             self.init_data_parallel()
         self._optim = CombinedOptimizer(fused_optims)

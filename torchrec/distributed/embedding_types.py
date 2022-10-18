@@ -364,9 +364,16 @@ class BaseGroupedFeatureProcessor(nn.Module):
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        shardable_params: Optional[List[str]] = None,
+    ) -> None:
         super().__init__()
         self._fused_params = fused_params
+        if not shardable_params:
+            shardable_params = []
+        self._shardable_params: List[str] = shardable_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
@@ -374,6 +381,34 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         ]
 
         return types
+
+    def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
+
+        shardable_params: Dict[str, nn.Parameter] = {}
+        for name, param in module.state_dict().items():
+            if name.endswith(".weight"):
+                table_name = name.split(".")[-2]
+                shardable_params[table_name] = param
+
+        if self._shardable_params:
+            assert all(
+                [
+                    table_name in self._shardable_params
+                    for table_name in shardable_params.keys()
+                ]
+            ) or all(
+                [
+                    table_name not in self._shardable_params
+                    for table_name in shardable_params.keys()
+                ]
+            ), f"Cannot partially shard {type(module)}, please check sharder kwargs"
+            shardable_params = {
+                table_name: param
+                for table_name, param in shardable_params.items()
+                if table_name in self._shardable_params
+            }
+
+        return shardable_params
 
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str

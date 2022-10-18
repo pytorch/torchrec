@@ -278,15 +278,6 @@ class QuantEmbeddingBagCollectionSharder(
         )
         return ShardedQuantEmbeddingBagCollection(module, params, env, fused_params)
 
-    def shardable_parameters(
-        self, module: QuantEmbeddingBagCollection
-    ) -> Dict[str, nn.Parameter]:
-        return {
-            name.split(".")[-2]: param
-            for name, param in module.state_dict().items()
-            if name.endswith(".weight")
-        }
-
     @property
     def module_type(self) -> Type[QuantEmbeddingBagCollection]:
         return QuantEmbeddingBagCollection
