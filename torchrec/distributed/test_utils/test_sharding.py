@@ -144,6 +144,7 @@ def gen_model_and_input(
     dedup_feature_names: Optional[List[str]] = None,
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
     variable_batch_size: bool = False,
+    batch_size: int = 4,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -181,6 +182,7 @@ def gen_model_and_input(
             weighted_tables=weighted_tables,
             num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
+            batch_size=batch_size,
         )
     ]
     return (model, inputs)
@@ -240,6 +242,7 @@ def sharding_single_rank_test(
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
     variable_batch_size: bool = False,
+    batch_size: int = 4,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -252,6 +255,7 @@ def sharding_single_rank_test(
             world_size=world_size,
             num_float_features=16,
             variable_batch_size=variable_batch_size,
+            batch_size=batch_size,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
