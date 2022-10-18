@@ -485,6 +485,12 @@ and will shard model according to torch.distributed.get_world_size().</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.model_inputs_data">
+<span class="sig-name descname"><span class="pre">model_inputs_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.model_inputs_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a dict of various data for benchmarking input generation.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.qualname_metadata">
 <span class="sig-name descname"><span class="pre">qualname_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.inference.modules.QualNameMetadata" title="torchrec.inference.modules.QualNameMetadata"><span class="pre">QualNameMetadata</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.qualname_metadata" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a dict from qualname (method name) to QualNameMetadata. This is additional information for execution of specific methods of the model.</p>
@@ -760,6 +766,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.batching_metadata_json"><code class="docutils literal notranslate"><span class="pre">PredictFactory.batching_metadata_json()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.create_predict_module"><code class="docutils literal notranslate"><span class="pre">PredictFactory.create_predict_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.model_inputs_data"><code class="docutils literal notranslate"><span class="pre">PredictFactory.model_inputs_data()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.qualname_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.qualname_metadata()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.result_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.result_metadata()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.run_weights_dependent_transformations"><code class="docutils literal notranslate"><span class="pre">PredictFactory.run_weights_dependent_transformations()</span></code></a></li>
