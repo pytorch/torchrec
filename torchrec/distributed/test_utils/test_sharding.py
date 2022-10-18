@@ -41,7 +41,7 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from typing_extensions import Protocol
 
@@ -238,7 +238,7 @@ def sharding_single_rank_test(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
     qcomms_config: Optional[QCommsConfig] = None,
-    apply_overlapped_optimizer_config: Optional[
+    apply_optimizer_in_backward_config: Optional[
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
     variable_batch_size: bool = False,
@@ -274,20 +274,20 @@ def sharding_single_rank_test(
         global_model_named_params_as_dict = dict(global_model.named_parameters())
         local_model_named_params_as_dict = dict(local_model.named_parameters())
 
-        if apply_overlapped_optimizer_config is not None:
+        if apply_optimizer_in_backward_config is not None:
             for apply_optim_name, (
                 optimizer_type,
                 optimizer_kwargs,
-            ) in apply_overlapped_optimizer_config.items():
+            ) in apply_optimizer_in_backward_config.items():
                 for name, param in global_model_named_params_as_dict.items():
                     if name not in apply_optim_name:
                         continue
                     assert name in local_model_named_params_as_dict
                     local_param = local_model_named_params_as_dict[name]
-                    apply_overlapped_optimizer(
+                    apply_optimizer_in_backward(
                         optimizer_type, [param], optimizer_kwargs
                     )
-                    apply_overlapped_optimizer(
+                    apply_optimizer_in_backward(
                         optimizer_type, [local_param], optimizer_kwargs
                     )
 

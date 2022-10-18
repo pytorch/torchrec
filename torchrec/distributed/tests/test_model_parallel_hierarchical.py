@@ -63,7 +63,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -82,14 +82,14 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         kernel_type: str,
         local_size: int,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         assume(
@@ -112,7 +112,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             world_size=4,
             local_size=local_size,
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
         )
 
@@ -148,7 +148,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -166,13 +166,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         kernel_type: str,
         local_size: int,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         world_size = 4
@@ -195,7 +195,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 for table in self.tables
             },
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -224,7 +224,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -240,13 +240,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         self._test_sharding(
@@ -265,7 +265,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             local_size=2,
             model_class=TestTowerSparseNN,
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -294,7 +294,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -310,12 +310,12 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
 
@@ -335,5 +335,5 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             local_size=2,
             model_class=TestTowerCollectionSparseNN,
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )

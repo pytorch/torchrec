@@ -55,7 +55,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -71,12 +71,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         self._test_sharding(
@@ -89,7 +89,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -108,16 +108,16 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from([None]),
+        apply_optimizer_in_backward_config=st.sampled_from([None]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
-        # apply_overlapped_optimizer_config=st.booleans(),
+        # apply_optimizer_in_backward_config=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_nccl_dp(
         self,
         sharding_type: str,
         kernel_type: str,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
@@ -129,7 +129,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 )
             ],
             backend="nccl",
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -157,7 +157,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -173,12 +173,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         self._test_sharding(
@@ -191,7 +191,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -211,7 +211,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -226,12 +226,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
         kernel_type: str,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
         assume(
-            apply_overlapped_optimizer_config is None
+            apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
         self._test_sharding(
@@ -246,7 +246,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @seed_and_log
@@ -298,7 +298,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
         qcomms_config: Optional[QCommsConfig] = None,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ] = None,
     ) -> None:
@@ -314,5 +314,5 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend=backend,
             constraints=constraints,
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
