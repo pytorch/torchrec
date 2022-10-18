@@ -84,7 +84,7 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: "11.6"
       timeout: 60
-      down-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+      download-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
       script: |
         ldd --version
         cat /proc/cpuinfo
