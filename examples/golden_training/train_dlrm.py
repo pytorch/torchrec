@@ -25,7 +25,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from tqdm import tqdm
@@ -104,7 +104,7 @@ def train(
     )
     train_model = DLRMTrain(dlrm_model)
 
-    apply_overlapped_optimizer(
+    apply_optimizer_in_backward(
         RowWiseAdagrad,
         train_model.model.sparse_arch.parameters(),
         {"lr": learning_rate},
