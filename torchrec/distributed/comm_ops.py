@@ -131,6 +131,7 @@ class All2AllSequenceInfo(object):
         output_splits (List[int]): output splits.
         lengths_sparse_before_features_all2all (Optional[Tensor]): lengths of sparse
             features before AlltoAll.
+        batch_size_per_rank (Optional[List[int]]): batch size in each rank for variable batch size case
     """
 
     embedding_dim: int
@@ -140,6 +141,7 @@ class All2AllSequenceInfo(object):
     input_splits: List[int]
     output_splits: List[int]
     codecs: Optional[QuantizedCommCodecs] = None
+    batch_size_per_rank: Optional[List[int]] = None
     permuted_lengths_after_sparse_data_all2all: Optional[Tensor] = None
 
 
@@ -295,6 +297,7 @@ def alltoall_pooled(
             `_recat_pooled_embedding_grad_out`.
         group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
             default process group will be used.
+        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -330,6 +333,7 @@ def alltoall_sequence(
     lengths_after_sparse_data_all2all: Tensor,
     input_splits: List[int],
     output_splits: List[int],
+    batch_size_per_rank: Optional[List[int]] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
@@ -340,21 +344,26 @@ def alltoall_sequence(
     and returns a single output tensor.
 
     NOTE:
-        AlltoAll operator for (T * B * L_i, D) tensors.
+        AlltoAll operator for Sequence embedding tensors.
         Does not support mixed dimensions.
 
     Args:
-        a2a_sequence_embs_tensor (Tensor): input embeddings. Usually with the shape of
+        a2a_sequence_embs_tensor (Tensor): input embeddings.
+        For fixed batch size case, it is
             (T * B * L_i, D), where B - batch size, T - number of embedding tables,
             D - embedding dimension.
+        For Variable batch size case, it is
+            (Sum{B_i * L_i * T}, D),
         forward_recat_tensor (Tensor): recat tensor for forward.
         backward_recat_tensor (Tensor): recat tensor for backward.
         lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
             AlltoAll.
         input_splits (Tensor): input splits.
         output_splits (Tensor): output splits.
+        batch_size_per_rank ( Optional[List[int]] ): batch size in each rank for variable batch size case.
         group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
             default process group will be used.
+        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -378,6 +387,7 @@ def alltoall_sequence(
         input_splits=input_splits,
         output_splits=output_splits,
         codecs=codecs,
+        batch_size_per_rank=batch_size_per_rank,
     )
     # sequence of embeddings, bags are definitely non-uniform
 
@@ -892,9 +902,20 @@ class All2All_Seq_Req(Function):
         lengths_after_sparse_data_all2all = a2ai.lengths_after_sparse_data_all2all * D
         input_splits = [i * D for i in a2ai.output_splits]
         output_splits = [i * D for i in a2ai.input_splits]
-        local_T = lengths_after_sparse_data_all2all.shape[0]
-        if local_T > 0:
-            with record_function("## alltoall_seq_embedding_fwd_permute ##"):
+
+        local_T = (
+            lengths_after_sparse_data_all2all.shape[0]
+            if a2ai.batch_size_per_rank is None
+            else int(
+                lengths_after_sparse_data_all2all.numel()
+                / sum(a2ai.batch_size_per_rank)  # pyre-ignore [6]
+            )
+        )
+
+        with record_function("## alltoall_seq_embedding_fwd_permute ##"):
+            # For fixed batch size across ranks case
+            if a2ai.batch_size_per_rank is None:
+
                 (
                     permuted_lengths_after_sparse_data_all2all,
                     sharded_input_embeddings,
@@ -906,9 +927,33 @@ class All2All_Seq_Req(Function):
                     None,
                     sharded_input_embeddings.numel(),
                 )
-
-        else:
-            permuted_lengths_after_sparse_data_all2all = None
+            # For variable batch size across ranks case, need to aggregate local feature's lengths based on different rank's variable batch size
+            else:
+                batch_sizes_all_features = torch.tensor(
+                    a2ai.batch_size_per_rank, device=forward_recat_tensor.device
+                ).repeat(local_T)
+                local_length_offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(
+                    batch_sizes_all_features
+                )
+                local_lengths_sum = torch.ops.fbgemm.segment_sum_csr(
+                    1,  # for variable batch size we need to use batch size =1
+                    local_length_offsets.int(),
+                    torch.tensor(lengths_after_sparse_data_all2all),
+                )
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                    forward_recat_tensor,
+                    torch.unsqueeze(
+                        local_lengths_sum,
+                        dim=1,
+                    ),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
 
         if a2ai.codecs is not None:
             sharded_input_embeddings = a2ai.codecs.forward.encode(

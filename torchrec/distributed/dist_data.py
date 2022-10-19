@@ -1034,6 +1034,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         lengths: torch.Tensor,
         input_splits: List[int],
         output_splits: List[int],
+        batch_size_per_rank: Optional[List[int]] = None,
         unbucketize_permute_tensor: Optional[torch.Tensor] = None,
     ) -> SequenceEmbeddingsAwaitable:
         """
@@ -1044,6 +1045,8 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             lengths (torch.Tensor): lengths of sparse features after AlltoAll.
             input_splits (List[int]): input splits of AlltoAll.
             output_splits (List[int]): output splits of AlltoAll.
+            batch_size_per_rank (Optional[List[int]]): batch size per rank, to support
+                variable batch size.
             unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order
                 of the KJT bucketize (for row-wise sharding only).
 
@@ -1058,6 +1061,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             lengths_after_sparse_data_all2all=lengths,
             input_splits=input_splits,
             output_splits=output_splits,
+            batch_size_per_rank=batch_size_per_rank,
             group=self._pg,
             codecs=self._codecs,
         )
