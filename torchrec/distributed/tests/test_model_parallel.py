@@ -732,6 +732,8 @@ class ModelParallelStateDictTest(unittest.TestCase):
         )
 
     def test_meta_device_dmp_state_dict(self) -> None:
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
         env = ShardingEnv.from_process_group(dist.GroupMember.WORLD)
 
         m1 = TestSparseNN(
