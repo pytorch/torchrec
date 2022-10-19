@@ -73,7 +73,7 @@ jobs:
       shell: bash
       run: |
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
+        conda install -n build_binary -y -c conda-forge cudnn
     - name: Install Dependencies
       shell: bash
       run: |
@@ -186,12 +186,11 @@ jobs:
       run: |
         rm -r dist || true
         conda run -n build_binary python -m pip install *.whl
-    # TODO figure out why this is breaking...
-    # - name: Test torchrec installation
-    #   shell: bash
-    #   run: |
-    #     conda run -n build_binary \
-    #       python -c "import torchrec"
+    - name: Test torchrec installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import torchrec"
     - name: Push TorchRec Binary to PYPI
       env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
