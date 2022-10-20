@@ -272,7 +272,7 @@ class TestDenseArch(nn.Module):
             in_features=num_float_features, out_features=8, device=device
         )
 
-        self.dummy_param = torch.nn.Parameter(torch.empty(2))
+        self.dummy_param = torch.nn.Parameter(torch.empty(2, device=device))
         self.register_buffer(
             "dummy_buffer",
             torch.nn.Parameter(torch.empty(1, device=device)),
