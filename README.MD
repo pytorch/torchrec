@@ -30,7 +30,7 @@ TO use the library without cuda, use the *-cpu fbgemm installations. However, th
 Nightly
 
 conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-conda install -y -c conda-forge cudnn
+conda install -c conda-forge cudnn
 pip install torchrec_nightly
 
 Stable
@@ -65,7 +65,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/)
    ```
    conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-   conda install -y -c conda-forge cudnn
+   conda install -c conda-forge cudnn
    ```
 
 2. Install Requirements
