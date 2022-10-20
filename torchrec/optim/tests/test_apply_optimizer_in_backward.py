@@ -10,7 +10,7 @@ import unittest
 
 import torch
 from torchrec import EmbeddingBagCollection, EmbeddingBagConfig, KeyedJaggedTensor
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
+from torch.distributed.optim import apply_optimizer_in_backward
 
 
 class ApplyOverlappedOptimizerTest(unittest.TestCase):

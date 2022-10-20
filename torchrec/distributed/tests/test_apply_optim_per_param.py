@@ -41,7 +41,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
+from torch.distributed.optim import apply_optimizer_in_backward
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class

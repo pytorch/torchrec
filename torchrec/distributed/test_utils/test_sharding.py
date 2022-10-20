@@ -41,7 +41,7 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
+from torch.distributed.optim import apply_optimizer_in_backward
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from typing_extensions import Protocol
 

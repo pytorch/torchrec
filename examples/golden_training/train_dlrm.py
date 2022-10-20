@@ -25,7 +25,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
+from torch.distributed.optim import apply_optimizer_in_backward
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from tqdm import tqdm
