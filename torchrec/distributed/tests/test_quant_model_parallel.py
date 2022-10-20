@@ -27,6 +27,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
+from torchrec.inference.modules import copy_to_device
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
@@ -330,9 +331,8 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
 
         sharded_model = sharded_model.to(device)
 
-        # pyre-ignore
-        sharded_model_copy = sharded_model.copy(
-            current_device=device, to_device=device_1
+        sharded_model_copy = copy_to_device(
+            module=sharded_model, current_device=device, to_device=device_1
         )
 
         self._recursive_device_check(
