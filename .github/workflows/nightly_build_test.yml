@@ -110,7 +110,7 @@ jobs:
         conda run -n build_binary python --version
         sudo yum install -y gcc gcc-c++
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
+        conda install -n build_binary -y -c conda-forge cudnn
         ls -R
         rm -r dist || true
         conda run -n build_binary python -m pip install *.whl
