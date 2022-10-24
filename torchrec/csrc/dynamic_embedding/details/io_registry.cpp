@@ -13,7 +13,7 @@
 namespace tde::details {
 
 void IORegistry::register_provider(IOProvider provider) {
-  std::string type = provider.type_;
+  std::string type = provider.type;
   auto it = providers_.find(type);
   if (it != providers_.end()) {
     TORCH_WARN("IO provider ", type, " already registered. Ignored this time.");
@@ -29,25 +29,25 @@ void IORegistry::register_plugin(const char* filename) {
   IOProvider provider{};
   auto type_ptr = dlsym(ptr.get(), "IO_type");
   TORCH_CHECK(type_ptr != nullptr, "cannot find IO_type symbol");
-  provider.type_ = *reinterpret_cast<const char**>(type_ptr);
+  provider.type = *reinterpret_cast<const char**>(type_ptr);
 
   auto initialize_ptr = dlsym(ptr.get(), "IO_Initialize");
   TORCH_CHECK(initialize_ptr != nullptr, "cannot find IO_Initialize symbol");
-  provider.initialize_ =
-      reinterpret_cast<decltype(provider.initialize_)>(initialize_ptr);
+  provider.initialize =
+      reinterpret_cast<decltype(provider.initialize)>(initialize_ptr);
 
   auto finalize_ptr = dlsym(ptr.get(), "IO_Finalize");
   TORCH_CHECK(finalize_ptr != nullptr, "cannot find IO_Finalize symbol");
-  provider.finalize_ =
-      reinterpret_cast<decltype(provider.finalize_)>(finalize_ptr);
+  provider.finalize =
+      reinterpret_cast<decltype(provider.finalize)>(finalize_ptr);
 
   auto pull_ptr = dlsym(ptr.get(), "IO_Pull");
   TORCH_CHECK(pull_ptr != nullptr, "cannot find IO_Pull symbol");
-  provider.pull_ = reinterpret_cast<decltype(provider.pull_)>(pull_ptr);
+  provider.pull = reinterpret_cast<decltype(provider.pull)>(pull_ptr);
 
   auto push_ptr = dlsym(ptr.get(), "IO_Push");
   TORCH_CHECK(push_ptr != nullptr, "cannot find IO_Push symbol");
-  provider.push_ = reinterpret_cast<decltype(provider.push_)>(push_ptr);
+  provider.push = reinterpret_cast<decltype(provider.push)>(push_ptr);
 
   register_provider(provider);
   dls_.emplace_back(std::move(ptr));

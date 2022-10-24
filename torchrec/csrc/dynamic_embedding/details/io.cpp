@@ -22,21 +22,21 @@ IO::IO(const std::string& config) {
   std::string rest_cfg = config.substr(pos + k_schema_separator.size());
   auto& reg = IORegistry::Instance();
   provider_ = reg.resolve(schema);
-  instance_ = provider_.initialize_(rest_cfg.c_str());
+  instance_ = provider_.initialize(rest_cfg.c_str());
 }
 
 IO::~IO() {
   if (instance_ == nullptr) {
     return;
   }
-  provider_.finalize_(instance_);
+  provider_.finalize(instance_);
 }
 
 struct FetchContext {
-  std::vector<torch::Tensor> tensors_;
-  std::function<void(std::vector<torch::Tensor>)> on_complete_;
-  torch::ScalarType scalar_type_;
-  uint32_t num_optimizer_states_;
+  std::vector<torch::Tensor> tensors;
+  std::function<void(std::vector<torch::Tensor>)> on_complete;
+  torch::ScalarType scalar_type;
+  uint32_t num_optimizer_states;
 };
 
 static void on_global_id_fetched(
@@ -46,7 +46,7 @@ static void on_global_id_fetched(
     void* data,
     uint32_t data_len) {
   auto c = reinterpret_cast<FetchContext*>(ctx);
-  auto& tensor = c->tensors_[offset];
+  auto& tensor = c->tensors[offset];
   // non-existed global id
   if (data_len == 0) {
     if (tensor.defined()) {
@@ -55,15 +55,15 @@ static void on_global_id_fetched(
     return;
   }
   if (!tensor.defined()) {
-    size_t elem_size = torch::elementSize(c->scalar_type_);
+    size_t elem_size = torch::elementSize(c->scalar_type);
     TORCH_CHECK(data_len % elem_size == 0);
     size_t num_elems = data_len / elem_size;
     tensor = torch::empty(
         {
-            static_cast<int64_t>(c->num_optimizer_states_),
+            static_cast<int64_t>(c->num_optimizer_states),
             static_cast<int64_t>(num_elems),
         },
-        c10::TensorOptions().dtype(c->scalar_type_));
+        c10::TensorOptions().dtype(c->scalar_type));
   }
   void* ptr = reinterpret_cast<void*>(
       reinterpret_cast<uintptr_t>(tensor.data_ptr()) +
@@ -73,7 +73,7 @@ static void on_global_id_fetched(
 
 static void on_all_fetched(void* ctx) {
   auto c = reinterpret_cast<FetchContext*>(ctx);
-  c->on_complete_(std::move(c->tensors_));
+  c->on_complete(std::move(c->tensors));
   delete c;
 }
 
@@ -85,26 +85,26 @@ void IO::pull(
     torch::ScalarType type,
     std::function<void(std::vector<torch::Tensor>)> on_fetch_complete) {
   std::unique_ptr<FetchContext> ctx(new FetchContext{
-      .on_complete_ = std::move(on_fetch_complete),
-      .scalar_type_ = type,
-      .num_optimizer_states_ = num_optimizer_states,
+      .on_complete = std::move(on_fetch_complete),
+      .scalar_type = type,
+      .num_optimizer_states = num_optimizer_states,
   });
 
-  ctx->tensors_.resize(
+  ctx->tensors.resize(
       global_ids.size() * std::max(col_ids.size(), static_cast<size_t>(1)));
 
   IOPullParameter param{
-      .table_name_ = table_name.c_str(),
-      .num_cols_ = static_cast<uint32_t>(col_ids.size()),
-      .num_global_ids_ = static_cast<uint32_t>(global_ids.size()),
-      .col_ids_ = col_ids.data(),
-      .global_ids_ = global_ids.data(),
-      .num_optimizer_stats_ = num_optimizer_states,
-      .on_global_id_fetched_ = on_global_id_fetched,
-      .on_all_fetched_ = on_all_fetched,
+      .table_name = table_name.c_str(),
+      .num_cols = static_cast<uint32_t>(col_ids.size()),
+      .num_global_ids = static_cast<uint32_t>(global_ids.size()),
+      .col_ids = col_ids.data(),
+      .global_ids = global_ids.data(),
+      .num_optimizer_states = num_optimizer_states,
+      .on_global_id_fetched = on_global_id_fetched,
+      .on_all_fetched = on_all_fetched,
   };
-  param.on_complete_context_ = ctx.release();
-  provider_.pull_(instance_, param);
+  param.on_complete_context = ctx.release();
+  provider_.pull(instance_, param);
 }
 
 struct PushContext {
@@ -129,20 +129,20 @@ void IO::push(
       .on_push_complete_ = std::move(on_push_complete),
   });
   IOPushParameter param{
-      .table_name_ = table_name.c_str(),
-      .num_cols_ = static_cast<uint32_t>(col_ids.size()),
-      .num_global_ids_ = static_cast<uint32_t>(global_ids.size()),
-      .col_ids_ = col_ids.data(),
-      .global_ids_ = global_ids.data(),
-      .num_optimizer_stats_ = static_cast<uint32_t>(os_ids.size()),
-      .optimizer_stats_ids_ = os_ids.data(),
-      .num_offsets_ = static_cast<uint32_t>(offsets.size()),
-      .offsets_ = offsets.data(),
-      .data_ = data.data(),
-      .on_complete_context_ = ctx.release(),
+      .table_name = table_name.c_str(),
+      .num_cols = static_cast<uint32_t>(col_ids.size()),
+      .num_global_ids = static_cast<uint32_t>(global_ids.size()),
+      .col_ids = col_ids.data(),
+      .global_ids = global_ids.data(),
+      .num_optimizer_states = static_cast<uint32_t>(os_ids.size()),
+      .optimizer_stats_ids = os_ids.data(),
+      .num_offsets = static_cast<uint32_t>(offsets.size()),
+      .offsets = offsets.data(),
+      .data = data.data(),
+      .on_complete_context = ctx.release(),
       .on_push_complete = OnPushComplete,
   };
-  provider_.push_(instance_, param);
+  provider_.push(instance_, param);
 }
 
 } // namespace tde::details

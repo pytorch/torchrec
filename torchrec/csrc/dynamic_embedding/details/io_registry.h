@@ -17,49 +17,43 @@
 namespace tde::details {
 
 struct IOPullParameter {
-  const char* table_name_;
-  uint32_t num_cols_;
-  uint32_t num_global_ids_;
-  const int64_t* col_ids_;
-  const int64_t* global_ids_;
-  uint32_t num_optimizer_stats_;
-  void* on_complete_context_;
-  void (*on_global_id_fetched_)(
+  const char* table_name;
+  uint32_t num_cols;
+  uint32_t num_global_ids;
+  const int64_t* col_ids;
+  const int64_t* global_ids;
+  uint32_t num_optimizer_states;
+  void* on_complete_context;
+  void (*on_global_id_fetched)(
       void* ctx,
       uint32_t offset,
       uint32_t optimizer_state,
       void* data,
       uint32_t data_len);
-  void (*on_all_fetched_)(void* ctx);
+  void (*on_all_fetched)(void* ctx);
 };
 
 struct IOPushParameter {
-  const char* table_name_;
-  uint32_t num_cols_;
-  uint32_t num_global_ids_;
-  const int64_t* col_ids_;
-  const int64_t* global_ids_;
-  uint32_t num_optimizer_stats_;
-  const uint32_t* optimizer_stats_ids_;
-  // offsets in bytes
-  // data_ptr is 1-D array divided by offsets in bytes.
-  // The offsets are jagged and length of offsets array is length + 1.
-  //
-  // data[global_id * num_cols * num_optimizer_stats_
-  //       + col_id * num_optimizer_stats_ + os_id ]
-  uint32_t num_offsets_;
-  const uint64_t* offsets_;
-  const void* data_;
-  void* on_complete_context_;
+  const char* table_name;
+  uint32_t num_cols;
+  uint32_t num_global_ids;
+  const int64_t* col_ids;
+  const int64_t* global_ids;
+  uint32_t num_optimizer_states;
+  const uint32_t* optimizer_stats_ids;
+  uint32_t num_offsets;
+  const uint64_t* offsets;
+  const void* data;
+  void* on_complete_context;
   void (*on_push_complete)(void* ctx);
 };
 
 struct IOProvider {
-  const char* type_;
-  void* (*initialize_)(const char* cfg);
-  void (*pull_)(void* instance, IOPullParameter cfg);
-  void (*push_)(void* instance, IOPushParameter cfg);
-  void (*finalize_)(void*);
+  const char* type;
+  void* (*initialize)(const char* cfg);
+  void (*pull)(void* instance, IOPullParameter cfg);
+  void (*push)(void* instance, IOPushParameter cfg);
+  void (*finalize)(void*);
 };
 
 class IORegistry {
