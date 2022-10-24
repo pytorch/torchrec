@@ -48,7 +48,7 @@ jobs:
       upload-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
       script: |
         ldd --version
-        conda create --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         conda run -n build_binary python -m pip install -r requirements.txt
@@ -80,7 +80,7 @@ jobs:
       download-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
       script: |
         ldd --version
-        conda create --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         # Install torchrec binary
