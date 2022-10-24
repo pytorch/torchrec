@@ -32,6 +32,170 @@ def choose(n: int, k: int) -> int:
         return 0
 
 
+# troch.fx.trace does not support dynamic control flow, wrap the if-else in this function to work around this limitation
+@torch.fx.wrap
+def lookup_sparse_features(
+    features: Optional[KeyedJaggedTensor],
+    embedding_bag_collection: Optional[EmbeddingBagCollection],
+    sparse_feature_names: List[str],
+    F: int,
+    D: int,
+) -> Optional[torch.Tensor]:
+    if embedding_bag_collection and features:
+        sparse_features: KeyedTensor = embedding_bag_collection(features)
+        B: int = features.stride()
+        sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
+        sparse_values: List[torch.Tensor] = []
+        for name in sparse_feature_names:
+            sparse_values.append(sparse[name])
+        return torch.cat(sparse_values, dim=1).reshape(B, F, D)
+    else:
+        return None
+
+
+class SparseArchRO(nn.Module):
+    """
+    Processes the sparse features of DQN. Does embedding lookups for all EmbeddingBag
+    and embedding features of each collection.
+
+    Args:
+        embedding_bag_collection (EmbeddingBagCollection): represents a collection of
+            pooled embeddings for Non Ro features.
+        embedding_bag_collection_ro (EmbeddingBagCollection): represents a collection of
+            pooled embeddings for RO features.
+
+    Example::
+
+        eb1_config = EmbeddingBagConfig(
+           name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+           name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+        )
+
+        eb2_config = EmbeddingBagConfig(
+           name="t3", embedding_dim=3, num_embeddings=10, feature_names=["f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+           name="t3", embedding_dim=4, num_embeddings=10, feature_names=["f4"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        ebc_ro = EmbeddingBagCollection(tables=[eb3_config, eb4_config])
+        sparse_arch = SparseArch(embedding_bag_collection, embedding_bag_collection_ro)
+
+        #     0       1        2  <-- batch
+        # 0   [0,1] None    [2]
+        # 1   [3]    [4]    [5,6,7]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_offsets_sync(
+           keys=["f1", "f2"],
+           values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+           offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        features_ro = KeyedJaggedTensor.from_offsets_sync(
+           keys=["f3", "f4"],
+           values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+           offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        sparse_embeddings = sparse_arch(features, features_ro)
+    """
+
+    def __init__(
+        self,
+        embedding_bag_collection: Optional[EmbeddingBagCollection] = None,
+        embedding_bag_collection_ro: Optional[EmbeddingBagCollection] = None,
+    ) -> None:
+        super().__init__()
+        self.embedding_bag_collection: Optional[
+            EmbeddingBagCollection
+        ] = embedding_bag_collection
+        self.embedding_bag_collection_ro: Optional[
+            EmbeddingBagCollection
+        ] = embedding_bag_collection_ro
+
+        assert (
+            self.embedding_bag_collection
+            and self.embedding_bag_collection.embedding_bag_configs
+            or self.embedding_bag_collection_ro
+            and self.embedding_bag_collection_ro.embedding_bag_configs
+        ), "Embedding bag collections cannot be empty!"
+        if (
+            self.embedding_bag_collection
+            and self.embedding_bag_collection.embedding_bag_configs
+        ):
+            embedding_bag_configs = (
+                self.embedding_bag_collection.embedding_bag_configs()
+            )
+            self.D: int = embedding_bag_configs[0].embedding_dim
+            self._sparse_feature_names: List[str] = [
+                name for conf in embedding_bag_configs for name in conf.feature_names
+            ]
+        else:
+            self.D = 0
+            self._sparse_feature_names = []
+
+        if (
+            self.embedding_bag_collection_ro
+            and self.embedding_bag_collection_ro.embedding_bag_configs
+        ):
+            embedding_bag_configs = (
+                self.embedding_bag_collection_ro.embedding_bag_configs()
+            )
+            self.D_RO: int = embedding_bag_configs[0].embedding_dim
+            self._ro_sparse_feature_names: List[str] = [
+                name for conf in embedding_bag_configs for name in conf.feature_names
+            ]
+        else:
+            self.D_RO = 0
+            self._ro_sparse_feature_names = []
+
+        self.F: int = len(self._sparse_feature_names)
+        self.F_RO: int = len(self._ro_sparse_feature_names)
+
+    def forward(
+        self,
+        features: Optional[KeyedJaggedTensor] = None,
+        features_ro: Optional[KeyedJaggedTensor] = None,
+    ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Args:
+            features (KeyedJaggedTensor): an input tensor of sparse non ro features.
+            features_ro (KeyedJaggedTensor): an input tensor of sparse ro features.
+        Returns:
+            Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]: tensor of shape B X F X D for ro and non ro features
+        """
+
+        sparse_values_cat = lookup_sparse_features(
+            features,
+            self.embedding_bag_collection,
+            self._sparse_feature_names,
+            self.F,
+            self.D,
+        )
+
+        sparse_values_cat_ro = lookup_sparse_features(
+            features_ro,
+            self.embedding_bag_collection_ro,
+            self._ro_sparse_feature_names,
+            self.F_RO,
+            self.D_RO,
+        )
+
+        return sparse_values_cat, sparse_values_cat_ro
+
+    @property
+    def sparse_feature_names(self) -> List[str]:
+        return self._sparse_feature_names
+
+    @property
+    def ro_sparse_feature_names(self) -> List[str]:
+        return self._ro_sparse_feature_names
+
+
 class SparseArch(nn.Module):
     """
     Processes the sparse features of DLRM. Does embedding lookups for all EmbeddingBag
