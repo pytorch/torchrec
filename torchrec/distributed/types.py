@@ -416,6 +416,39 @@ class ParameterSharding:
     sharding_spec: Optional[ShardingSpec] = None
 
 
+ModuleShardingPlan = Dict[str, ParameterSharding]
+"""
+Map of ParameterSharding per parameter (usually a table). This describes the sharding plan for a torchrec module (e.g. `EmbeddingBagCollection`)
+"""
+
+
+@dataclass
+class ShardingPlan:
+    """
+    Representation of sharding plan. This uses the FQN of the larger wrapped model (i.e the model that is wrapped using `DistributedModelParallel`)
+    ModuleShardingPlan should be used when TorchRec composability is desired.
+
+    Attributes:
+        plan (Dict[str, ModuleShardingPlan]): dict keyed by module path of
+            dict of parameter sharding specs keyed by parameter name.
+    """
+
+    plan: Dict[str, ModuleShardingPlan]
+
+    def get_plan_for_module(self, module_path: str) -> Optional[ModuleShardingPlan]:
+        """
+        Args:
+            module_path (str):
+
+        Returns:
+            Optional[ModuleShardingPlan]: dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.
+        """
+        return self.plan.get(module_path, None)
+
+    def __str__(self) -> str:
+        return str(self.plan)
+
+
 ShardedModuleContext = Multistreamable
 
 
@@ -661,7 +694,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
     def shard(
         self,
         module: M,
-        params: Dict[str, ParameterSharding],
+        params: ModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedModule[Any, Any, Any, Any]:
@@ -673,7 +706,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
         Args:
             module (M): module to shard.
-            params (Dict[str, ParameterSharding]): dict of fully qualified parameter names
+            params (ModuleShardingPlan): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
             device (torch.device): compute device.
@@ -727,34 +760,6 @@ class ModuleSharder(abc.ABC, Generic[M]):
             storage_map[compute_device_type].value: tensor.element_size()
             * tensor.nelement()
         }
-
-
-@dataclass
-class ShardingPlan:
-    """
-    Representation of sharding plan.
-
-    Attributes:
-        plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of
-            dict of parameter sharding specs keyed by parameter name.
-    """
-
-    plan: Dict[str, Dict[str, ParameterSharding]]
-
-    def get_plan_for_module(
-        self, module_path: str
-    ) -> Optional[Dict[str, ParameterSharding]]:
-        """
-        Args:
-            module_path (str):
-
-        Returns:
-            Optional[Dict[str, ParameterSharding]]: dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.
-        """
-        return self.plan.get(module_path, None)
-
-    def __str__(self) -> str:
-        return str(self.plan)
 
 
 class ShardingPlanner(abc.ABC):
