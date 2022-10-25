@@ -706,3 +706,7 @@ class TestEnumerators(unittest.TestCase):
         # weighted_table_0
         self.assertEqual(sharding_options[3].dependency, "tower_arch.tower_2")
         self.assertEqual(sharding_options[3].module[0], "tower_arch")
+
+    def test_empty(self) -> None:
+        sharding_options = self.enumerator.enumerate(self.model, sharders=[])
+        self.assertFalse(sharding_options)
