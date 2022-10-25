@@ -97,9 +97,7 @@ void PS::Evict(torch::Tensor ids_to_evict) {
   notification.Done();
   // The shared data for all chunks.
   std::vector<uint64_t> offsets;
-  offsets.reserve(num_ids_per_chunk_ * num_os_ids * col_ids.size() + 1);
-  std::vector<float> data(
-      num_ids_per_chunk_ * num_os_ids * col_ids.size() * col_size_);
+  offsets.resize(num_ids_per_chunk_ * num_os_ids * col_ids.size() + 1);
 
   for (uint32_t i = 0; i < num_ids_to_fetch; i += num_ids_per_chunk_) {
     uint32_t num_ids_in_chunk = std::min(
@@ -107,22 +105,18 @@ void PS::Evict(torch::Tensor ids_to_evict) {
     uint32_t data_size = num_ids_in_chunk * num_os_ids * col_ids.size();
     uint32_t offsets_size = num_ids_in_chunk * num_os_ids * col_ids.size() + 1;
 
-    offsets.clear();
-    offsets.emplace_back(0);
+    std::vector<torch::Tensor> all_tensors;
     for (uint32_t j = i; j < i + num_ids_in_chunk; ++j) {
       int64_t cache_id = cache_ids_to_fetch_or_evict_[j];
       std::vector<torch::Tensor> tensors = GetTensorViews(cache_id);
-      for (uint32_t k : os_ids_) {
-        // this cause 2 copy. is this avoidable?
-        torch::Tensor tensor = tensors[k].cpu();
-        // need to change this when considering col
-        memcpy(
-            reinterpret_cast<uint8_t*>(data.data()) + offsets.back(),
-            tensor.data_ptr<float>(),
-            tensor.numel() * tensor.element_size());
-        offsets.emplace_back(
-            offsets.back() + tensor.numel() * tensor.element_size());
-      }
+      all_tensors.insert(all_tensors.end(), tensors.begin(), tensors.end());
+    }
+    torch::Tensor data = torch::cat(all_tensors, 0).cpu();
+    TORCH_CHECK(data.numel() == data_size * col_size_);
+
+    offsets[0] = 0;
+    for (uint32_t j = 0; j < all_tensors.size(); ++j) {
+      offsets[j + 1] = offsets[j] + all_tensors[j].numel() * all_tensors[j].element_size();
     }
     // waiting for the Push of last chunk finishes.
     notification.Wait();
@@ -133,7 +127,7 @@ void PS::Evict(torch::Tensor ids_to_evict) {
         col_ids,
         os_ids_,
         tcb::span{
-            reinterpret_cast<uint8_t*>(data.data()), data_size * sizeof(float)},
+            reinterpret_cast<uint8_t*>(data.data_ptr<float>()), data_size * sizeof(float)},
         tcb::span{offsets.data(), offsets_size},
         [&notification] { notification.Done(); });
   }

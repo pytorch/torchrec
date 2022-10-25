@@ -54,7 +54,6 @@ class PS:
                 # This assumes all shard have the same column size.
                 col_size = shard.tensor.shape[1]
         elif isinstance(tensors[0], torch.Tensor):
-            tensors
             shards.append(
                 0,
                 0,
