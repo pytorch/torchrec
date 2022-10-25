@@ -12,11 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.planner.constants import (
-    BATCH_SIZE,
-    MIN_CW_DIM,
-    POOLING_FACTOR,
-)
+from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,

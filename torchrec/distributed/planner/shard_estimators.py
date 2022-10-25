@@ -59,7 +59,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
         if not sharder_map:
-            raise ValueError("sharder map not provided for perf estimator")
+            assert not sharding_options, "sharder_map not provided for sharding_options"
+            return
 
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
@@ -574,7 +575,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
         if not sharder_map:
-            raise ValueError("sharder map not provided for storage estimator")
+            assert not sharding_options, "sharder_map not provided for sharding_options"
+            return
 
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
