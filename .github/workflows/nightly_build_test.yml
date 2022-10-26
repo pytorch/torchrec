@@ -85,18 +85,25 @@ jobs:
         conda info
         conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         # Install torchrec binary
-        conda run -n build_binary python -m pip install "${RUNNER_ARTIFACT_DIR}/*.whl"
+        conda run -n build_binary python -m pip install ${RUNNER_ARTIFACT_DIR}/*.whl
         conda run -n build_binary \
           python -c "import torchrec"
-        conda run -n build_binary python -m pip install twine
   upload_package:
     runs-on: linux.2xlarge
     needs: test_on_gpu
     steps:
+    - name: Download wheel
+      uses: actions/download-artifact@v2
+      with:
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+    - name: Display structure of downloaded files
+      run: ls -R
     - name: Push TorchRec Binary to PYPI
       env:
         PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
       run: |
+          conda create -y --name build_binary
+          conda run -n build_binary python -m pip install twine
           conda run -n build_binary \
             python -m twine upload \
               --username __token__ \
