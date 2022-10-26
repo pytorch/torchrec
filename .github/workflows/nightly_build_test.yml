@@ -97,15 +97,15 @@ jobs:
         cuda-tag: ["cu11"]
     needs: test_on_gpu
     steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v2
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
         name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
-    # Checkout the repository to the GitHub Actions runner
-    - name: Checkout
-      uses: actions/checkout@v2
     - name: Update pip
       run: |
         sudo yum update -y
