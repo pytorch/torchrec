@@ -673,7 +673,6 @@ class All2All_Pooled_Req(Function):
         assert B_global == sum(batch_size_per_rank)
 
         sharded_input_embeddings = input_embeddings.view(-1)
-        D_global_sum = sum(dim_sum_per_rank)
 
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)

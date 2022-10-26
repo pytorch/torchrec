@@ -41,7 +41,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
@@ -76,13 +76,13 @@ def _test_sharding(
             device=ctx.device,
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             model.embedding_bags["table_0"].parameters(),
             {"lr": 1.0},
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             model.embedding_bags["table_1"].parameters(),
             {"lr": 4.0},
@@ -304,13 +304,13 @@ def _test_sharding_ec(
             device=ctx.device,
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             model.embeddings["table_0"].parameters(),
             {"lr": 1.0},
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             model.embeddings["table_1"].parameters(),
             {"lr": 4.0},

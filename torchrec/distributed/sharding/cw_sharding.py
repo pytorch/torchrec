@@ -175,6 +175,8 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
                         fused_params=info.fused_params,
+                        weight_init_max=info.embedding_config.weight_init_max,
+                        weight_init_min=info.embedding_config.weight_init_min,
                     )
                 )
 

@@ -261,23 +261,6 @@ class ShardedQuantEmbeddingBagCollection(
     def create_context(self) -> NullShardedModuleContext:
         return NullShardedModuleContext()
 
-    def extra_repr(self) -> str:
-        def loop(key: str, modules: List[nn.Module]) -> List[str]:
-            child_lines = []
-            if len(modules) > 0:
-                child_lines.append("(" + key + "): ")
-            for module in modules:
-                mod_str = repr(module)
-                mod_str = _addindent(mod_str, 2)
-                child_lines.append(mod_str)
-            return child_lines
-
-        return "\n  ".join(
-            loop("_lookup", self._lookups)
-            + loop("_input_dist", self._input_dists)
-            + loop("_output_dist", self._output_dists)
-        )
-
 
 class QuantEmbeddingBagCollectionSharder(
     BaseQuantEmbeddingSharder[QuantEmbeddingBagCollection]
@@ -294,15 +277,6 @@ class QuantEmbeddingBagCollectionSharder(
             dtype_to_data_type(module.output_dtype())
         )
         return ShardedQuantEmbeddingBagCollection(module, params, env, fused_params)
-
-    def shardable_parameters(
-        self, module: QuantEmbeddingBagCollection
-    ) -> Dict[str, nn.Parameter]:
-        return {
-            name.split(".")[-2]: param
-            for name, param in module.state_dict().items()
-            if name.endswith(".weight")
-        }
 
     @property
     def module_type(self) -> Type[QuantEmbeddingBagCollection]:

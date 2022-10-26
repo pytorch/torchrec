@@ -514,14 +514,12 @@ def _maybe_compute_length_per_key(
 ) -> List[int]:
     if length_per_key is None:
         if len(keys) and offsets is not None and len(offsets) > 0:
-            _length: List[int] = (
-                torch.sum((offsets[1:] - offsets[:-1]).view(-1, stride), dim=1)
-                .cpu()
-                .tolist()
-            )
+            _length: List[int] = torch.sum(
+                torch.diff(offsets).view(-1, stride), dim=1
+            ).tolist()
         elif len(keys) and lengths is not None:
             _length: List[int] = (
-                torch.sum(lengths.view(-1, stride), dim=1).cpu().tolist()
+                torch.sum(lengths.view(-1, stride), dim=1).tolist()
                 if lengths.numel() != 0
                 else [0] * len(keys)
             )
