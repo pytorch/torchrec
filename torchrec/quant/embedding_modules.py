@@ -36,6 +36,7 @@ from torchrec.modules.embedding_modules import (
     get_embedding_names_by_table,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.types import ModuleNoCopyMixin
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -111,7 +112,7 @@ def quantize_state_dict(
     return device
 
 
-class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
+class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
     This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
@@ -358,7 +359,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         return self._output_dtype
 
 
-class EmbeddingCollection(EmbeddingCollectionInterface):
+class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
 

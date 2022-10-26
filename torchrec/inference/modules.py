@@ -16,12 +16,12 @@ import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
-from torchrec.distributed.types import ModuleCopyMixin
 from torchrec.distributed.utils import sharded_model_copy
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollectionInterface,
     EmbeddingCollectionInterface,
 )
+from torchrec.types import CopyMixIn
 
 
 def quantize_feature(
@@ -85,13 +85,11 @@ def copy_to_device(
         return tensor
 
     # if this is a sharded module, customize the copy
-    if isinstance(copy_module, ModuleCopyMixin):
+    if isinstance(copy_module, CopyMixIn):
         return copy_module.copy(to_device)
 
     for child_name, child in copy_module.named_children():
-        if not any(
-            [isinstance(submodule, ModuleCopyMixin) for submodule in child.modules()]
-        ):
+        if not any([isinstance(submodule, CopyMixIn) for submodule in child.modules()]):
             child_copy = child._apply(_copy_if_device_match)
         else:
             child_copy = copy_to_device(child, current_device, to_device)
@@ -99,13 +97,16 @@ def copy_to_device(
     return copy_module
 
 
-class CopyableMixin(nn.Module):
+class CopyableMixin(CopyMixIn):
     def copy(
         self,
         device: torch.device,
     ) -> nn.Module:
         return copy_to_device(
-            self, current_device=torch.device("cpu"), to_device=device
+            # pyre-ignore [6]
+            self,
+            current_device=torch.device("cpu"),
+            to_device=device,
         )
 
 
