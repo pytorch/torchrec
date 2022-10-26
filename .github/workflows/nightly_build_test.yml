@@ -95,7 +95,7 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        name: torchrec_nightly_*.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Push TorchRec Binary to PYPI
