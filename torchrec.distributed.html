@@ -2375,7 +2375,7 @@ as specified by corresponding ParameterSharding.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>M</em>) – module to shard.</p></li>
-<li><p><strong>params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><em>ParameterSharding</em></a><em>]</em>) – dict of fully qualified parameter names
+<li><p><strong>params</strong> (<em>ModuleShardingPlan</em>) – dict of fully qualified parameter names
 (module path + parameter name, ‘.’-separated) to its sharding spec.</p></li>
 <li><p><strong>env</strong> (<a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><em>ShardingEnv</em></a>) – sharding environment that has the process group.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – compute device.</p></li>
@@ -4299,7 +4299,7 @@ as specified by corresponding ParameterSharding.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>M</em>) – module to shard.</p></li>
-<li><p><strong>params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><em>ParameterSharding</em></a><em>]</em>) – dict of fully qualified parameter names
+<li><p><strong>params</strong> (<em>ModuleShardingPlan</em>) – dict of fully qualified parameter names
 (module path + parameter name, ‘.’-separated) to its sharding spec.</p></li>
 <li><p><strong>env</strong> (<a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><em>ShardingEnv</em></a>) – sharding environment that has the process group.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – compute device.</p></li>
@@ -4342,7 +4342,7 @@ as specified by corresponding ParameterSharding.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>M</em>) – module to shard.</p></li>
-<li><p><strong>params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><em>ParameterSharding</em></a><em>]</em>) – dict of fully qualified parameter names
+<li><p><strong>params</strong> (<em>ModuleShardingPlan</em>) – dict of fully qualified parameter names
 (module path + parameter name, ‘.’-separated) to its sharding spec.</p></li>
 <li><p><strong>env</strong> (<a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><em>ShardingEnv</em></a>) – sharding environment that has the process group.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – compute device.</p></li>
@@ -5271,11 +5271,6 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_default_sharders">
-<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">get_default_sharders</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.get_default_sharders" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.get_module">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.model_parallel.</span></span><span class="sig-name descname"><span class="pre">get_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.get_module" title="Permalink to this definition">¶</a></dt>
 <dd><p>Unwraps DMP module.</p>
@@ -5311,7 +5306,7 @@ as specified by corresponding ParameterSharding.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>M</em>) – module to shard.</p></li>
-<li><p><strong>params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><em>ParameterSharding</em></a><em>]</em>) – dict of fully qualified parameter names
+<li><p><strong>params</strong> (<em>ModuleShardingPlan</em>) – dict of fully qualified parameter names
 (module path + parameter name, ‘.’-separated) to its sharding spec.</p></li>
 <li><p><strong>env</strong> (<a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><em>ShardingEnv</em></a>) – sharding environment that has the process group.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – compute device.</p></li>
@@ -5711,7 +5706,7 @@ as specified by corresponding ParameterSharding.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>module</strong> (<em>M</em>) – module to shard.</p></li>
-<li><p><strong>params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><em>ParameterSharding</em></a><em>]</em>) – dict of fully qualified parameter names
+<li><p><strong>params</strong> (<em>ModuleShardingPlan</em>) – dict of fully qualified parameter names
 (module path + parameter name, ‘.’-separated) to its sharding spec.</p></li>
 <li><p><strong>env</strong> (<a class="reference internal" href="#torchrec.distributed.types.ShardingEnv" title="torchrec.distributed.types.ShardingEnv"><em>ShardingEnv</em></a>) – sharding environment that has the process group.</p></li>
 <li><p><strong>device</strong> (<em>torch.device</em>) – compute device.</p></li>
@@ -5757,6 +5752,13 @@ compute kernel.</p>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shardings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.FeatureShardingMixIn" title="torchrec.distributed.types.FeatureShardingMixIn"><span class="pre">FeatureShardingMixIn</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.types.ModuleShardingMixIn.shardings" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="torchrec.distributed.types.ModuleShardingPlan">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleShardingPlan</span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleShardingPlan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Map of ParameterSharding per parameter (usually a table). This describes the sharding plan for a torchrec module (e.g. <cite>EmbeddingBagCollection</cite>)</p>
+<p>alias of <code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParameterSharding</span></code></a>]</p>
 </dd></dl>
 
 <dl class="py class">
@@ -6061,7 +6063,8 @@ enables <cite>DistributedModelParallel</cite> to be used during inference.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ShardingPlan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Representation of sharding plan.</p>
+<p>Representation of sharding plan. This uses the FQN of the larger wrapped model (i.e the model that is wrapped using <cite>DistributedModelParallel</cite>)
+ModuleShardingPlan should be used when TorchRec composability is desired.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardingPlan.plan">
 <span class="sig-name descname"><span class="pre">plan</span></span><a class="headerlink" href="#torchrec.distributed.types.ShardingPlan.plan" title="Permalink to this definition">¶</a></dt>
@@ -6069,7 +6072,7 @@ enables <cite>DistributedModelParallel</cite> to be used during inference.</p>
 dict of parameter sharding specs keyed by parameter name.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Dict[str, Dict[str, <a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding">ParameterSharding</a>]]</p>
+<dd class="field-odd"><p>Dict[str, ModuleShardingPlan]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -6085,7 +6088,7 @@ dict of parameter sharding specs keyed by parameter name.</p>
 <dd class="field-even"><p>dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Optional[Dict[str, <a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding">ParameterSharding</a>]]</p>
+<dd class="field-odd"><p>Optional[ModuleShardingPlan]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -6925,7 +6928,6 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.training"><code class="docutils literal notranslate"><span class="pre">DistributedModelParallel.training</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#torchrec.distributed.model_parallel.get_default_sharders"><code class="docutils literal notranslate"><span class="pre">get_default_sharders()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.model_parallel.get_module"><code class="docutils literal notranslate"><span class="pre">get_module()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.model_parallel.get_unwrapped_module"><code class="docutils literal notranslate"><span class="pre">get_unwrapped_module()</span></code></a></li>
 </ul>
@@ -7034,6 +7036,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.types.ModuleShardingMixIn.shardings"><code class="docutils literal notranslate"><span class="pre">ModuleShardingMixIn.shardings</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#torchrec.distributed.types.ModuleShardingPlan"><code class="docutils literal notranslate"><span class="pre">ModuleShardingPlan</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.NoOpQuantizedCommCodec"><code class="docutils literal notranslate"><span class="pre">NoOpQuantizedCommCodec</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.types.NoOpQuantizedCommCodec.calc_quantized_size"><code class="docutils literal notranslate"><span class="pre">NoOpQuantizedCommCodec.calc_quantized_size()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.NoOpQuantizedCommCodec.create_context"><code class="docutils literal notranslate"><span class="pre">NoOpQuantizedCommCodec.create_context()</span></code></a></li>

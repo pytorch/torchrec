@@ -407,32 +407,6 @@ to provided ParameterConstraints.</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.enumerators.calculate_shard_sizes_and_offsets">
-<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.enumerators.</span></span><span class="sig-name descname"><span class="pre">calculate_shard_sizes_and_offsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col_wise_shard_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.enumerators.calculate_shard_sizes_and_offsets" title="Permalink to this definition">¶</a></dt>
-<dd><p>Calculates sizes and offsets for tensor sharded according to provided sharding type.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>tensor</strong> (<em>torch.Tensor</em>) – tensor to be sharded.</p></li>
-<li><p><strong>world_size</strong> (<em>int</em>) – total number of devices in topology.</p></li>
-<li><p><strong>local_world_size</strong> (<em>int</em>) – total number of devices in host group topology.</p></li>
-<li><p><strong>sharding_type</strong> (<em>str</em>) – provided ShardingType value.</p></li>
-<li><p><strong>col_wise_shard_dim</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – dimension for column wise sharding split.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>shard sizes, represented as a list of the dimensions of the sharded tensor on each device, and shard offsets, represented as a list of coordinates of placement on each device.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Tuple[List[List[int]], List[List[int]]]</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>ValueError</strong> – If <cite>sharding_type</cite> is not a valid ShardingType.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.enumerators.get_partition_by_type">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.enumerators.</span></span><span class="sig-name descname"><span class="pre">get_partition_by_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.enumerators.get_partition_by_type" title="Permalink to this definition">¶</a></dt>
 <dd><p>Gets corresponding partition by type for provided sharding type.</p>
@@ -1256,6 +1230,12 @@ to store the shard with an estimation ‘perf’.</p>
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.placement">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.utils.</span></span><span class="sig-name descname"><span class="pre">placement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">compute_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.placement" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns placement, formatted as string</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.utils.prod">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.utils.</span></span><span class="sig-name descname"><span class="pre">prod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.prod" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -1321,7 +1301,6 @@ to store the shard with an estimation ‘perf’.</p>
 <li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.EmbeddingEnumerator.enumerate"><code class="docutils literal notranslate"><span class="pre">EmbeddingEnumerator.enumerate()</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.calculate_shard_sizes_and_offsets"><code class="docutils literal notranslate"><span class="pre">calculate_shard_sizes_and_offsets()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.get_partition_by_type"><code class="docutils literal notranslate"><span class="pre">get_partition_by_type()</span></code></a></li>
 </ul>
 </li>
@@ -1510,6 +1489,7 @@ to store the shard with an estimation ‘perf’.</p>
 <li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_gb"><code class="docutils literal notranslate"><span class="pre">bytes_to_gb()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_mb"><code class="docutils literal notranslate"><span class="pre">bytes_to_mb()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.utils.gb_to_bytes"><code class="docutils literal notranslate"><span class="pre">gb_to_bytes()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.planner.utils.placement"><code class="docutils literal notranslate"><span class="pre">placement()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.utils.prod"><code class="docutils literal notranslate"><span class="pre">prod()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.planner.utils.sharder_name"><code class="docutils literal notranslate"><span class="pre">sharder_name()</span></code></a></li>
 </ul>
