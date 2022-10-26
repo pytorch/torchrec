@@ -62,7 +62,8 @@ jobs:
         conda run -n build_binary \
             python setup.py bdist_wheel \
             --package_name torchrec-nightly \
-            --python-tag=${{ matrix.python-tag }}
+            --python-tag=${{ matrix.python-tag }} \
+            --dist-dir=${RUNNER_ARTIFACT_DIR}/
 
   test_on_gpu:
     strategy:
