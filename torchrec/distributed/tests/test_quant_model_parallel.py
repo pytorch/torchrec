@@ -21,7 +21,7 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
-from torchrec.distributed.shard_embedding_modules import shard_embedding_modules
+from torchrec.distributed.shard import shard
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     ModelInput,
@@ -310,7 +310,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_quant_pred_shard_embedding_modules(self, output_type: torch.dtype) -> None:
+    def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -322,7 +322,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
         quant_model = _quantize(model, inplace=True, output_type=output_type)
 
-        sharded_model, _sharded_params = shard_embedding_modules(
+        sharded_model, _sharded_params = shard(
             module=quant_model,
             sharders=[
                 cast(
