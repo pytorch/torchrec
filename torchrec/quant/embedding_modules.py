@@ -18,7 +18,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     PoolingMode,
 )
 from torch import Tensor
-from torchrec.distributed.types import ModuleCopyMixin
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
@@ -112,7 +111,7 @@ def quantize_state_dict(
     return device
 
 
-class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleCopyMixin):
+class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
     This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
@@ -358,13 +357,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleCopyMixin):
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
 
-    # quant unsharded can be used directly in inference now.
-    # so override its copy behavior
-    def copy(self, device: torch.device) -> nn.Module:
-        return self
 
-
-class EmbeddingCollection(EmbeddingCollectionInterface, ModuleCopyMixin):
+class EmbeddingCollection(EmbeddingCollectionInterface):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
 
@@ -570,8 +564,3 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleCopyMixin):
 
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
-
-    # quant unsharded can be used directly in inference now.
-    # so override its copy behavior
-    def copy(self, device: torch.device) -> nn.Module:
-        return self
