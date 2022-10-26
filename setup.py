@@ -28,8 +28,7 @@ def get_version():
 
 def get_nightly_version():
     today = date.today()
-    #return f'{today.year}.{today.month}.{today.day}'
-    return ""
+    return f"{today.year}.{today.month}.{today.day}"
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
