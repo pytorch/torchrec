@@ -89,13 +89,17 @@ jobs:
         conda run -n build_binary \
           python -c "import torchrec"
   upload_package:
-    runs-on: linux.2xlarge
+    strategy:
+      matrix:
+        os: [linux.2xlarge]
+        python-version: [3.7, 3.8, 3.9]
+        cuda-tag: ["cu11"]
     needs: test_on_gpu
     steps:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec_nightly_*.whl
+        name: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Push TorchRec Binary to PYPI
