@@ -1133,6 +1133,45 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
             torch.equal(model_eager_traced(*sample_6), torch.tensor([0, 2, 2, 3]))
         )
 
+    def test_keyed_jagged_tensor_to_dict_jit_tracable(self) -> None:
+        # This module will go through the constructor of the
+        # KeyedJaggedTensor to construct it with multiple different batch sizes and call to_dict()
+        class MyModule(torch.nn.Module):
+            def forward(
+                self, lengths: torch.Tensor, values: torch.Tensor, weights: torch.Tensor
+            ) -> torch.Tensor:
+                j = KeyedJaggedTensor.from_lengths_sync(
+                    lengths=lengths,
+                    values=values,
+                    weights=weights,
+                    keys=["index_0", "index_1"],
+                )
+
+                jt_dict = j.to_dict()
+                return jt_dict["index_0"].values()
+
+        sample_2 = (
+            torch.tensor([2, 0]),
+            torch.arange(2),
+            torch.arange(2),
+        )
+        sample_6 = (
+            torch.tensor([2, 0, 1, 1, 2, 2]),
+            torch.arange(8),
+            torch.arange(8),
+        )
+        m = MyModule()
+        model_eager_traced: torch.jit.ScriptModule = torch.jit.trace(
+            m, sample_2, strict=False
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_2), torch.tensor([0, 1]))
+        )
+        self.assertTrue(
+            torch.equal(model_eager_traced(*sample_6), torch.tensor([0, 1, 2]))
+        )
+        self.assertTrue(torch.equal(m(*sample_6), torch.tensor([0, 1, 2])))
+
     def test_create_and_access_keyed_jagged_tensor(self) -> None:
         class ModuleCreateAndAccessKeyedJaggedTensor(torch.nn.Module):
             def __init__(self):

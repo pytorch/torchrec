@@ -529,6 +529,26 @@ def _maybe_compute_length_per_key(
     return length_per_key
 
 
+def _maybe_compute_length_per_key_tensor(
+    keys: List[str],
+    stride: int,
+    lengths: Optional[torch.Tensor],
+    offsets: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    if len(keys) and offsets is not None and len(offsets) > 0:
+        _length: torch.Tensor = torch.sum(torch.diff(offsets).view(-1, stride), dim=1)
+    elif len(keys) and lengths is not None:
+        _length: torch.Tensor = (
+            torch.sum(lengths.view(-1, stride), dim=1)
+            if lengths.numel() != 0
+            else torch.zeros(len(keys))
+        )
+    else:
+        _length: torch.Tensor = torch.tensor([])
+    length_per_key_tensor = _length
+    return length_per_key_tensor
+
+
 def _maybe_compute_offset_per_key(
     keys: List[str],
     stride: int,
@@ -584,7 +604,15 @@ def _maybe_compute_kjt_to_jt_dict(
 ) -> Dict[str, JaggedTensor]:
     if jt_dict is None:
         _jt_dict: Dict[str, JaggedTensor] = {}
-        values_list = torch.split(values, length_per_key)
+        offset_per_key_tensor: Optional[torch.Tensor] = None
+        if torch.jit.is_tracing():
+            length_per_key_tensor = _maybe_compute_length_per_key_tensor(
+                keys, stride, lengths
+            )
+            offset_per_key_tensor = torch.cumsum(length_per_key_tensor, dim=0)
+            values_list = torch.tensor_split(values, offset_per_key_tensor)[:-1]
+        else:
+            values_list = torch.split(values, length_per_key)
         lengths_tuple = torch.unbind(
             lengths.view(-1, stride) if lengths.numel() != 0 else lengths, dim=0
         )
@@ -596,7 +624,10 @@ def _maybe_compute_kjt_to_jt_dict(
         )
 
         if weights is not None:
-            weights_list = torch.split(weights, length_per_key)
+            if torch.jit.is_tracing() and offset_per_key_tensor is not None:
+                weights_list = torch.tensor_split(weights, offset_per_key_tensor)[:-1]
+            else:
+                weights_list = torch.split(weights, length_per_key)
             for idx, key in enumerate(keys):
                 length = lengths_tuple[idx]
                 offset = offsets_tuple[idx]
