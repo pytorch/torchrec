@@ -89,6 +89,7 @@ jobs:
         conda run -n build_binary \
           python -c "import torchrec"
   upload_package:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [linux.2xlarge]
