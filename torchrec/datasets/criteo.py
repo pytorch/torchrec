@@ -271,6 +271,8 @@ class BinaryCriteoUtils:
         lengths: List[int],
         rank: int,
         world_size: int,
+        start_row: int = 0,
+        last_row: Optional[int] = None,
     ) -> Dict[int, Tuple[int, int]]:
         """
         Given a rank, world_size, and the lengths (number of rows) for a list of files,
@@ -296,14 +298,26 @@ class BinaryCriteoUtils:
         # All ..._g variables are globals indices (meaning they range from 0 to
         # total_length - 1). All ..._l variables are local indices (meaning they range
         # from 0 to lengths[i] - 1 for the ith file).
-
-        total_length = sum(lengths)
+        if last_row is None:
+            total_length = sum(lengths) - start_row
+        else:
+            total_length = last_row - start_row + 1
         rows_per_rank = total_length // world_size
+        remainder = total_length % world_size
 
         # Global indices that rank is responsible for. All ranges (left, right) are
         # inclusive.
-        rank_left_g = rank * rows_per_rank
-        rank_right_g = (rank + 1) * rows_per_rank - 1
+        if rank < remainder:
+            rank_left_g = rank * (rows_per_rank + 1)
+            rank_right_g = (rank + 1) * (rows_per_rank + 1) - 1
+        else:
+            rank_left_g = (
+                remainder * (rows_per_rank + 1) + (rank - remainder) * rows_per_rank
+            )
+            rank_right_g = rank_left_g + rows_per_rank - 1
+
+        rank_left_g += start_row
+        rank_right_g += start_row
 
         output = {}
 
@@ -734,34 +748,31 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         }
 
     def _load_data_for_rank(self) -> None:
-        if self.stage == "train":
-            file_idx_to_row_range = BinaryCriteoUtils.get_file_idx_to_row_range(
-                lengths=[
-                    BinaryCriteoUtils.get_shape_from_npy(
-                        path, path_manager_key=self.path_manager_key
-                    )[0]
-                    for path in self.dense_paths
-                ],
-                rank=self.rank,
-                world_size=self.world_size,
-            )
-        elif self.stage in ["val", "test"]:
+        start_row, last_row = 0, None
+        if self.stage in ["val", "test"]:
             # Last day's dataset is split into 2 sets: 1st half for "val"; 2nd for "test"
             samples_in_file = BinaryCriteoUtils.get_shape_from_npy(
                 self.dense_paths[0], path_manager_key=self.path_manager_key
             )[0]
-
-            dataset_start = 0
+            start_row = 0
             dataset_len = int(np.ceil(samples_in_file / 2.0))
-
             if self.stage == "test":
-                dataset_start = dataset_len
-                dataset_len = samples_in_file - dataset_len
-            segment_len = dataset_len // self.world_size
-            rank_start_row = dataset_start + self.rank * segment_len
+                start_row = dataset_len
+                dataset_len = samples_in_file - start_row
+            last_row = start_row + dataset_len - 1
 
-            rank_last_row = rank_start_row + segment_len - 1
-            file_idx_to_row_range = {0: (rank_start_row, rank_last_row)}
+        file_idx_to_row_range = BinaryCriteoUtils.get_file_idx_to_row_range(
+            lengths=[
+                BinaryCriteoUtils.get_shape_from_npy(
+                    path, path_manager_key=self.path_manager_key
+                )[0]
+                for path in self.dense_paths
+            ],
+            rank=self.rank,
+            world_size=self.world_size,
+            start_row=start_row,
+            last_row=last_row,
+        )
 
         self.dense_arrs, self.sparse_arrs, self.labels_arrs = [], [], []
         for arrs, paths in zip(
