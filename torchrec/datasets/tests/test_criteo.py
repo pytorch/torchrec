@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import math
 import os
 import random
 import tempfile
@@ -239,12 +240,9 @@ class TestBinaryCriteoUtils(CriteoTest):
                 input_files, temp_output_dir, freq_threshold, columns
             )
 
-            output_files = list(
-                map(
-                    lambda f: os.path.join(temp_output_dir, f),
-                    os.listdir(temp_output_dir),
-                )
-            )
+            output_files = [
+                os.path.join(temp_output_dir, f) for f in os.listdir(temp_output_dir)
+            ]
             output_files.sort()
             for day, file in enumerate(output_files):
                 processed_data = np.load(file)
@@ -280,9 +278,9 @@ class TestBinaryCriteoUtils(CriteoTest):
             labels_data = [np.array([[i], [i + 3], [i + 6]]) for i in range(3)]
 
             def save_data_list(data: List[np.ndarray], data_type: str) -> None:
-                for day, data in enumerate(data):
+                for day, data_ in enumerate(data):
                     file = os.path.join(temp_input_dir, f"day_{day}_{data_type}.npy")
-                    np.save(file, data)
+                    np.save(file, data_)
 
             save_data_list(dense_data, "dense")
             save_data_list(sparse_data, "sparse")
@@ -380,14 +378,14 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 dataset_start = num_rows // 2 + num_rows % 2
                 dataset_len = num_rows // 2
 
-            incomplete_last_batch_size = dataset_len // world_size % batch_size
-            num_batches = dataset_len // world_size // batch_size + (
-                incomplete_last_batch_size != 0
-            )
-
             lens = []
-            samples_counts = []
+            remainder = dataset_len % world_size
             for rank in range(world_size):
+                incomplete_last_batch_size = (
+                    dataset_len // world_size % batch_size + int(rank < remainder)
+                )
+                num_samples = dataset_len // world_size + int(rank < remainder)
+                num_batches = math.ceil(num_samples / batch_size)
                 datapipe = InMemoryBinaryCriteoIterDataPipe(
                     stage=stage,
                     dense_paths=[f[0] for f in files],
@@ -421,12 +419,14 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 # Check that dataset __len__ matches true length.
                 self.assertEqual(datapipe_len, len_)
                 lens.append(len_)
-                self.assertEqual(samples_count, dataset_len // world_size)
-                samples_counts.append(samples_count)
+                self.assertEqual(samples_count, num_samples)
 
-            # Ensure all ranks' datapipes return the same number of batches.
-            self.assertEqual(len(set(lens)), 1)
-            self.assertEqual(len(set(samples_counts)), 1)
+            # Ensure all ranks return the correct number of batches.
+            if remainder > 0:
+                self.assertEqual(len(set(lens[:remainder])), 1)
+                self.assertEqual(len(set(lens[remainder:])), 1)
+            else:
+                self.assertEqual(len(set(lens)), 1)
 
     def test_dataset_small_files(self) -> None:
         self._test_dataset([1] * 20, 4, 2)
