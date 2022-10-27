@@ -61,6 +61,7 @@ class QCommsConfig:
     # divide the gradient of the encoder by this value. In some cases this can provide additional numerical stability.
     forward_loss_scale: Optional[float] = None
     backward_loss_scale: Optional[float] = None
+    fp8_quantize_dim: Optional[int] = None
 
 
 def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCodecs:
@@ -73,6 +74,8 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                     qcomms_config.forward_precision
                 ),
                 loss_scale=qcomms_config.forward_loss_scale,
+                is_fwd=True,
+                row_dim=qcomms_config.fp8_quantize_dim,
             ),
         )
         codecs.backward = cast(
@@ -82,6 +85,8 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                     qcomms_config.backward_precision
                 ),
                 loss_scale=qcomms_config.backward_loss_scale,
+                is_fwd=False,
+                row_dim=qcomms_config.fp8_quantize_dim,
             ),
         )
     return codecs
@@ -125,12 +130,13 @@ def get_qcomm_codecs_registry(
         # TODO: On H100, FP8 types might be natively supported, in which case we should check for that arch type and not fallback.
         if (
             comm_op == CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER
-            and qcomm_config_copy.forward_precision == CommType.FP8
+            and (qcomm_config_copy.forward_precision == CommType.FP8 or qcomm_config_copy.backward_precision == CommType.FP8)
         ):
             logger.warning(
                 "FP8 is not for forward_precision is not supported for reduce scatter - falling back to FP16."
             )
             qcomm_config_copy.forward_precision = CommType.FP16
+            qcomm_config_copy.backward_precision = CommType.BF16  # TODO enable FP8 all gather
 
         if device.type == "cpu":
             if qcomm_config_copy.forward_precision == CommType.BF16:
