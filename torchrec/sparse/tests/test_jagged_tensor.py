@@ -955,6 +955,178 @@ class TestKeyedJaggedTensor(unittest.TestCase):
                 keys=keys, values=values, offsets=offsets
             )
 
+    def test_to_dict_is_traceable_unweighted(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(
+                self,
+                offsets: torch.Tensor,
+                values: torch.Tensor,
+            ):
+                keys = ["index_0", "index_1"]
+                j = KeyedJaggedTensor.from_offsets_sync(
+                    keys=keys,
+                    offsets=offsets,
+                    values=values,
+                )
+                d = j.to_dict()
+                return tuple(
+                    [
+                        (
+                            v.values(),
+                            v.lengths(),
+                            v.offsets(),
+                        )
+                        for (k, v) in d.items()
+                    ]
+                )
+
+        sample_1 = (
+            torch.tensor([0, 0, 2, 3, 5, 5, 6]),
+            torch.arange(6),
+        )
+        sample_2 = (
+            torch.tensor([0, 0, 2, 3, 4]),
+            torch.arange(4),
+        )
+        sample_3 = (
+            torch.tensor([0, 0, 2, 3, 4, 7, 8]),
+            torch.arange(8),
+        )
+
+        samples: List[Tuple[torch.Tensor, torch.Tensor]] = [
+            sample_1,
+            sample_2,
+            sample_3,
+        ]
+
+        m = MyModule()
+
+        for trace_sample in samples:
+            traced_m: torch.jit.ScriptModule = torch.jit.trace(
+                m, trace_sample, strict=False
+            )
+            for test_sample in samples:
+                output_from_native = m(*test_sample)
+                output_from_traced = traced_m(*test_sample)
+                self.assertTrue(
+                    all(
+                        [
+                            all(
+                                [
+                                    torch.equal(*corresponding_tensor_pair)
+                                    for corresponding_tensor_pair in zip(*kjt_pair)
+                                ]
+                            )
+                            for kjt_pair in zip(output_from_native, output_from_traced)
+                        ]
+                    ),
+                    f"While using {trace_sample=} and {test_sample=}, "
+                    "received unequal outputs from native model and traced models."
+                    f"{output_from_native=}, {output_from_traced=}",
+                )
+
+        traced_models = set()
+        for sample in samples:
+            traced_m: torch.jit.ScriptModule = torch.jit.trace(m, sample, strict=False)
+            code, constants = traced_m.code_with_constants  # type: ignore
+            traced_models.add((code, tuple(constants.const_mapping.items())))
+
+        self.assertEqual(
+            len(traced_models),
+            1,
+            "Expected all (code, constants) pairs created as a "
+            "result of tracing the module to be equal",
+        )
+
+    def test_to_dict_is_traceable_weighted(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(
+                self,
+                offsets: torch.Tensor,
+                values: torch.Tensor,
+                weights: torch.Tensor,
+            ):
+                keys = ["index_0", "index_1"]
+                j = KeyedJaggedTensor.from_offsets_sync(
+                    keys=keys,
+                    offsets=offsets,
+                    values=values,
+                    weights=weights,
+                )
+                d = j.to_dict()
+                return tuple(
+                    [
+                        (
+                            v.values(),
+                            v.lengths(),
+                            v.offsets(),
+                            v.weights(),
+                        )
+                        for (k, v) in d.items()
+                    ]
+                )
+
+        sample_1 = (
+            torch.tensor([0, 0, 2, 3, 5, 5, 6]),
+            torch.arange(6),
+            torch.arange(10, 16),
+        )
+        sample_2 = (
+            torch.tensor([0, 0, 2, 3, 4]),
+            torch.arange(4),
+            torch.arange(10, 14),
+        )
+        sample_3 = (
+            torch.tensor([0, 0, 2, 3, 4, 7, 8]),
+            torch.arange(8),
+            torch.arange(10, 18),
+        )
+
+        samples: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = [
+            sample_1,
+            sample_2,
+            sample_3,
+        ]
+
+        m = MyModule()
+
+        for trace_sample in samples:
+            traced_m: torch.jit.ScriptModule = torch.jit.trace(
+                m, trace_sample, strict=False
+            )
+            for test_sample in samples:
+                output_from_native = m(*test_sample)
+                output_from_traced = traced_m(*test_sample)
+                self.assertTrue(
+                    all(
+                        [
+                            all(
+                                [
+                                    torch.equal(*corresponding_tensor_pair)
+                                    for corresponding_tensor_pair in zip(*kjt_pair)
+                                ]
+                            )
+                            for kjt_pair in zip(output_from_native, output_from_traced)
+                        ]
+                    ),
+                    f"While using {trace_sample=} and {test_sample=}, "
+                    "received unequal outputs from native model and traced models."
+                    f"{output_from_native=}, {output_from_traced=}",
+                )
+
+        traced_models = set()
+        for sample in samples:
+            traced_m: torch.jit.ScriptModule = torch.jit.trace(m, sample, strict=False)
+            code, constants = traced_m.code_with_constants  # type: ignore
+            traced_models.add((code, tuple(constants.const_mapping.items())))
+
+        self.assertEqual(
+            len(traced_models),
+            1,
+            "Expected all (code, constants) pairs created as a "
+            "result of tracing the module to be equal",
+        )
+
     def test_scriptable(self) -> None:
         class MyModule(torch.nn.Module):
             def forward(self, input: KeyedJaggedTensor) -> torch.Tensor:
