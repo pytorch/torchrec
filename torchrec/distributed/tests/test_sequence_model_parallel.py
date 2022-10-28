@@ -14,14 +14,22 @@ import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import assume, given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
-from torchrec.distributed.test_utils.test_model import TestSparseNNBase
-from torchrec.distributed.test_utils.test_sharding import sharding_single_rank_test
+from torchrec.distributed.test_utils.test_model import TestECSharder, TestSparseNNBase
+from torchrec.distributed.test_utils.test_sharding import (
+    SharderType,
+    sharding_single_rank_test,
+)
 from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
     TestSequenceSparseNN,
+    TestVariableBatchSequenceSparseNN,
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingConfig
@@ -64,6 +72,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(
@@ -74,22 +83,37 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
+
+        fused_params = {}
+        qcomm_codecs_registry = {}
+        if qcomms_config is not None:
+            qcomm_codecs_registry = get_qcomm_codecs_registry(
+                qcomms_config, device=torch.device("cuda")
+            )
         self._test_sharding(
             sharders=[
-                TestEmbeddingCollectionSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                    qcomms_config=qcomms_config,
-                )
+                TestECSharder(
+                    sharding_type,
+                    kernel_type,
+                    fused_params,
+                    qcomm_codecs_registry,
+                    variable_batch_size,
+                ),
             ],
-            backend="nccl",
+            model_class=TestVariableBatchSequenceSparseNN
+            if variable_batch_size
+            else TestSequenceSparseNN,
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            backend="nccl",
+            variable_batch_size=variable_batch_size,
+            is_sequence=True,
         )
 
     @unittest.skipIf(
@@ -123,10 +147,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
     ) -> None:
         self._test_sharding(
             sharders=[
-                TestEmbeddingCollectionSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                TestECSharder(
+                    sharding_type,
+                    kernel_type,
+                ),
             ],
             backend="nccl",
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
@@ -166,6 +190,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(
@@ -176,26 +201,40 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
         )
+        fused_params = {}
+        qcomm_codecs_registry = {}
+        if qcomms_config is not None:
+            qcomm_codecs_registry = get_qcomm_codecs_registry(
+                qcomms_config, device=torch.device("cuda")
+            )
         self._test_sharding(
             sharders=[
-                TestEmbeddingCollectionSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                    qcomms_config=qcomms_config,
-                )
+                TestECSharder(
+                    sharding_type,
+                    kernel_type,
+                    fused_params,
+                    qcomm_codecs_registry,
+                    variable_batch_size,
+                ),
             ],
-            backend="nccl",
+            model_class=TestVariableBatchSequenceSparseNN
+            if variable_batch_size
+            else TestSequenceSparseNN,
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            backend="nccl",
+            variable_batch_size=variable_batch_size,
+            is_sequence=True,
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        True,
         "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-fixme[56]
@@ -236,10 +275,10 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         )
         self._test_sharding(
             sharders=[
-                TestEmbeddingCollectionSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=kernel_type,
-                )
+                TestECSharder(
+                    sharding_type,
+                    kernel_type,
+                ),
             ],
             backend="nccl",
             constraints={
@@ -291,7 +330,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
 
     def _test_sharding(
         self,
-        sharders: List[TestEmbeddingCollectionSharder],
+        sharders: List[TestECSharder],
         backend: str = "gloo",
         world_size: int = 2,
         local_size: Optional[int] = None,
@@ -301,6 +340,8 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ] = None,
+        variable_batch_size: bool = False,
+        is_sequence: bool = False,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -315,4 +356,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             constraints=constraints,
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
+            is_sequence=is_sequence,
         )

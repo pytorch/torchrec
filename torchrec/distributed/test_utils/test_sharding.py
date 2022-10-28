@@ -29,6 +29,7 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
     TestEBSharder,
+    TestECSharder,
     TestETCSharder,
     TestETSharder,
     TestSparseNNBase,
@@ -49,6 +50,7 @@ from typing_extensions import Protocol
 class SharderType(Enum):
     EMBEDDING_BAG = "embedding_bag"
     EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
+    EMBEDDING_COLLECTION = "embedding_collection"
     EMBEDDING_TOWER = "embedding_tower"
     EMBEDDING_TOWER_COLLECTION = "embedding_tower_collection"
 
@@ -61,7 +63,7 @@ def create_test_sharder(
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
     variable_batch_size: bool = False,
-) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
+) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder, TestECSharder]:
     if fused_params is None:
         fused_params = {}
     qcomm_codecs_registry = {}
@@ -75,6 +77,14 @@ def create_test_sharder(
         )
     elif sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value:
         return TestEBCSharder(
+            sharding_type,
+            kernel_type,
+            fused_params,
+            qcomm_codecs_registry,
+            variable_batch_size,
+        )
+    elif sharder_type == SharderType.EMBEDDING_COLLECTION.value:
+        return TestECSharder(
             sharding_type,
             kernel_type,
             fused_params,
@@ -106,6 +116,7 @@ class ModelInputCallable(Protocol):
             Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
         ] = None,
         variable_batch_size: bool = False,
+        is_sequence: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         ...
 
@@ -119,6 +130,7 @@ def generate_inputs(
     batch_size: int = 4,
     num_float_features: int = 16,
     variable_batch_size: bool = False,
+    is_sequence: bool = False,
 ) -> Tuple[ModelInput, List[ModelInput]]:
     return generate(
         batch_size=batch_size,
@@ -128,6 +140,7 @@ def generate_inputs(
         dedup_tables=dedup_tables,
         weighted_tables=weighted_tables or [],
         variable_batch_size=variable_batch_size,
+        is_sequence=is_sequence,
     )
 
 
@@ -145,6 +158,7 @@ def gen_model_and_input(
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    is_sequence: bool = False,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -183,6 +197,7 @@ def gen_model_and_input(
             num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
+            is_sequence=is_sequence,
         )
     ]
     return (model, inputs)
@@ -243,6 +258,7 @@ def sharding_single_rank_test(
     ] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    is_sequence: bool = False,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -256,6 +272,7 @@ def sharding_single_rank_test(
             num_float_features=16,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
+            is_sequence=is_sequence,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
@@ -353,6 +370,7 @@ def sharding_single_rank_test(
         all_local_pred = []
         for _ in range(world_size):
             all_local_pred.append(torch.empty_like(local_pred))
+
         dist.all_gather(all_local_pred, local_pred, group=ctx.pg)
 
         # Run second training step of the unsharded model.

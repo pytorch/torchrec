@@ -10,6 +10,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
     EmbeddingTowerSharder,
@@ -23,7 +24,11 @@ from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
 from torchrec.inference.modules import CopyableMixin
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
+from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
+    EmbeddingBagConfig,
+    EmbeddingConfig,
+)
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
@@ -43,13 +48,22 @@ class ModelInput(Pipelineable):
         batch_size: int,
         world_size: int,
         num_float_features: int,
-        tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
-        weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+        weighted_tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
         pooling_avg: int = 10,
         dedup_tables: Optional[
-            Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
+            Union[
+                List[EmbeddingTableConfig],
+                List[EmbeddingBagConfig],
+                List[EmbeddingConfig],
+            ]
         ] = None,
         variable_batch_size: bool = False,
+        is_sequence: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -813,6 +827,39 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
 
 
 class TestEBCSharder(EmbeddingBagCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
+    ) -> None:
+        if fused_params is None:
+            fused_params = {}
+
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+        super().__init__(fused_params, qcomm_codecs_registry, variable_batch_size)
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
+
+
+class TestECSharder(EmbeddingCollectionSharder):
     def __init__(
         self,
         sharding_type: str,

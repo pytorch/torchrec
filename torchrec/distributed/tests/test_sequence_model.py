@@ -31,6 +31,34 @@ except OSError:
     pass
 
 
+@torch.fx.wrap
+def _post_seq_sparsenn_forward(
+    padded_embeddings: List[torch.Tensor],
+    batch_size: Optional[int] = None,
+) -> torch.Tensor:
+    if batch_size is None:
+
+        return torch.cat(
+            padded_embeddings,
+            dim=1,
+        )
+
+    else:
+
+        seq_emb = torch.cat(padded_embeddings, dim=1)
+
+        ec_values = torch.zeros(
+            batch_size,
+            seq_emb.size(1),
+            dtype=seq_emb.dtype,
+            device=seq_emb.device,
+        )
+
+        ec_values[: seq_emb.size(0), :] = seq_emb
+
+        return ec_values
+
+
 class TestSequenceSparseArch(nn.Module):
     def __init__(
         self,
@@ -50,8 +78,10 @@ class TestSequenceSparseArch(nn.Module):
     def forward(
         self,
         id_list_features: KeyedJaggedTensor,
+        batch_size: Optional[int] = None,
     ) -> torch.Tensor:
         jt_dict = self.ec(id_list_features)
+
         padded_embeddings = [
             torch.ops.fbgemm.jagged_2d_to_dense(
                 values=jt_dict[e].values(),
@@ -60,10 +90,8 @@ class TestSequenceSparseArch(nn.Module):
             ).view(-1, 20 * self.embedding_dim)
             for e in self.embedding_names
         ]
-        return torch.cat(
-            padded_embeddings,
-            dim=1,
-        )
+
+        return _post_seq_sparsenn_forward(padded_embeddings, batch_size)
 
 
 class TestSequenceTowerInteraction(nn.Module):
@@ -224,6 +252,53 @@ class TestSequenceOverArch(nn.Module):
         sparse: torch.Tensor,
     ) -> torch.Tensor:
         return self.linear(torch.cat([dense, sparse], dim=1))
+
+
+class TestVariableBatchSequenceSparseNN(TestSparseNNBase):
+    def __init__(
+        self,
+        tables: List[EmbeddingConfig],
+        weighted_tables: Optional[List[EmbeddingConfig]] = None,
+        num_float_features: int = 10,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(Optional[List[BaseEmbeddingConfig]], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+        if embedding_groups is None:
+            embedding_groups = {}
+
+        self.dense = TestDenseArch(
+            device=dense_device, num_float_features=num_float_features
+        )
+        self.sparse = TestSequenceSparseArch(
+            tables,
+            list(embedding_groups.values())[0] if embedding_groups.values() else [],
+            device=sparse_device,
+        )
+        self.over = TestSequenceOverArch(tables=tables, device=dense_device)
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        dense_r = self.dense(input.float_features)
+        sparse_r = self.sparse(input.idlist_features, input.float_features.size(0))
+        over_r = self.over(dense_r, sparse_r)
+        pred = torch.sigmoid(torch.mean(over_r, dim=1))
+        if self.training:
+            return (
+                torch.nn.functional.binary_cross_entropy_with_logits(pred, input.label),
+                pred,
+            )
+        else:
+            return pred
 
 
 class TestSequenceSparseNN(TestSparseNNBase):

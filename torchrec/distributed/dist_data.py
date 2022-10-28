@@ -509,7 +509,7 @@ class KJTAllToAll(nn.Module):
                 # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
                 local_split=splits[pg.rank()],
                 num_splits=len(splits),
-                device=device,
+                device=device,  # pyre-ignore[6]
                 stagger=stagger,
             ),
         )
@@ -1007,13 +1007,13 @@ class SequenceEmbeddingsAllToAll(nn.Module):
     ) -> None:
         super().__init__()
         self._pg = pg
-        self._local_split = features_per_rank[self._pg.rank()]
-        self._num_splits = self._pg.size()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
+        self._local_split: int = features_per_rank[self._pg.rank()]
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+        self._num_splits: int = self._pg.size()
 
         forward_recat = []
-        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         for j in range(self._num_splits):
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
             for i in range(self._local_split):
                 forward_recat.append(j + i * self._num_splits)
         self.register_buffer(
@@ -1083,7 +1083,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             lengths_after_sparse_data_all2all=lengths,
             input_splits=input_splits,
             output_splits=output_splits,
-            variable_batch_size=variable_batch_size,
+            variable_batch_size=variable_batch_size,  # pyre-fixme [6]
             group=self._pg,
             codecs=self._codecs,
         )
