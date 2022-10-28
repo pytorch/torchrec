@@ -344,6 +344,45 @@ example and further information.</p>
 <section id="module-torchrec.sparse.jagged_tensor">
 <span id="torchrec-sparse-jagged-tensor"></span><h2>torchrec.sparse.jagged_tensor<a class="headerlink" href="#module-torchrec.sparse.jagged_tensor" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.ComputeKJTToJTDict">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">ComputeKJTToJTDict</span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Converts a KeyedJaggedTensor to a dict of JaggedTensors.</p>
+<p>Args:</p>
+<p>Example::
+#              0       1        2  &lt;– dim_1
+# “Feature0”   [V0,V1] None    [V2]
+# “Feature1”   [V3]    [V4]    [V5,V6,V7]
+#   ^
+#  dim_0</p>
+<p>would return</p>
+<dl class="simple">
+<dt>{</dt><dd><p>“Feature0”: JaggedTensor([[V0,V1],None,V2]),
+“Feature1”: JaggedTensor([V3,V4,[V5,V6,V7]]),</p>
+</dd>
+</dl>
+<p>}</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keyed_jagged_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a KeyedJaggedTensor into a dict of JaggedTensors.
+:param keyed_jagged_tensor: tensor to convert
+:type keyed_jagged_tensor: KeyedJaggedTensor</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str, JaggedTensor]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">JaggedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Pipelineable</span></code></p>
@@ -918,6 +957,11 @@ example and further information.</p>
               <ul>
 <li><a class="reference internal" href="#">torchrec.sparse</a><ul>
 <li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.forward"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict.forward()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.training"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict.training</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor"><code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.empty()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.from_dense()</span></code></a></li>
