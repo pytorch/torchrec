@@ -27,7 +27,6 @@ jobs:
             python-version: 3.7
             python-tag: "py37"
             cuda-tag: "cpu"
-
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
