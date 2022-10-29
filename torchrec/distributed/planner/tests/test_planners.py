@@ -15,7 +15,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import PlannerError, PlannerErrorType, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import ModuleSharder, ShardingPlan, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -133,3 +133,18 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         ]
 
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
+
+    def test_no_sharders(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        sharding_plan = self.planner.plan(module=model, sharders=[])
+
+        self.assertEqual(sharding_plan, ShardingPlan({}))

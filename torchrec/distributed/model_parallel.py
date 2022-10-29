@@ -18,16 +18,13 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
-from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+
+from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     ModuleCopyMixin,
     ModuleSharder,
@@ -46,16 +43,6 @@ from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
 
 _DDP_STATE_DICT_PREFIX = "module."
-
-
-def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
-    return [
-        cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], FusedEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
-    ]
 
 
 class DataParallelWrapper(abc.ABC):
@@ -249,6 +236,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._init_dmp(
             fused_optims=fused_optims,
         )
+
+        if init_parameters:
+            self._init_parameters(self.module)
+
         if init_data_parallel:
             self.init_data_parallel()
         self._optim = CombinedOptimizer(fused_optims)
@@ -574,38 +565,3 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
-
-
-def copy_to_device(
-    module: nn.Module,
-    current_device: torch.device,
-    to_device: torch.device,
-) -> nn.Module:
-
-    with sharded_model_copy(device=None):
-        copy_module = copy.deepcopy(module)
-
-    # Copy only weights with matching device.
-    def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
-        if tensor.device == current_device:
-            return tensor.to(to_device)
-        return tensor
-
-    # if this is a sharded module, customize the copy
-    if isinstance(copy_module, ModuleCopyMixin):
-        return copy_module.copy(to_device)
-
-    for child_name, child in copy_module.named_children():
-        if not any(
-            [isinstance(submodule, ModuleCopyMixin) for submodule in child.modules()]
-        ):
-            child_copy = child._apply(_copy_if_device_match)
-        else:
-            child_copy = copy_to_device(child, current_device, to_device)
-        copy_module.register_module(child_name, child_copy)
-    return copy_module
-
-
-def bind_copy_to_device(module: nn.Module) -> None:
-    # pyre-ignore
-    module.copy = types.MethodType(copy_to_device, module)

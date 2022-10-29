@@ -10,7 +10,6 @@ from functools import reduce
 from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
 
-import torch
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
@@ -41,6 +40,7 @@ from torchrec.distributed.planner.types import (
     StorageReservation,
     Topology,
 )
+from torchrec.distributed.sharding_plan import placement
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
     ModuleSharder,
@@ -56,15 +56,6 @@ def _to_sharding_plan(
     sharding_options: List[ShardingOption],
     topology: Topology,
 ) -> ShardingPlan:
-    def _placement(
-        compute_device: str,
-        rank: int,
-        local_size: int,
-    ) -> str:
-        param_device = compute_device
-        if compute_device == "cuda":
-            param_device = torch.device("cuda", rank % local_size)
-        return f"rank:{rank}/{param_device}"
 
     compute_device = topology.compute_device
     local_size = topology.local_world_size
@@ -83,7 +74,7 @@ def _to_sharding_plan(
                     ShardMetadata(
                         shard_sizes=shard.size,
                         shard_offsets=shard.offset,
-                        placement=_placement(
+                        placement=placement(
                             compute_device, cast(int, shard.rank), local_size
                         ),
                     )
@@ -304,7 +295,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
-            if global_storage_constraints < lowest_storage:
+            if not lowest_storage.fits_in(global_storage_constraints):
                 raise PlannerError(
                     error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
                     message="Unable to find a plan for this model because of insufficient storage. \n"

@@ -21,7 +21,7 @@ def _join_module_path(path: str, name: str) -> str:
     return (path + "." + name) if path else name
 
 
-def shard_embedding_modules(
+def shard(
     module: nn.Module,
     env: Optional[ShardingEnv] = None,
     device: Optional[torch.device] = None,
@@ -56,7 +56,7 @@ def shard_embedding_modules(
                     init.kaiming_normal_(param)
 
         m = MyModel(device='meta')
-        m = shard_embedding_modules(m)
+        m = shard(m)
         assert isinstance(m.embedding_bag_collection, ShardedEmbeddingBagCollection)
     """
 

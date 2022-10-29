@@ -87,7 +87,6 @@ def _reserve_kjt_storage(
 def _reserve_storage_percentage(topology: Topology, percent: float) -> None:
     for device in topology.devices:
         device.storage.hbm = int((1 - percent) * device.storage.hbm)
-        device.storage.ddr = int((1 - percent) * device.storage.ddr)
 
 
 def _get_input_lengths_and_shardable_parameters(

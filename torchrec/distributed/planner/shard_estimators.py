@@ -6,9 +6,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import cast, Dict, List, Optional, Tuple
+from typing import cast, Dict, List, Optional, Tuple, Type
 
 import torch
+import torchrec.optim as trec_optim
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
@@ -58,7 +59,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
         if not sharder_map:
-            raise ValueError("sharder map not provided for perf estimator")
+            assert not sharding_options, "sharder_map not provided for sharding_options"
+            return
 
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
@@ -573,7 +575,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
         if not sharder_map:
-            raise ValueError("sharder map not provided for storage estimator")
+            assert not sharding_options, "sharder_map not provided for sharding_options"
+            return
 
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
@@ -687,19 +690,21 @@ def calculate_shard_storages(
     }:
         hbm_storage = round(ddr_storage * caching_ratio)
 
+    optimizer_class = getattr(tensor, "_optimizer_class", None)
+
     hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=hbm_storage,
         shape=tensor.shape,
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
-        compute_kernel=compute_kernel,
+        optimizer_class=optimizer_class,
     )
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
         shape=tensor.shape,
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
-        compute_kernel=compute_kernel,
+        optimizer_class=optimizer_class,
     )
 
     hbm_sizes: List[int] = [
@@ -976,7 +981,7 @@ def _calculate_storage_specific_sizes(
     shape: torch.Size,
     shard_sizes: List[List[int]],
     sharding_type: str,
-    compute_kernel: str,
+    optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
 ) -> List[int]:
     tensor_sizes: List[int] = [
         math.ceil(storage * prod(size) / prod(shape))
@@ -984,13 +989,29 @@ def _calculate_storage_specific_sizes(
         else storage
         for size in shard_sizes
     ]
+    optimizer_multipler: float = _get_optimizer_multipler(optimizer_class, shape)
 
     optimizer_sizes: List[int] = [
-        tensor_size * 2 if compute_kernel == EmbeddingComputeKernel.DENSE.value else 0
-        for tensor_size in tensor_sizes
+        math.ceil(tensor_size * optimizer_multipler) for tensor_size in tensor_sizes
     ]
 
     return [
         tensor_size + optimizer_size
         for tensor_size, optimizer_size in zip(tensor_sizes, optimizer_sizes)
     ]
+
+
+def _get_optimizer_multipler(
+    optimizer_class: Optional[Type[torch.optim.Optimizer]],
+    shape: torch.Size,
+) -> float:
+    if not optimizer_class:
+        return 0.0
+    if optimizer_class in [torch.optim.SGD, trec_optim.SGD]:
+        return 0
+    elif optimizer_class in [torch.optim.Adam, trec_optim.Adam]:
+        return 2
+    elif optimizer_class == trec_optim.RowWiseAdagrad:
+        return 1 / shape[-1]
+    else:
+        return 1

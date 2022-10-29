@@ -87,7 +87,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -105,7 +105,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
@@ -130,7 +130,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             qcomms_config=qcomms_config,
             backend="nccl",
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
         )
 
@@ -156,7 +156,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from([None]),
+        apply_optimizer_in_backward_config=st.sampled_from([None]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
@@ -165,7 +165,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharder_type: str,
         sharding_type: str,
         kernel_type: str,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
@@ -176,7 +176,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -210,7 +210,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -228,7 +228,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
@@ -255,7 +255,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
         )
 
@@ -291,7 +291,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -309,7 +309,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
@@ -332,7 +332,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
         )
 
@@ -365,7 +365,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -382,7 +382,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
@@ -399,7 +399,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             qcomms_config=qcomms_config,
             backend="gloo",
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     # pyre-fixme[56]
@@ -432,7 +432,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -449,7 +449,7 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
@@ -472,7 +472,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     # pyre-fixme[56]

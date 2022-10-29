@@ -41,7 +41,7 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from typing_extensions import Protocol
 
@@ -144,6 +144,7 @@ def gen_model_and_input(
     dedup_feature_names: Optional[List[str]] = None,
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
     variable_batch_size: bool = False,
+    batch_size: int = 4,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -181,6 +182,7 @@ def gen_model_and_input(
             weighted_tables=weighted_tables,
             num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
+            batch_size=batch_size,
         )
     ]
     return (model, inputs)
@@ -236,10 +238,11 @@ def sharding_single_rank_test(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
     qcomms_config: Optional[QCommsConfig] = None,
-    apply_overlapped_optimizer_config: Optional[
+    apply_optimizer_in_backward_config: Optional[
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
     variable_batch_size: bool = False,
+    batch_size: int = 4,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -252,6 +255,7 @@ def sharding_single_rank_test(
             world_size=world_size,
             num_float_features=16,
             variable_batch_size=variable_batch_size,
+            batch_size=batch_size,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
@@ -270,20 +274,20 @@ def sharding_single_rank_test(
         global_model_named_params_as_dict = dict(global_model.named_parameters())
         local_model_named_params_as_dict = dict(local_model.named_parameters())
 
-        if apply_overlapped_optimizer_config is not None:
+        if apply_optimizer_in_backward_config is not None:
             for apply_optim_name, (
                 optimizer_type,
                 optimizer_kwargs,
-            ) in apply_overlapped_optimizer_config.items():
+            ) in apply_optimizer_in_backward_config.items():
                 for name, param in global_model_named_params_as_dict.items():
                     if name not in apply_optim_name:
                         continue
                     assert name in local_model_named_params_as_dict
                     local_param = local_model_named_params_as_dict[name]
-                    apply_overlapped_optimizer(
+                    apply_optimizer_in_backward(
                         optimizer_type, [param], optimizer_kwargs
                     )
-                    apply_overlapped_optimizer(
+                    apply_optimizer_in_backward(
                         optimizer_type, [local_param], optimizer_kwargs
                     )
 

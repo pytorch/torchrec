@@ -22,6 +22,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.inference.modules import CopyableMixin
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
@@ -271,7 +272,7 @@ class TestDenseArch(nn.Module):
             in_features=num_float_features, out_features=8, device=device
         )
 
-        self.dummy_param = torch.nn.Parameter(torch.empty(2))
+        self.dummy_param = torch.nn.Parameter(torch.empty(2, device=device))
         self.register_buffer(
             "dummy_buffer",
             torch.nn.Parameter(torch.empty(1, device=device)),
@@ -513,7 +514,7 @@ class TestSparseNNBase(nn.Module):
             sparse_device = torch.device("cpu")
 
 
-class TestSparseNN(TestSparseNNBase):
+class TestSparseNN(TestSparseNNBase, CopyableMixin):
     """
     Simple version of a SparseNN model.
 
