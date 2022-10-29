@@ -19,14 +19,14 @@ on:
 
 jobs:
   build_test:
-   strategy:
-      matrix:
-        include:
-         - os: linux.2xlarge
-          # ideally we run on 3.8 and 3.9 as well, however we are limited in resources.
-           python-version: 3.7
-           python-tag: "py37"
-           cuda-tag: "cpu"
+    strategy:
+        matrix:
+          include:
+          - os: linux.2xlarge
+            # ideally we run on 3.8 and 3.9 as well, however we are limited in resources.
+            python-version: 3.7
+            python-tag: "py37"
+            cuda-tag: "cpu"
 
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
