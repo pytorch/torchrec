@@ -6,17 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
-import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.planner.constants import (
-    BATCH_SIZE,
-    MIN_CW_DIM,
-    POOLING_FACTOR,
-)
+from torchrec.distributed.planner.constants import MIN_CW_DIM, POOLING_FACTOR
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
@@ -31,6 +25,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import sharder_name
+from torchrec.distributed.sharding_plan import calculate_shard_sizes_and_offsets
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 
@@ -251,107 +246,6 @@ def get_partition_by_type(sharding_type: str) -> str:
     raise ValueError(
         f"Unrecognized or unsupported sharding type provided: {sharding_type}"
     )
-
-
-def calculate_shard_sizes_and_offsets(
-    tensor: torch.Tensor,
-    world_size: int,
-    local_world_size: int,
-    sharding_type: str,
-    col_wise_shard_dim: Optional[int] = None,
-) -> Tuple[List[List[int]], List[List[int]]]:
-    """
-    Calculates sizes and offsets for tensor sharded according to provided sharding type.
-
-    Args:
-        tensor (torch.Tensor): tensor to be sharded.
-        world_size (int): total number of devices in topology.
-        local_world_size (int): total number of devices in host group topology.
-        sharding_type (str): provided ShardingType value.
-        col_wise_shard_dim (Optional[int]): dimension for column wise sharding split.
-
-    Returns:
-        Tuple[List[List[int]], List[List[int]]]: shard sizes, represented as a list of the dimensions of the sharded tensor on each device, and shard offsets, represented as a list of coordinates of placement on each device.
-
-    Raises:
-        ValueError: If `sharding_type` is not a valid ShardingType.
-    """
-
-    (rows, columns) = tensor.shape
-
-    if sharding_type == ShardingType.DATA_PARALLEL.value:
-        return [[rows, columns]] * world_size, [[0, 0]] * world_size
-    elif sharding_type == ShardingType.TABLE_WISE.value:
-        return [[rows, columns]], [[0, 0]]
-    elif sharding_type == ShardingType.ROW_WISE.value:
-        return _calculate_rw_shard_sizes_and_offsets(rows, world_size, columns)
-    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-        return _calculate_rw_shard_sizes_and_offsets(rows, local_world_size, columns)
-    elif (
-        sharding_type == ShardingType.COLUMN_WISE.value
-        or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
-    ):
-        return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
-
-    raise ValueError(
-        f"Unrecognized or unsupported sharding type provided: {sharding_type}"
-    )
-
-
-def _calculate_rw_shard_sizes_and_offsets(
-    hash_size: int, num_devices: int, columns: int
-) -> Tuple[List[List[int]], List[List[int]]]:
-    """
-    Sets prefix of shard_sizes to be ceil(hash_size/num_devices).
-
-    For example if hash_size = 10, num_devices = 3, we will allocate the rows as 3,3,3,1
-    (rather than 3,3,2,2).
-    This is due to implementation in RW sharding that sets block_size_lists to be ceil.
-    The balanced way is harder to support on GPU.
-    For more details see https://fb.quip.com/xbgbAchCTOL0
-
-    Also consider the example of hash_size = 5, num_devices = 4. The expected rows per
-    rank is [2,2,1,0].
-    """
-
-    block_size: int = math.ceil(hash_size / num_devices)
-    last_rank: int = hash_size // block_size
-    last_block_size: int = hash_size - block_size * last_rank
-    shard_sizes: List[List[int]] = []
-
-    for rank in range(num_devices):
-        if rank < last_rank:
-            local_row: int = block_size
-        elif rank == last_rank:
-            local_row: int = last_block_size
-        else:
-            local_row: int = 0
-        shard_sizes.append([local_row, columns])
-    shard_offsets = [[0, 0]]
-
-    for i in range(num_devices - 1):
-        shard_offsets.append([shard_sizes[i][0] + shard_offsets[i][0], 0])
-
-    return shard_sizes, shard_offsets
-
-
-def _calculate_cw_shard_sizes_and_offsets(
-    hash_size: int,
-    rows: int,
-    col_wise_shard_dim: Optional[int] = None,
-) -> Tuple[List[List[int]], List[List[int]]]:
-    block_size: int = min(
-        col_wise_shard_dim if col_wise_shard_dim else MIN_CW_DIM, hash_size
-    )
-    num_col_wise_shards, residual = divmod(hash_size, block_size)
-
-    shard_sizes: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
-    shard_sizes.append([rows, block_size + residual])
-
-    shard_offsets: List[List[int]] = [
-        [0, block_size * rank] for rank in range(num_col_wise_shards)
-    ]
-    return shard_sizes, shard_offsets
 
 
 def _get_tower_index(name: str, child_module: EmbeddingTowerCollection) -> int:

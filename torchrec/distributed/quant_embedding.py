@@ -6,13 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
-from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding,
     EmbeddingShardingInfo,
@@ -40,10 +38,10 @@ from torchrec.distributed.types import (
     ShardedModule,
     ShardingEnv,
 )
-from torchrec.distributed.utils import filter_state_dict
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
+    EmbeddingConfig,
 )
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
@@ -162,6 +160,9 @@ class ShardedQuantEmbeddingCollection(
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
+
+        self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
+
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, fused_params
         )
@@ -181,9 +182,9 @@ class ShardedQuantEmbeddingCollection(
         }
 
         self._input_dists: List[nn.Module] = []
-        self._lookups: nn.ModuleList = nn.ModuleList()
+        self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params)
-        self._output_dists: nn.ModuleList = nn.ModuleList()
+        self._output_dists: List[nn.Module] = []
 
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
@@ -193,6 +194,27 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_dim: int = module.embedding_dim()
         self._need_indices: bool = module.need_indices()
+
+        # This provides consistency between this class and the EmbeddingBagCollection's
+        # nn.Module API calls (state_dict, named_modules, etc)
+        # Currently, Sharded Quant EC only uses TW sharding, and returns non-sharded tensors as part of state dict
+        # TODO - revisit if we state_dict can be represented as sharded tensor
+        self.embeddings: nn.ModuleDict = nn.ModuleDict()
+        for table in self._embedding_configs:
+            self.embeddings[table.name] = torch.nn.Module()
+
+        for _sharding_type, lookup in zip(
+            self._sharding_type_to_sharding.keys(), self._lookups
+        ):
+            lookup_state_dict = lookup.state_dict()
+            for key in lookup_state_dict:
+                if not key.endswith(".weight"):
+                    continue
+                table_name = key[: -len(".weight")]
+                # Register as buffer because this is an inference model, and can potentially use uint8 types.
+                self.embeddings[table_name].register_buffer(
+                    "weight", lookup_state_dict[key]
+                )
 
     def _create_input_dist(
         self,
@@ -307,41 +329,6 @@ class ShardedQuantEmbeddingCollection(
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         return self.output_dist(ctx, self.compute(ctx, input))
 
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-        for lookup in self._lookups:
-            lookup.state_dict(destination, prefix + "embeddings.", keep_vars)
-        return destination
-
-    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
-    #  inconsistently.
-    def load_state_dict(
-        self,
-        state_dict: "OrderedDict[str, torch.Tensor]",
-        strict: bool = True,
-    ) -> _IncompatibleKeys:
-        missing_keys = []
-        unexpected_keys = []
-        for lookup in self._lookups:
-            missing, unexpected = lookup.load_state_dict(
-                filter_state_dict(state_dict, "embeddings"),
-                strict,
-            )
-            missing_keys.extend(missing)
-            unexpected_keys.extend(unexpected)
-        return _IncompatibleKeys(
-            missing_keys=missing_keys, unexpected_keys=unexpected_keys
-        )
-
     def copy(self, device: torch.device) -> nn.Module:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(device)
@@ -376,15 +363,6 @@ class QuantEmbeddingCollectionSharder(
             dtype_to_data_type(module.output_dtype())
         )
         return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
-
-    def shardable_parameters(
-        self, module: QuantEmbeddingCollection
-    ) -> Dict[str, nn.Parameter]:
-        return {
-            name.split(".")[-2]: param
-            for name, param in module.state_dict().items()
-            if name.endswith(".weight")
-        }
 
     @property
     def module_type(self) -> Type[QuantEmbeddingCollection]:

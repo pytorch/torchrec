@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, Type
 import torch
 
 
-def apply_overlapped_optimizer(
+def apply_optimizer_in_backward(
     optimizer_class: Type[torch.optim.Optimizer],
     params: Iterable[torch.nn.Parameter],
     optimizer_kwargs: Dict[str, Any],
@@ -34,14 +34,14 @@ def apply_overlapped_optimizer(
         param_1 = next(params_generator)
         param_2 = list(params_generator)
 
-        apply_overlapped_optimizer(torch.optim.SGD, [param_1], {"lr": .02})
-        apply_overlapped_optimizer(torch.optim.Adam, param_2, {"lr": .04})
+        apply_optimizer_in_backward(torch.optim.SGD, [param_1], {"lr": .02})
+        apply_optimizer_in_backward(torch.optim.Adam, param_2, {"lr": .04})
 
         print(param_1._optimizer, param_1._optimizer_kwargs)
         >> torch.optim.SGD, {"lr": .02}
     """
 
-    def _apply_overlapped_optimizer_to_param(param: torch.nn.Parameter) -> None:
+    def _apply_optimizer_in_backward_to_param(param: torch.nn.Parameter) -> None:
         # acc_grad creates a new node in the auto_grad graph that comes after
         # the parameter node. In this node's backwards we call the overlapped
         # optimizer.step(). We cannot do the backwards hook on param because
@@ -77,4 +77,4 @@ def apply_overlapped_optimizer(
         param._acc_grad.register_hook(optimizer_hook)
 
     for param in params:
-        _apply_overlapped_optimizer_to_param(param)
+        _apply_optimizer_in_backward_to_param(param)

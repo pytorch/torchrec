@@ -133,5 +133,5 @@ jobs:
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \
-              torchrec_nightly*.whl \
+              torchrec_nightly-*.whl \
               --verbose

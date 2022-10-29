@@ -56,7 +56,7 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
-        apply_overlapped_optimizer_config=st.sampled_from(
+        apply_optimizer_in_backward_config=st.sampled_from(
             [
                 None,
                 {
@@ -71,7 +71,7 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
         self,
         sharding_type: str,
         kernel_type: str,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
@@ -86,7 +86,7 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
             world_size=4,
             local_size=2,
             model_class=TestSequenceTowerSparseNN,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     # TODO: consolidate the following methods with https://fburl.com/code/62zg0kel
@@ -116,7 +116,7 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
         world_size: int = 2,
         local_size: Optional[int] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
-        apply_overlapped_optimizer_config: Optional[
+        apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ] = None,
     ) -> None:
@@ -130,5 +130,5 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
             sharders=sharders,
             optim=EmbOptimType.EXACT_SGD,
             backend=backend,
-            apply_overlapped_optimizer_config=apply_overlapped_optimizer_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )

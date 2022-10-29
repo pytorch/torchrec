@@ -10,11 +10,11 @@ import unittest
 
 import torch
 from torchrec import EmbeddingBagCollection, EmbeddingBagConfig, KeyedJaggedTensor
-from torchrec.optim.apply_overlapped_optimizer import apply_overlapped_optimizer
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 
 
 class ApplyOverlappedOptimizerTest(unittest.TestCase):
-    def test_apply_overlapped_optimizer(self) -> None:
+    def test_apply_optimizer_in_backward(self) -> None:
         ebc = EmbeddingBagCollection(
             tables=[
                 EmbeddingBagConfig(
@@ -26,13 +26,13 @@ class ApplyOverlappedOptimizerTest(unittest.TestCase):
             ]
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             ebc.embedding_bags["t1"].parameters(),
             optimizer_kwargs={"lr": 1.0},
         )
 
-        apply_overlapped_optimizer(
+        apply_optimizer_in_backward(
             torch.optim.SGD,
             ebc.embedding_bags["t2"].parameters(),
             optimizer_kwargs={"lr": 2.0},
