@@ -1,0 +1,73 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: CPU Unit Test CI Test
+
+on:
+  push:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+
+jobs:
+  build_test:
+   strategy:
+      matrix:
+        include:
+         - os: linux.2xlarge
+          # ideally we run on 3.8 and 3.9 as well, however we are limited in resources.
+           python-version: 3.7
+           python-tag: "py37"
+           cuda-tag: "cpu"
+
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: ${{ matrix.os }}
+      # specify cuda here to get the correct build image that contains CUDA build toolkit
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      timeout: 60
+      upload-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+      script: |
+        ldd --version
+        conda create -y --name build_binary python=${{ matrix.python-version }}
+        conda info
+        python --version
+        conda run -n build_binary python --version
+        conda run -n build_binary python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary python -m pip install -r requirements.txt
+        conda run -n build_binary python -m pip uninstall fbgemm_gpu-nightly -y
+        conda run -n build_binary python -m pip install fbgemm-gpu-nightly-cpu
+        conda run -n build_binary python -c "import torch.distributed"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary python -c "import skbuild"
+        echo "skbuild succeeded"
+        conda run -n build_binary python -c "import numpy"
+        conda run -n build_binary python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
+        echo "numpy succeeded"
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --package_name torchrec-test-cpu \
+          --python-tag=${{ matrix.python-tag }}
+          conda run -n build_binary \
+          python -c "import torchrec"
+        conda run -n build_binary \
+          python -m pip install pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
+        mkdir cpp-build
+        cd cpp-build
+        conda run -n build_binary cmake \
+            -DBUILD_TEST=ON \
+            -DCMAKE_PREFIX_PATH=/home/ec2-user/miniconda/envs/build_binary/lib/python3.7/site-packages/torch/share/cmake ..
+        conda run -n build_binary make -j
+        conda run -n build_binary ctest -v .
