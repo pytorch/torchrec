@@ -34,7 +34,6 @@ jobs:
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
       timeout: 60
-      upload-artifact: torchrec_nightly_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
       script: |
         ldd --version
         conda create -y --name build_binary python=${{ matrix.python-version }}
