@@ -63,7 +63,7 @@ jobs:
           python -m pip install pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
-        conda install -n build_binary gxx_linux-64
+        conda install -n build_binary -y gxx_linux-64
         conda run -n build_binary x86_64-conda-linux-gnu-g++ --version
         mkdir cpp-build
         cd cpp-build
