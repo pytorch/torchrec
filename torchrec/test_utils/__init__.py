@@ -24,10 +24,9 @@ TReturn = TypeVar("TReturn")
 
 
 def get_free_port() -> int:
-    address = socket.gethostbyname(socket.gethostname())
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((address, 0))
+            s.bind(("127.0.0.1", 0))
             s.listen(0)
             with closing(s):
                 return s.getsockname()[1]
