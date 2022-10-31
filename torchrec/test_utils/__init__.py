@@ -24,31 +24,17 @@ TReturn = TypeVar("TReturn")
 
 
 def get_free_port() -> int:
-    if socket.has_ipv6:
-        family = socket.AF_INET6
-        address = "localhost6"
-    else:
-        family = socket.AF_INET
-        address = "localhost4"
-    with socket.socket(family, socket.SOCK_STREAM) as s:
-        try:
+    address = socket.gethostbyname(socket.gethostname())
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((address, 0))
             s.listen(0)
             with closing(s):
                 return s.getsockname()[1]
-        except socket.gaierror:
-            if address == "localhost6":
-                address = "::1"
-            else:
-                address = "127.0.0.1"
-            s.bind((address, 0))
-            s.listen(0)
-            with closing(s):
-                return s.getsockname()[1]
-        except Exception as e:
-            raise Exception(
-                f"Binding failed with address {address} while getting free port {e}"
-            )
+    except Exception as e:
+        raise Exception(
+            f"Binding failed with address {address} while getting free port {e}"
+        )
 
 
 def is_asan() -> bool:
@@ -93,7 +79,8 @@ def init_distributed_single_host(
     os.environ["LOCAL_WORLD_SIZE"] = str(local_size if local_size else world_size)
     os.environ["LOCAL_RANK"] = str(rank % local_size if local_size else rank)
     dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
-    # pyre-fixme[7]: Expected `ProcessGroup` but got `Optional[ProcessGroup]`.
+    # pyre-fixme[7]: Expected `ProcessGroup` but got
+    #  `Optional[_distributed_c10d.ProcessGroup]`.
     return dist.group.WORLD
 
 
