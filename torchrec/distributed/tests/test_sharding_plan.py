@@ -92,6 +92,11 @@ def _test_sharding(
 
 @skip_if_asan_class
 class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
+    # TODO: Remove GPU check after T136512190 is fixed
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
     # pyre-fixme[56]
     @given(
         per_param_sharding=st.sampled_from(
@@ -109,8 +114,8 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
                     "table_1": row_wise(),
                 },
                 {
-                    "table_0": column_wise(ranks=[1, 2]),
-                    "table_1": column_wise(ranks=[1, 2]),
+                    "table_0": column_wise(ranks=[0, 1]),
+                    "table_1": column_wise(ranks=[0, 1]),
                 },
             ]
         ),
@@ -164,8 +169,8 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
         module_sharding_plan = construct_module_sharding_plan(
             EmbeddingBagCollection(tables=embedding_bag_config),
             per_param_sharding=per_param_sharding,
-            local_size=2,
-            world_size=2,
+            local_size=WORLD_SIZE,
+            world_size=WORLD_SIZE,
             device_type="cuda" if torch.cuda.is_available() else "cpu",
         )
 
@@ -555,4 +560,65 @@ class ConstructParameterShardingTest(unittest.TestCase):
             local_size=8,
             world_size=32,
         )
+        self.assertDictEqual(expected, module_sharding_plan)
+
+    def test_column_wise(self) -> None:
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name=f"table_{idx}",
+                feature_names=[f"feature_{idx}"],
+                embedding_dim=64,
+                num_embeddings=4096,
+            )
+            for idx in range(2)
+        ]
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding={
+                "table_0": column_wise(ranks=[0, 1]),
+                "table_1": column_wise(ranks=[0, 1]),
+            },
+            local_size=2,
+            world_size=2,
+        )
+        expected = {
+            "table_0": ParameterSharding(
+                sharding_type="column_wise",
+                compute_kernel="dense",
+                ranks=[0, 1],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[4096, 32],
+                            placement="rank:0/cuda:0",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[0, 32],
+                            shard_sizes=[4096, 32],
+                            placement="rank:1/cuda:1",
+                        ),
+                    ]
+                ),
+            ),
+            "table_1": ParameterSharding(
+                sharding_type="column_wise",
+                compute_kernel="dense",
+                ranks=[0, 1],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[4096, 32],
+                            placement="rank:0/cuda:0",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[0, 32],
+                            shard_sizes=[4096, 32],
+                            placement="rank:1/cuda:1",
+                        ),
+                    ]
+                ),
+            ),
+        }
         self.assertDictEqual(expected, module_sharding_plan)
