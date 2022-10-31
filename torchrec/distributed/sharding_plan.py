@@ -381,7 +381,7 @@ def column_wise(
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
-    If there are not enough shards, only the first ceil(embedding_dim/shard_dim) ranks will get shards
+    Table will the sharded column-wise evenly across specified ranks (and can reuse ranks).
 
     Args:
     ranks (List[int]): ranks to place columns
@@ -404,8 +404,17 @@ def column_wise(
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
+        if param.shape[1] % len(ranks) != 0:
+            raise ValueError(
+                f"column dim of {param.shape[1]} cannot be evenly divided across {ranks}"
+            )
+        shard_dim = param.shape[1] // len(ranks)
         size_and_offsets = _get_parameter_size_offsets(
-            param, ShardingType.COLUMN_WISE, local_size, world_size
+            param,
+            ShardingType.COLUMN_WISE,
+            local_size,
+            world_size,
+            col_wise_shard_dim=shard_dim,
         )
 
         size_offset_ranks = []
