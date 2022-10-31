@@ -46,6 +46,8 @@ def state_dict_all_gather_keys(
         pg (ProcessGroup): Process Group used for comms
     """
     names = list(state_dict.keys())
+    # pyre-fixme[6]: For 1st param expected
+    #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
     all_names = [None] * dist.get_world_size(pg)
     dist.all_gather_object(all_names, names, pg)
     deduped_names = set()
@@ -79,6 +81,9 @@ def state_dict_to_device(
                     Shard.from_tensor_and_offsets(
                         tensor=shard.tensor.to(device),
                         shard_offsets=shard.metadata.shard_offsets,
+                        # pyre-fixme[6]: For 1st param expected
+                        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                        #  `ProcessGroup`.
                         rank=dist.get_rank(pg),
                     )
                     for shard in tensor.local_shards()

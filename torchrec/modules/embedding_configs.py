@@ -35,6 +35,9 @@ class DataType(Enum):
     INT4 = "INT4"
     INT2 = "INT2"
 
+    def __str__(self) -> str:
+        return self.value
+
 
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
@@ -102,6 +105,10 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float16
     elif data_type == DataType.INT8:
         return torch.int8
+    elif data_type == DataType.INT4:
+        return torch.quint4x2
+    elif data_type == DataType.INT2:
+        return torch.quint2x4
     else:
         raise ValueError(f"DataType {data_type} cannot be converted to dtype")
 

@@ -14,6 +14,9 @@ It also contains
 - several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
 - Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc
 """
+from torchrec.optim.apply_optimizer_in_backward import (  # noqa
+    apply_optimizer_in_backward,
+)
 
 from torchrec.optim.clipping import GradientClipping, GradientClippingOptimizer  # noqa
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule  # noqa
@@ -23,13 +26,24 @@ from torchrec.optim.keyed import (  # noqa
     KeyedOptimizerWrapper,
     OptimizerWrapper,
 )
+from torchrec.optim.optimizers import (  # noqa
+    Adagrad,
+    Adam,
+    LAMB,
+    LarsSGD,
+    PartialRowWiseAdam,
+    PartialRowWiseLAMB,
+    SGD,
+)
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad  # noqa
 from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage  # noqa
 
 from . import (  # noqa  # noqa  # noqa  # noqa
+    apply_optimizer_in_backward,
     clipping,
     fused,
     keyed,
+    optimizers,
     rowwise_adagrad,
     warmup,
 )

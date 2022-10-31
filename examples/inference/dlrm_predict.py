@@ -97,7 +97,7 @@ class DLRMPredictModule(PredictModule):
         """
 
         try:
-            predictions = self.predict_module(
+            logits = self.predict_module(
                 batch["float_features"],
                 KeyedJaggedTensor(
                     keys=self.id_list_features_keys,
@@ -105,6 +105,7 @@ class DLRMPredictModule(PredictModule):
                     values=batch["id_list_features.values"],
                 ),
             )
+            predictions = logits.sigmoid()
         except Exception as e:
             logger.info(e)
             raise e

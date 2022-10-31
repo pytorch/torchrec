@@ -8,13 +8,11 @@
 import abc
 import copy
 import itertools
-import logging
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops import (
     ComputeDevice,
     DenseTableBatchedEmbeddingBagsCodegen,
@@ -43,8 +41,6 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-
-logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
@@ -254,33 +250,6 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
-def configure_fused_params(
-    fused_params: Optional[Dict[str, Any]], weights_precision: SparseType
-) -> Dict[str, Any]:
-
-    """
-    Configure the fused_params including cache_precision if the value is not preset
-
-    Args:
-        fused_params (Optional[Dict[str, Any]]): the original fused_params
-        weights_precision (SparseType): the weights_precision to be used for
-        the embedding lookup kernel
-
-    Returns:
-        [Dict[str, Any]]: a non-null configured fused_params dictionary to be
-        used to configure the embedding lookup kernel
-    """
-
-    if fused_params is None:
-        fused_params = {}
-    if "cache_precision" not in fused_params:
-        # Set cache_precision to be the same as weights_precision
-        # if it is not preset
-        fused_params["cache_precision"] = weights_precision
-
-    return fused_params
-
-
 class BaseBatchedEmbedding(BaseEmbedding):
     def __init__(
         self,
@@ -368,8 +337,11 @@ class BaseBatchedEmbedding(BaseEmbedding):
         pass
 
     def named_split_embedding_weights(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, param in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -384,7 +356,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -399,10 +370,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -412,7 +386,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
                 pooling_mode=PoolingMode.NONE,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -420,7 +394,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
-
         self.init_parameters()
 
     @property
@@ -434,13 +407,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         return self._optim
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         """
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse)
+        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -460,6 +433,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
     ) -> None:
         super().__init__(config, pg, device)
 
+        weights_precision = data_type_to_sparse_type(config.data_type)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -468,6 +442,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
                 use_cpu=device is None
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
+                weights_precision=weights_precision,
             )
         )
 
@@ -480,7 +455,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         return self._emb_module
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 
@@ -590,8 +565,11 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         pass
 
     def named_split_embedding_weights(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, param in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -606,7 +584,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -625,10 +602,12 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             else:
                 compute_devices.append(ComputeDevice.CPU)
                 managed.append(EmbeddingLocation.HOST)
+
         weights_precision = data_type_to_sparse_type(config.data_type)
-        fused_params = configure_fused_params(
-            fused_params=fused_params, weights_precision=weights_precision
-        )
+        fused_params = config.fused_params or {}
+        if "cache_precision" not in fused_params:
+            fused_params["cache_precision"] = weights_precision
+
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(
@@ -638,7 +617,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 pooling_mode=self._pooling,
                 weights_precision=weights_precision,
                 device=device,
-                **(fused_params or {}),
+                **fused_params,
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
@@ -660,13 +639,13 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         return self._optim
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         """
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse)
+        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True
@@ -686,6 +665,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     ) -> None:
         super().__init__(config, pg, device)
 
+        weights_precision = data_type_to_sparse_type(config.data_type)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -694,6 +674,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 use_cpu=device is None
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
+                weights_precision=weights_precision,
             )
         )
 
@@ -706,7 +687,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         return self._emb_module
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 

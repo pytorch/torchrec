@@ -35,39 +35,6 @@
 
 namespace torchrec {
 
-// noncopyable because we only want to move PredictionBatch around
-// as it holds a reference to ResourceManagerGuard. We wouldn't want
-// to inadvertently increase the reference count to ResourceManagerGuard
-// with copies of this struct.
-struct PredictionBatch : public boost::noncopyable {
-  size_t batchSize;
-
-  c10::Dict<std::string, at::Tensor> forwardArgs;
-
-  std::vector<RequestContext> contexts;
-
-  std::unique_ptr<ResourceManagerGuard> resourceManagerGuard = nullptr;
-
-  std::chrono::time_point<std::chrono::steady_clock> enqueueTime =
-      std::chrono::steady_clock::now();
-
-  Event event;
-
-  // Need a constructor to use make_shared/unique with
-  // noncopyable struct and not trigger copy-constructor.
-  explicit PredictionBatch(
-      size_t bs,
-      c10::Dict<std::string, at::Tensor> fa,
-      std::vector<RequestContext> ctxs,
-      std::unique_ptr<ResourceManagerGuard> rmg = nullptr)
-      : batchSize(bs),
-        forwardArgs(std::move(fa)),
-        contexts(std::move(ctxs)),
-        resourceManagerGuard(std::move(rmg)) {}
-
-  size_t size() const;
-};
-
 using BatchQueueCb = std::function<void(std::shared_ptr<PredictionBatch>)>;
 
 class BatchingQueue {

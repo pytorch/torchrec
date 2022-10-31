@@ -29,6 +29,7 @@ class QuantizationCommCodecTest(unittest.TestCase):
                 (CommType.FP16, 4.0),
                 (CommType.BF16, None),
                 (CommType.FP8, None),
+                (CommType.INT8, None),
             ]
         ),
         row_size=st.integers(4, 256),
@@ -57,8 +58,13 @@ class QuantizationCommCodecTest(unittest.TestCase):
 
         input_tensor = torch.rand(shape, requires_grad=True)
 
-        quant_tensor = quant_codec.forward.encode(input_tensor)
-        output_tensor = quant_codec.forward.decode(quant_tensor)
+        ctx = quant_codec.forward.create_context()
+        if comm_precision == CommType.INT8:
+            assume(row_size * col_size % ctx.row_dim == 0)
+            input_tensor = input_tensor.view(-1)
+
+        quant_tensor = quant_codec.forward.encode(input_tensor, ctx)
+        output_tensor = quant_codec.forward.decode(quant_tensor, ctx)
 
         rtol = 0.005
         atol = 0.005

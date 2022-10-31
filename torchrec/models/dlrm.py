@@ -893,7 +893,7 @@ class DLRMTrain(nn.Module):
             Tuple[loss, Tuple[loss, logits, labels]]
         """
         logits = self.model(batch.dense_features, batch.sparse_features)
-        logits = logits.squeeze()
+        logits = logits.squeeze(-1)
         loss = self.loss_fn(logits, batch.labels.float())
 
         return loss, (loss.detach(), logits.detach(), batch.labels.detach())

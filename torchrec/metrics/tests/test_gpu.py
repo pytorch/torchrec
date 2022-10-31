@@ -16,6 +16,7 @@ from torchrec.metrics.metrics_config import (
     DefaultTaskInfo,
     RecMetricEnum,
 )
+from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.tests.test_utils import gen_test_batch
 
 
@@ -74,3 +75,62 @@ class TestGPU(unittest.TestCase):
             model_output = gen_test_batch(batch_size)
             model_output = {k: v.to(device) for k, v in model_output.items()}
             metric_module.update(model_output)
+
+    @unittest.skipIf(_CUDA_UNAVAILABLE, "Test needs to run on GPU")
+    def test_window_metric(self) -> None:
+        ne = NEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=128,
+            tasks=[DefaultTaskInfo],
+            window_size=3 * 128,
+        )
+        # Mimic the case where the metric module is moved to GPU.
+        device = torch.device("cuda:0")
+        ne.to(device)
+
+        ne_computation = ne._metrics_computations[0]
+        # test RecMetricComputation._add_window_state
+        torch.allclose(
+            ne_computation.window_cross_entropy_sum,
+            torch.tensor([0.0], dtype=torch.double, device=device),
+        )
+        torch.allclose(
+            ne_computation.window_weighted_num_samples,
+            torch.tensor([[0.0]], dtype=torch.double, device=device),
+        )
+
+        # test RecMetricComputation._aggregate_window_state
+        for i in range(4):
+            model_output = gen_test_batch(128)
+            model_output = {k: v.to(device) for k, v in model_output.items()}
+            ne.update(
+                predictions={"DefaultTask": model_output["prediction"]},
+                labels={"DefaultTask": model_output["label"]},
+                weights={"DefaultTask": model_output["weight"]},
+            )
+
+            if i < 3:
+                ne_metric = ne.compute()
+                name = DefaultTaskInfo.name
+                torch.allclose(
+                    ne_metric[f"ne-{name}|lifetime_ne"],
+                    ne_metric[f"ne-{name}|window_ne"],
+                )
+                ne_metric = ne.local_compute()
+                torch.allclose(
+                    ne_metric[f"ne-{name}|local_lifetime_ne"],
+                    ne_metric[f"ne-{name}|local_window_ne"],
+                )
+            else:
+                self.assertEqual(
+                    ne_computation.window_cross_entropy_sum.size(), torch.Size([1])
+                )
+                self.assertEqual(
+                    len(
+                        ne_computation._batch_window_buffers[
+                            "window_cross_entropy_sum"
+                        ].buffers
+                    ),
+                    3,
+                )

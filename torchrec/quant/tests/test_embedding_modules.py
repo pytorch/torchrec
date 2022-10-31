@@ -90,7 +90,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),
@@ -164,6 +164,20 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self._test_ebc([eb1_config, eb2_config], features)
 
+    def test_multiple_features(self) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1", "f2"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2", embedding_dim=16, num_embeddings=10, feature_names=["f3"]
+        )
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.as_tensor([0, 1, 2]),
+            lengths=torch.as_tensor([1, 1, 1]),
+        )
+        self._test_ebc([eb1_config, eb2_config], features)
+
     # pyre-ignore
     @given(
         data_type=st.sampled_from(
@@ -174,7 +188,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),
@@ -258,7 +272,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         quant_type=st.sampled_from(
             [
-                # torch.half,
+                torch.half,
                 torch.qint8,
             ]
         ),

@@ -5,14 +5,11 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import abc
 from dataclasses import dataclass, field
-from typing import List, Optional, TypeVar
+from typing import List, Optional
 
 import torch
 import torch.distributed as dist  # noqa
-from torchrec.distributed.embedding_sharding import BaseEmbeddingDist
-from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -51,19 +48,20 @@ class SequenceShardingContext(Multistreamable):
             self.lengths_after_input_dist.record_stream(stream)
 
 
-T = TypeVar("T")
-
-
-class BaseSequenceEmbeddingDist(BaseEmbeddingDist[T]):
+@dataclass
+class InferSequenceShardingContext(Multistreamable):
     """
-    Base class for converting output of the sequence embedding lookup from
-    model-parallel to data-parallel.
+    Stores inference context and reuses it in sequence embedding output_dist or result return.
+
+    Attributes:
+        features (Optional[List[KeyedJaggedTensor]]): stores the original
+            shards of KJT after input dist.
     """
 
-    @abc.abstractmethod
-    def forward(
-        self,
-        local_embs: T,
-        sharding_ctx: SequenceShardingContext,
-    ) -> Awaitable[torch.Tensor]:
-        pass
+    features: Optional[List[KeyedJaggedTensor]] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        if self.features is not None:
+            # pyre-ignore [16]
+            for feature in self.features:
+                feature.record_stream(stream)

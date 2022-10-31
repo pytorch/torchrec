@@ -121,6 +121,7 @@ class WarmupOptimizer(OptimizerWrapper):
 
     def post_load_state_dict(self) -> None:
         iter_, stage_id = self._get_warmup_state()
+        logger.info(f"Warmup Optimizer set to iteration {iter_}")
         self._set_lr(iter_, stage_id)
 
     # pyre-ignore [2]
@@ -134,7 +135,7 @@ class WarmupOptimizer(OptimizerWrapper):
         ):
             stage_id += 1
             logger.info(
-                "Optimizer finishing "
+                "Warmup Optimizer finishing "
                 f"{self._stages[stage_id - 1]} "
                 "switching to "
                 f"{self._stages[stage_id]}"

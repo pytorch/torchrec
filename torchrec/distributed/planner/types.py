@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import cast, Dict, List, Optional, Tuple, Union
@@ -173,26 +174,44 @@ class Shard:
         )
 
 
-@dataclass
 class ShardingOption:
     """
     One way of sharding an embedding table.
     """
 
-    name: str
-    tensor: torch.Tensor
-    module: Tuple[str, nn.Module]
-    upstream_modules: List[Tuple[str, nn.Module]]
-    downstream_modules: List[Tuple[str, nn.Module]]
-    input_lengths: List[float]
-    batch_size: int  # per single device
-    sharding_type: str
-    partition_by: str  # {DEVICE, HOST, UNIFORM}
-    compute_kernel: str
-    # relevant to planner output, must be populated if sharding option
-    # part of final solution
-    shards: List[Shard] = field(default_factory=list)
-    dependency: Optional[str] = None
+    def __init__(
+        self,
+        name: str,
+        tensor: torch.Tensor,
+        module: Tuple[str, nn.Module],
+        input_lengths: List[float],
+        batch_size: int,
+        sharding_type: str,
+        partition_by: str,
+        compute_kernel: str,
+        shards: List[Shard],
+        dependency: Optional[str] = None,
+    ) -> None:
+        self.name = name
+        self._tensor = tensor
+        self._module = module
+        self.input_lengths = input_lengths
+        self.batch_size = batch_size
+        self.sharding_type = sharding_type
+        self.partition_by = partition_by
+        self.compute_kernel = compute_kernel
+        # relevant to planner output, must be populated if sharding option
+        # part of final solution
+        self.shards = shards
+        self.dependency = dependency
+
+    @property
+    def tensor(self) -> torch.Tensor:
+        return self._tensor
+
+    @property
+    def module(self) -> Tuple[str, nn.Module]:
+        return self._module
 
     @property
     def fqn(self) -> str:
@@ -237,6 +256,18 @@ class ShardingOption:
             )
         )
 
+    def __deepcopy__(
+        self, memo: Optional[Dict[int, "ShardingOption"]]
+    ) -> "ShardingOption":
+        cls = self.__class__
+        result = cls.__new__(cls)
+        for k, v in self.__dict__.items():
+            if k in ["_tensor", "_module"]:
+                setattr(result, k, v)
+            else:
+                setattr(result, k, deepcopy(v, memo))
+        return result
+
 
 class PartitionByType(Enum):
     """
@@ -271,8 +302,25 @@ class ParameterConstraints:
     is_weighted: bool = False
 
 
+class PlannerErrorType(Enum):
+    """
+    Classify PlannerError based on the following cases.
+    """
+
+    INSUFFICIENT_STORAGE = "insufficient_storage"
+    STRICT_CONSTRAINTS = "strict_constraints"
+    PARTITION = "partition"
+    OTHER = "other"
+
+
 class PlannerError(Exception):
-    ...
+    def __init__(
+        self,
+        message: str,
+        error_type: PlannerErrorType = PlannerErrorType.OTHER,
+    ) -> None:
+        self.error_type = error_type
+        super().__init__(message)
 
 
 # ---- PLANNER COMPONENTS ---- #

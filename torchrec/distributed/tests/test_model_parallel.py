@@ -8,7 +8,7 @@
 import os
 import unittest
 from collections import defaultdict, OrderedDict
-from typing import cast, Dict, List, Optional, Tuple
+from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 import numpy as np
@@ -17,7 +17,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torchrec.distributed as trec_dist
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import given, settings, Verbosity
+from hypothesis import assume, given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
@@ -87,6 +87,16 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -95,7 +105,15 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             sharders=[
                 cast(
@@ -106,11 +124,14 @@ class ModelParallelTest(ModelParallelTestShared):
                         kernel_type,
                         qcomms_config=qcomms_config,
                         device=torch.device("cuda"),
+                        variable_batch_size=variable_batch_size,
                     ),
                 ),
             ],
             qcomms_config=qcomms_config,
             backend="nccl",
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -135,17 +156,27 @@ class ModelParallelTest(ModelParallelTestShared):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from([None]),
+        # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_dp(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
+
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
                 create_test_sharder(sharder_type, sharding_type, kernel_type),
             ],
             backend="nccl",
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -156,7 +187,7 @@ class ModelParallelTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
@@ -167,7 +198,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -179,6 +210,16 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
@@ -187,7 +228,15 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -197,6 +246,7 @@ class ModelParallelTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
+                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
@@ -205,6 +255,8 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -239,6 +291,16 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        variable_batch_size=st.sampled_from([True, False]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
@@ -247,7 +309,15 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
     ) -> None:
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -257,10 +327,13 @@ class ModelParallelTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
+                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     # pyre-fixme[56]
@@ -292,6 +365,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_tw(
@@ -300,6 +382,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -314,6 +399,7 @@ class ModelParallelTest(ModelParallelTestShared):
             ],
             qcomms_config=qcomms_config,
             backend="gloo",
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     # pyre-fixme[56]
@@ -346,6 +432,15 @@ class ModelParallelTest(ModelParallelTestShared):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_gloo_cw(
@@ -354,6 +449,9 @@ class ModelParallelTest(ModelParallelTestShared):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
         world_size = 4
         self._test_sharding(
@@ -374,6 +472,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     # pyre-fixme[56]

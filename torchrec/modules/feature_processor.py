@@ -277,7 +277,7 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
                 return features
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         yield from ()
 

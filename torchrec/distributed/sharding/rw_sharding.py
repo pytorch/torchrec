@@ -17,6 +17,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSparseFeaturesDist,
     bucketize_kjt_before_all2all,
     EmbeddingSharding,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
     SparseFeaturesAllToAll,
@@ -39,11 +40,13 @@ from torchrec.distributed.types import (
 from torchrec.streamable import Multistreamable
 
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for row-wise sharding.
     """
@@ -55,6 +58,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(
             qcomm_codecs_registry=qcomm_codecs_registry,
@@ -90,6 +94,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         for group_config in self._grouped_embedding_configs:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
+
+        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -134,6 +140,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
                         global_metadata=global_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
+                        fused_params=info.fused_params,
                     )
                 )
         return tables_per_rank
@@ -153,6 +160,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[F, T]):
         for grouped_config in self._score_grouped_embedding_configs:
             embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
@@ -231,8 +241,10 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         is_sequence: bool = False,
         has_feature_processor: bool = False,
         need_pos: bool = False,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
+        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._world_size: int = pg.size()
         self._num_id_list_features = num_id_list_features
         self._num_id_score_list_features = num_id_score_list_features
@@ -266,6 +278,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_score_list_features_per_rank=self._world_size
             * [self._num_id_score_list_features],
             device=device,
+            variable_batch_size=variable_batch_size,
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
@@ -322,7 +335,9 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(bucketized_sparse_features)
 
 
-class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class RwPooledEmbeddingDist(
+    BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes pooled embedding tensor in RW fashion by performing a reduce-scatter
     operation.
@@ -347,7 +362,11 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
             else None,
         )
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmbeddingShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs reduce-scatter pooled operation on pooled embeddings tensor.
 
@@ -358,10 +377,17 @@ class RwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
         """
 
-        return self._dist(local_embs)
+        if sharding_ctx is None:
+            return self._dist(local_embs)
+        else:
+            return self._dist(local_embs, input_splits=sharding_ctx.batch_size_per_rank)
 
 
-class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class RwPooledEmbeddingSharding(
+    BaseRwEmbeddingSharding[
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
+):
     """
     Shards embedding bags row-wise, i.e.. a given embedding table is evenly distributed
     by rows and table slices are placed on all ranks.
@@ -387,6 +413,7 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
             is_sequence=False,
             has_feature_processor=self._has_feature_processor,
             need_pos=self._need_pos,
+            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(
@@ -398,7 +425,6 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -407,7 +433,7 @@ class RwPooledEmbeddingSharding(BaseRwEmbeddingSharding[SparseFeatures, torch.Te
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         return RwPooledEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.

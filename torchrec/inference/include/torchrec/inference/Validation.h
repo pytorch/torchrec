@@ -16,7 +16,11 @@ namespace torchrec {
 // Currently validates:
 //  1. Whether sum(lengths) == size(values)
 //  2. Whether there are negative values in lengths
-bool validateSparseFeatures(at::Tensor& values, at::Tensor& lengths);
+//  3. If weights is present, whether sum(lengths) == size(weights)
+bool validateSparseFeatures(
+    at::Tensor& values,
+    at::Tensor& lengths,
+    c10::optional<at::Tensor> maybeWeights = c10::nullopt);
 
 // Returns whether dense features are valid.
 // Currently validates:

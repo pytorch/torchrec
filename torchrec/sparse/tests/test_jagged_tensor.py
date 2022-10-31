@@ -12,7 +12,12 @@ from typing import List, Tuple
 import torch
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import (
+    ComputeKJTToJTDict,
+    JaggedTensor,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
 
 torch.fx.wrap("len")
 
@@ -1454,3 +1459,32 @@ KeyedTensor({
 })
 """,
         )
+
+
+class TestComputeKJTToJTDict(unittest.TestCase):
+    def test_key_lookup(self) -> None:
+        m = ComputeKJTToJTDict()
+        input = KeyedJaggedTensor.from_offsets_sync(
+            values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+            weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+            keys=["index_0", "index_1"],
+            offsets=torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8]),
+        )
+
+        out = m(input)
+
+        i0 = out["index_0"]
+        self.assertTrue(torch.equal(i0._values, torch.tensor([1.0, 2.0, 3.0])))
+        self.assertTrue(torch.equal(i0._weights, torch.tensor([1.0, 0.5, 1.5])))
+        self.assertTrue(torch.equal(i0._lengths, torch.tensor([0, 2, 0, 1])))
+        self.assertTrue(torch.equal(i0._offsets, torch.tensor([0, 0, 2, 2, 3])))
+
+        i1 = out["index_1"]
+        self.assertTrue(
+            torch.equal(i1._values, torch.tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
+        )
+        self.assertTrue(
+            torch.equal(i1._weights, torch.tensor([1.0, 0.5, 1.0, 1.0, 1.5]))
+        )
+        self.assertTrue(torch.equal(i1._lengths, torch.tensor([1, 1, 0, 3])))
+        self.assertTrue(torch.equal(i1._offsets, torch.tensor([0, 1, 2, 2, 5])))

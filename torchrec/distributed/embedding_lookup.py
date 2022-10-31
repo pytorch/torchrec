@@ -85,7 +85,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         grouped_configs: List[GroupedEmbeddingConfig],
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         def _create_lookup(
             config: GroupedEmbeddingConfig,
@@ -101,7 +100,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
                     config=config,
                     pg=pg,
                     device=device,
-                    fused_params=fused_params,
                 )
             else:
                 raise ValueError(
@@ -184,8 +182,12 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "GroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
 
@@ -196,7 +198,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         grouped_configs: List[GroupedEmbeddingConfig],
         grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
@@ -215,7 +216,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                     config=config,
                     pg=pg,
                     device=device,
-                    fused_params=fused_params,
                 )
             else:
                 raise ValueError(
@@ -354,8 +354,12 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "GroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
         for emb_module in self._score_emb_modules:
@@ -463,8 +467,12 @@ class MetaInferGroupedEmbeddingsLookup(
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "MetaInferGroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
 
@@ -617,8 +625,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "MetaInferGroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
         for emb_module in self._score_emb_modules:

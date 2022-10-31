@@ -50,6 +50,7 @@ from torch.distributed._shard.sharding_spec import (  # noqa
     ShardingSpec,
     ShardMetadata,
 )
+from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
 
 
@@ -90,10 +91,13 @@ class ComputeKernel(Enum):
     DEFAULT = "default"
 
 
+QuantizationContext = TypeVar("QuantizationContext")
+
+
 # Once we only support python3.8+ use
 # from typing import protocol.
 # We can't use from typing_extensions import Protocol due to torch.deploy restrictions.
-class QuantizedCommCodec:
+class QuantizedCommCodec(Generic[QuantizationContext]):
     """
     Provide an implementation to quantized, or apply mixed precision, to the tensors used in collective calls (pooled_all_to_all, reduce_scatter, etc).
     The dtype is the dtype of the tensor called from encode.
@@ -110,10 +114,14 @@ class QuantizedCommCodec:
 
     """
 
-    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+    def encode(
+        self, input_tensor: torch.Tensor, ctx: Optional[QuantizationContext] = None
+    ) -> torch.Tensor:
         ...
 
-    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+    def decode(
+        self, input_grad: torch.Tensor, ctx: Optional[QuantizationContext] = None
+    ) -> torch.Tensor:
         ...
 
     def quantized_dtype(self) -> torch.dtype:
@@ -122,20 +130,58 @@ class QuantizedCommCodec:
         """
         ...
 
+    def calc_quantized_size(
+        self,
+        input_len: int,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> int:
+        """
+        Given the length of input tensor, returns the length of tensor after
+        quantization. Used by INT8 codecs where the quantized tensor have
+        some additional parameters. For other cases, the quantized tensor should
+        have the same length with input.
+        """
+        ...
 
-class NoOpQuantizedCommCodec:
+    def create_context(self) -> Optional[QuantizationContext]:
+        """
+        Create a context object that can be used to carry session-based
+        parameters between encoder and decoder.
+        """
+        ...
+
+
+class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
     """
     Default No-Op implementation of QuantizedCommCodec
     """
 
-    def encode(self, input_tensor: torch.Tensor) -> torch.Tensor:
+    def encode(
+        self,
+        input_tensor: torch.Tensor,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> torch.Tensor:
         return input_tensor
 
-    def decode(self, input_grad: torch.Tensor) -> torch.Tensor:
+    def decode(
+        self,
+        input_grad: torch.Tensor,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> torch.Tensor:
         return input_grad
 
     def quantized_dtype(self) -> torch.dtype:
         return torch.float
+
+    def calc_quantized_size(
+        self,
+        input_len: int,
+        ctx: Optional[QuantizationContext] = None,
+    ) -> int:
+        return input_len
+
+    def create_context(self) -> Optional[QuantizationContext]:
+        return None
 
 
 @dataclass
@@ -160,9 +206,6 @@ class CommOp(Enum):
 
 W = TypeVar("W")
 M = TypeVar("M", bound=nn.Module)
-Out = TypeVar("Out")
-CompIn = TypeVar("CompIn", bound=Multistreamable)
-DistOut = TypeVar("DistOut")
 
 
 class Awaitable(abc.ABC, Generic[W]):
@@ -373,12 +416,43 @@ class ParameterSharding:
     sharding_spec: Optional[ShardingSpec] = None
 
 
+ModuleShardingPlan = Dict[str, ParameterSharding]
+"""
+Map of ParameterSharding per parameter (usually a table). This describes the sharding plan for a torchrec module (e.g. `EmbeddingBagCollection`)
+"""
+
+
 @dataclass
-class ShardedModuleContext(Multistreamable):
-    pass
+class ShardingPlan:
+    """
+    Representation of sharding plan. This uses the FQN of the larger wrapped model (i.e the model that is wrapped using `DistributedModelParallel`)
+    ModuleShardingPlan should be used when TorchRec composability is desired.
+
+    Attributes:
+        plan (Dict[str, ModuleShardingPlan]): dict keyed by module path of
+            dict of parameter sharding specs keyed by parameter name.
+    """
+
+    plan: Dict[str, ModuleShardingPlan]
+
+    def get_plan_for_module(self, module_path: str) -> Optional[ModuleShardingPlan]:
+        """
+        Args:
+            module_path (str):
+
+        Returns:
+            Optional[ModuleShardingPlan]: dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.
+        """
+        return self.plan.get(module_path, None)
+
+    def __str__(self) -> str:
+        return str(self.plan)
 
 
-class EmptyContext(ShardedModuleContext):
+ShardedModuleContext = Multistreamable
+
+
+class NullShardedModuleContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
 
@@ -411,6 +485,8 @@ class ShardingEnv:
         NOTE:
             Typically used during training.
         """
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
 
     @classmethod
@@ -434,7 +510,53 @@ class ModuleCopyMixin:
         return self.to(device)
 
 
-class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCopyMixin):
+class FeatureShardingMixIn:
+    """
+    Feature Sharding Interface to provide sharding-aware feature metadata.
+    """
+
+    def id_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+    def id_score_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+
+class ModuleShardingMixIn:
+    """
+    The interface to access a sharded module's sharding scheme.
+    """
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        raise NotImplementedError
+
+
+Out = TypeVar("Out")
+CompIn = TypeVar("CompIn", bound=Multistreamable)
+DistOut = TypeVar("DistOut")
+ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+
+class ShardedModule(
+    abc.ABC,
+    nn.Module,
+    Generic[CompIn, DistOut, Out, ShrdCtx],
+    ModuleCopyMixin,
+    ModuleShardingMixIn,
+):
     """
     All model-parallel modules implement this interface.
     Inputs and outputs are data-parallel.
@@ -459,8 +581,13 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
             qcomm_codecs_registry = {}
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
-    def create_context(self) -> ShardedModuleContext:
-        return EmptyContext()
+        self._input_dists: List[nn.Module] = []
+        self._lookups: List[nn.Module] = []
+        self._output_dists: List[nn.Module] = []
+
+    @abc.abstractmethod
+    def create_context(self) -> ShrdCtx:
+        pass
 
     @property
     def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
@@ -469,7 +596,7 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
     @abc.abstractmethod
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
+        ctx: ShrdCtx,
         # pyre-ignore[2]
         *input,
         # pyre-ignore[2]
@@ -478,17 +605,15 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
         pass
 
     @abc.abstractmethod
-    def compute(self, ctx: ShardedModuleContext, dist_input: CompIn) -> DistOut:
+    def compute(self, ctx: ShrdCtx, dist_input: CompIn) -> DistOut:
         pass
 
     @abc.abstractmethod
-    def output_dist(
-        self, ctx: ShardedModuleContext, output: DistOut
-    ) -> LazyAwaitable[Out]:
+    def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
         pass
 
     def compute_and_output_dist(
-        self, ctx: ShardedModuleContext, input: CompIn
+        self, ctx: ShrdCtx, input: CompIn
     ) -> LazyAwaitable[Out]:
         """
         In case of multiple output distributions it makes sense to override this method
@@ -526,6 +651,28 @@ class ShardedModule(abc.ABC, nn.Module, Generic[CompIn, DistOut, Out], ModuleCop
         for key, _ in self.named_parameters(prefix):
             yield key
 
+    def extra_repr(self) -> str:
+        """
+        Pretty prints representation of the module's lookup modules, input_dists and output_dists
+        """
+
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        rep = []
+        rep.extend(loop("lookups", self._lookups))
+        rep.extend(loop("_input_dists", self._input_dists))
+        rep.extend(loop("_output_dists", self._output_dists))
+
+        return "\n ".join(rep)
+
 
 class ModuleSharder(abc.ABC, Generic[M]):
     """
@@ -547,10 +694,10 @@ class ModuleSharder(abc.ABC, Generic[M]):
     def shard(
         self,
         module: M,
-        params: Dict[str, ParameterSharding],
+        params: ModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> ShardedModule[Any, Any, Any]:
+    ) -> ShardedModule[Any, Any, Any, Any]:
         """
         Does the actual sharding. It will allocate parameters on the requested locations
         as specified by corresponding ParameterSharding.
@@ -559,7 +706,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
         Args:
             module (M): module to shard.
-            params (Dict[str, ParameterSharding]): dict of fully qualified parameter names
+            params (ModuleShardingPlan): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
             device (torch.device): compute device.
@@ -613,34 +760,6 @@ class ModuleSharder(abc.ABC, Generic[M]):
             storage_map[compute_device_type].value: tensor.element_size()
             * tensor.nelement()
         }
-
-
-@dataclass
-class ShardingPlan:
-    """
-    Representation of sharding plan.
-
-    Attributes:
-        plan (Dict[str, Dict[str, ParameterSharding]]): dict keyed by module path of
-            dict of parameter sharding specs keyed by parameter name.
-    """
-
-    plan: Dict[str, Dict[str, ParameterSharding]]
-
-    def get_plan_for_module(
-        self, module_path: str
-    ) -> Optional[Dict[str, ParameterSharding]]:
-        """
-        Args:
-            module_path (str):
-
-        Returns:
-            Optional[Dict[str, ParameterSharding]]: dict of parameter sharding specs keyed by parameter name. None if sharding specs do not exist for given module_path.
-        """
-        return self.plan.get(module_path, None)
-
-    def __str__(self) -> str:
-        return str(self.plan)
 
 
 class ShardingPlanner(abc.ABC):

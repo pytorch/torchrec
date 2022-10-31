@@ -36,6 +36,7 @@ from torchrec.modules.embedding_modules import (
     get_embedding_names_by_table,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.types import ModuleNoCopyMixin
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -84,7 +85,9 @@ def quantize_state_dict(
                 scale_shift = None
         else:
             if tensor.dtype == torch.float or tensor.dtype == torch.float16:
-                if tensor.dtype == torch.float16 and data_type == DataType.FP16:
+                if data_type == DataType.FP16:
+                    if tensor.dtype == torch.float:
+                        tensor = tensor.half()
                     quant_res = tensor.view(torch.uint8)
                 else:
                     quant_res = (
@@ -109,7 +112,7 @@ def quantize_state_dict(
     return device
 
 
-class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
+class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
     This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
@@ -212,7 +215,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             (pooling, data_type) = key
             embedding_specs = []
             weight_lists = []
-            for table in emb_configs:
+            feature_table_map: List[int] = []
+
+            for idx, table in enumerate(emb_configs):
                 embedding_specs.append(
                     (
                         table.name,
@@ -223,6 +228,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     )
                 )
                 weight_lists.append(table_name_to_quantized_weights[table.name])
+                feature_table_map.extend([idx] * table.num_features())
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=embedding_specs,
@@ -231,6 +237,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=16,
+                feature_table_map=feature_table_map,
             )
             self._emb_modules.append(emb_module)
 
@@ -352,7 +359,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         return self._output_dtype
 
 
-class EmbeddingCollection(EmbeddingCollectionInterface):
+class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
 

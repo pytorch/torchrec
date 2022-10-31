@@ -376,10 +376,16 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths = _lengths
         return _lengths
 
+    def lengths_or_none(self) -> Optional[torch.Tensor]:
+        return self._lengths
+
     def offsets(self) -> torch.Tensor:
         _offsets = _maybe_compute_offsets(self._lengths, self._offsets)
         self._offsets = _offsets
         return _offsets
+
+    def offsets_or_none(self) -> Optional[torch.Tensor]:
+        return self._offsets
 
     def values(self) -> torch.Tensor:
         return self._values
@@ -508,14 +514,12 @@ def _maybe_compute_length_per_key(
 ) -> List[int]:
     if length_per_key is None:
         if len(keys) and offsets is not None and len(offsets) > 0:
-            _length: List[int] = (
-                torch.sum((offsets[1:] - offsets[:-1]).view(-1, stride), dim=1)
-                .cpu()
-                .tolist()
-            )
+            _length: List[int] = torch.sum(
+                torch.diff(offsets).view(-1, stride), dim=1
+            ).tolist()
         elif len(keys) and lengths is not None:
             _length: List[int] = (
-                torch.sum(lengths.view(-1, stride), dim=1).cpu().tolist()
+                torch.sum(lengths.view(-1, stride), dim=1).tolist()
                 if lengths.numel() != 0
                 else [0] * len(keys)
             )
@@ -567,6 +571,47 @@ def _jagged_tensor_string(
         )
         + "\n    }"
     )
+
+
+class ComputeKJTToJTDict(torch.nn.Module):
+    """Converts a KeyedJaggedTensor to a dict of JaggedTensors.
+
+    Args:
+
+    Example::
+    #              0       1        2  <-- dim_1
+    # "Feature0"   [V0,V1] None    [V2]
+    # "Feature1"   [V3]    [V4]    [V5,V6,V7]
+    #   ^
+    #  dim_0
+
+    would return
+
+    {
+        "Feature0": JaggedTensor([[V0,V1],None,V2]),
+        "Feature1": JaggedTensor([V3,V4,[V5,V6,V7]]),
+    }
+    """
+
+    def forward(
+        self, keyed_jagged_tensor: "KeyedJaggedTensor"
+    ) -> Dict[str, JaggedTensor]:
+        """
+        Converts a KeyedJaggedTensor into a dict of JaggedTensors.
+        Args:
+            keyed_jagged_tensor (KeyedJaggedTensor): tensor to convert
+        Returns:
+            Dict[str, JaggedTensor]
+        """
+        return _maybe_compute_kjt_to_jt_dict(
+            stride=keyed_jagged_tensor.stride(),
+            keys=keyed_jagged_tensor.keys(),
+            length_per_key=keyed_jagged_tensor.length_per_key(),
+            values=keyed_jagged_tensor.values(),
+            lengths=keyed_jagged_tensor.lengths(),
+            weights=keyed_jagged_tensor.weights_or_none(),
+            jt_dict=keyed_jagged_tensor._jt_dict,
+        )
 
 
 def _maybe_compute_kjt_to_jt_dict(
@@ -632,7 +677,7 @@ def _merge_weights_or_none(
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) keyed jagged tensor.
 
-    A `JaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
+    A `KeyedJaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
@@ -671,7 +716,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
         lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
         offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
-        keys: List[int] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
+        keys: List[str] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
         index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}  # index for each key
         offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
     """
@@ -772,13 +817,13 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             curr_is_weighted: bool = kjt.weights_or_none() is not None
             if is_weighted != curr_is_weighted:
                 raise ValueError("Can't merge weighted KJT with unweighted KJT")
-
+            _length_per_key: Optional[List[int]] = None
             if kjt._length_per_key is None:
                 has_length_per_key = False
-
-            if has_length_per_key:
-                # pyre-ignore[6]
-                length_per_key += kjt._length_per_key
+            else:
+                _length_per_key = kjt._length_per_key
+            if has_length_per_key and _length_per_key is not None:
+                length_per_key += _length_per_key
             keys += kjt.keys()
             value_list.append(kjt.values())
             if is_weighted:
@@ -835,10 +880,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths = _lengths
         return _lengths
 
+    def lengths_or_none(self) -> Optional[torch.Tensor]:
+        return self._lengths
+
     def offsets(self) -> torch.Tensor:
         _offsets = _maybe_compute_offsets(self._lengths, self._offsets)
         self._offsets = _offsets
         return _offsets
+
+    def offsets_or_none(self) -> Optional[torch.Tensor]:
+        return self._offsets
 
     def keys(self) -> List[str]:
         return self._keys
@@ -874,6 +925,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._length_per_key = _length_per_key
         return _length_per_key
 
+    def length_per_key_or_none(self) -> Optional[List[int]]:
+        return self._length_per_key
+
     def offset_per_key(self) -> List[int]:
         _length_per_key, _offset_per_key = _maybe_compute_offset_per_key(
             self._keys,
@@ -886,6 +940,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._length_per_key = _length_per_key
         self._offset_per_key = _offset_per_key
         return _offset_per_key
+
+    def offset_per_key_or_none(self) -> Optional[List[int]]:
+        return self._offset_per_key
 
     def split(self, segments: List[int]) -> List["KeyedJaggedTensor"]:
         split_list: List[KeyedJaggedTensor] = []

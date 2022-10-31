@@ -191,8 +191,10 @@ class EmbeddingStats(Stats):
                 else 0
             )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
-            used_ddr_ratio = used_ddr[rank] / (
-                (1 - reserved_percent) * device.storage.ddr
+            used_ddr_ratio = (
+                used_ddr[rank] / ((1 - reserved_percent) * device.storage.ddr)
+                if device.storage.ddr > 0
+                else 0
             )
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
@@ -231,6 +233,8 @@ class EmbeddingStats(Stats):
                     "Pooling Factor",
                     "Output",
                     "Features",
+                    "Emb Dim",
+                    "Hash Size",
                     "Ranks",
                 ],
                 [
@@ -241,6 +245,8 @@ class EmbeddingStats(Stats):
                     "----------------",
                     "--------",
                     "----------",
+                    "--------",
+                    "-----------",
                     "-------",
                 ],
             ]
@@ -253,6 +259,8 @@ class EmbeddingStats(Stats):
                 pooling_factor = str(round(sum(so.input_lengths), 3))
                 output = "pooled" if so.is_pooled else "sequence"
                 num_features = len(so.input_lengths)
+                embedding_dim = so.tensor.shape[1]
+                hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
                         so.fqn,
@@ -262,6 +270,8 @@ class EmbeddingStats(Stats):
                         pooling_factor,
                         output,
                         num_features,
+                        embedding_dim,
+                        hash_size,
                         ",".join(ranks),
                     ]
                 )

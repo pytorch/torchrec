@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar
 
 import torch
@@ -33,10 +33,11 @@ from torchrec.distributed.types import (
     Awaitable,
     CommOp,
     LazyAwaitable,
+    Multistreamable,
+    NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardedModule,
-    ShardedModuleContext,
     ShardingEnv,
     ShardingType,
 )
@@ -88,8 +89,8 @@ class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
 
 
 @dataclass
-class EmbeddingTowerCollectionContext(ShardedModuleContext):
-    embedding_contexts: List[ShardedModuleContext]
+class EmbeddingTowerCollectionContext(Multistreamable):
+    embedding_contexts: List[NullShardedModuleContext] = field(default_factory=list)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.embedding_contexts:
@@ -101,6 +102,7 @@ class ShardedEmbeddingTower(
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
+        NullShardedModuleContext,
     ],
     FusedOptimizerModule,
 ):
@@ -123,11 +125,17 @@ class ShardedEmbeddingTower(
         self._device = device
         self._output_dist: Optional[PooledEmbeddingsAllToAll] = None
         self._cross_pg_global_batch_size: int = 0
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+        #  `Optional[dist.ProcessGroup]`.
         self._cross_pg_world_size: int = dist.get_world_size(self._cross_pg)
 
         self._has_uninitialized_output_dist = True
 
         # make sure all sharding on single physical node
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+        #  `Optional[dist.ProcessGroup]`.
         devices_per_host = dist.get_world_size(intra_pg)
         tower_devices = set()
         for sharding in table_name_to_parameter_sharding.values():
@@ -152,10 +160,20 @@ class ShardedEmbeddingTower(
         self.interaction: Optional[nn.Module] = None
         if self._active_device:
             _replace_sharding_with_intra_node(
-                table_name_to_parameter_sharding, dist.get_world_size(self._intra_pg)
+                table_name_to_parameter_sharding,
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
+                dist.get_world_size(self._intra_pg),
             )
             intra_env: ShardingEnv = ShardingEnv(
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
                 world_size=dist.get_world_size(self._intra_pg),
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
                 rank=dist.get_rank(self._intra_pg),
                 pg=self._intra_pg,
             )
@@ -210,6 +228,9 @@ class ShardedEmbeddingTower(
                 ),
             )
 
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+        #  `Optional[dist.ProcessGroup]`.
         node_count = dist.get_world_size(self._cross_pg)
         kjt_features_per_node = [
             len(self._kjt_feature_names) if node == self._tower_node else 0
@@ -228,10 +249,10 @@ class ShardedEmbeddingTower(
             self._device,
         )
 
-    # pyre-ignore [14]
+    # pyre-ignore[14]
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
+        ctx: NullShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[SparseFeaturesList]:
@@ -278,7 +299,7 @@ class ShardedEmbeddingTower(
             return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
 
     def compute(
-        self, ctx: ShardedModuleContext, dist_input: SparseFeaturesList
+        self, ctx: NullShardedModuleContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
         kjt_features = dist_input[0].id_list_features
         wkjt_features = dist_input[0].id_score_list_features
@@ -304,7 +325,7 @@ class ShardedEmbeddingTower(
         return output
 
     def _create_output_dist(
-        self, ctx: ShardedModuleContext, output: torch.Tensor
+        self, ctx: NullShardedModuleContext, output: torch.Tensor
     ) -> None:
         # Determine the output_dist splits and the all_to_all output size
         assert len(output.shape) == 2
@@ -321,6 +342,9 @@ class ShardedEmbeddingTower(
                 dtype=torch.int64,
                 device=self._device,
             )
+            # pyre-fixme[6]: For 1st param expected
+            #  `Optional[_distributed_c10d.ProcessGroup]` but got
+            #  `Optional[dist.ProcessGroup]`.
             for i in range(dist.get_world_size(self._cross_pg))
         ]
         dist.all_gather(
@@ -345,7 +369,7 @@ class ShardedEmbeddingTower(
         )
 
     def output_dist(
-        self, ctx: ShardedModuleContext, output: torch.Tensor
+        self, ctx: NullShardedModuleContext, output: torch.Tensor
     ) -> LazyAwaitable[torch.Tensor]:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(ctx, output)
@@ -445,12 +469,16 @@ class ShardedEmbeddingTower(
     ) -> Iterator[Tuple[str, nn.Module]]:
         yield from [(prefix, self)]
 
+    def create_context(self) -> NullShardedModuleContext:
+        return NullShardedModuleContext()
+
 
 class ShardedEmbeddingTowerCollection(
     ShardedModule[
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
+        EmbeddingTowerCollectionContext,
     ],
     FusedOptimizerModule,
 ):
@@ -469,7 +497,13 @@ class ShardedEmbeddingTowerCollection(
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+        #  `Optional[dist.ProcessGroup]`.
         self._cross_pg_world_size: int = dist.get_world_size(self._cross_pg)
+        # pyre-fixme[6]: For 1st param expected
+        #  `Optional[_distributed_c10d.ProcessGroup]` but got
+        #  `Optional[dist.ProcessGroup]`.
         self._intra_pg_world_size: int = dist.get_world_size(self._intra_pg)
         self._device = device
         self._tower_id: int = dist.get_rank() // self._intra_pg_world_size
@@ -559,10 +593,20 @@ class ShardedEmbeddingTowerCollection(
 
         if local_towers:
             _replace_sharding_with_intra_node(
-                table_name_to_parameter_sharding, dist.get_world_size(self._intra_pg)
+                table_name_to_parameter_sharding,
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
+                dist.get_world_size(self._intra_pg),
             )
             intra_env: ShardingEnv = ShardingEnv(
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
                 world_size=dist.get_world_size(self._intra_pg),
+                # pyre-fixme[6]: For 1st param expected
+                #  `Optional[_distributed_c10d.ProcessGroup]` but got
+                #  `Optional[dist.ProcessGroup]`.
                 rank=dist.get_rank(self._intra_pg),
                 pg=self._intra_pg,
             )
@@ -694,7 +738,6 @@ class ShardedEmbeddingTowerCollection(
                     )
             return SparseFeaturesListAwaitable(input_dists)
 
-    # pyre-ignore [14]
     def compute(
         self, ctx: EmbeddingTowerCollectionContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
@@ -744,6 +787,9 @@ class ShardedEmbeddingTowerCollection(
                 dtype=torch.int64,
                 device=self._device,
             )
+            # pyre-fixme[6]: For 1st param expected
+            #  `Optional[_distributed_c10d.ProcessGroup]` but got
+            #  `Optional[dist.ProcessGroup]`.
             for i in range(dist.get_world_size(self._cross_pg))
         ]
         dist.all_gather(
@@ -766,7 +812,6 @@ class ShardedEmbeddingTowerCollection(
             else None,
         )
 
-    # pyre-ignore [14]
     def output_dist(
         self, ctx: EmbeddingTowerCollectionContext, output: torch.Tensor
     ) -> LazyAwaitable[torch.Tensor]:

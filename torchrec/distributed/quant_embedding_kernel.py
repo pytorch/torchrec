@@ -167,8 +167,11 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         )
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
         for config, weight in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
