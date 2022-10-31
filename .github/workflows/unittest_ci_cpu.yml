@@ -40,7 +40,7 @@ jobs:
       timeout: 30
       script: |
         ldd --version
-        conda create -yp --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         python --version
         conda activate build_binary
