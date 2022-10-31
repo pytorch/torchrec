@@ -7,6 +7,7 @@
 
 import abc
 import copy
+import types
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
@@ -17,16 +18,13 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
-from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
     Topology,
 )
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+
+from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     ModuleCopyMixin,
     ModuleSharder,
@@ -45,16 +43,6 @@ from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
 
 _DDP_STATE_DICT_PREFIX = "module."
-
-
-def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
-    return [
-        cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], FusedEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
-        cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
-    ]
 
 
 class DataParallelWrapper(abc.ABC):
@@ -248,6 +236,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._init_dmp(
             fused_optims=fused_optims,
         )
+
+        if init_parameters:
+            self._init_parameters(self.module)
+
         if init_data_parallel:
             self.init_data_parallel()
         self._optim = CombinedOptimizer(fused_optims)
@@ -326,6 +318,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         process, since some modules needs to use the original references (like
         `ShardedModule` for inference).
         """
+        assert isinstance(device, torch.device)
         with sharded_model_copy(device=None):
             copy_dmp = copy.deepcopy(self)
         copy_module = copy_dmp._copy(copy_dmp.module, device)
@@ -548,14 +541,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def named_buffers(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         gen = self._named_buffers(self.module, prefix, recurse)
         memo = set()
         for key, param in gen:
             if param in memo:
                 continue
-            memo.add(param)
+            if remove_duplicate:
+                memo.add(param)
             yield key, param
 
     @property

@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import copy
 import json
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Tuple, Type
@@ -15,10 +16,12 @@ import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
+from torchrec.distributed.utils import sharded_model_copy
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollectionInterface,
     EmbeddingCollectionInterface,
 )
+from torchrec.types import CopyMixIn
 
 
 def quantize_feature(
@@ -64,6 +67,52 @@ def quantize_embeddings(
         mapping=mapping,
         inplace=inplace,
     )
+
+
+def copy_to_device(
+    module: nn.Module,
+    current_device: torch.device,
+    to_device: torch.device,
+) -> nn.Module:
+
+    with sharded_model_copy(device=None):
+        copy_module = copy.deepcopy(module)
+
+    # Copy only weights with matching device.
+    def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
+        if tensor.device == current_device:
+            return tensor.to(to_device)
+        return tensor
+
+    # if this is a sharded module, customize the copy
+    if isinstance(copy_module, CopyMixIn):
+        return copy_module.copy(to_device)
+
+    for child_name, child in copy_module.named_children():
+        if not any([isinstance(submodule, CopyMixIn) for submodule in child.modules()]):
+            child_copy = child._apply(_copy_if_device_match)
+        else:
+            child_copy = copy_to_device(child, current_device, to_device)
+        copy_module.register_module(child_name, child_copy)
+    return copy_module
+
+
+class CopyableMixin(CopyMixIn):
+    def copy(
+        self,
+        device: torch.device,
+    ) -> nn.Module:
+        return copy_to_device(
+            # pyre-ignore [6]
+            self,
+            current_device=torch.device("cpu"),
+            to_device=device,
+        )
+
+
+@dataclass
+class QualNameMetadata:
+    need_preproc: bool
 
 
 @dataclass
@@ -116,6 +165,37 @@ class PredictFactory(abc.ABC):
         Returns a string which represents the result type. This information is used for result split.
         """
         pass
+
+    @abc.abstractmethod
+    def run_weights_independent_tranformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that don't rely on weights of the predict module. e.g. fx tracing, model
+        split etc.
+        """
+        pass
+
+    @abc.abstractmethod
+    def run_weights_dependent_transformations(
+        self, predict_module: torch.nn.Module
+    ) -> torch.nn.Module:
+        """
+        Run transformations that depends on weights of the predict module. e.g. lowering to a backend.
+        """
+        pass
+
+    def qualname_metadata(self) -> Dict[str, QualNameMetadata]:
+        """
+        Returns a dict from qualname (method name) to QualNameMetadata. This is additional information for execution of specific methods of the model.
+        """
+        return {}
+
+    def model_inputs_data(self) -> Dict[str, Any]:
+        """
+        Returns a dict of various data for benchmarking input generation.
+        """
+        return {}
 
 
 class PredictModule(nn.Module):

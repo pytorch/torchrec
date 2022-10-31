@@ -46,6 +46,8 @@ class RowWiseAdagrad(Optimizer):
         eps: float = 1e-10,
         *,
         maximize: bool = False,
+        # pyre-ignore
+        **unused,
     ) -> None:
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))

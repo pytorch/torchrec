@@ -13,69 +13,13 @@ C++ 17 is a requirement.
 
 ### **1. Install Dependencies**
 
-Create a conda environment: `conda create --name inference`
-
-### **Pytorch**
-
-The inference library uses torch deploy which is a library in pytorch that's only accessible if built from source. **Ensure that the pytorch version installed is compatible**
-**with your CUDA toolkit and driver**. Run `nvidia-smi` to check driver version. Run `nvcc --version` or `conda list` to check toolkit version.
-- Follow this link: https://github.com/pytorch/pytorch/tree/master/torch/csrc/deploy to initially install all the necessary CPython dependencies
-- Follow this link: https://github.com/pytorch/pytorch/#from-source, to install pytorch from source. However, once at the installation step, run these commands:
-```
-export CMAKE_PREFIX_PATH=${CONDA_PREFIX:-"$(dirname $(which conda))/../"}
-export USE_DEPLOY=1
-export BUILD_SPLIT_CUDA=1
-
-python setup.py develop
-```
-
-### **TorchRec**
-```
-pip install torchrec-nightly
-```
-
-### **Folly**
-The inference library relies on folly for performance optimzations. Follow: https://github.com/facebook/folly#build-notes to install folly from source.
-Ensure to provide a path to the `--scratch-path` option (e.g. `~/folly-build/`). Folly will be installed at the location of the scratch path. Folly will also install fmt
-(along with other libraries) for you.
-
-### **gRPC**
-Install gRPC for both C++ (server) and Python (client).
-
-**C++**
-
-gRPC is used by the server and client to communicate via RPC. It is highly recommended to install gRPC from source. Follow: https://grpc.io/docs/languages/cpp/quickstart/#install-grpce to do so. Note that they strongly encourage local installation ("using an appropriately set `CMAKE_INSTALL_PREFIX`") as opposed to a global installation as it'll be difficult to uninstall.
-
-**Python**
+Follow the instructions at: https://github.com/pytorch/pytorch/blob/master/docs/source/deploy.rst to ensure torch::deploy
+is working in your environment. Use the Dockerfile in the docker directory to install all dependencies. Run it via:
 
 ```
-pip install grpcio
-pip install grpcio-tools # for protoc to generate Python code for from .protobuf files
+sudo nvidia-docker build -t torchrec .
+sudo nvidia-docker run -it torchrec:latest
 ```
-
-
-### **fbgemm_gpu**
-TorchRec relies on fbgemm_gpu for high-performance CUDA GPU operations. This is needed
-for GPU inference. Install fbgemm_gpu here: https://github.com/pytorch/FBGEMM/tree/main/fbgemm_gpu.
-
-If pytorch was built from source with `GLIBCXX_USE_CXX11_ABI=0`, then you can use `pip install fbgemm-gpu-nightly`.
-
-This can be checked via: `torch._C._GLIBCXX_USE_CXX11_ABI`. If the value is `1`, then install fbgemm_gpu from source using the instructions in the link above. This is necessary to ensure the ABIs between dependencies match (else you'll run into `undefined symbol` issues).
-
-In order to use the fbgemm_gpu C++ operators, we need to link to the shared lib: `libfbgemm_gpu_py.so`. After installing fbgemm_gpu, search for the file `fbgemm_gpu_py.so` in your system:
-
-```
-sudo find / -type f -name fbgemm_gpu_py.so
-```
-
-This file will likely be located in the `site-packages` of your conda environment (e.g. `~anaconda3/envs/inference/lib/python3.8/site-packages/fbgemm_gpu-0.1.0-py3.8-linux-x86_64.egg/fbgemm_gpu/`). Create a copy of this library named: `libfbgemm_gpu_py.so`.
-
-```
-cd location_of_fbgemm_gpu_py.so
-cp fbgemm_gpu_py.so libfbgemm_gpu_py.so
-```
-
-This is necessary to make it easier to link to the fbgemm_gpu C++ library. This step will be removed in the near future.
 
 ### **2. Set variables**
 

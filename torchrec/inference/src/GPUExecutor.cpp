@@ -23,8 +23,14 @@
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <torch/csrc/autograd/profiler_legacy.h>
+#include <torch/csrc/autograd/profiler.h>
+
+// remove this after we switch over to multipy externally for torchrec
+#ifdef FBCODE_CAFFE2
+#include <multipy/runtime/deploy.h> // @manual
+#else
 #include <torch/csrc/deploy/deploy.h> // @manual
+#endif
 
 #include "ATen/cuda/CUDAEvent.h"
 #include "torchrec/inference/BatchingQueue.h"
@@ -63,12 +69,13 @@ void enable_nvtx_tracing() {
 GPUExecutor::GPUExecutor(
     std::shared_ptr<torch::deploy::InterpreterManager> manager,
     torch::deploy::ReplicatedObj model,
-    int rank,
-    int worldSize,
+    size_t rank,
+    size_t worldSize,
     std::shared_ptr<torchrec::ResultSplitFunc> func,
     std::chrono::milliseconds queueTimeout,
     std::shared_ptr<IGPUExecutorObserver> observer,
-    std::function<void()> warmupFn)
+    std::function<void()> warmupFn,
+    c10::optional<size_t> numThreadsPerGPU)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
@@ -77,26 +84,30 @@ GPUExecutor::GPUExecutor(
       resultSplitFunc_(func),
       queueTimeout_(queueTimeout),
       observer_(observer),
-      warmupFn_(std::move(warmupFn)) {
+      warmupFn_(std::move(warmupFn)),
+      numThreadsPerGPU_(
+          numThreadsPerGPU.has_value()
+              ? *numThreadsPerGPU
+              : manager_->allInstances().size() / worldSize_) {
   CHECK(observer_ != nullptr);
   at::cuda::CUDAGuard guard(rank_);
 
-  int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
   rejectionExecutor_ =
-      std::make_unique<folly::CPUThreadPoolExecutor>(2 * num_threads_per_gpu);
-  for (int i = 0; i < num_threads_per_gpu; ++i) {
+      std::make_unique<folly::CPUThreadPoolExecutor>(2 * numThreadsPerGPU_);
+  for (int i = 0; i < numThreadsPerGPU_; ++i) {
     LOG(INFO) << "Starting Thread " << i << " for Model Shard Rank " << rank_
-              << ", as Global thread: " << rank * num_threads_per_gpu + i;
-    processThreads_.emplace_back([this, rank, num_threads_per_gpu, i] {
-      if (FLAGS_emit_nsys_nvtx) {
-        enable_nvtx_tracing();
-      }
-      process(rank * num_threads_per_gpu + i);
-    });
+              << ", as Global thread: " << rank * numThreadsPerGPU_ + i;
+    processThreads_.emplace_back(
+        [this, rank, threadsPerGPU = numThreadsPerGPU_, i] {
+          if (FLAGS_emit_nsys_nvtx) {
+            enable_nvtx_tracing();
+          }
+          process(rank * threadsPerGPU + i);
+        });
   }
 
   completionExecutor_ =
-      std::make_unique<folly::CPUThreadPoolExecutor>(2 * num_threads_per_gpu);
+      std::make_unique<folly::CPUThreadPoolExecutor>(2 * numThreadsPerGPU_);
 }
 
 GPUExecutor::~GPUExecutor() {
@@ -121,9 +132,8 @@ void GPUExecutor::callback(std::shared_ptr<PredictionBatch> batch) {
 }
 
 void GPUExecutor::process(int idx) {
-  int num_threads_per_gpu = manager_->allInstances().size() / worldSize_;
   folly::setThreadName(
-      fmt::format("GPU-{}: Thread-{}", rank_, idx % num_threads_per_gpu));
+      fmt::format("GPU-{}: Thread-{}", rank_, idx % numThreadsPerGPU_));
 
   c10::InferenceMode inferenceModeGuard;
   std::vector<c10::cuda::CUDAStream> streams;
@@ -222,10 +232,11 @@ void GPUExecutor::process(int idx) {
 
           if (predictions.isNone()) {
             observer->addPredictionExceptionCount(1);
-            rejectionExecutor_->add([batch = std::move(batch)]() {
-              handleBatchException(
-                  batch->contexts, "GPUExecutor prediction exception");
-            });
+            rejectionExecutor_->add(
+                [contexts = std::move(batch->contexts)]() mutable {
+                  handleBatchException(
+                      contexts, "GPUExecutor prediction exception");
+                });
           } else {
             size_t offset = 0;
             auto rsfStart = std::chrono::steady_clock::now();

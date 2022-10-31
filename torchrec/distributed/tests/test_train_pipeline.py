@@ -19,6 +19,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import (
+    EmbeddingBagCollectionContext,
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
@@ -36,7 +37,6 @@ from torchrec.distributed.types import (
     Awaitable,
     ModuleSharder,
     ParameterSharding,
-    ShardedModuleContext,
     ShardingEnv,
     ShardingType,
 )
@@ -52,7 +52,7 @@ from torchrec.test_utils import get_free_port, init_distributed_single_host
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
     def input_dist(
         self,
-        ctx: ShardedModuleContext,
+        ctx: EmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
     ) -> Awaitable[SparseFeaturesList]:
         return super().input_dist(ctx, features)

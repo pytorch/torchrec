@@ -12,7 +12,7 @@ from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
-from torch import nn
+from torch import fx, nn
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
@@ -88,6 +88,17 @@ class SparseFeatures(Multistreamable):
         if self.id_score_list_features is not None:
             self.id_score_list_features.record_stream(stream)
 
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            SparseFeatures,
+            args=(
+                tracer.create_arg(self.id_list_features),
+                tracer.create_arg(self.id_score_list_features),
+            ),
+            kwargs={},
+        )
+
 
 class SparseFeaturesList(Multistreamable):
     def __init__(self, features: List[SparseFeatures]) -> None:
@@ -109,6 +120,14 @@ class SparseFeaturesList(Multistreamable):
         for feature in self.features:
             feature.record_stream(stream)
 
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            SparseFeaturesList,
+            args=(tracer.create_arg(self.features),),
+            kwargs={},
+        )
+
 
 class ListOfSparseFeaturesList(Multistreamable):
     def __init__(self, features: List[SparseFeaturesList]) -> None:
@@ -129,6 +148,14 @@ class ListOfSparseFeaturesList(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features_list:
             feature.record_stream(stream)
+
+    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
+        return tracer.create_node(
+            "call_function",
+            ListOfSparseFeaturesList,
+            args=(tracer.create_arg(self.features_list),),
+            kwargs={},
+        )
 
 
 @dataclass
@@ -154,7 +181,7 @@ class ShardedEmbeddingTable(
     EmbeddingAttributes,
     EmbeddingTableConfig,
 ):
-    pass
+    fused_params: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -165,6 +192,7 @@ class GroupedEmbeddingConfig:
     has_feature_processor: bool
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
+    fused_params: Optional[Dict[str, Any]] = None
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
@@ -242,8 +270,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
+        self._variable_batch_size = variable_batch_size
 
         # TODO remove after decoupling
         self._fused_params = fused_params
@@ -286,6 +316,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
+
+    @property
+    def variable_batch_size(self) -> bool:
+        return self._variable_batch_size
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
@@ -330,9 +364,16 @@ class BaseGroupedFeatureProcessor(nn.Module):
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):
-    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        shardable_params: Optional[List[str]] = None,
+    ) -> None:
         super().__init__()
         self._fused_params = fused_params
+        if not shardable_params:
+            shardable_params = []
+        self._shardable_params: List[str] = shardable_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
@@ -340,6 +381,34 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         ]
 
         return types
+
+    def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
+
+        shardable_params: Dict[str, nn.Parameter] = {}
+        for name, param in module.state_dict().items():
+            if name.endswith(".weight"):
+                table_name = name.split(".")[-2]
+                shardable_params[table_name] = param
+
+        if self._shardable_params:
+            assert all(
+                [
+                    table_name in self._shardable_params
+                    for table_name in shardable_params.keys()
+                ]
+            ) or all(
+                [
+                    table_name not in self._shardable_params
+                    for table_name in shardable_params.keys()
+                ]
+            ), f"Cannot partially shard {type(module)}, please check sharder kwargs"
+            shardable_params = {
+                table_name: param
+                for table_name, param in shardable_params.items()
+                if table_name in self._shardable_params
+            }
+
+        return shardable_params
 
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str

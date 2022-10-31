@@ -96,6 +96,9 @@ class CriteoTest(unittest.TestCase):
         generate_dense: bool = True,
         generate_sparse: bool = True,
         generate_labels: bool = True,
+        dense: Optional[np.ndarray] = None,
+        sparse: Optional[np.ndarray] = None,
+        labels: Optional[np.ndarray] = None,
     ) -> Generator[Tuple[str, ...], None, None]:
         with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -108,31 +111,34 @@ class CriteoTest(unittest.TestCase):
 
                 if generate_dense:
                     dense_path = os.path.join(tmpdir, filename + "_dense.npy")
-                    dense = np.random.random((num_rows, INT_FEATURE_COUNT)).astype(
-                        np.float32
-                    )
+                    if dense is None:
+                        dense = np.random.random((num_rows, INT_FEATURE_COUNT)).astype(
+                            np.float32
+                        )
                     np.save(dense_path, dense)
                     paths.append(dense_path)
 
                 if generate_sparse:
                     sparse_path = os.path.join(tmpdir, filename + "_sparse.npy")
-                    sparse = np.random.randint(
-                        cls.CAT_VAL_RANGE[0],
-                        cls.CAT_VAL_RANGE[1] + 1,
-                        size=(num_rows, CAT_FEATURE_COUNT),
-                        dtype=np.int32,
-                    )
+                    if sparse is None:
+                        sparse = np.random.randint(
+                            cls.CAT_VAL_RANGE[0],
+                            cls.CAT_VAL_RANGE[1] + 1,
+                            size=(num_rows, CAT_FEATURE_COUNT),
+                            dtype=np.int32,
+                        )
                     np.save(sparse_path, sparse)
                     paths.append(sparse_path)
 
                 if generate_labels:
                     labels_path = os.path.join(tmpdir, filename + "_labels.npy")
-                    labels = np.random.randint(
-                        cls.LABEL_VAL_RANGE[0],
-                        cls.LABEL_VAL_RANGE[1] + 1,
-                        size=(num_rows, 1),
-                        dtype=np.int32,
-                    )
+                    if labels is None:
+                        labels = np.random.randint(
+                            cls.LABEL_VAL_RANGE[0],
+                            cls.LABEL_VAL_RANGE[1] + 1,
+                            size=(num_rows, 1),
+                            dtype=np.int32,
+                        )
                     np.save(labels_path, labels)
                     paths.append(labels_path)
 

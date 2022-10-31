@@ -14,6 +14,7 @@ from torchrec.distributed.planner.types import (
     PartitionByType,
     Partitioner,
     PlannerError,
+    PlannerErrorType,
     ShardingOption,
     Storage,
     Topology,
@@ -141,18 +142,17 @@ class GreedyPerfPartitioner(Partitioner):
         """
 
         _topology: Topology = copy.deepcopy(storage_constraint)
-        plan = copy.deepcopy(proposal)
         _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
-        uniform_sharding_options = _get_uniform_sharding_options(plan)
+        uniform_sharding_options = _get_uniform_sharding_options(proposal)
         GreedyPerfPartitioner._uniform_partition(
             uniform_sharding_options, _topology.devices
         )
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
-        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(plan)
+        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(proposal)
 
         for sharding_option_group in sharding_option_groups:
             if (
@@ -178,7 +178,7 @@ class GreedyPerfPartitioner(Partitioner):
                 )
         # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
         self._topology: Topology = _topology
-        return plan
+        return proposal
 
     @staticmethod
     def _device_partition(
@@ -196,7 +196,8 @@ class GreedyPerfPartitioner(Partitioner):
                     break
             if not success:
                 raise PlannerError(
-                    f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}"
+                    error_type=PlannerErrorType.PARTITION,
+                    message=f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}",
                 )
 
     @staticmethod
@@ -245,7 +246,8 @@ class GreedyPerfPartitioner(Partitioner):
                     device.perf = device_copy.perf
                 return
         raise PlannerError(
-            f"can't find a host for sharding option group {sharding_option_group}"
+            error_type=PlannerErrorType.PARTITION,
+            message=f"can't find a host for sharding option group {sharding_option_group}",
         )
 
     @staticmethod
@@ -272,7 +274,8 @@ class GreedyPerfPartitioner(Partitioner):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)
                 if not storage_needed.fits_in(devices[i].storage):
                     raise PlannerError(
-                        f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}."
+                        error_type=PlannerErrorType.PARTITION,
+                        message=f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}.",
                     )
                 else:
                     sharding_option.shards[i].rank = devices[i].rank

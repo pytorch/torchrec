@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
-    EmbeddingsAllToOne,
+    SeqEmbeddingsAllToOne,
     SequenceEmbeddingsAllToAll,
 )
 from torchrec.distributed.embedding_lookup import (
@@ -28,7 +28,7 @@ from torchrec.distributed.embedding_types import (
     SparseFeaturesList,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
-    BaseSequenceEmbeddingDist,
+    InferSequenceShardingContext,
     SequenceShardingContext,
 )
 from torchrec.distributed.sharding.tw_sharding import (
@@ -39,44 +39,9 @@ from torchrec.distributed.sharding.tw_sharding import (
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
-class InferTwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[List[torch.Tensor]]):
-    """
-    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
-    operation.
-
-    Args:
-        device (torch.device): device on which the tensors will be communicated to.
-        world_size (int): number of devices in the topology.
-    """
-
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-    ) -> None:
-        super().__init__()
-        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(device, world_size, 0)
-
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: SequenceShardingContext,
-    ) -> Awaitable[torch.Tensor]:
-        """
-        Performs AlltoOne operation on sequence embeddings tensor.
-
-        Args:
-            sharding_ctx (SequenceShardingContext): shared context from KJTAllToOne
-                operation.
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
-        """
-        return self._dist.forward(local_embs)
-
-
-class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
+class TwSequenceEmbeddingDist(
+    BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes sequence embedding tensor in TW fashion with an AlltoAll operation.
 
@@ -109,7 +74,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: SequenceShardingContext,
+        sharding_ctx: Optional[SequenceShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on sequence embeddings tensor.
@@ -123,6 +88,7 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
 
+        assert sharding_ctx is not None
         return self._dist(
             local_embs,
             lengths=sharding_ctx.lengths_after_input_dist,
@@ -133,7 +99,9 @@ class TwSequenceEmbeddingDist(BaseSequenceEmbeddingDist[torch.Tensor]):
 
 
 class TwSequenceEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwEmbeddingSharding[
+        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
@@ -148,8 +116,8 @@ class TwSequenceEmbeddingSharding(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -162,7 +130,6 @@ class TwSequenceEmbeddingSharding(
         assert feature_processor is None
         return GroupedEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
         )
@@ -170,19 +137,65 @@ class TwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSequenceEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[SequenceShardingContext, torch.Tensor, torch.Tensor]:
+        assert self._pg is not None
         return TwSequenceEmbeddingDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
+            self.id_list_features_per_rank(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
 
+class InferTwSequenceEmbeddingDist(
+    BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]
+):
+    """
+    Redistributes sequence embedding tensor in hierarchical fashion with an AlltoOne
+    operation.
+
+    Args:
+        device (torch.device): device on which the tensors will be communicated to.
+        world_size (int): number of devices in the topology.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
+
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+        sharding_ctx: Optional[InferSequenceShardingContext] = None,
+    ) -> Awaitable[List[torch.Tensor]]:
+        """
+        Performs AlltoOne operation on sequence embeddings tensor.
+
+        Args:
+            local_embs (List[orch.Tensor]): tensor of values to distribute.
+            sharding_ctx (InferSequenceShardingContext): shared context from KJTAllToOne
+                operation.
+
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
+        """
+        return self._dist.forward(local_embs)
+
+
 class InferTwSequenceEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
+    BaseTwEmbeddingSharding[
+        InferSequenceShardingContext,
+        SparseFeaturesList,
+        List[torch.Tensor],
+        List[torch.Tensor],
+    ]
 ):
     """
     Shards sequence (unpooled) embedding table-wise, i.e.. a given embedding table is
@@ -193,8 +206,8 @@ class InferTwSequenceEmbeddingSharding(
         self, device: Optional[torch.device] = None
     ) -> BaseSparseFeaturesDist[SparseFeaturesList]:
         return InferTwSparseFeaturesDist(
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             self._world_size,
         )
 
@@ -213,7 +226,9 @@ class InferTwSequenceEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[List[torch.Tensor]]:
+    ) -> BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]:
         device = device if device is not None else self._device
         return InferTwSequenceEmbeddingDist(
             # pyre-fixme [6]

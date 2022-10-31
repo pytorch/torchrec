@@ -14,21 +14,24 @@
 TEST(ValidationTest, validateSparseFeatures) {
   auto values = at::tensor({1, 2, 3, 4});
   auto lengths = at::tensor({1, 1, 1, 1});
+  auto weights = at::tensor({.1, .2, .3, .4});
 
   // pass 1D
-  EXPECT_TRUE(torchrec::validateSparseFeatures(values, lengths));
+  EXPECT_TRUE(torchrec::validateSparseFeatures(values, lengths, weights));
 
   // pass 2D
   lengths.reshape({2, 2});
-  EXPECT_TRUE(torchrec::validateSparseFeatures(values, lengths));
+  EXPECT_TRUE(torchrec::validateSparseFeatures(values, lengths, weights));
 
   // fail 1D
   auto invalidLengths = at::tensor({1, 2, 1, 1});
-  EXPECT_FALSE(torchrec::validateSparseFeatures(values, invalidLengths));
+  EXPECT_FALSE(
+      torchrec::validateSparseFeatures(values, invalidLengths, weights));
 
   // fail 2D
   invalidLengths.reshape({2, 2});
-  EXPECT_FALSE(torchrec::validateSparseFeatures(values, invalidLengths));
+  EXPECT_FALSE(
+      torchrec::validateSparseFeatures(values, invalidLengths, weights));
 }
 
 TEST(ValidationTest, validateDenseFeatures) {

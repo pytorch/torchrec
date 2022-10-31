@@ -18,8 +18,16 @@
 #include <grpc++/grpc++.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
+
+// remove this after we switch over to multipy externally for torchrec
+#ifdef FBCODE_CAFFE2
+#include <multipy/runtime/deploy.h> // @manual
+#include <multipy/runtime/path_environment.h>
+#else
 #include <torch/csrc/deploy/deploy.h>
 #include <torch/csrc/deploy/path_environment.h>
+#endif
+
 #include <torch/torch.h>
 
 #include "torchrec/inference/GPUExecutor.h"
@@ -246,10 +254,9 @@ int main(int argc, char* argv[]) {
               .toIValue();
       for (const auto& iter : batchingMetadata.toGenericDict()) {
         torchrec::BatchingMetadata metadata;
-        metadata.type = iter.value().toString()->string();
+        metadata.type = iter.value().toStringRef();
         metadata.device = "cuda";
-        batchingMetadataMap[iter.key().toString()->string()] =
-            std::move(metadata);
+        batchingMetadataMap[iter.key().toStringRef()] = std::move(metadata);
       }
     }
 

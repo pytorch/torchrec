@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import os
 import shutil
 import time
@@ -270,6 +271,8 @@ class BinaryCriteoUtils:
         lengths: List[int],
         rank: int,
         world_size: int,
+        start_row: int = 0,
+        last_row: Optional[int] = None,
     ) -> Dict[int, Tuple[int, int]]:
         """
         Given a rank, world_size, and the lengths (number of rows) for a list of files,
@@ -295,14 +298,26 @@ class BinaryCriteoUtils:
         # All ..._g variables are globals indices (meaning they range from 0 to
         # total_length - 1). All ..._l variables are local indices (meaning they range
         # from 0 to lengths[i] - 1 for the ith file).
-
-        total_length = sum(lengths)
+        if last_row is None:
+            total_length = sum(lengths) - start_row
+        else:
+            total_length = last_row - start_row + 1
         rows_per_rank = total_length // world_size
+        remainder = total_length % world_size
 
         # Global indices that rank is responsible for. All ranges (left, right) are
         # inclusive.
-        rank_left_g = rank * rows_per_rank
-        rank_right_g = (rank + 1) * rows_per_rank - 1
+        if rank < remainder:
+            rank_left_g = rank * (rows_per_rank + 1)
+            rank_right_g = (rank + 1) * (rows_per_rank + 1) - 1
+        else:
+            rank_left_g = (
+                remainder * (rows_per_rank + 1) + (rank - remainder) * rows_per_rank
+            )
+            rank_right_g = rank_left_g + rows_per_rank - 1
+
+        rank_left_g += start_row
+        rank_right_g += start_row
 
         output = {}
 
@@ -632,10 +647,12 @@ class BinaryCriteoUtils:
             curr_first_row = curr_last_row
 
         # Directly copy over the last day's files since they will be used for validation and testing.
-        for part in ["dense", "sparse", "labels"]:
-            path_to_original = os.path.join(
-                input_dir_sparse, f"day_{days-1}_{part}.npy"
-            )
+        for (part, input_dir) in [
+            ("sparse", input_dir_sparse),
+            ("dense", input_dir_labels_and_dense),
+            ("labels", input_dir_labels_and_dense),
+        ]:
+            path_to_original = os.path.join(input_dir, f"day_{days-1}_{part}.npy")
             val_train_path = os.path.join(
                 output_dir_shuffled, f"day_{days-1}_{part}.npy"
             )
@@ -653,6 +670,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
     the Criteo tsv files to the npy files expected by this dataset.
 
     Args:
+        stage (str): "train", "val", or "test".
         dense_paths (List[str]): List of path strings to dense npy files.
         sparse_paths (List[str]): List of path strings to sparse npy files.
         labels_paths (List[str]): List of path strings to labels npy files.
@@ -681,6 +699,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
 
     def __init__(
         self,
+        stage: str,
         dense_paths: List[str],
         sparse_paths: List[str],
         labels_paths: List[str],
@@ -692,6 +711,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         hashes: Optional[List[int]] = None,
         path_manager_key: str = PATH_MANAGER_KEY,
     ) -> None:
+        self.stage = stage
         self.dense_paths = dense_paths
         self.sparse_paths = sparse_paths
         self.labels_paths = labels_paths
@@ -706,7 +726,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
 
         self._load_data_for_rank()
         self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
-        self.num_batches: int = sum(self.num_rows_per_file) // batch_size
+        self.num_batches: int = math.ceil(sum(self.num_rows_per_file) / batch_size)
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
@@ -719,7 +739,6 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.offsets: torch.Tensor = torch.arange(
             0, self._num_ids_in_batch + 1, dtype=torch.int32
         )
-        self.stride = batch_size
         self.length_per_key: List[int] = CAT_FEATURE_COUNT * [batch_size]
         self.offset_per_key: List[int] = [
             batch_size * i for i in range(CAT_FEATURE_COUNT + 1)
@@ -729,6 +748,19 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         }
 
     def _load_data_for_rank(self) -> None:
+        start_row, last_row = 0, None
+        if self.stage in ["val", "test"]:
+            # Last day's dataset is split into 2 sets: 1st half for "val"; 2nd for "test"
+            samples_in_file = BinaryCriteoUtils.get_shape_from_npy(
+                self.dense_paths[0], path_manager_key=self.path_manager_key
+            )[0]
+            start_row = 0
+            dataset_len = int(np.ceil(samples_in_file / 2.0))
+            if self.stage == "test":
+                start_row = dataset_len
+                dataset_len = samples_in_file - start_row
+            last_row = start_row + dataset_len - 1
+
         file_idx_to_row_range = BinaryCriteoUtils.get_file_idx_to_row_range(
             lengths=[
                 BinaryCriteoUtils.get_shape_from_npy(
@@ -738,6 +770,8 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             ],
             rank=self.rank,
             world_size=self.world_size,
+            start_row=start_row,
+            last_row=last_row,
         )
 
         self.dense_arrs, self.sparse_arrs, self.labels_arrs = [], [], []
@@ -775,17 +809,27 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             sparse = sparse[shuffler]
             labels = labels[shuffler]
 
+        batch_size = len(dense)
+        num_ids_in_batch = CAT_FEATURE_COUNT * batch_size
+        if batch_size == self.batch_size:
+            length_per_key = self.length_per_key
+            offset_per_key = self.offset_per_key
+        else:
+            # handle last batch in dataset when it's an incomplete batch.
+            length_per_key = CAT_FEATURE_COUNT * [batch_size]
+            offset_per_key = [batch_size * i for i in range(CAT_FEATURE_COUNT + 1)]
+
         return Batch(
             dense_features=torch.from_numpy(dense),
             sparse_features=KeyedJaggedTensor(
                 keys=self.keys,
                 # transpose + reshape(-1) incurs an additional copy.
                 values=torch.from_numpy(sparse.transpose(1, 0).reshape(-1)),
-                lengths=self.lengths,
-                offsets=self.offsets,
-                stride=self.stride,
-                length_per_key=self.length_per_key,
-                offset_per_key=self.offset_per_key,
+                lengths=self.lengths[:num_ids_in_batch],
+                offsets=self.offsets[: num_ids_in_batch + 1],
+                stride=batch_size,
+                length_per_key=length_per_key,
+                offset_per_key=offset_per_key,
                 index_per_key=self.index_per_key,
             ),
             labels=torch.from_numpy(labels.reshape(-1)),
@@ -813,7 +857,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         batch_idx = 0
         while batch_idx < self.num_batches:
             buffer_row_count = 0 if buffer is None else none_throws(buffer)[0].shape[0]
-            if buffer_row_count == self.batch_size:
+            if buffer_row_count == self.batch_size or file_idx == len(self.dense_arrs):
                 yield self._np_arrays_to_batch(*none_throws(buffer))
                 batch_idx += 1
                 buffer = None

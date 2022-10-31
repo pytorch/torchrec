@@ -218,6 +218,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
 
         bw_hook = None
         if full_backward_hooks:
+            # pyre-fixme[20]: Argument `user_pre_hooks` expected.
             bw_hook = hooks.BackwardHook(self, full_backward_hooks)
             input = bw_hook.setup_input_hook(input)
 

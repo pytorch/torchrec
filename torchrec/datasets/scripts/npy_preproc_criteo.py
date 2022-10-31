@@ -51,14 +51,16 @@ def main(argv: List[str]) -> None:
     input_dir = args.input_dir
     output_dir = args.output_dir
 
-    for f in os.listdir(input_dir):
-        in_file_path = os.path.join(input_dir, f)
-        dense_out_file_path = os.path.join(output_dir, f + "_dense.npy")
-        sparse_out_file_path = os.path.join(output_dir, f + "_sparse.npy")
-        labels_out_file_path = os.path.join(output_dir, f + "_labels.npy")
+    for i in range(24):
+        in_file_path = os.path.join(input_dir, f"day_{i}")
+        if not os.path.exists(in_file_path):
+            continue
+        dense_out_file_path = os.path.join(output_dir, f"day_{i}_dense.npy")
+        sparse_out_file_path = os.path.join(output_dir, f"day_{i}_sparse.npy")
+        labels_out_file_path = os.path.join(output_dir, f"day_{i}_labels.npy")
         print(
-            f"Processing {in_file_path}. Outputs will be saved to {dense_out_file_path}"
-            f", {sparse_out_file_path}, and {labels_out_file_path}..."
+            f"Processing {in_file_path}.\nOutput will be saved to\n{dense_out_file_path}"
+            f"\n{sparse_out_file_path}\n{labels_out_file_path}"
         )
         BinaryCriteoUtils.tsv_to_npys(
             in_file_path,

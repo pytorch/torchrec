@@ -22,6 +22,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.inference.modules import CopyableMixin
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
@@ -48,19 +49,30 @@ class ModelInput(Pipelineable):
         dedup_tables: Optional[
             Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
         ] = None,
+        variable_batch_size: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
-        idlist_features = [
-            feature for table in tables for feature in table.feature_names
-        ]
+        batch_size_by_rank = [batch_size] * world_size
+        if variable_batch_size:
+            batch_size_by_rank = [
+                batch_size_by_rank[r] - r if batch_size_by_rank[r] - r > 0 else 1
+                for r in range(world_size)
+            ]
+
+        idlist_features_to_num_embeddings = {}
+        for table in tables:
+            for feature in table.feature_names:
+                idlist_features_to_num_embeddings[feature] = table.num_embeddings
+
+        idlist_features = list(idlist_features_to_num_embeddings.keys())
         idscore_features = [
             feature for table in weighted_tables for feature in table.feature_names
         ]
 
-        idlist_ind_ranges = [table.num_embeddings for table in tables]
+        idlist_ind_ranges = list(idlist_features_to_num_embeddings.values())
         idscore_ind_ranges = [table.num_embeddings for table in weighted_tables]
 
         # Generate global batch.
@@ -71,9 +83,19 @@ class ModelInput(Pipelineable):
         global_idscore_weights = []
 
         for ind_range in idlist_ind_ranges:
-            lengths = torch.abs(
+            lengths_ = torch.abs(
                 torch.randn(batch_size * world_size) + pooling_avg
             ).int()
+            if variable_batch_size:
+                lengths = torch.zeros(batch_size * world_size).int()
+                for r in range(world_size):
+                    lengths[
+                        r * batch_size : r * batch_size + batch_size_by_rank[r]
+                    ] = lengths_[
+                        r * batch_size : r * batch_size + batch_size_by_rank[r]
+                    ]
+            else:
+                lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
             indices = torch.randint(0, ind_range, (num_indices,))
             global_idlist_lengths.append(lengths)
@@ -85,9 +107,19 @@ class ModelInput(Pipelineable):
         )
 
         for ind_range in idscore_ind_ranges:
-            lengths = torch.abs(
+            lengths_ = torch.abs(
                 torch.randn(batch_size * world_size) + pooling_avg
             ).int()
+            if variable_batch_size:
+                lengths = torch.zeros(batch_size * world_size).int()
+                for r in range(world_size):
+                    lengths[
+                        r * batch_size : r * batch_size + batch_size_by_rank[r]
+                    ] = lengths_[
+                        r * batch_size : r * batch_size + batch_size_by_rank[r]
+                    ]
+            else:
+                lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
             indices = torch.randint(0, ind_range, (num_indices,))
             weights = torch.rand((num_indices,))
@@ -119,7 +151,7 @@ class ModelInput(Pipelineable):
 
             for lengths, indices in zip(global_idlist_lengths, global_idlist_indices):
                 local_idlist_lengths.append(
-                    lengths[r * batch_size : (r + 1) * batch_size]
+                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]]
                 )
                 lengths_cumsum = [0] + lengths.view(world_size, -1).sum(dim=1).cumsum(
                     dim=0
@@ -132,7 +164,7 @@ class ModelInput(Pipelineable):
                 global_idscore_lengths, global_idscore_indices, global_idscore_weights
             ):
                 local_idscore_lengths.append(
-                    lengths[r * batch_size : (r + 1) * batch_size]
+                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]]
                 )
                 lengths_cumsum = [0] + lengths.view(world_size, -1).sum(dim=1).cumsum(
                     dim=0
@@ -240,6 +272,12 @@ class TestDenseArch(nn.Module):
             in_features=num_float_features, out_features=8, device=device
         )
 
+        self.dummy_param = torch.nn.Parameter(torch.empty(2, device=device))
+        self.register_buffer(
+            "dummy_buffer",
+            torch.nn.Parameter(torch.empty(1, device=device)),
+        )
+
     def forward(self, dense_input: torch.Tensor) -> torch.Tensor:
         return self.linear(dense_input)
 
@@ -304,6 +342,61 @@ class TestOverArch(nn.Module):
         for feature_name in self._weighted_features:
             ret_list.append(sparse[feature_name])
         return self.linear(torch.cat(ret_list, dim=1))
+
+
+@torch.fx.wrap
+def _post_sparsenn_forward(
+    ebc: KeyedTensor,
+    fp_ebc: KeyedTensor,
+    w_ebc: KeyedTensor,
+    batch_size: Optional[int] = None,
+) -> KeyedTensor:
+    if batch_size is None or ebc.values().size(0) == batch_size:
+        ebc_values = ebc.values()
+        fp_ebc_values = fp_ebc.values() if fp_ebc is not None else None
+        w_ebc_values = w_ebc.values()
+    else:
+        ebc_values = torch.zeros(
+            batch_size,
+            ebc.values().size(1),
+            dtype=ebc.values().dtype,
+            device=ebc.values().device,
+        )
+        ebc_values[: ebc.values().size(0), :] = ebc.values()
+        if fp_ebc is not None:
+            fp_ebc_values = torch.zeros(
+                batch_size,
+                fp_ebc.values().size(1),
+                dtype=fp_ebc.values().dtype,
+                device=fp_ebc.values().device,
+            )
+            fp_ebc_values[: fp_ebc.values().size(0), :] = fp_ebc.values()
+        else:
+            fp_ebc_values = None
+        w_ebc_values = torch.zeros(
+            batch_size,
+            w_ebc.values().size(1),
+            dtype=w_ebc.values().dtype,
+            device=w_ebc.values().device,
+        )
+        w_ebc_values[: w_ebc.values().size(0), :] = w_ebc.values()
+    result = (
+        KeyedTensor(
+            keys=ebc.keys() + w_ebc.keys(),
+            length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
+            values=torch.cat([ebc_values, w_ebc_values], dim=1),
+        )
+        if fp_ebc is None
+        else KeyedTensor(
+            keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
+            length_per_key=ebc.length_per_key()
+            + fp_ebc.length_per_key()
+            + w_ebc.length_per_key(),
+            # pyre-ignore[6]
+            values=torch.cat([ebc_values, fp_ebc_values, w_ebc_values], dim=1),
+        )
+    )
+    return result
 
 
 class TestSparseArch(nn.Module):
@@ -380,6 +473,7 @@ class TestSparseArch(nn.Module):
         self,
         features: KeyedJaggedTensor,
         weighted_features: KeyedJaggedTensor,
+        batch_size: Optional[int] = None,
     ) -> KeyedTensor:
         fp_features = features
         if self.fps:
@@ -389,23 +483,7 @@ class TestSparseArch(nn.Module):
         ebc = self.ebc(features)
         fp_ebc = self.fp_ebc(fp_features) if self.fp_ebc is not None else None
         w_ebc = self.weighted_ebc(weighted_features)
-        result = (
-            KeyedTensor(
-                keys=ebc.keys() + w_ebc.keys(),
-                length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
-                values=torch.cat([ebc.values(), w_ebc.values()], dim=1),
-            )
-            if self.fp_ebc is None
-            else KeyedTensor(
-                keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
-                length_per_key=ebc.length_per_key()
-                + fp_ebc.length_per_key()
-                + w_ebc.length_per_key(),
-                values=torch.cat(
-                    [ebc.values(), fp_ebc.values(), w_ebc.values()], dim=1
-                ),
-            )
-        )
+        result = _post_sparsenn_forward(ebc, fp_ebc, w_ebc, batch_size)
         return result
 
 
@@ -436,7 +514,7 @@ class TestSparseNNBase(nn.Module):
             sparse_device = torch.device("cpu")
 
 
-class TestSparseNN(TestSparseNNBase):
+class TestSparseNN(TestSparseNNBase, CopyableMixin):
     """
     Simple version of a SparseNN model.
 
@@ -491,7 +569,9 @@ class TestSparseNN(TestSparseNNBase):
         input: ModelInput,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         dense_r = self.dense(input.float_features)
-        sparse_r = self.sparse(input.idlist_features, input.idscore_features)
+        sparse_r = self.sparse(
+            input.idlist_features, input.idscore_features, input.float_features.size(0)
+        )
         over_r = self.over(dense_r, sparse_r)
         pred = torch.sigmoid(torch.mean(over_r, dim=1))
         if self.training:
@@ -739,13 +819,14 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         if fused_params is None:
             fused_params = {}
 
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
-        super().__init__(fused_params, qcomm_codecs_registry)
+        super().__init__(fused_params, qcomm_codecs_registry, variable_batch_size)
 
     """
     Restricts sharding to single type only.

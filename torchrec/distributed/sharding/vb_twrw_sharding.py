@@ -15,7 +15,7 @@ import torch
 import torch.distributed as dist
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
-    PooledEmbeddingsReduceScatterV,
+    PooledEmbeddingsReduceScatter,
 )
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
@@ -30,11 +30,8 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.twrw_sharding import BaseTwRwEmbeddingSharding
-from torchrec.distributed.sharding.vb_sharding import (
-    BaseVariableBatchEmbeddingDist,
-    VariableBatchShardingContext,
-)
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
 torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
@@ -103,7 +100,9 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
     ) -> None:
         super().__init__()
         assert (
-            pg.size() % intra_pg.size() == 0
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+            pg.size() % intra_pg.size()
+            == 0
         ), "currently group granularity must be node"
 
         self._world_size: int = pg.size()
@@ -233,7 +232,7 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
 
 
 class VariableBatchTwRwPooledEmbeddingDist(
-    BaseVariableBatchEmbeddingDist[torch.Tensor]
+    BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]
 ):
     def __init__(
         self,
@@ -242,30 +241,44 @@ class VariableBatchTwRwPooledEmbeddingDist(
         intra_pg: dist.ProcessGroup,
         dim_sum_per_node: List[int],
         device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
         self._rank = rank
         self._intra_pg: dist.ProcessGroup = intra_pg
         self._cross_pg: dist.ProcessGroup = cross_pg
         self._device: Optional[torch.device] = device
-        self._intra_dist = PooledEmbeddingsReduceScatterV(intra_pg)
+        self._intra_dist = PooledEmbeddingsReduceScatter(
+            intra_pg,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
         self._cross_dist = PooledEmbeddingsAllToAll(
             cross_pg,
             dim_sum_per_node,
             device,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
         )
 
     def forward(
         self,
         local_embs: torch.Tensor,
-        sharding_ctx: VariableBatchShardingContext,
+        sharding_ctx: Optional[VariableBatchShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
-
+        assert sharding_ctx is not None
         # preprocess batch_size_per_rank
         (
             batch_size_per_rank_by_cross_group,
             batch_size_sum_by_cross_group,
         ) = self._preprocess_batch_size_per_rank(
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
             self._intra_pg.size(),
             self._cross_pg.size(),
             sharding_ctx.batch_size_per_rank,
@@ -308,7 +321,9 @@ class VariableBatchTwRwPooledEmbeddingDist(
 
 
 class VariableBatchTwRwPooledEmbeddingSharding(
-    BaseTwRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwRwEmbeddingSharding[
+        VariableBatchShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards embedding bags table-wise then row-wise.
@@ -351,7 +366,6 @@ class VariableBatchTwRwPooledEmbeddingSharding(
             grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
                 self._rank
             ],
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -360,11 +374,12 @@ class VariableBatchTwRwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
         return VariableBatchTwRwPooledEmbeddingDist(
             rank=self._rank,
             cross_pg=cast(dist.ProcessGroup, self._cross_pg),
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),
             device=device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

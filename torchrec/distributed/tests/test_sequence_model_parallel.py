@@ -7,12 +7,12 @@
 
 
 import unittest
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from hypothesis import given, settings, Verbosity
+from hypothesis import assume, given, settings, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
@@ -55,6 +55,15 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(
@@ -62,7 +71,14 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
+        assume(
+            apply_optimizer_in_backward_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -73,6 +89,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -91,9 +108,19 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from([None]),
+        # TODO - need to enable optimizer overlapped behavior for data_parallel tables
+        # apply_optimizer_in_backward_config=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
-    def test_sharding_nccl_dp(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_dp(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+    ) -> None:
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -102,6 +129,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 )
             ],
             backend="nccl",
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -129,6 +157,15 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 ),
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(
@@ -136,7 +173,14 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
     ) -> None:
+        assume(
+            apply_optimizer_in_backward_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -147,6 +191,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @unittest.skipIf(
@@ -166,9 +211,29 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_nccl_cw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_cw(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+    ) -> None:
+        assume(
+            apply_optimizer_in_backward_config is None
+            or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
         self._test_sharding(
             sharders=[
                 TestEmbeddingCollectionSharder(
@@ -181,6 +246,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 table.name: ParameterConstraints(min_partition=4)
                 for table in self.tables
             },
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
     @seed_and_log
@@ -188,8 +254,9 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         super().setUp()
 
         num_features = 4
+        shared_features = 2
 
-        self.tables = [
+        initial_tables = [
             EmbeddingConfig(
                 num_embeddings=(i + 1) * 11,
                 embedding_dim=16,
@@ -198,8 +265,28 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             )
             for i in range(num_features)
         ]
+
+        shared_features_tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 11,
+                embedding_dim=16,
+                name="table_" + str(i + num_features),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(shared_features)
+        ]
+
+        self.tables = initial_tables + shared_features_tables
+        self.shared_features = [f"feature_{i}" for i in range(shared_features)]
+
         self.embedding_groups = {
-            "group_0": ["feature_" + str(i) for i in range(num_features)]
+            "group_0": [
+                f"{feature}@{table.name}"
+                if feature in self.shared_features
+                else feature
+                for table in self.tables
+                for feature in table.feature_names
+            ]
         }
 
     def _test_sharding(
@@ -211,6 +298,9 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
         qcomms_config: Optional[QCommsConfig] = None,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -224,4 +314,5 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend=backend,
             constraints=constraints,
             qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )

@@ -7,7 +7,7 @@
 
 import itertools
 import math
-from typing import Any, cast, Dict, List, Optional, TypeVar
+from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -23,6 +23,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseSparseFeaturesDist,
     bucketize_kjt_before_all2all,
     EmbeddingSharding,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
     SparseFeaturesAllToAll,
@@ -44,11 +45,13 @@ from torchrec.distributed.types import (
 )
 from torchrec.streamable import Multistreamable
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for table wise row wise sharding.
     """
@@ -60,6 +63,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -72,7 +76,10 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
-            intra_pg.size() if intra_pg else get_local_size(self._world_size)
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+            intra_pg.size()
+            if intra_pg
+            else get_local_size(self._world_size)
         )
 
         sharded_tables_per_rank = self._shard(sharding_infos)
@@ -108,6 +115,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
         ]:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
+        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -160,6 +168,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
                         global_metadata=global_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
+                        fused_params=info.fused_params,
                     )
                 )
 
@@ -188,6 +197,9 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[F, T]):
             for grouped_config in score_grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
+
+    def embedding_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
@@ -312,10 +324,13 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         device: Optional[torch.device] = None,
         has_feature_processor: bool = False,
         need_pos: bool = False,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         assert (
-            pg.size() % intra_pg.size() == 0
+            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
+            pg.size() % intra_pg.size()
+            == 0
         ), "currently group granularity must be node"
 
         self._world_size: int = pg.size()
@@ -374,6 +389,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
             stagger=self._num_cross_nodes,
+            variable_batch_size=variable_batch_size,
         )
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
@@ -444,7 +460,9 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         ]
 
 
-class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class TwRwPooledEmbeddingDist(
+    BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes pooled embedding tensor in TWRW fashion by performing a reduce-scatter
     operation row wise on the host level and then an AlltoAll operation table wise on
@@ -462,6 +480,7 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
 
     def __init__(
         self,
+        rank: int,
         cross_pg: dist.ProcessGroup,
         intra_pg: dist.ProcessGroup,
         dim_sum_per_node: List[int],
@@ -469,6 +488,10 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
+        self._rank = rank
+        self._intra_pg: dist.ProcessGroup = intra_pg
+        self._cross_pg: dist.ProcessGroup = cross_pg
+
         self._intra_dist = PooledEmbeddingsReduceScatter(
             intra_pg,
             codecs=qcomm_codecs_registry.get(
@@ -488,7 +511,11 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
             else None,
         )
 
-    def forward(self, local_embs: torch.Tensor) -> Awaitable[torch.Tensor]:
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmbeddingShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
         """
         Performs reduce-scatter pooled operation on pooled embeddings tensor followed by
         AlltoAll pooled operation.
@@ -499,12 +526,53 @@ class TwRwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
         """
+        if sharding_ctx is not None and len(set(sharding_ctx.batch_size_per_rank)) > 1:
+            # preprocess batch_size_per_rank
+            (
+                batch_size_per_rank_by_cross_group,
+                batch_size_sum_by_cross_group,
+            ) = self._preprocess_batch_size_per_rank(
+                # pyre-ignore[16]
+                self._intra_pg.size(),
+                self._cross_pg.size(),
+                sharding_ctx.batch_size_per_rank,
+            )
+            # Perform ReduceScatterV within one host
+            lengths = batch_size_sum_by_cross_group
+            local_rank = self._rank % self._intra_pg.size()
+            batch_size_per_rank = batch_size_per_rank_by_cross_group[local_rank]
+            rs_result = self._intra_dist(local_embs, input_splits=lengths).wait()
+            return self._cross_dist(rs_result, batch_size_per_rank=batch_size_per_rank)
+        else:
+            return self._cross_dist(self._intra_dist(local_embs).wait())
 
-        return self._cross_dist(self._intra_dist(local_embs).wait())
+    def _preprocess_batch_size_per_rank(
+        self, local_size: int, nodes: int, batch_size_per_rank: List[int]
+    ) -> Tuple[List[List[int]], List[int]]:
+        """
+        Reorders `batch_size_per_rank` so it's aligned with reordered features after
+        AlltoAll.
+        """
+        batch_size_per_rank_by_cross_group: List[List[int]] = []
+        batch_size_sum_by_cross_group: List[int] = []
+        for local_rank in range(local_size):
+            batch_size_per_rank_: List[int] = []
+            batch_size_sum = 0
+            for node in range(nodes):
+                batch_size_per_rank_.append(
+                    batch_size_per_rank[local_rank + node * local_size]
+                )
+                batch_size_sum += batch_size_per_rank[local_rank + node * local_size]
+            batch_size_per_rank_by_cross_group.append(batch_size_per_rank_)
+            batch_size_sum_by_cross_group.append(batch_size_sum)
+
+        return batch_size_per_rank_by_cross_group, batch_size_sum_by_cross_group
 
 
 class TwRwPooledEmbeddingSharding(
-    BaseTwRwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwRwEmbeddingSharding[
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards embedding bags table-wise then row-wise.
@@ -521,9 +589,8 @@ class TwRwPooledEmbeddingSharding(
         )
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
+        assert self._pg is not None
         return TwRwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             id_list_features_per_rank=id_list_features_per_rank,
@@ -533,6 +600,7 @@ class TwRwPooledEmbeddingSharding(
             device=device if device is not None else self._device,
             has_feature_processor=self._has_feature_processor,
             need_pos=self._need_pos,
+            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(
@@ -546,7 +614,6 @@ class TwRwPooledEmbeddingSharding(
             grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
                 self._rank
             ],
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -555,8 +622,9 @@ class TwRwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         return TwRwPooledEmbeddingDist(
+            rank=self._rank,
             cross_pg=cast(dist.ProcessGroup, self._cross_pg),
             intra_pg=cast(dist.ProcessGroup, self._intra_pg),
             dim_sum_per_node=self._dim_sum_per_node(),

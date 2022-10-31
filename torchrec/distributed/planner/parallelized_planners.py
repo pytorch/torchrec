@@ -39,6 +39,7 @@ from torchrec.distributed.planner.types import (
     Partitioner,
     PerfModel,
     PlannerError,
+    PlannerErrorType,
     Proposer,
     ShardingOption,
     Stats,
@@ -305,8 +306,8 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
                 lambda x, y: x + y,
                 [device.storage for device in storage_constraint.devices],
             )
-            raise PlannerError(
-                f"Unable to find a plan for this model that evaluates {self._num_proposals} proposals."
+            no_plan_solution = (
+                f"Planner evaluated {self._num_proposals} proposals."
                 "\nPossible solutions:"
                 f"\n  1) Increase the number of devices ({self._topology.world_size})"
                 f"\n  2) Reduce the model size ("
@@ -316,3 +317,15 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
                 f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
+            if global_storage_constraints < lowest_storage:
+                raise PlannerError(
+                    error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
+                    message="Unable to find a plan for this model because of insufficient storage. \n"
+                    + no_plan_solution,
+                )
+            else:
+                raise PlannerError(
+                    error_type=PlannerErrorType.STRICT_CONSTRAINTS,
+                    message="Unable to find a plan for this model because of the strict constraints. \n"
+                    + no_plan_solution,
+                )

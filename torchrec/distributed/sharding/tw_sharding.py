@@ -19,8 +19,10 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     EmbeddingSharding,
+    EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
+    NullShardingContext,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
 )
@@ -44,11 +46,13 @@ from torchrec.distributed.types import (
 from torchrec.streamable import Multistreamable
 
 
+C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
+W = TypeVar("W")
 
 
-class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
+class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for table wise sharding.
     """
@@ -59,6 +63,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -83,6 +88,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
         ] = self._score_grouped_embedding_configs_per_rank[self._rank]
+        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -127,6 +133,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
                     global_metadata=global_metadata,
                     weight_init_max=info.embedding_config.weight_init_max,
                     weight_init_min=info.embedding_config.weight_init_min,
+                    fused_params=info.fused_params,
                 )
             )
         return tables_per_rank
@@ -169,6 +176,20 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
+    def embedding_names_per_rank(self) -> List[List[str]]:
+        embedding_names = []
+        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
+            self._grouped_embedding_configs_per_rank,
+            self._score_grouped_embedding_configs_per_rank,
+        ):
+            embedding_names_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                embedding_names_per_rank.extend(grouped_config.embedding_names())
+            for grouped_config in score_grouped_embedding_configs:
+                embedding_names_per_rank.extend(grouped_config.embedding_names())
+            embedding_names.append(embedding_names_per_rank)
+        return embedding_names
+
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
         for grouped_embedding_configs, score_grouped_embedding_configs in zip(
@@ -201,7 +222,29 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
                 id_score_list_feature_names.extend(grouped_config.feature_names())
         return id_score_list_feature_names
 
-    def _id_list_features_per_rank(self) -> List[int]:
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        id_list_feature_names = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            id_list_feature_names_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                id_list_feature_names_per_rank.extend(grouped_config.feature_names())
+            id_list_feature_names.append(id_list_feature_names_per_rank)
+        return id_list_feature_names
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        id_score_list_feature_names = []
+        for (
+            score_grouped_embedding_configs
+        ) in self._score_grouped_embedding_configs_per_rank:
+            id_score_list_feature_names_per_rank = []
+            for grouped_config in score_grouped_embedding_configs:
+                id_score_list_feature_names_per_rank.extend(
+                    grouped_config.feature_names()
+                )
+            id_score_list_feature_names.append(id_score_list_feature_names_per_rank)
+        return id_score_list_feature_names
+
+    def id_list_features_per_rank(self) -> List[int]:
         id_list_features_per_rank = []
         for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
             num_features = 0
@@ -210,7 +253,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[F, T]):
             id_list_features_per_rank.append(num_features)
         return id_list_features_per_rank
 
-    def _id_score_list_features_per_rank(self) -> List[int]:
+    def id_score_list_features_per_rank(self) -> List[int]:
         id_score_list_features_per_rank = []
         for (
             score_grouped_embedding_configs
@@ -242,6 +285,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         device: Optional[torch.device] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._dist = SparseFeaturesAllToAll(
@@ -249,6 +293,7 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
+            variable_batch_size=variable_batch_size,
         )
 
     def forward(
@@ -268,7 +313,9 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(sparse_features)
 
 
-class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
+class TwPooledEmbeddingDist(
+    BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]
+):
     """
     Redistributes pooled embedding tensor with an AlltoAll collective operation for
     table wise sharding.
@@ -290,10 +337,10 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     ) -> None:
         super().__init__()
         self._dist = PooledEmbeddingsAllToAll(
-            pg,
-            dim_sum_per_rank,
-            device,
-            callbacks,
+            pg=pg,
+            dim_sum_per_rank=dim_sum_per_rank,
+            device=device,
+            callbacks=callbacks,
             codecs=qcomm_codecs_registry.get(
                 CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
             )
@@ -304,6 +351,7 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
     def forward(
         self,
         local_embs: torch.Tensor,
+        sharding_ctx: Optional[EmbeddingShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoAll operation on pooled embeddings tensor.
@@ -314,11 +362,19 @@ class TwPooledEmbeddingDist(BaseEmbeddingDist[torch.Tensor]):
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings.
         """
+        if sharding_ctx is None:
+            return self._dist(local_embs)
+        else:
+            return self._dist(
+                local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
+            )
 
-        return self._dist(local_embs)
 
-
-class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]):
+class TwPooledEmbeddingSharding(
+    BaseTwEmbeddingSharding[
+        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
+):
     """
     Shards embedding bags table-wise, i.e.. a given embedding table is entirely placed
     on a selected rank.
@@ -328,13 +384,13 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
         self,
         device: Optional[torch.device] = None,
     ) -> BaseSparseFeaturesDist[SparseFeatures]:
+        assert self._pg is not None
         return TwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
+            self._variable_batch_size,
         )
 
     def create_lookup(
@@ -346,7 +402,6 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -355,10 +410,9 @@ class TwPooledEmbeddingSharding(BaseTwEmbeddingSharding[SparseFeatures, torch.Te
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
+        assert self._pg is not None
         return TwPooledEmbeddingDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,
@@ -408,7 +462,9 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeaturesList]):
         return NoWait(self._dist.forward(sparse_features))
 
 
-class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
+class InferTwPooledEmbeddingDist(
+    BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
+):
     """
     Merges pooled embedding tensor from each device for inference.
 
@@ -428,6 +484,7 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
     def forward(
         self,
         local_embs: List[torch.Tensor],
+        sharding_ctx: Optional[NullShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
         """
         Performs AlltoOne operation on pooled embedding tensors.
@@ -444,7 +501,9 @@ class InferTwPooledEmbeddingDist(BaseEmbeddingDist[List[torch.Tensor]]):
 
 
 class InferTwEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeaturesList, List[torch.Tensor]]
+    BaseTwEmbeddingSharding[
+        NullShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
+    ]
 ):
     """
     Shards embedding bags table-wise for inference
@@ -454,8 +513,8 @@ class InferTwEmbeddingSharding(
         self, device: Optional[torch.device] = None
     ) -> BaseSparseFeaturesDist[SparseFeaturesList]:
         return InferTwSparseFeaturesDist(
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             self._world_size,
         )
 
@@ -475,10 +534,10 @@ class InferTwEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[List[torch.Tensor]]:
+    ) -> BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]:
         device = device if device is not None else self._device
+        assert device is not None
         return InferTwPooledEmbeddingDist(
-            # pyre-fixme [6]
             device,
             self._world_size,
         )

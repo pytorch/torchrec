@@ -19,7 +19,13 @@
 #include <folly/io/IOBuf.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+
+// remove this after we switch over to multipy externally for torchrec
+#ifdef FBCODE_CAFFE2
+#include <multipy/runtime/deploy.h> // @manual
+#else
 #include <torch/csrc/deploy/deploy.h> // @manual
+#endif
 
 #include "torchrec/inference/BatchingQueue.h"
 #include "torchrec/inference/Observer.h"
@@ -33,13 +39,14 @@ class GPUExecutor {
   GPUExecutor(
       std::shared_ptr<torch::deploy::InterpreterManager> manager,
       torch::deploy::ReplicatedObj model,
-      int rank,
-      int worldSize,
+      size_t rank,
+      size_t worldSize,
       std::shared_ptr<torchrec::ResultSplitFunc> func,
       std::chrono::milliseconds queueTimeout,
       std::shared_ptr<IGPUExecutorObserver>
           observer, // shared_ptr because used in completion executor callback
-      std::function<void()> warmupFn = {});
+      std::function<void()> warmupFn = {},
+      c10::optional<size_t> numThreadsPerGPU = c10::nullopt);
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
   ~GPUExecutor();
@@ -52,8 +59,8 @@ class GPUExecutor {
   // torch deploy
   std::shared_ptr<torch::deploy::InterpreterManager> manager_;
   torch::deploy::ReplicatedObj model_;
-  int rank_;
-  int worldSize_;
+  const size_t rank_;
+  const size_t worldSize_;
 
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> batches_;
   std::vector<std::thread> processThreads_;
@@ -63,6 +70,8 @@ class GPUExecutor {
   const std::chrono::milliseconds queueTimeout_;
   std::shared_ptr<IGPUExecutorObserver> observer_;
   std::function<void()> warmupFn_;
+
+  size_t numThreadsPerGPU_;
 };
 
 } // namespace torchrec

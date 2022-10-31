@@ -48,14 +48,6 @@ DEFINE_bool(
 
 namespace torchrec {
 
-size_t PredictionBatch::size() const {
-  size_t size = 0;
-  for (auto& iter : forwardArgs) {
-    size += iter.value().storage().nbytes();
-  }
-  return size;
-}
-
 BatchingQueue::BatchingQueue(
     std::vector<BatchQueueCb> cbs,
     const Config& config,
@@ -151,7 +143,8 @@ void BatchingQueue::createBatch() {
           startTime = front.addedTime;
         }
 
-        if (batchSize + front.request->batch_size > config_.maxBatchSize) {
+        if (batchSize > 0 &&
+            (batchSize + front.request->batch_size > config_.maxBatchSize)) {
           full = true;
           break;
         }
@@ -167,12 +160,14 @@ void BatchingQueue::createBatch() {
         (startTime &&
          (std::chrono::steady_clock::now() - *startTime >=
           config_.batchingInterval))) {
+      const auto requestsCount = requests.size();
+
       batchingQueues_[roundRobinIdx++]->blockingWrite(BatchingQueueEntry{
           .requests = std::move(requests),
           .contexts = std::move(contexts),
           .addedTime = *startTime});
 
-      observer_->addRequestsCount(requests.size());
+      observer_->addRequestsCount(requestsCount);
       observer_->recordBatchCreationLatency(
           getTimeElapsedMS(*startTime).count());
 

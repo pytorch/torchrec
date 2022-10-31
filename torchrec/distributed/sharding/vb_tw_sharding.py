@@ -12,6 +12,7 @@ import torch.distributed as dist
 from torchrec.distributed.dist_data import PooledEmbeddingsAllToAll
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
+    BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     SparseFeaturesAllToAll,
@@ -21,11 +22,8 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
 )
 from torchrec.distributed.sharding.tw_sharding import BaseTwEmbeddingSharding
-from torchrec.distributed.sharding.vb_sharding import (
-    BaseVariableBatchEmbeddingDist,
-    VariableBatchShardingContext,
-)
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.sharding.vb_sharding import VariableBatchShardingContext
+from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 
 
 class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
@@ -77,20 +75,36 @@ class VariableBatchTwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         return self._dist(sparse_features)
 
 
-class VariableBatchTwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Tensor]):
+class VariableBatchTwPooledEmbeddingDist(
+    BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]
+):
     def __init__(
         self,
         pg: dist.ProcessGroup,
         dim_sum_per_rank: List[int],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(pg, dim_sum_per_rank, device, callbacks)
+        self._dist = PooledEmbeddingsAllToAll(
+            pg,
+            dim_sum_per_rank,
+            device,
+            callbacks,
+            codecs=qcomm_codecs_registry.get(
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+            )
+            if qcomm_codecs_registry
+            else None,
+        )
 
     def forward(
-        self, local_embs: torch.Tensor, sharding_ctx: VariableBatchShardingContext
+        self,
+        local_embs: torch.Tensor,
+        sharding_ctx: Optional[VariableBatchShardingContext] = None,
     ) -> Awaitable[torch.Tensor]:
+        assert sharding_ctx is not None
         # do not remove the keyword for quantized communication hook injection.
         return self._dist(
             local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
@@ -98,7 +112,9 @@ class VariableBatchTwPooledEmbeddingDist(BaseVariableBatchEmbeddingDist[torch.Te
 
 
 class VariableBatchTwPooledEmbeddingSharding(
-    BaseTwEmbeddingSharding[SparseFeatures, torch.Tensor]
+    BaseTwEmbeddingSharding[
+        VariableBatchShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    ]
 ):
     """
     Shards pooled embeddings table-wise, i.e.. a given embedding table is entirely placed
@@ -115,8 +131,8 @@ class VariableBatchTwPooledEmbeddingSharding(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._id_list_features_per_rank(),
-            self._id_score_list_features_per_rank(),
+            self.id_list_features_per_rank(),
+            self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -129,7 +145,6 @@ class VariableBatchTwPooledEmbeddingSharding(
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
             grouped_score_configs=self._score_grouped_embedding_configs,
-            fused_params=fused_params,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
@@ -138,11 +153,12 @@ class VariableBatchTwPooledEmbeddingSharding(
     def create_output_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseVariableBatchEmbeddingDist[torch.Tensor]:
+    ) -> BaseEmbeddingDist[VariableBatchShardingContext, torch.Tensor, torch.Tensor]:
         return VariableBatchTwPooledEmbeddingDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
             self._dim_sum_per_rank(),
             device if device is not None else self._device,
+            qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
