@@ -43,38 +43,51 @@ jobs:
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         python --version
-        conda activate build_binary
-        python --version
-        conda install \
+        conda run -n build_binary python --version
+        conda install -n build_binary \
           --yes \
           -c pytorch-nightly \
           "pytorch-nightly"::pytorch[build="*cpu*"]
-        pip install -r requirements.txt
-        pip uninstall fbgemm_gpu-nightly -y
-        pip install fbgemm-gpu-nightly-cpu
-        python -c "import torch.distributed"
-        echo "torch.distributed succeeded"
-        python -c "import skbuild"
-        echo "skbuild succeeded"
-        python -c "import numpy"
-        python -c "import fbgemm_gpu"
-        echo "fbgemm_gpu succeeded"
-        echo "numpy succeeded"
-        python setup.py bdist_wheel \
+        conda run -n build_binary \
+          pip install -r requirements.txt
+        conda run -n build_binary \
+          pip uninstall fbgemm_gpu-nightly -y
+        conda run -n build_binary \
+          pip install fbgemm-gpu-nightly-cpu
+        conda run -n build_binary \
+          python -c "import torch.distributed"
+        conda run -n build_binary \
+          echo "torch.distributed succeeded"
+        conda run -n build_binary \
+          python -c "import skbuild"
+        conda run -n build_binary \
+          echo "skbuild succeeded"
+        conda run -n build_binary \
+          python -c "import numpy"
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        conda run -n build_binary \
+          echo "fbgemm_gpu succeeded"
+        conda run -n build_binary \
+          echo "numpy succeeded"
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
           --package_name torchrec-test-cpu \
           --python-tag=${{ matrix.python-tag }}
-        python -c "import torchrec"
-        conda install -y pytest
-        python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
-        echo "Starting C++ Tests"
-        export CONDA_BACKUP_CXX=$(which gcc)
-        echo $CONDA_BACKUP_CXX
-        conda install -y gxx_linux-64
-        x86_64-conda-linux-gnu-g++ --version
+        conda run -n build_binary \
+          python -c "import torchrec"
+        conda install -n build_binary -y pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
+        conda run -n build_binary \
+          echo "Starting C++ Tests"
+        conda install -n build_binary -y gxx_linux-64
+        conda run -n build_binary \
+          x86_64-conda-linux-gnu-g++ --version
         mkdir cpp-build
         cd cpp-build
-        cmake \
+        conda run -n build_binary cmake \
             -DBUILD_TEST=ON \
             -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake ..
-        make -j
-        ctest -v .
+        conda run -n build_binary make -j
+        conda run -n build_binary ctest -v .
