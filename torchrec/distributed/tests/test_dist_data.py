@@ -8,9 +8,10 @@
 import itertools
 import random
 import unittest
-from typing import Generator, List, Optional, Tuple, TypeVar, Union
+from typing import Dict, Generator, List, Optional, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
+import numpy as np
 import torch
 import torch.distributed as dist
 from hypothesis import given, settings
@@ -23,6 +24,7 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
+    SequenceEmbeddingsAllToAll,
 )
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -753,4 +755,250 @@ class PooledEmbeddingsAllGatherTest(MultiProcessTestBase):
         )
 
 
-# TODO Need testing of SequenceEmbeddingAllToAllTest!
+# For sequence embedding we do not support different dim for different tables
+def _generate_sequence_embedding_batch(
+    keys: List[str],
+    dim: int,
+    splits: List[int],
+    batch_size_per_rank: List[int],
+    lengths_before_a2a_per_rank: Dict[int, List],  # pyre-ignore [24]
+) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+    world_size = len(splits)
+
+    tensor_by_feature: Dict[
+        str, List[torch.Tensor]
+    ] = {}  # Model parallel, key as feature
+    tensor_by_rank: Dict[str, List[torch.Tensor]] = {}  # Data parallel, key as rank
+
+    emb_by_rank_feature = {}
+    for rank in range(world_size):
+        offset = 0
+        current_rank_lengths = lengths_before_a2a_per_rank[rank]
+        current_rank_batch_size = batch_size_per_rank[rank]
+
+        for feature in keys:
+            current_stride_lengths = current_rank_lengths[
+                offset : offset + current_rank_batch_size
+            ]
+            offset += current_rank_batch_size
+            emb_by_rank_feature[f"{feature}_{str(rank)}"] = np.random.rand(
+                sum(current_stride_lengths), dim
+            ).tolist()
+            tensor_by_feature[f"{feature}"] = []
+            tensor_by_rank[f"{str(rank)}"] = []
+
+    for k, v in emb_by_rank_feature.items():
+        feature, rank = k.split("_")
+        tensor_by_feature[feature].extend(v)
+        tensor_by_rank[rank].extend(v)
+
+    in_tensor: List[torch.Tensor] = []
+    out_tensor: List[torch.Tensor] = []
+
+    for _, v in tensor_by_feature.items():
+        in_tensor.append(torch.Tensor(v))
+
+    for _, v in tensor_by_rank.items():
+        out_tensor.append(torch.Tensor(v))
+
+    input_offsets = [0] + list(itertools.accumulate(splits))
+    output_offsets = np.arange(0, world_size + 1, dtype=int).tolist()
+
+    regroup_in_tensor: List[torch.Tensor] = []
+    regroup_out_tensor: List[torch.Tensor] = []
+
+    for i in range(world_size):
+        regroup_in_tensor.append(
+            torch.cat(in_tensor[input_offsets[i] : input_offsets[i + 1]])
+        )
+        regroup_out_tensor.append(
+            torch.cat(out_tensor[output_offsets[i] : output_offsets[i + 1]])
+        )
+
+    return regroup_in_tensor, regroup_out_tensor
+
+
+class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
+    @classmethod
+    def _run_test_dist(
+        cls,
+        rank: int,
+        world_size: int,
+        _input: torch.Tensor,
+        output: torch.Tensor,
+        input_splits: List[int],
+        output_splits: List[int],
+        lengths_after_sdd_a2a: torch.Tensor,
+        features_per_rank: List[int],
+        batch_size_per_rank: List[int],
+        qcomms_config: Optional[QCommsConfig] = None,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend="nccl")
+        pg = dist.group.WORLD
+        device = torch.device(f"cuda:{rank}")
+        _input = _input.to(device=device)
+        output = output.to(device=device)
+        lengths_after_sdd_a2a = lengths_after_sdd_a2a.to(device=device)
+
+        a2a = SequenceEmbeddingsAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[_distributed_c10d.ProcessGroup]`.
+            pg=pg,
+            features_per_rank=features_per_rank,
+            device=device,
+        )
+        _input.requires_grad = True
+
+        res = a2a(
+            local_embs=_input,
+            lengths=lengths_after_sdd_a2a,
+            input_splits=input_splits,
+            output_splits=output_splits,
+            sparse_features_recat=None,
+            batch_size_per_rank=batch_size_per_rank,
+        ).wait()
+
+        atol, rtol = None, None
+        if qcomms_config is not None:
+            atol, rtol = 0.01, 0.01
+            if (
+                qcomms_config.forward_precision == CommType.FP8
+                or qcomms_config.backward_precision == CommType.FP8
+            ):
+                atol, rtol = 0.05, 0.05
+        torch.testing.assert_close(res, output, rtol=rtol, atol=atol)
+        res.backward(res)
+        grad = _input.grad
+        # pyre-fixme[16]: Optional type has no attribute `cpu`.
+        assert_array_equal(_input.cpu().detach(), grad.cpu().detach())
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        variable_batch_size=st.booleans(),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=128.0,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP32,
+                    backward_precision=CommType.BF16,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP8,
+                    backward_precision=CommType.FP8,
+                ),
+                QCommsConfig(
+                    forward_precision=CommType.FP8,
+                    backward_precision=CommType.BF16,
+                ),
+            ]
+        ),
+    )
+    @settings(max_examples=8, deadline=None)
+    def test_sequence_embeddings(
+        self,
+        variable_batch_size: bool,
+        qcomms_config: Optional[QCommsConfig],
+    ) -> None:
+
+        world_size = 2
+        seq_emb_dim = 3
+        features = 3
+        keys = [f"F{feature}" for feature in range(features)]
+
+        if variable_batch_size:
+            variable_batch_size = True
+            batch_size_per_rank = [3, 2]
+
+            feature_num_per_rank = [1, 2]
+
+            lengths_before_a2a_per_rank = {
+                0: [3, 0, 2, 4, 1, 2, 1, 2, 0],
+                1: [4, 3, 1, 0, 5, 0],
+            }
+
+            lengths_after_a2a_per_rank = [
+                torch.tensor([3, 0, 2, 4, 3], dtype=int),  # pyre-ignore [6]
+                torch.tensor(
+                    [4, 1, 2, 1, 0, 1, 2, 0, 5, 0], dtype=int  # pyre-ignore [6]
+                ),
+            ]
+
+            input_splits_per_rank = {}
+            output_splits_per_rank = {}
+
+            input_splits_per_rank[0] = [5, 10]  # sum (3,0,2), sum(4, 1, 2, 1, 2, 0)
+            input_splits_per_rank[1] = [7, 6]  # sum (4, 3), sum(1, 0, 5, 0)
+            output_splits_per_rank[0] = [5, 7]  # emb input splits
+            output_splits_per_rank[1] = [10, 6]  #
+        else:
+            variable_batch_size = False
+            batch_size_per_rank = [2, 2]
+
+            feature_num_per_rank = [1, 2]
+
+            lengths_before_a2a_per_rank = {0: [3, 4, 1, 2, 6, 0], 1: [4, 0, 2, 3, 1, 2]}
+            lengths_after_a2a_per_rank = [
+                torch.tensor([[3, 4, 4, 0]], dtype=int),  # pyre-ignore [6]
+                torch.tensor(
+                    [[1, 2, 2, 3], [6, 0, 1, 2]], dtype=int  # pyre-ignore [6]
+                ),
+            ]
+
+            input_splits_per_rank = {}
+            output_splits_per_rank = {}
+
+            input_splits_per_rank[0] = [
+                7,
+                9,
+            ]  # sum (3,4) rank0, sum(2, 6, 5, 0) for rank 1
+            input_splits_per_rank[1] = [
+                4,
+                8,
+            ]  # sum (9,0) rank0, sum(7, 8, 1, 5) for rank 1
+            output_splits_per_rank[0] = [7, 4]  # emb input splits
+            output_splits_per_rank[1] = [9, 8]  #
+
+        _input, output = _generate_sequence_embedding_batch(
+            keys=keys,
+            dim=seq_emb_dim,
+            splits=feature_num_per_rank,
+            batch_size_per_rank=batch_size_per_rank,
+            lengths_before_a2a_per_rank=lengths_before_a2a_per_rank,
+        )
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "input_splits": input_splits_per_rank[rank],
+                    "output_splits": output_splits_per_rank[rank],
+                    "lengths_after_sdd_a2a": lengths_after_a2a_per_rank[rank],
+                    "features_per_rank": feature_num_per_rank,
+                    "batch_size_per_rank": batch_size_per_rank,
+                    "qcomms_config": qcomms_config,
+                }
+            )
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
