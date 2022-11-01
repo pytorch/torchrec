@@ -73,6 +73,6 @@ jobs:
         cd cpp-build
         cmake \
             -DBUILD_TEST=ON \
-            -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python3.7/site-packages/torch/share/cmake ..
+            -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake ..
         make -j
         ctest -v .
