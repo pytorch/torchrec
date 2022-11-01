@@ -98,31 +98,39 @@ def create_embedding_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    variable_batch_size: bool = False,
 ) -> EmbeddingSharding[
     SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
 ]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
         return RwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpSequenceEmbeddingSharding(sharding_infos, env, device)
+        return DpSequenceEmbeddingSharding(
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
+        )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            variable_batch_size=variable_batch_size,
         )
     else:
         raise ValueError(f"Sharding not supported {sharding_type}")
@@ -309,6 +317,7 @@ class ShardedEmbeddingCollection(
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
@@ -316,6 +325,7 @@ class ShardedEmbeddingCollection(
             table_name_to_parameter_sharding,
             fused_params,
         )
+        self._variable_batch_size = variable_batch_size
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
@@ -323,11 +333,12 @@ class ShardedEmbeddingCollection(
             ],
         ] = {
             sharding_type: create_embedding_sharding(
-                sharding_type,
-                embedding_confings,
-                env,
-                device,
+                sharding_type=sharding_type,
+                sharding_infos=embedding_confings,
+                env=env,
+                device=device,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
+                variable_batch_size=self._variable_batch_size,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
@@ -561,6 +572,8 @@ class ShardedEmbeddingCollection(
                 indices_awaitable = lengths_awaitable.wait()  # finish lengths all2all
                 input_splits = []
                 output_splits = []
+                batch_size_per_rank = []
+                sparse_features_recat = None
                 if isinstance(indices_awaitable, SparseFeaturesIndicesAwaitable):
                     assert indices_awaitable._id_list_features_awaitable is not None
                     input_splits = (
@@ -571,18 +584,30 @@ class ShardedEmbeddingCollection(
                         # pyre-fixme[16]
                         indices_awaitable._id_list_features_awaitable._out_lengths_per_worker
                     )
+                    batch_size_per_rank = (
+                        # pyre-fixme[16]
+                        indices_awaitable._id_list_features_awaitable._batch_size_per_rank
+                    )
+                    # Pass input_dist recat so that we do not need double calculate recat in Sequence embedding all2all to save H2D
+                    sparse_features_recat = (
+                        # pyre-fixme[16]
+                        indices_awaitable._id_list_features_awaitable._recat
+                    )
+
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
+                        sparse_features_recat=sparse_features_recat,
                         input_splits=input_splits,
                         output_splits=output_splits,
                         unbucketize_permute_tensor=module.unbucketize_permute_tensor
                         if isinstance(module, RwSparseFeaturesDist)
                         else None,
+                        batch_size_per_rank=batch_size_per_rank,
                     )
                 )
                 awaitables.append(indices_awaitable)
-            return SparseFeaturesListAwaitable(awaitables)
+        return SparseFeaturesListAwaitable(awaitables)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: SparseFeaturesList
@@ -771,6 +796,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
             self.fused_params,
             device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+            variable_batch_size=self._variable_batch_size,
         )
 
     def shardable_parameters(
