@@ -55,6 +55,7 @@ def train(
     dense_arch_layer_sizes: Optional[List[int]] = None,
     over_arch_layer_sizes: Optional[List[int]] = None,
     learning_rate: float = 0.1,
+    num_iterations: int = 1000,
     qcomm_forward_precision: Optional[CommType] = CommType.FP16,
     qcomm_backward_precision: Optional[CommType] = CommType.BF16,
 ) -> None:
@@ -68,7 +69,7 @@ def train(
     The effects of quantized comms will be most apparent in large training jobs across multiple nodes where inter host communication is expensive.
     """
     if dense_arch_layer_sizes is None:
-        dense_arch_layer_sizes = [64, 128]
+        dense_arch_layer_sizes = [64, embedding_dim]
     if over_arch_layer_sizes is None:
         over_arch_layer_sizes = [64, 1]
 
@@ -109,18 +110,25 @@ def train(
         train_model.model.sparse_arch.parameters(),
         {"lr": learning_rate},
     )
-
-    sharder = EmbeddingBagCollectionSharder(
-        qcomm_codecs_registry=get_qcomm_codecs_registry(
+    qcomm_codecs_registry = (
+        get_qcomm_codecs_registry(
             qcomms_config=QCommsConfig(
+                # pyre-ignore
                 forward_precision=qcomm_forward_precision,
+                # pyre-ignore
                 backward_precision=qcomm_backward_precision,
             )
         )
+        if backend == "nccl"
+        else None
     )
+    sharder = EmbeddingBagCollectionSharder(qcomm_codecs_registry=qcomm_codecs_registry)
 
     model = DistributedModelParallel(
-        module=train_model, device=device, sharders=[sharder]
+        module=train_model,
+        device=device,
+        # pyre-ignore
+        sharders=[sharder],
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
@@ -140,7 +148,7 @@ def train(
             num_embeddings=num_embeddings,
         )
     )
-    for _ in tqdm(range(int(1e4)), mininterval=5.0):
+    for _ in tqdm(range(int(num_iterations)), mininterval=5.0):
         train_pipeline.progress(train_iterator)
 
 
