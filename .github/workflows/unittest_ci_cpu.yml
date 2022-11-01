@@ -49,7 +49,7 @@ jobs:
           --yes \
           -c pytorch-nightly \
           "pytorch-nightly"::pytorch[build="*cpu*"]
-        conda install -r requirements.txt
+        conda install --file requirements.txt
         conda uninstall fbgemm_gpu-nightly -y
         conda install fbgemm-gpu-nightly-cpu
         python -c "import torch.distributed"
