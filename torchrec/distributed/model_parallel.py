@@ -7,7 +7,6 @@
 
 import abc
 import copy
-import types
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
@@ -343,13 +342,16 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     ) -> None:
         sharded_params = self._plan.get_plan_for_module(path)
         if sharded_params:
-            sharder_key = sharder_name(type(module))
-            sharded_module = self._sharder_map[sharder_key].shard(
-                module,
-                sharded_params,
-                self._env,
-                self.device,
-            )
+            if isinstance(module, ShardedModule):
+                sharded_module = module
+            else:
+                sharder_key = sharder_name(type(module))
+                sharded_module = self._sharder_map[sharder_key].shard(
+                    module,
+                    sharded_params,
+                    self._env,
+                    self.device,
+                )
             if path:
                 leaf_module = self._dmp_wrapped_module
                 split_path = path.split(".")
