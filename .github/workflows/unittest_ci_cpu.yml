@@ -56,20 +56,17 @@ jobs:
           pip install fbgemm-gpu-nightly-cpu
         conda run -n build_binary \
           python -c "import torch.distributed"
-        conda run -n build_binary \
-          echo "torch.distributed succeeded"
+        echo "torch.distributed succeeded"
         conda run -n build_binary \
           python -c "import skbuild"
-        conda run -n build_binary \
-          echo "skbuild succeeded"
+        echo "skbuild succeeded"
         conda run -n build_binary \
           python -c "import numpy"
+        echo "numpy succeeded"
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
-        conda run -n build_binary \
-          echo "fbgemm_gpu succeeded"
-        conda run -n build_binary \
-          echo "numpy succeeded"
+        echo "fbgemm_gpu succeeded"
+
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-test-cpu \
@@ -79,8 +76,7 @@ jobs:
         conda install -n build_binary -y pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
-        conda run -n build_binary \
-          echo "Starting C++ Tests"
+        echo "Starting C++ Tests"
         conda install -n build_binary -y gxx_linux-64
         conda run -n build_binary \
           x86_64-conda-linux-gnu-g++ --version
