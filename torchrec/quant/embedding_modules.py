@@ -193,6 +193,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         # Their states will be modified via self.embedding_bags
         self._emb_modules: List[nn.Module] = []
         self._output_dtype = output_dtype
+        self._device = device
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -358,6 +359,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
 
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
 
 class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     """
@@ -428,6 +433,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
         self._output_dtype = output_dtype
+        self._device = device
+
         table_names = set()
         for config in tables:
             if config.name in table_names:
@@ -565,3 +572,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
