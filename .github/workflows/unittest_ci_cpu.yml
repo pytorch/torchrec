@@ -69,6 +69,7 @@ jobs:
         conda install -y pytest
         python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
         echo "Starting C++ Tests"
+        export CONDA_BACKUP_CXX=$(which gcc)
         conda install -y gxx_linux-64
         x86_64-conda-linux-gnu-g++ --version
         mkdir cpp-build
