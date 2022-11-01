@@ -43,8 +43,6 @@ jobs:
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         python --version
-        conda init bash
-        source /root/.bashrc
         conda activate build_binary
         python --version
         conda install \
