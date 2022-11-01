@@ -45,7 +45,10 @@ jobs:
         python --version
         conda activate build_binary
         python --version
-        conda install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+        conda install \
+          --yes \
+          -c pytorch-nightly \
+          "pytorch-nightly"::pytorch[build="*cpu*"]
         conda install -r requirements.txt
         conda uninstall fbgemm_gpu-nightly -y
         conda install fbgemm-gpu-nightly-cpu
