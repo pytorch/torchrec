@@ -133,6 +133,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
         self._lengths_per_embedding: List[int] = []
+        self._device: torch.device = (
+            device if device is not None else torch.device("cpu")
+        )
+
         table_names = set()
         for embedding_config in tables:
             if embedding_config.name in table_names:
@@ -197,6 +201,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
 
 
 class EmbeddingCollectionInterface(abc.ABC, nn.Module):
@@ -297,6 +305,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         self._embedding_configs = tables
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
+        self._device: torch.device = (
+            device if device is not None else torch.device("cpu")
+        )
+
         table_names = set()
         for config in tables:
             if config.name in table_names:
@@ -367,3 +379,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
     def embedding_names_by_table(self) -> List[List[str]]:
         return self._embedding_names_by_table
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
