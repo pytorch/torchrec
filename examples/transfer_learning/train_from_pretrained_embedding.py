@@ -83,8 +83,6 @@ def share_tensor_via_shm(
     global gloo_pg
     if gloo_pg is None:
         if dist.get_backend() == "gloo":
-            # pyre-fixme[9]: gloo_pg has type `Optional[dist.ProcessGroup]`; used as
-            #  `Optional[_distributed_c10d.ProcessGroup]`.
             gloo_pg = dist.group.WORLD
         else:
             gloo_pg = dist.new_group(backend="gloo")
@@ -190,7 +188,6 @@ def main() -> None:
     ).collective_plan(
         ebc,
         sharders,
-        # pyre-fixme[6]: For 3rd param expected `ProcessGroup` but got `ProcessGroup`.
         pg,
     )
     print(plan)

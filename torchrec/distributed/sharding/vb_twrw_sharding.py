@@ -100,9 +100,7 @@ class VariableBatchTwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]
     ) -> None:
         super().__init__()
         assert (
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
-            pg.size() % intra_pg.size()
-            == 0
+            pg.size() % intra_pg.size() == 0
         ), "currently group granularity must be node"
 
         self._world_size: int = pg.size()
@@ -278,7 +276,6 @@ class VariableBatchTwRwPooledEmbeddingDist(
             batch_size_per_rank_by_cross_group,
             batch_size_sum_by_cross_group,
         ) = self._preprocess_batch_size_per_rank(
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
             self._intra_pg.size(),
             self._cross_pg.size(),
             sharding_ctx.batch_size_per_rank,
