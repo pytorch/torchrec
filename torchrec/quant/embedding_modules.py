@@ -195,7 +195,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         # Their states will be modified via self.embedding_bags
         self._emb_modules: List[nn.Module] = []
         self._output_dtype = output_dtype
-        self._device = device
+        self._device: torch.device = device
         self._table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None
@@ -249,6 +249,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=16,
                 feature_table_map=feature_table_map,
             )
+            if device != torch.device("meta") and weight_lists is None:
+                emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
 
         self._embedding_names: List[str] = list(
@@ -464,28 +466,29 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             if table_name_to_quantized_weights:
                 # pyre-ignore
                 weight_lists.append(table_name_to_quantized_weights[config.name])
-            self.embeddings.append(
-                IntNBitTableBatchedEmbeddingBagsCodegen(
-                    embedding_specs=[
-                        (
-                            "",
-                            config.num_embeddings,
-                            config.embedding_dim,
-                            data_type_to_sparse_type(config.data_type),
-                            EmbeddingLocation.HOST
-                            if device.type == "cpu"
-                            else EmbeddingLocation.DEVICE,
-                        )
-                    ],
-                    pooling_mode=PoolingMode.NONE,
-                    weight_lists=weight_lists,
-                    device=device,
-                    output_dtype=data_type_to_sparse_type(
-                        dtype_to_data_type(output_dtype)
-                    ),
-                    row_alignment=16,
-                )
+            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=[
+                    (
+                        "",
+                        config.num_embeddings,
+                        config.embedding_dim,
+                        data_type_to_sparse_type(config.data_type),
+                        EmbeddingLocation.HOST
+                        if device.type == "cpu"
+                        else EmbeddingLocation.DEVICE,
+                    )
+                ],
+                pooling_mode=PoolingMode.NONE,
+                weight_lists=weight_lists,
+                device=device,
+                output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
+                row_alignment=16,
             )
+            if device != torch.device("meta") and weight_lists is None:
+                emb_module.initialize_weights()
+
+            self.embeddings.append(emb_module)
+
             if not config.feature_names:
                 config.feature_names = [config.name]
 
