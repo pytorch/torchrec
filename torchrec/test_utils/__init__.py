@@ -32,7 +32,7 @@ def get_free_port() -> int:
                 return s.getsockname()[1]
     except Exception as e:
         raise Exception(
-            f"Binding failed with address {address} while getting free port {e}"
+            f"Binding failed with address 127.0.0.1 while getting free port {e}"
         )
 
 
