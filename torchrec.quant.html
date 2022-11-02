@@ -419,6 +419,11 @@ B: batch size</p>
 <span class="n">quantized_embeddings</span> <span class="o">=</span> <span class="n">qebc</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 </pre></div>
 </div>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.device">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">device</span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.device" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs">
 <span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
@@ -518,6 +523,11 @@ where:</p>
 <span class="p">[</span> <span class="mf">0.9329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0697</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8095</span><span class="p">]],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">EmbeddingBackward</span><span class="o">&gt;</span><span class="p">)</span>
 </pre></div>
 </div>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.device">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">device</span></em><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.device" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs">
 <span class="sig-name descname"><span class="pre">embedding_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><span class="pre">EmbeddingConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs" title="Permalink to this definition">¶</a></dt>
@@ -703,6 +713,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
 <li><a class="reference internal" href="#">torchrec.quant</a><ul>
 <li><a class="reference internal" href="#module-torchrec.quant.embedding_modules">torchrec.quant.embedding_modules</a><ul>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.device"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.device</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.embedding_bag_configs()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.forward"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.forward()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingBagCollection.from_float"><code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection.from_float()</span></code></a></li>
@@ -712,6 +723,7 @@ This reduces the size of the model weights and speeds up model execution.</p>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.device"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.device</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_configs"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_configs()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_dim"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_dim()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.quant.embedding_modules.EmbeddingCollection.embedding_names_by_table"><code class="docutils literal notranslate"><span class="pre">EmbeddingCollection.embedding_names_by_table()</span></code></a></li>
