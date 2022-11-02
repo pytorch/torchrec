@@ -64,7 +64,6 @@ class VariableBatchRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         has_feature_processor: bool = False,
     ) -> None:
         super().__init__()
-        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._world_size: int = pg.size()
         self._num_id_list_features = num_id_list_features
         self._num_id_score_list_features = num_id_score_list_features
@@ -174,9 +173,7 @@ class VariableBatchRwPooledEmbeddingDist(
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
         self._workers: int = pg.size()
-        # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
         self._rank: int = pg.rank()
         self._dist = PooledEmbeddingsReduceScatter(
             pg,

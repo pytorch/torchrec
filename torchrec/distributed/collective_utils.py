@@ -28,7 +28,6 @@ def is_leader(pg: Optional[dist.ProcessGroup], leader_rank: int = 0) -> bool:
     """
     if pg is None:
         return leader_rank == 0
-    # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
     return pg.rank() == leader_rank
 
 
@@ -50,13 +49,11 @@ def invoke_on_rank_and_broadcast_result(
 
         id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
     """
-    # pyre-fixme[16]: `ProcessGroup` has no attribute `rank`.
     if pg.rank() == rank:
         res = func(*args, **kwargs)
         object_list = [res]
     else:
         object_list = [None]
-    # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
     if pg.size() > 1:
         dist.broadcast_object_list(object_list, rank, group=pg)
     return cast(T, object_list[0])
