@@ -176,11 +176,13 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
     def __init__(
         self,
-        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
         tables: List[EmbeddingBagConfig],
         is_weighted: bool,
         device: torch.device,
         output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -194,6 +196,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._emb_modules: List[nn.Module] = []
         self._output_dtype = output_dtype
         self._device = device
+        self._table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -215,7 +220,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for key, emb_configs in self._key_to_tables.items():
             (pooling, data_type) = key
             embedding_specs = []
-            weight_lists = []
+            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
+                [] if table_name_to_quantized_weights else None
+            )
             feature_table_map: List[int] = []
 
             for idx, table in enumerate(emb_configs):
@@ -228,7 +235,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                         location,
                     )
                 )
-                weight_lists.append(table_name_to_quantized_weights[table.name])
+                if table_name_to_quantized_weights:
+                    # pyre-ignore
+                    weight_lists.append(table_name_to_quantized_weights[table.name])
                 feature_table_map.extend([idx] * table.num_features())
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
@@ -340,12 +349,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
         return cls(
-            table_name_to_quantized_weights,
             embedding_bag_configs,
             module.is_weighted(),
             device=device,
             # pyre-ignore [16]
             output_dtype=module.qconfig.activation().dtype,
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
         )
 
     def embedding_bag_configs(
@@ -421,11 +430,13 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
     def __init__(  # noqa C901
         self,
-        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
         tables: List[EmbeddingConfig],
         device: torch.device,
         need_indices: bool = False,
         output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
     ) -> None:
         super().__init__()
         self.embeddings: nn.ModuleList = nn.ModuleList()
@@ -447,6 +458,12 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
                 )
+            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
+                [] if table_name_to_quantized_weights else None
+            )
+            if table_name_to_quantized_weights:
+                # pyre-ignore
+                weight_lists.append(table_name_to_quantized_weights[config.name])
             self.embeddings.append(
                 IntNBitTableBatchedEmbeddingBagsCodegen(
                     embedding_specs=[
@@ -461,7 +478,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         )
                     ],
                     pooling_mode=PoolingMode.NONE,
-                    weight_lists=[table_name_to_quantized_weights[config.name]],
+                    weight_lists=weight_lists,
                     device=device,
                     output_dtype=data_type_to_sparse_type(
                         dtype_to_data_type(output_dtype)
@@ -549,10 +566,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
 
         return cls(
-            table_name_to_quantized_weights,
             tables,
             device=device,
             need_indices=module.need_indices(),
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
         )
 
     def _get_name(self) -> str:
