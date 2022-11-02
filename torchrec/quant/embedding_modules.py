@@ -177,14 +177,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
     def __init__(
         self,
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
-        embedding_configs: List[EmbeddingBagConfig],
+        tables: List[EmbeddingBagConfig],
         is_weighted: bool,
         device: torch.device,
         output_dtype: torch.dtype = torch.float,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
-        self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
+        self._embedding_bag_configs: List[EmbeddingBagConfig] = tables
         self._key_to_tables: Dict[
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
         ] = defaultdict(list)
