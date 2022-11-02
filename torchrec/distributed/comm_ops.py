@@ -662,8 +662,6 @@ class All2All_Pooled_Req(Function):
         a2ai: All2AllPooledInfo,
         input_embeddings: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         (B_global, D_local_sum) = input_embeddings.shape
 
@@ -766,8 +764,6 @@ class All2All_Pooled_Wait(Function):
         myreq: Request[Tensor],
         *dummy_tensor: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
@@ -881,11 +877,7 @@ class All2All_Seq_Req(Function):
         a2ai: All2AllSequenceInfo,
         sharded_input_embeddings: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         world_size = dist.get_world_size(pg)
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         D = a2ai.embedding_dim
         forward_recat_tensor = a2ai.forward_recat_tensor
@@ -1163,8 +1155,6 @@ class ReduceScatter_Req(Function):
         rsi: ReduceScatterInfo,
         *inputs: Any,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
 
         if rsi.codecs is not None:
@@ -1273,8 +1263,6 @@ class ReduceScatterBase_Req(Function):
         rsi: ReduceScatterBaseInfo,
         inputs: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_size = dist.get_world_size(pg)
         assert inputs.size(0) % my_size == 0
         if rsi.codecs is not None:
@@ -1366,8 +1354,6 @@ class AllGatherBase_Req(Function):
         agi: AllGatherBaseInfo,
         input: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_size = dist.get_world_size(pg)
 
         if agi.codecs is not None:
@@ -1461,8 +1447,6 @@ class ReduceScatterV_Req(Function):
         rsi: ReduceScatterVInfo,
         input: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
 
         if rsi.codecs is not None:
