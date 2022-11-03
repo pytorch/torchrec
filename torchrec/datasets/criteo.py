@@ -372,7 +372,7 @@ class BinaryCriteoUtils:
             if len(shape) == 2:
                 total_rows, row_size = shape
             else:
-                raise ValueError("Cannot load range for npy with ndim == 2.")
+                raise ValueError("Cannot load range for npy with ndim != 2.")
 
             if not (0 <= start_row < total_rows):
                 raise ValueError(
@@ -537,7 +537,7 @@ class BinaryCriteoUtils:
             output_dir_full_set (str): Output directory of the full dataset, if desired.
             days (int): Number of day files.
             int_columns (int): Number of columns with dense features.
-            columns (int): Total number of columns.
+            sparse_columns (int): Total number of categorical columns.
             path_manager_key (str): Path manager key used to load from different filesystems.
             random_seed (int): Random seed used for the random.shuffle operator.
         """
