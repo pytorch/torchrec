@@ -982,7 +982,7 @@ def _get_default_rtol_and_atol(
 ) -> Tuple[float, float]:
     """
     default tolerance values for torch.testing.assert_close,
-    consistent with the values of torch.testing.assert_allclose
+    consistent with the values of torch.testing.assert_close
     """
     _DTYPE_PRECISIONS = {
         torch.float16: (1e-3, 1e-3),
