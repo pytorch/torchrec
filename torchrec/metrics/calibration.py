@@ -39,10 +39,10 @@ def get_calibration_states(
 
 class CalibrationMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for Calibration, which is the
+    This class implements the RecMetricComputation for Calibration, which is the
     ratio between the prediction and the labels (conversions).
 
-    The constructer arguments are defined in RecMetricComputation.
+    The constructor arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
     """
 

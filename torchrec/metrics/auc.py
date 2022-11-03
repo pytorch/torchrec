@@ -48,9 +48,9 @@ def _state_reduction(state: List[torch.Tensor]) -> List[torch.Tensor]:
 
 class AUCMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for AUC, i.e. Area Under the Curve.
+    This class implements the RecMetricComputation for AUC, i.e. Area Under the Curve.
 
-    The constructer arguments are defined in RecMetricComputation.
+    The constructor arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
     """
 
