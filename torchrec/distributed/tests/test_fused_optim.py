@@ -81,7 +81,7 @@ class ModelParallelTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=5, deadline=None)
     def test_sharding_nccl_rw(
         self,
         sharding_type: str,
@@ -120,7 +120,7 @@ class ModelParallelTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=5, deadline=None)
     def test_sharding_nccl_tw(
         self,
         sharding_type: str,
