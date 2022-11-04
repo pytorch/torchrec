@@ -34,7 +34,7 @@ jobs:
               python-tag: "py310"
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      runner: ${{ matrix.runner }}
+      runner: ${{ matrix.os }}
       timeout: 60
       gpu-arch-type: cuda
       gpu-arch-version: "${{ matrix.cuda-version }}"
@@ -77,7 +77,7 @@ jobs:
               python-tag: "py310"
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      runner: ${{ matrix.runner }}
+      runner: ${{ matrix.os }}
       timeout: 60
       gpu-arch-type: cuda
       gpu-arch-version: "${{ matrix.cuda_version }}"
