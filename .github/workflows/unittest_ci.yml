@@ -61,7 +61,7 @@ jobs:
         python setup.py bdist_wheel \
           --package_name torchrec-test \
           --python-tag=${{ matrix.python-tag }}
-        mv dist/torchrec-test-*.whl "${RUNNER_ARTIFACT_DIR}/"
+        mv dist/torchrec-test*.whl "${RUNNER_ARTIFACT_DIR}/"
   test_on_gpu:
     needs: build_on_cpu
     strategy:
@@ -100,5 +100,5 @@ jobs:
         conda install -y cudnn
         # Install torchrec binary
         conda install "${RUNNER_ARTIFACT_DIR}/*.whl"
-        conda -y install pytest
+        conda install -y pytest
         python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
