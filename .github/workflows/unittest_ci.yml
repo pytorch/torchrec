@@ -41,21 +41,20 @@ jobs:
       upload-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-version }}.whl
       script: |
         set -x
-        # TODO: Re-write this as a single bash script
         ldd --version
         conda create --name build_binary python=${{ matrix.python-version }}
         conda info
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
-        conda run -n build_binary python -m pip install -r requirements.txt
-        conda run -n build_binary python -c "import torch.distributed"
+        conda activate build_binary
+        conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -y cudnn
+        python -m pip install -r requirements.txt
+        python -c "import torch.distributed"
         echo "torch.distributed succeeded"
-        conda run -n build_binary python -c "import skbuild"
+        python -c "import skbuild"
         echo "skbuild succeeded"
-        conda run -n build_binary python -c "import numpy"
+        python -c "import numpy"
         echo "numpy succeeded"
-        conda run -n build_binary \
-          python setup.py bdist_wheel \
+        python setup.py bdist_wheel \
           --package_name torchrec-test \
           --python-tag=${{ matrix.python-tag }}
         mv dist/torchrec-test-*.whl "${RUNNER_ARTIFACT_DIR}/"
@@ -85,15 +84,13 @@ jobs:
       download-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
       script: |
         set -x
-        # TODO: Re-write this as a single bash script
         ldd --version
         conda create --name build_binary python=${{ matrix.python-version }}
         conda info
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -n build_binary -y cudnn
+        conda activate build_binary
+        conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -y cudnn
         # Install torchrec binary
-        conda run -n build_binary python -m pip install "${RUNNER_ARTIFACT_DIR}/*.whl"
-        conda run -n build_binary \
-          python -m pip install pytest
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+        conda install "${RUNNER_ARTIFACT_DIR}/*.whl"
+        conda -y install pytest
+        python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
