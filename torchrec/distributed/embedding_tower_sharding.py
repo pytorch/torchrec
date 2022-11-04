@@ -170,9 +170,11 @@ class ShardedEmbeddingTower(
                 device,
             )
             # Hierarchical DDP
-            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
+                # pyre-fixme[6]: For 2nd param expected
+                #  `Optional[Sequence[Union[int, device]]]` but got
+                #  `List[Optional[device]]`.
                 device_ids=[self._device],
                 process_group=self._intra_pg,
                 gradient_as_bucket_view=True,
@@ -584,9 +586,11 @@ class ShardedEmbeddingTowerCollection(
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
                 # Hierarchical DDP
-                # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
+                    # pyre-fixme[6]: For 2nd param expected
+                    #  `Optional[Sequence[Union[int, device]]]` but got
+                    #  `List[Optional[device]]`.
                     device_ids=[self._device],
                     process_group=self._intra_pg,
                     gradient_as_bucket_view=True,
