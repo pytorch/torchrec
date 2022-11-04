@@ -66,22 +66,10 @@ jobs:
     strategy:
         matrix:
           include:
-            - os: linux.2xlarge
-              python-version: 3.7
-              python-tag: "py37"
-              cuda-version: "11.7"
-            - os: linux.2xlarge
-              python-version: 3.8
-              python-tag: "py38"
-              cuda-version: "11.7"
-            - os: linux.2xlarge
-              python-version: 3.9
-              python-tag: "py39"
-              cuda-version: "11.7"
-            - os: linux.2xlarge
-              python-version: '3.10'
-              python-tag: "py310"
-              cuda-version: "11.7"
+            - os: [linux.4xlarge.nvidia.gpu]
+              cuda-tag: ["cu11"]
+              python-version: [3.7, 3.8, 3.9, '3.10']
+              cuda_version: ["11.7"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
