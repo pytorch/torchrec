@@ -45,8 +45,8 @@ logger: logging.Logger = logging.getLogger()
 def _get_recat(
     local_split: int,
     num_splits: int,
-    stagger: int = 1,
     device: Optional[torch.device] = None,
+    stagger: int = 1,
     batch_size_per_rank: Optional[List[int]] = None,
 ) -> torch.Tensor:
     """
@@ -55,9 +55,9 @@ def _get_recat(
     Args:
         local_split (int): how many features in local split.
         num_splits (int): how many splits (typically WORLD_SIZE).
+        device (torch.device): device on which buffer will be allocated.
         stagger (int): secondary reordering, (typically 1, but
             `WORLD_SIZE/LOCAL_WORLD_SIZE` for TWRW).
-        device (Optional[torch.device]): device on which buffer will be allocated.
         batch_size_per_rank: batch size per rank, needed for variable batch size.
 
     Returns:
@@ -351,8 +351,8 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
             self._recat = _get_recat(
                 local_split=dim_0,
                 num_splits=len(splits),
-                stagger=stagger,
                 device=self._device,
+                stagger=stagger,
                 batch_size_per_rank=self._batch_size_per_rank,
             )
         else:
@@ -503,8 +503,8 @@ class KJTAllToAll(nn.Module):
             _get_recat(
                 local_split=splits[pg.rank()],
                 num_splits=len(splits),
-                stagger=stagger,
                 device=device,
+                stagger=stagger,
             ),
         )
 
@@ -998,19 +998,21 @@ class SequenceEmbeddingsAllToAll(nn.Module):
     ) -> None:
         super().__init__()
         self._pg = pg
+        self._local_split: int = features_per_rank[self._pg.rank()]
+        self._num_splits: int = self._pg.size()
 
         forward_recat = []
-        for j in range(self._pg.size()):
-            for i in range(features_per_rank[self._pg.rank()]):
-                forward_recat.append(j + i * self._pg.size())
+        for j in range(self._num_splits):
+            for i in range(self._local_split):
+                forward_recat.append(j + i * self._num_splits)
         self.register_buffer(
             "_forward_recat_tensor",
             torch.tensor(forward_recat, device=device, dtype=torch.int),
         )
         backward_recat = []
-        for i in range(features_per_rank[self._pg.rank()]):
-            for j in range(self._pg.size()):
-                backward_recat.append(i + j * features_per_rank[self._pg.rank()])
+        for i in range(self._local_split):
+            for j in range(self._num_splits):
+                backward_recat.append(i + j * self._local_split)
         self.register_buffer(
             "_backward_recat_tensor",
             torch.tensor(backward_recat, device=device, dtype=torch.int),
@@ -1023,6 +1025,8 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         lengths: torch.Tensor,
         input_splits: List[int],
         output_splits: List[int],
+        batch_size_per_rank: Optional[List[int]] = None,
+        sparse_features_recat: Optional[torch.Tensor] = None,
         unbucketize_permute_tensor: Optional[torch.Tensor] = None,
     ) -> SequenceEmbeddingsAwaitable:
         """
@@ -1033,6 +1037,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             lengths (torch.Tensor): lengths of sparse features after AlltoAll.
             input_splits (List[int]): input splits of AlltoAll.
             output_splits (List[int]): output splits of AlltoAll.
+            sparse_features_recat (Optional[torch.Tensor]): recat tensor used for sparse feature input dist
             unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order
                 of the KJT bucketize (for row-wise sharding only).
 
@@ -1040,13 +1045,36 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
         """
 
+        variable_batch_size = (
+            batch_size_per_rank is not None and len(set(batch_size_per_rank)) > 1
+        )
+        if variable_batch_size:
+            if sparse_features_recat is None:
+                sparse_features_recat = _get_recat(
+                    local_split=self._local_split,
+                    num_splits=self._num_splits,
+                    device=local_embs.device,
+                    stagger=1,
+                    batch_size_per_rank=batch_size_per_rank,
+                )
+
+        if sparse_features_recat is not None:
+            forward_recat_tensor = torch.ops.fbgemm.invert_permute(
+                sparse_features_recat
+            )
+            backward_recat_tensor = sparse_features_recat
+        else:
+            forward_recat_tensor = self._forward_recat_tensor
+            backward_recat_tensor = self._backward_recat_tensor
+
         tensor_awaitable = alltoall_sequence(
             a2a_sequence_embs_tensor=local_embs,
-            forward_recat_tensor=self._forward_recat_tensor,
-            backward_recat_tensor=self._backward_recat_tensor,
+            forward_recat_tensor=forward_recat_tensor,
+            backward_recat_tensor=backward_recat_tensor,
             lengths_after_sparse_data_all2all=lengths,
             input_splits=input_splits,
             output_splits=output_splits,
+            variable_batch_size=variable_batch_size,
             group=self._pg,
             codecs=self._codecs,
         )
