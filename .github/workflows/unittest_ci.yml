@@ -50,7 +50,6 @@ jobs:
         conda info
         conda activate build_binary
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -y cudnn
         python -m pip install -r requirements.txt
         python -c "import torch.distributed"
         echo "torch.distributed succeeded"
@@ -97,7 +96,6 @@ jobs:
         conda info
         conda activate build_binary
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
-        conda install -y cudnn
         # Install torchrec binary
         conda install "${RUNNER_ARTIFACT_DIR}/*.whl"
         conda install -y pytest
