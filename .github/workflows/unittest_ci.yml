@@ -66,7 +66,6 @@ jobs:
     strategy:
         matrix:
           os: [linux.4xlarge.nvidia.gpu]
-          cuda-tag: ["cu11"]
           python-version: [3.7, 3.8, 3.9, '3.10']
           cuda_version: ["11.7"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -75,7 +74,7 @@ jobs:
       timeout: 60
       gpu-arch-type: cuda
       gpu-arch-version: "${{ matrix.cuda_version }}"
-      download-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+      download-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-version }}.whl
       script: |
         set -x
         ldd --version
