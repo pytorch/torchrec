@@ -46,7 +46,7 @@ jobs:
       script: |
         set -x
         ldd --version
-        conda create --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         conda activate build_binary
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
@@ -93,7 +93,7 @@ jobs:
       script: |
         set -x
         ldd --version
-        conda create --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         conda activate build_binary
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
