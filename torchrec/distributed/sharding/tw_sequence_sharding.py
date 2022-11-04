@@ -94,6 +94,8 @@ class TwSequenceEmbeddingDist(
             lengths=sharding_ctx.lengths_after_input_dist,
             input_splits=sharding_ctx.input_splits,
             output_splits=sharding_ctx.output_splits,
+            batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+            sparse_features_recat=sharding_ctx.sparse_features_recat,
             unbucketize_permute_tensor=None,
         )
 
@@ -119,6 +121,7 @@ class TwSequenceEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
+            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(

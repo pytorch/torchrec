@@ -44,6 +44,7 @@ class CwSequenceEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
+            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(

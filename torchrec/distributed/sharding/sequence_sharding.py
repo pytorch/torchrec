@@ -10,12 +10,13 @@ from typing import List, Optional
 
 import torch
 import torch.distributed as dist  # noqa
+from torchrec.distributed.embedding_sharding import EmbeddingShardingContext
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
 @dataclass
-class SequenceShardingContext(Multistreamable):
+class SequenceShardingContext(EmbeddingShardingContext):
     """
     Stores KJTAllToAll context and reuses it in SequenceEmbeddingsAllToAll.
     SequenceEmbeddingsAllToAll has the same comm pattern as KJTAllToAll.
@@ -34,12 +35,16 @@ class SequenceShardingContext(Multistreamable):
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
     input_splits: List[int] = field(default_factory=list)
     output_splits: List[int] = field(default_factory=list)
+    sparse_features_recat: Optional[torch.Tensor] = None
     unbucketize_permute_tensor: Optional[torch.Tensor] = None
     lengths_after_input_dist: Optional[torch.Tensor] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         if self.features_before_input_dist is not None:
             self.features_before_input_dist.record_stream(stream)
+        if self.sparse_features_recat is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
+            self.sparse_features_recat.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
             # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.unbucketize_permute_tensor.record_stream(stream)
