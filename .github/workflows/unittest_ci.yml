@@ -59,8 +59,8 @@ jobs:
         echo "numpy succeeded"
         python setup.py bdist_wheel \
           --package_name torchrec-test \
-          --python-tag=${{ matrix.python-tag }}
-        mv dist/torchrec-test*.whl "${RUNNER_ARTIFACT_DIR}/"
+          --python-tag=${{ matrix.python-tag }} \
+          --dist-dir=${RUNNER_ARTIFACT_DIR}
   test_on_gpu:
     needs: build_on_cpu
     strategy:
