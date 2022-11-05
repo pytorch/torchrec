@@ -67,7 +67,7 @@ jobs:
         matrix:
           os: [linux.4xlarge.nvidia.gpu]
           python-version: [3.7, 3.8, 3.9, '3.10']
-          cuda_version: ["11.7"]
+          cuda-version: ["11.7"]
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
