@@ -73,7 +73,7 @@ jobs:
       runner: ${{ matrix.os }}
       timeout: 60
       gpu-arch-type: cuda
-      gpu-arch-version: "${{ matrix.cuda_version }}"
+      gpu-arch-version: "${{ matrix.cuda-version }}"
       download-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-version }}.whl
       script: |
         set -x
