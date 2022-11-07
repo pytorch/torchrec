@@ -348,7 +348,7 @@ class BinaryCriteoUtils:
         num_rows: int,
         path_manager_key: str = PATH_MANAGER_KEY,
         mmap_mode: bool = False,
-    ) -> np.ndarray:
+    ) -> Union[np.ndarray, List[np.ndarray]]:
         """
         Load part of an npy file.
 
@@ -365,8 +365,14 @@ class BinaryCriteoUtils:
             output (np.ndarray): numpy array with the desired range of data from the
                 supplied npy file.
         """
+        slice_ = slice(start_row, start_row + num_rows)
         path_manager = PathManagerFactory().get(path_manager_key)
         with path_manager.open(fname, "rb") as fin:
+            # if loading multi-hot synthetic sparse data
+            if fname.endswith("sparse_multi_hot.npz"):
+                data_dict = np.load(fname, mmap_mode="r")
+                return [data_dict[str(i)][slice_] for i in range(CAT_FEATURE_COUNT)]
+            # else
             np.lib.format.read_magic(fin)
             shape, _order, dtype = np.lib.format.read_array_header_1_0(fin)
             if len(shape) == 2:
@@ -386,7 +392,7 @@ class BinaryCriteoUtils:
                 )
             if mmap_mode:
                 data = np.load(fname, mmap_mode="r")
-                data = data[start_row : start_row + num_rows]
+                data = data[slice_]
             else:
                 offset = start_row * row_size * dtype.itemsize
                 fin.seek(offset, os.SEEK_CUR)
@@ -709,6 +715,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         shuffle_batches: bool = False,
         mmap_mode: bool = False,
         hashes: Optional[List[int]] = None,
+        is_multi_hot: Optional[bool] = False,
         path_manager_key: str = PATH_MANAGER_KEY,
     ) -> None:
         self.stage = stage
@@ -721,12 +728,18 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.shuffle_batches = shuffle_batches
         self.mmap_mode = mmap_mode
         self.hashes = hashes
+        self.is_multi_hot = is_multi_hot
         self.path_manager_key = path_manager_key
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
 
         self._load_data_for_rank()
         self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
         self.num_batches: int = math.ceil(sum(self.num_rows_per_file) / batch_size)
+
+        if is_multi_hot:
+            self.multi_hot_sizes: List[int] = [
+                multi_hot_feat.shape[-1] for multi_hot_feat in self.sparse_arrs[0]
+            ]
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
@@ -797,16 +810,27 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         if not self.mmap_mode and self.hashes is not None:
             hashes_np = np.array(self.hashes).reshape((1, CAT_FEATURE_COUNT))
             for sparse_arr in self.sparse_arrs:
-                sparse_arr %= hashes_np
+                if self.is_multi_hot:
+                    sparse_arr = [
+                        feats % hash for (feats, hash) in zip(sparse_arr, hashes_np)
+                    ]
+                else:
+                    sparse_arr %= hashes_np
 
     def _np_arrays_to_batch(
-        self, dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
+        self,
+        dense: np.ndarray,
+        sparse: Union[np.ndarray, List[np.ndarray]],
+        labels: np.ndarray,
     ) -> Batch:
         if self.shuffle_batches:
             # Shuffle all 3 in unison
             shuffler = np.random.permutation(len(dense))
+            if self.is_multi_hot:
+                sparse = [multi_hot_ft[shuffler] for multi_hot_ft in sparse]
+            else:
+                sparse = sparse[shuffler]
             dense = dense[shuffler]
-            sparse = sparse[shuffler]
             labels = labels[shuffler]
 
         batch_size = len(dense)
@@ -819,28 +843,58 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             length_per_key = CAT_FEATURE_COUNT * [batch_size]
             offset_per_key = [batch_size * i for i in range(CAT_FEATURE_COUNT + 1)]
 
-        return Batch(
-            dense_features=torch.from_numpy(dense),
-            sparse_features=KeyedJaggedTensor(
-                keys=self.keys,
-                # transpose + reshape(-1) incurs an additional copy.
-                values=torch.from_numpy(sparse.transpose(1, 0).reshape(-1)),
-                lengths=self.lengths[:num_ids_in_batch],
-                offsets=self.offsets[: num_ids_in_batch + 1],
-                stride=batch_size,
-                length_per_key=length_per_key,
-                offset_per_key=offset_per_key,
-                index_per_key=self.index_per_key,
-            ),
-            labels=torch.from_numpy(labels.reshape(-1)),
-        )
+        if not self.is_multi_hot:
+            return Batch(
+                dense_features=torch.from_numpy(dense.copy()),
+                sparse_features=KeyedJaggedTensor(
+                    keys=self.keys,
+                    # transpose + reshape(-1) incurs an additional copy.
+                    values=torch.from_numpy(sparse.transpose(1, 0).reshape(-1)),
+                    lengths=self.lengths[:num_ids_in_batch],
+                    offsets=self.offsets[: num_ids_in_batch + 1],
+                    stride=batch_size,
+                    length_per_key=length_per_key,
+                    offset_per_key=offset_per_key,
+                    index_per_key=self.index_per_key,
+                ),
+                labels=torch.from_numpy(labels.reshape(-1).copy()),
+            )
+        else:
+            # multi-hot case
+            lengths = torch.ones((CAT_FEATURE_COUNT * batch_size), dtype=torch.int32)
+            for k, multi_hot_size in enumerate(self.multi_hot_sizes):
+                lengths[k * batch_size : (k + 1) * batch_size] = multi_hot_size
+            offsets = torch.cumsum(torch.concat((torch.tensor([0]), lengths)), dim=0)
+            length_per_key = [
+                batch_size * multi_hot_size for multi_hot_size in self.multi_hot_sizes
+            ]
+            offset_per_key = torch.cumsum(
+                torch.concat((torch.tensor([0]), torch.tensor(length_per_key))), dim=0
+            )
+            values = torch.concat(sparse)
+            return Batch(
+                dense_features=torch.from_numpy(dense.copy()),
+                sparse_features=KeyedJaggedTensor(
+                    keys=self.keys,
+                    values=values,
+                    lengths=lengths,
+                    offsets=offsets,
+                    stride=batch_size,
+                    length_per_key=length_per_key,
+                    offset_per_key=offset_per_key.tolist(),
+                    index_per_key=self.index_per_key,
+                ),
+                labels=torch.from_numpy(labels.reshape(-1).copy()),
+            )
 
     def __iter__(self) -> Iterator[Batch]:
         # Invariant: buffer never contains more than batch_size rows.
         buffer: Optional[List[np.ndarray]] = None
 
         def append_to_buffer(
-            dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
+            dense: np.ndarray,
+            sparse: Union[np.ndarray, List[np.ndarray]],
+            labels: np.ndarray,
         ) -> None:
             nonlocal buffer
             if buffer is None:
@@ -868,14 +922,24 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 )
                 slice_ = slice(row_idx, row_idx + rows_to_get)
 
+                if self.is_multi_hot:
+                    sparse_inputs = [
+                        feats[slice_, :] for feats in self.sparse_arrs[file_idx]
+                    ]
+                else:
+                    sparse_inputs = self.sparse_arrs[file_idx][slice_, :]
                 dense_inputs = self.dense_arrs[file_idx][slice_, :]
-                sparse_inputs = self.sparse_arrs[file_idx][slice_, :]
                 target_labels = self.labels_arrs[file_idx][slice_, :]
 
                 if self.mmap_mode and self.hashes is not None:
-                    sparse_inputs = sparse_inputs % np.array(self.hashes).reshape(
-                        (1, CAT_FEATURE_COUNT)
-                    )
+                    hashes_np = np.array(self.hashes).reshape((1, CAT_FEATURE_COUNT))
+                    if self.is_multi_hot:
+                        sparse_inputs = [
+                            feats % hash
+                            for (feats, hash) in zip(sparse_inputs, hashes_np)
+                        ]
+                    else:
+                        sparse_inputs = sparse_inputs % hashes_np
 
                 append_to_buffer(
                     dense_inputs,
