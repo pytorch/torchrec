@@ -35,7 +35,7 @@ from torchrec.metrics.metrics_config import (
 )
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecMetricList, RecTaskInfo
-from torchrec.metrics.tests.test_utils import gen_test_batch, get_launch_config
+from torchrec.metrics.test_utils import gen_test_batch, get_launch_config
 from torchrec.metrics.throughput import ThroughputMetric
 
 METRIC_MODULE_PATH = "torchrec.metrics.metric_module"
