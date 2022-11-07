@@ -85,6 +85,6 @@ jobs:
         # Install torchrec binary
         ls ${RUNNER_ARTIFACT_DIR}
         echo ${RUNNER_ARTIFACT_DIR}
-        pip install "${RUNNER_ARTIFACT_DIR}/torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-version }}.whl"
+        pip install "${RUNNER_ARTIFACT_DIR}/"*.whl
         conda install -y pytest
         python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
