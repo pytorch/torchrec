@@ -7,6 +7,7 @@
 
 #!/usr/bin/env python3
 
+import logging
 import math
 import time
 from collections import deque
@@ -21,7 +22,9 @@ from torchrec.metrics.metrics_namespace import (
     MetricPrefix,
 )
 
-MAX_WINDOW_TS = 1_000_000
+MAX_WINDOW_TS: int = 2 * 60 * 60  # 2 hours
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class ThroughputMetric(nn.Module):
@@ -86,6 +89,12 @@ class ThroughputMetric(nn.Module):
                 "warmup_steps must be at least 1 to give throughput a "
                 "reasonable begin time."
             )
+
+        if window_seconds > MAX_WINDOW_TS:
+            logger.warn(
+                f"window_seconds is greater than {MAX_WINDOW_TS}, capping to {MAX_WINDOW_TS} to make sure window_qps is not staled"
+            )
+            window_seconds = MAX_WINDOW_TS
 
         self._batch_examples = batch_size * world_size
         self._window_seconds = window_seconds
