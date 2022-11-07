@@ -100,7 +100,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        permute_order=st.sampled_from([True, False]),
+        permute_order=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_ebc(
