@@ -158,7 +158,11 @@ def train(
             compute_device=device.type,
         ),
     ).collective_plan(
-        module=two_tower_model, sharders=sharders, pg=dist.GroupMember.WORLD
+        module=two_tower_model,
+        sharders=sharders,
+        # pyre-fixme[6]: For 3rd param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
+        pg=dist.GroupMember.WORLD,
     )
     model = DistributedModelParallel(
         module=two_tower_train_task,
