@@ -30,7 +30,7 @@ class CachelineIDTransformerIterator {
         continue;
       }
       TransformerRecord<LXURecord> result{};
-      result.global_id_ = -record.global_id_not_;
+      result.global_id_ = ~record.global_id_not_;
       result.cache_id_ = record.cache_id_;
       result.lxu_record_ = record.lxu_record_;
       return result;
