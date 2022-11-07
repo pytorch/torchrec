@@ -96,7 +96,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -219,7 +219,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
@@ -300,7 +300,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
