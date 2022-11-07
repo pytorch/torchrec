@@ -7,7 +7,6 @@
 
 import abc
 import copy
-import types
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
@@ -190,7 +189,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
-        self._dmp_wrapped_module = module
         self.init_parameters = init_parameters
         self._ddp_wrapped: bool = False
 
@@ -214,7 +212,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             data_parallel_wrapper = DefaultDataParallelWrapper()
         self._data_parallel_wrapper: DataParallelWrapper = data_parallel_wrapper
 
-        # 2. Call ShardingPlanner.collective_plan passing all found modules and corresponding sharders.
         if plan is None:
             planner = EmbeddingShardingPlanner(
                 topology=Topology(
@@ -230,19 +227,14 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 plan = planner.plan(module, sharders)
         self._plan: ShardingPlan = plan
 
-        # 3. Replace modules w/ sharded versions,
-        # and then wrap w/ DistributedDataParallel.
-        fused_optims = []
-        self._init_dmp(
-            fused_optims=fused_optims,
-        )
+        self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
+        self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
 
         if init_parameters:
             self._init_parameters(self.module)
 
         if init_data_parallel:
             self.init_data_parallel()
-        self._optim = CombinedOptimizer(fused_optims)
 
     @property
     def module(self) -> nn.Module:
@@ -325,48 +317,61 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         copy_dmp.module = copy_module
         return copy_dmp
 
-    def _init_dmp(
+    def _init_dmp(self, module: nn.Module) -> nn.Module:
+        return self._shard_modules_impl(module)
+
+    def _init_optim(self, module: nn.Module) -> CombinedOptimizer:
+        # pyre-ignore [6]
+        return CombinedOptimizer(self._fused_optim_impl(module, []))
+
+    def _fused_optim_impl(
         self,
+        module: nn.Module,
         fused_optims: List[Tuple[str, KeyedOptimizer]],
-    ) -> None:
-        self._shard_modules_impl(
-            self._dmp_wrapped_module,
-            "",
-            fused_optims,
-        )
+        path: str = "",
+    ) -> List[Tuple[str, KeyedOptimizer]]:
+        if isinstance(module, FusedOptimizerModule):
+            fused_optims.append((path, module.fused_optimizer))
+            return fused_optims
+
+        for name, child in module.named_children():
+            self._fused_optim_impl(
+                child,
+                fused_optims,
+                path + "." + name if path else name,
+            )
+        return fused_optims
 
     def _shard_modules_impl(
         self,
         module: nn.Module,
-        path: str,
-        fused_optims: List[Tuple[str, KeyedOptimizer]],
-    ) -> None:
-        sharded_params = self._plan.get_plan_for_module(path)
-        if sharded_params:
+        path: str = "",
+    ) -> nn.Module:
+
+        # pre-sharded module
+        if isinstance(module, ShardedModule):
+            return module
+
+        # shardable module
+        module_sharding_plan = self._plan.get_plan_for_module(path)
+        if module_sharding_plan:
             sharder_key = sharder_name(type(module))
-            sharded_module = self._sharder_map[sharder_key].shard(
+            module = self._sharder_map[sharder_key].shard(
                 module,
-                sharded_params,
+                module_sharding_plan,
                 self._env,
                 self.device,
             )
-            if path:
-                leaf_module = self._dmp_wrapped_module
-                split_path = path.split(".")
-                for name in split_path[:-1]:
-                    leaf_module = getattr(leaf_module, name)
-                setattr(leaf_module, split_path[-1], sharded_module)
-            else:
-                self._dmp_wrapped_module = sharded_module
-            if isinstance(sharded_module, FusedOptimizerModule):
-                fused_optims.append((path, sharded_module.fused_optimizer))
-        else:
-            for name, child in module.named_children():
-                self._shard_modules_impl(
-                    child,
-                    path + "." + name if path else name,
-                    fused_optims,
-                )
+            return module
+
+        for name, child in module.named_children():
+            child = self._shard_modules_impl(
+                child,
+                path + "." + name if path else name,
+            )
+            setattr(module, name, child)
+
+        return module
 
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
