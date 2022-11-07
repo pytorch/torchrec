@@ -83,6 +83,6 @@ jobs:
         conda activate build_binary
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         # Install torchrec binary
-        conda install "${{ runner.temp }}/artifacts/*.whl"
+        conda install "${ runner.temp }/artifacts/*.whl"
         conda install -y pytest
         python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
