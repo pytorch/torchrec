@@ -1,4 +1,4 @@
-name: Unit Test CI
+name: GPU Unit Test CI
 
 on:
   push:
