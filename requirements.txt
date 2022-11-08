@@ -34,7 +34,7 @@ six
 sortedcontainers
 tabulate
 torchmetrics
-torchx-nightly
+torchx
 tqdm
 typing-inspect
 typing_extensions

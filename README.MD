@@ -34,7 +34,7 @@ pip install torchrec_nightly
 
 Stable
 
-conda install pytorch cudatoolkit=11.6 -c pytorch -c conda-forge
+conda install pytorch pytorch-cuda=11.7 -c pytorch -c nvidia
 pip install torchrec
 
 If you have no CUDA device:
