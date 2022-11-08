@@ -499,14 +499,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
         gen = self._named_parameters(self.module, prefix, recurse)
         memo = set()
         for key, param in gen:
             if param in memo:
                 continue
-            memo.add(param)
+            if remove_duplicate:
+                memo.add(param)
             yield key, param
 
     def bare_named_parameters(
