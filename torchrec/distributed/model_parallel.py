@@ -98,7 +98,6 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         # initialize DDP
         dmp._dmp_wrapped_module = cast(
             nn.Module,
-            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             DistributedDataParallel(
                 module=dmp._dmp_wrapped_module.to(device),
                 device_ids=None if device.type == "cpu" else [device],
