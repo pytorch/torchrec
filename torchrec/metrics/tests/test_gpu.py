@@ -17,7 +17,7 @@ from torchrec.metrics.metrics_config import (
     RecMetricEnum,
 )
 from torchrec.metrics.ne import NEMetric
-from torchrec.metrics.tests.test_utils import gen_test_batch
+from torchrec.metrics.test_utils import gen_test_batch
 
 
 _CUDA_UNAVAILABLE: bool = not torch.cuda.is_available()
