@@ -49,6 +49,8 @@ jobs:
       download-artifact: torchrec-test_3.8_11.7.whl
       script: |
         set -x
+        echo "${{ runner.temp }}"
+        ls "${{ runner.temp }}"/artifacts
         ldd --version
         conda create -y --name build_binary python="3.8"
         conda info
