@@ -13,7 +13,7 @@ import torch
 import torch.distributed as dist
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
-from torchrec.metrics.tests.test_utils import (
+from torchrec.metrics.test_utils import (
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,

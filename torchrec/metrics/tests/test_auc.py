@@ -14,7 +14,7 @@ import torch.distributed as dist
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
-from torchrec.metrics.tests.test_utils import (
+from torchrec.metrics.test_utils import (
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,
