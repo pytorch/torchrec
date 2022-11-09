@@ -222,8 +222,11 @@ class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
         yield cast(nn.Parameter, self._emb_module.weights)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_parameters"
         for table, weight in zip(
             self._embedding_tables, self.split_embedding_weights()
         ):
