@@ -11,8 +11,13 @@ add_library(tde_cpp_objs
             details/random_bits_generator.cpp
             details/mixed_lfu_lru_strategy.cpp
             details/io_registry.cpp
-            details/io.cpp)
+            details/io.cpp
+            details/notification.cpp)
 
+if (BUILD_REDIS_IO)
+    add_subdirectory(details/redis)
+endif()
+            
 target_include_directories(tde_cpp_objs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../)
 target_include_directories(tde_cpp_objs PUBLIC ${TORCH_INCLUDE_DIRS})
 target_link_libraries(tde_cpp_objs PUBLIC ${TORCH_LIBRARIES})

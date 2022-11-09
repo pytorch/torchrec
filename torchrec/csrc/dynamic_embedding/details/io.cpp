@@ -8,7 +8,7 @@
 
 #include <torchrec/csrc/dynamic_embedding/details/io.h>
 
-namespace tde::details {
+namespace torchrec {
 
 static constexpr std::string_view k_schema_separator = "://";
 
@@ -135,7 +135,7 @@ void IO::push(
       .col_ids = col_ids.data(),
       .global_ids = global_ids.data(),
       .num_optimizer_states = static_cast<uint32_t>(os_ids.size()),
-      .optimizer_stats_ids = os_ids.data(),
+      .optimizer_state_ids = os_ids.data(),
       .num_offsets = static_cast<uint32_t>(offsets.size()),
       .offsets = offsets.data(),
       .data = data.data(),
@@ -145,4 +145,4 @@ void IO::push(
   provider_.push(instance_, param);
 }
 
-} // namespace tde::details
+} // namespace torchrec

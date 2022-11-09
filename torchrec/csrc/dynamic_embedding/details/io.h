@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <span>
 
-namespace tde::details {
+namespace torchrec {
 
 class IO {
  public:
@@ -89,4 +89,4 @@ class IO {
   void* instance_{};
 };
 
-} // namespace tde::details
+} // namespace torchrec

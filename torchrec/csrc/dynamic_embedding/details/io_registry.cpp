@@ -10,7 +10,7 @@
 #include <torch/torch.h>
 #include <torchrec/csrc/dynamic_embedding/details/io_registry.h>
 
-namespace tde::details {
+namespace torchrec {
 
 void IORegistry::register_provider(IOProvider provider) {
   std::string type = provider.type;
@@ -72,4 +72,4 @@ IORegistry& IORegistry::Instance() {
   return instance;
 }
 
-} // namespace tde::details
+} // namespace torchrec

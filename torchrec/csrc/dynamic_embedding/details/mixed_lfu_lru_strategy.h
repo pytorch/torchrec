@@ -60,8 +60,10 @@ class MixedLFULRUStrategy {
     return static_cast<int64_t>(reinterpret_cast<Record*>(&record)->time_);
   }
 
-  lxu_record_t
-  update(int64_t global_id, int64_t cache_id, std::optional<lxu_record_t> val);
+  lxu_record_t update(
+      int64_t global_id,
+      int64_t cache_id,
+      std::optional<lxu_record_t> val);
 
   struct EvictItem {
     int64_t global_id_;
