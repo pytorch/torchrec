@@ -2577,6 +2577,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -2775,6 +2777,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -2945,6 +2949,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -3171,6 +3177,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -3344,6 +3352,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -4524,6 +4534,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -4763,6 +4775,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -4934,6 +4948,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -5203,6 +5219,8 @@ name of the parameter as well as the parameter itself.</p>
 <li><p><strong>recurse</strong> (<em>bool</em>) – if True, then yields parameters of this module
 and all submodules. Otherwise, yields only parameters that
 are direct members of this module.</p></li>
+<li><p><strong>remove_duplicate</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to remove the duplicated
+parameters in the result. Defaults to True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Yields<span class="colon">:</span></dt>
@@ -5678,18 +5696,6 @@ overlap (i.e. quickly waited the first one but long wait on the second)</p></li>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleCopyMixin</span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>A mixin to allow modules to override copy behaviors in DMP.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.distributed.types.ModuleCopyMixin.copy">
-<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.distributed.types.ModuleCopyMixin.copy" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ModuleSharder">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ModuleSharder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.ModuleSharder" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">M</span></code>]</p>
@@ -5962,7 +5968,7 @@ parameters between encoder and decoder.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.ShardedModule">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">ShardedModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.ShardedModule" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">CompIn</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">DistOut</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">Out</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">ShrdCtx</span></code>], <a class="reference internal" href="#torchrec.distributed.types.ModuleCopyMixin" title="torchrec.distributed.types.ModuleCopyMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModuleCopyMixin</span></code></a>, <a class="reference internal" href="#torchrec.distributed.types.ModuleShardingMixIn" title="torchrec.distributed.types.ModuleShardingMixIn"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModuleShardingMixIn</span></code></a></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">CompIn</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">DistOut</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">Out</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">ShrdCtx</span></code>], <code class="xref py py-class docutils literal notranslate"><span class="pre">ModuleNoCopyMixin</span></code>, <a class="reference internal" href="#torchrec.distributed.types.ModuleShardingMixIn" title="torchrec.distributed.types.ModuleShardingMixIn"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModuleShardingMixIn</span></code></a></p>
 <p>All model-parallel modules implement this interface.
 Inputs and outputs are data-parallel.</p>
 <dl class="simple">
@@ -6234,6 +6240,11 @@ This plan can be saved and re-used to ensure sharding stability.</p>
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">append_prefix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.utils.append_prefix" title="Permalink to this definition">¶</a></dt>
 <dd><p>Appends provided prefix to provided name.</p>
 </dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.utils.copy_to_device">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.utils.</span></span><span class="sig-name descname"><span class="pre">copy_to_device</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.distributed.utils.copy_to_device" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.utils.filter_state_dict">
@@ -7039,10 +7050,6 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.types.GenericMeta"><code class="docutils literal notranslate"><span class="pre">GenericMeta</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable"><code class="docutils literal notranslate"><span class="pre">LazyAwaitable</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.LazyNoWait"><code class="docutils literal notranslate"><span class="pre">LazyNoWait</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.types.ModuleCopyMixin"><code class="docutils literal notranslate"><span class="pre">ModuleCopyMixin</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.types.ModuleCopyMixin.copy"><code class="docutils literal notranslate"><span class="pre">ModuleCopyMixin.copy()</span></code></a></li>
-</ul>
-</li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder"><code class="docutils literal notranslate"><span class="pre">ModuleSharder</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder.compute_kernels"><code class="docutils literal notranslate"><span class="pre">ModuleSharder.compute_kernels()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ModuleSharder.module_type"><code class="docutils literal notranslate"><span class="pre">ModuleSharder.module_type</span></code></a></li>
@@ -7141,6 +7148,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#module-torchrec.distributed.utils">torchrec.distributed.utils</a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.utils.add_prefix_to_state_dict"><code class="docutils literal notranslate"><span class="pre">add_prefix_to_state_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.append_prefix"><code class="docutils literal notranslate"><span class="pre">append_prefix()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.utils.copy_to_device"><code class="docutils literal notranslate"><span class="pre">copy_to_device()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.filter_state_dict"><code class="docutils literal notranslate"><span class="pre">filter_state_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.get_unsharded_module_names"><code class="docutils literal notranslate"><span class="pre">get_unsharded_module_names()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.utils.merge_fused_params"><code class="docutils literal notranslate"><span class="pre">merge_fused_params()</span></code></a></li>
