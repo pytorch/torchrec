@@ -416,7 +416,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
 
@@ -460,7 +460,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         yield from ()
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]
@@ -648,7 +648,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         yield from ()
 
@@ -692,7 +692,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         yield from ()
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]
