@@ -19,7 +19,7 @@ from torchrec.distributed.fbgemm_qcomm_codec import (
 
 
 class QuantizationCommCodecTest(unittest.TestCase):
-    @settings(deadline=2000)
+    @settings(deadline=4000)
     # pyre-ignore
     @given(
         comm_precisions_loss_scale=st.sampled_from(
@@ -35,6 +35,7 @@ class QuantizationCommCodecTest(unittest.TestCase):
         row_size=st.integers(4, 256),
         col_size=st.integers(4, 256),
         rand_seed=st.integers(0, 65534),
+        row_dim=st.sampled_from([-1, 4, 8, 16, 32]),
     )
     def test_quantized_comm_codec(
         self,
@@ -42,22 +43,35 @@ class QuantizationCommCodecTest(unittest.TestCase):
         row_size: int,
         col_size: int,
         rand_seed: int,
+        row_dim: int,
     ) -> None:
+
         (comm_precision, loss_scale) = comm_precisions_loss_scale
+
         if comm_precision == CommType.FP8:
+            if row_dim > 0:
+                assume((col_size * row_size) % row_dim == 0)
             assume(col_size % 4 == 0)
 
         torch.manual_seed(rand_seed)
         shape = (row_size, col_size)
+        input_tensor = torch.rand(shape, requires_grad=True)
+        cur_row_dim = None
+
+        if (
+            comm_precision == CommType.FP8
+            and torch.cuda.device_count() != 0
+            and row_dim > 0
+        ):
+            cur_row_dim = row_dim
+            input_tensor = input_tensor.view(-1).cuda()
 
         quant_codec = get_qcomm_codecs(
             QCommsConfig(
                 forward_precision=comm_precision,
+                fp8_quantize_dim=cur_row_dim,
             )
         )
-
-        input_tensor = torch.rand(shape, requires_grad=True)
-
         ctx = quant_codec.forward.create_context()
         if comm_precision == CommType.INT8:
             assume(row_size * col_size % ctx.row_dim == 0)
@@ -73,5 +87,8 @@ class QuantizationCommCodecTest(unittest.TestCase):
             atol = 0.05
 
         torch.testing.assert_close(
-            input_tensor.detach(), output_tensor.detach(), rtol=rtol, atol=atol
+            input_tensor.detach().cpu(),
+            output_tensor.detach().cpu(),
+            rtol=rtol,
+            atol=atol,
         )
