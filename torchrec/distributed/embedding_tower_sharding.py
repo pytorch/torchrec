@@ -172,9 +172,6 @@ class ShardedEmbeddingTower(
             # Hierarchical DDP
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
-                # pyre-fixme[6]: For 2nd param expected
-                #  `Optional[Sequence[Union[int, device]]]` but got
-                #  `List[Optional[device]]`.
                 device_ids=[self._device],
                 process_group=self._intra_pg,
                 gradient_as_bucket_view=True,
@@ -588,9 +585,6 @@ class ShardedEmbeddingTowerCollection(
                 # Hierarchical DDP
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
-                    # pyre-fixme[6]: For 2nd param expected
-                    #  `Optional[Sequence[Union[int, device]]]` but got
-                    #  `List[Optional[device]]`.
                     device_ids=[self._device],
                     process_group=self._intra_pg,
                     gradient_as_bucket_view=True,

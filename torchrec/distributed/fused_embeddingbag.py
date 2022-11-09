@@ -69,9 +69,6 @@ class ShardedFusedEmbeddingBagCollection(
             if isinstance(sharding, DpPooledEmbeddingSharding):
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
-                    # pyre-fixme[6]: For 2nd param expected
-                    #  `Optional[Sequence[Union[int, device]]]` but got
-                    #  `List[Optional[device]]`.
                     device_ids=[device],
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,
