@@ -85,8 +85,6 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         if sharded_parameter_names == all_paramemeter_names:
             return
 
-        # pyre-fixme[16]: `DistributedDataParallel` has no attribute
-        #  `_set_params_and_buffers_to_ignore_for_model`.
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
             params_and_buffers_to_ignore=[
