@@ -109,6 +109,10 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float32
     elif data_type == DataType.FP16:
         return torch.float16
+    elif data_type == DataType.INT64:
+        return torch.int64
+    elif data_type == DataType.INT32:
+        return torch.int32
     elif data_type == DataType.INT8:
         return torch.int8
     elif data_type == DataType.INT4:
