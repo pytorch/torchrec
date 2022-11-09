@@ -6,7 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import copy
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
 
@@ -25,7 +24,6 @@ from torchrec.distributed.planner import (
 
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
-    ModuleCopyMixin,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
@@ -34,8 +32,8 @@ from torchrec.distributed.types import (
 from torchrec.distributed.utils import (
     add_prefix_to_state_dict,
     append_prefix,
+    copy_to_device,
     filter_state_dict,
-    sharded_model_copy,
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
@@ -270,36 +268,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             self._data_parallel_wrapper.wrap(self, self._env, self.device)
             self._ddp_wrapped = True
 
-    def _copy(self, module: nn.Module, device: torch.device) -> nn.Module:
-        # Copy only weights with matching device.
-        def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
-            if tensor.device == self.device:
-                return tensor.to(device)
-            else:
-                return tensor
-
-        # if this is a sharded module, customize the copy
-        if isinstance(module, ModuleCopyMixin):
-            return module.copy(device)
-        # this could be dense or a compound module
-        for name, child in module.named_children():
-            # potential DFS cache or bottom-up can save runtime
-            # search immediate submodules
-            if not any(
-                [
-                    isinstance(submodule, ModuleCopyMixin)
-                    for submodule in child.modules()
-                ]
-            ):
-                # if not containing ShardedModule down this submodule (this is a dense module)
-                # copy it.
-                child_copy = child._apply(_copy_if_device_match)
-            else:
-                # else this module contains a ShardedModule somewhere, recursively process it.
-                child_copy = self._copy(child, device)
-            setattr(module, name, child_copy)
-        return module
-
     def copy(
         self,
         device: torch.device,
@@ -310,11 +278,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         `ShardedModule` for inference).
         """
         assert isinstance(device, torch.device)
-        with sharded_model_copy(device=None):
-            copy_dmp = copy.deepcopy(self)
-        copy_module = copy_dmp._copy(copy_dmp.module, device)
-        copy_dmp.module = copy_module
-        return copy_dmp
+        copy_dmp = copy_to_device(self, self.device, device)
+        return cast(DistributedModelParallel, copy_dmp)
 
     def _init_dmp(self, module: nn.Module) -> nn.Module:
         return self._shard_modules_impl(module)
