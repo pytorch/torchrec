@@ -548,7 +548,7 @@ embedding in each rank.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2AllSequenceInfo">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">All2AllSequenceInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">permuted_lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">All2AllSequenceInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embedding_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variable_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">permuted_lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The data class that collects the attributes when calling the <cite>alltoall_sequence</cite>
 operation.</p>
@@ -581,7 +581,7 @@ AlltoAll.</p>
 <dd><p>recat tensor for forward.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Tensor</p>
+<dd class="field-odd"><p>Optional[Tensor]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -620,8 +620,19 @@ AlltoAll.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2AllSequenceInfo.lengths_sparse_before_features_all2all">
-<span class="sig-name descname"><span class="pre">lengths_sparse_before_features_all2all</span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.lengths_sparse_before_features_all2all" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2AllSequenceInfo.variable_batch_size">
+<span class="sig-name descname"><span class="pre">variable_batch_size</span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.variable_batch_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether variable batch size is enabled</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all">
+<span class="sig-name descname"><span class="pre">permuted_lengths_after_sparse_data_all2all</span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all" title="Permalink to this definition">¶</a></dt>
 <dd><p>lengths of sparse
 features before AlltoAll.</p>
 <dl class="field-list simple">
@@ -648,7 +659,7 @@ features before AlltoAll.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="id6">
-<span class="sig-name descname"><span class="pre">forward_recat_tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#id6" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward_recat_tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id6" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -667,8 +678,13 @@ features before AlltoAll.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all">
-<span class="sig-name descname"><span class="pre">permuted_lengths_after_sparse_data_all2all</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id10">
+<span class="sig-name descname"><span class="pre">permuted_lengths_after_sparse_data_all2all</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id10" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id11">
+<span class="sig-name descname"><span class="pre">variable_batch_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#id11" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -761,23 +777,23 @@ remembers how to fill the output when doing the <cite>all_to_all_single</cite> o
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id10">
-<span class="sig-name descname"><span class="pre">B_global</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#id10" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="id11">
-<span class="sig-name descname"><span class="pre">B_local</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#id11" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="id12">
-<span class="sig-name descname"><span class="pre">B_local_list</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id12" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">B_global</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#id12" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="id13">
-<span class="sig-name descname"><span class="pre">D_local_list</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id13" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">B_local</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#id13" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id14">
+<span class="sig-name descname"><span class="pre">B_local_list</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id14" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id15">
+<span class="sig-name descname"><span class="pre">D_local_list</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id15" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -791,13 +807,13 @@ remembers how to fill the output when doing the <cite>all_to_all_single</cite> o
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id14">
-<span class="sig-name descname"><span class="pre">input_split_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id14" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id16">
+<span class="sig-name descname"><span class="pre">input_split_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id16" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id15">
-<span class="sig-name descname"><span class="pre">output_split_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id15" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id17">
+<span class="sig-name descname"><span class="pre">output_split_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id17" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1089,8 +1105,8 @@ operation.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id16">
-<span class="sig-name descname"><span class="pre">input_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Size</span></em><a class="headerlink" href="#id16" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id18">
+<span class="sig-name descname"><span class="pre">input_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Size</span></em><a class="headerlink" href="#id18" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1206,8 +1222,8 @@ operation.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id17">
-<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Size</span></em><a class="headerlink" href="#id17" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id19">
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Size</span></em><a class="headerlink" href="#id19" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1325,8 +1341,8 @@ gradient.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id18">
-<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id18" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id20">
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id20" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1383,18 +1399,18 @@ gradient.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id19">
-<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id19" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="id20">
-<span class="sig-name descname"><span class="pre">input_splits</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id20" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="id21">
-<span class="sig-name descname"><span class="pre">total_input_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id21" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">input_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Size</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id21" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id22">
+<span class="sig-name descname"><span class="pre">input_splits</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id22" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id23">
+<span class="sig-name descname"><span class="pre">total_input_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id23" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1638,6 +1654,7 @@ embedding in each rank.</p></li>
 <cite>_recat_pooled_embedding_grad_out</cite>.</p></li>
 <li><p><strong>group</strong> (<em>Optional</em><em>[</em><em>dist.ProcessGroup</em><em>]</em>) – The process group to work on. If None, the
 default process group will be used.</p></li>
+<li><p><strong>codecs</strong> – Optional[QuantizedCommCodecs]: Quantized communication codecs</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -1655,30 +1672,30 @@ default process group will be used.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.alltoall_sequence">
-<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">alltoall_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a2a_sequence_embs_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.alltoall_sequence" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">alltoall_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a2a_sequence_embs_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backward_recat_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_after_sparse_data_all2all</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variable_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.alltoall_sequence" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs AlltoAll operation for sequence embeddings. Each process splits the input
 tensor based on the world size, and then scatters the split list to all processes in
 the group. Then concatenates the received tensors from all processes in the group
 and returns a single output tensor.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>AlltoAll operator for (T * B * L_i, D) tensors.
+<p>AlltoAll operator for Sequence embedding tensors.
 Does not support mixed dimensions.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>a2a_sequence_embs_tensor</strong> (<em>Tensor</em>) – input embeddings. Usually with the shape of
-(T * B * L_i, D), where B - batch size, T - number of embedding tables,
-D - embedding dimension.</p></li>
+<li><p><strong>a2a_sequence_embs_tensor</strong> (<em>Tensor</em>) – input embeddings.</p></li>
 <li><p><strong>forward_recat_tensor</strong> (<em>Tensor</em>) – recat tensor for forward.</p></li>
 <li><p><strong>backward_recat_tensor</strong> (<em>Tensor</em>) – recat tensor for backward.</p></li>
 <li><p><strong>lengths_after_sparse_data_all2all</strong> (<em>Tensor</em>) – lengths of sparse features after
 AlltoAll.</p></li>
 <li><p><strong>input_splits</strong> (<em>Tensor</em>) – input splits.</p></li>
 <li><p><strong>output_splits</strong> (<em>Tensor</em>) – output splits.</p></li>
+<li><p><strong>variable_batch_size</strong> (<em>bool</em>) – whether varibale batch size is enabled</p></li>
 <li><p><strong>group</strong> (<em>Optional</em><em>[</em><em>dist.ProcessGroup</em><em>]</em>) – The process group to work on. If None, the
 default process group will be used.</p></li>
+<li><p><strong>codecs</strong> – Optional[QuantizedCommCodecs]: Quantized communication codecs</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -2282,7 +2299,7 @@ happens within.</p></li>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbucketize_permute_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable" title="torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable"><span class="pre">SequenceEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unbucketize_permute_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size_per_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features_recat</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable" title="torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable"><span class="pre">SequenceEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll.forward" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs AlltoAll operation on sequence embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2293,6 +2310,8 @@ happens within.</p></li>
 <li><p><strong>output_splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – output splits of AlltoAll.</p></li>
 <li><p><strong>unbucketize_permute_tensor</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – stores the permute order
 of the KJT bucketize (for row-wise sharding only).</p></li>
+<li><p><strong>batch_size_per_rank</strong> – (Optional[List[int]]): batch size per rank</p></li>
+<li><p><strong>sparse_features_recat</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – recat tensor used for sparse feature input dist</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -6094,8 +6113,8 @@ dict of parameter sharding specs keyed by parameter name.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id22">
-<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id22" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id24">
+<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id24" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -6392,7 +6411,8 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.backward_recat_tensor"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.backward_recat_tensor</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.input_splits"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.input_splits</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.output_splits"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.output_splits</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.lengths_sparse_before_features_all2all"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.lengths_sparse_before_features_all2all</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.variable_batch_size"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.variable_batch_size</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all</span></code></a></li>
 <li><a class="reference internal" href="#id4"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.backward_recat_tensor</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.codecs"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.codecs</span></code></a></li>
 <li><a class="reference internal" href="#id5"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.embedding_dim</span></code></a></li>
@@ -6400,7 +6420,8 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#id7"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.input_splits</span></code></a></li>
 <li><a class="reference internal" href="#id8"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.lengths_after_sparse_data_all2all</span></code></a></li>
 <li><a class="reference internal" href="#id9"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.output_splits</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all</span></code></a></li>
+<li><a class="reference internal" href="#id10"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.permuted_lengths_after_sparse_data_all2all</span></code></a></li>
+<li><a class="reference internal" href="#id11"><code class="docutils literal notranslate"><span class="pre">All2AllSequenceInfo.variable_batch_size</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo</span></code></a><ul>
@@ -6411,14 +6432,14 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo.D_local_list"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.D_local_list</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo.input_split_sizes"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.input_split_sizes</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo.output_split_sizes"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.output_split_sizes</span></code></a></li>
-<li><a class="reference internal" href="#id10"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_global</span></code></a></li>
-<li><a class="reference internal" href="#id11"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_local</span></code></a></li>
-<li><a class="reference internal" href="#id12"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_local_list</span></code></a></li>
-<li><a class="reference internal" href="#id13"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.D_local_list</span></code></a></li>
+<li><a class="reference internal" href="#id12"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_global</span></code></a></li>
+<li><a class="reference internal" href="#id13"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_local</span></code></a></li>
+<li><a class="reference internal" href="#id14"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.B_local_list</span></code></a></li>
+<li><a class="reference internal" href="#id15"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.D_local_list</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo.codecs"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.codecs</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo.dims_sum_per_rank"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.dims_sum_per_rank</span></code></a></li>
-<li><a class="reference internal" href="#id14"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.input_split_sizes</span></code></a></li>
-<li><a class="reference internal" href="#id15"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.output_split_sizes</span></code></a></li>
+<li><a class="reference internal" href="#id16"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.input_split_sizes</span></code></a></li>
+<li><a class="reference internal" href="#id17"><code class="docutils literal notranslate"><span class="pre">All2AllVInfo.output_split_sizes</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.All2All_Pooled_Req"><code class="docutils literal notranslate"><span class="pre">All2All_Pooled_Req</span></code></a><ul>
@@ -6454,7 +6475,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.AllGatherBaseInfo"><code class="docutils literal notranslate"><span class="pre">AllGatherBaseInfo</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.AllGatherBaseInfo.input_size"><code class="docutils literal notranslate"><span class="pre">AllGatherBaseInfo.input_size</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.AllGatherBaseInfo.codecs"><code class="docutils literal notranslate"><span class="pre">AllGatherBaseInfo.codecs</span></code></a></li>
-<li><a class="reference internal" href="#id16"><code class="docutils literal notranslate"><span class="pre">AllGatherBaseInfo.input_size</span></code></a></li>
+<li><a class="reference internal" href="#id18"><code class="docutils literal notranslate"><span class="pre">AllGatherBaseInfo.input_size</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.AllGatherBase_Req"><code class="docutils literal notranslate"><span class="pre">AllGatherBase_Req</span></code></a><ul>
@@ -6470,7 +6491,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBaseInfo</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBaseInfo.input_sizes</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.codecs"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBaseInfo.codecs</span></code></a></li>
-<li><a class="reference internal" href="#id17"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBaseInfo.input_sizes</span></code></a></li>
+<li><a class="reference internal" href="#id19"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBaseInfo.input_sizes</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req"><code class="docutils literal notranslate"><span class="pre">ReduceScatterBase_Req</span></code></a><ul>
@@ -6486,7 +6507,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterInfo"><code class="docutils literal notranslate"><span class="pre">ReduceScatterInfo</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterInfo.input_sizes"><code class="docutils literal notranslate"><span class="pre">ReduceScatterInfo.input_sizes</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterInfo.codecs"><code class="docutils literal notranslate"><span class="pre">ReduceScatterInfo.codecs</span></code></a></li>
-<li><a class="reference internal" href="#id18"><code class="docutils literal notranslate"><span class="pre">ReduceScatterInfo.input_sizes</span></code></a></li>
+<li><a class="reference internal" href="#id20"><code class="docutils literal notranslate"><span class="pre">ReduceScatterInfo.input_sizes</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterVInfo"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo</span></code></a><ul>
@@ -6495,9 +6516,9 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterVInfo.total_input_size"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.total_input_size</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterVInfo.codecs"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.codecs</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterVInfo.equal_splits"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.equal_splits</span></code></a></li>
-<li><a class="reference internal" href="#id19"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.input_sizes</span></code></a></li>
-<li><a class="reference internal" href="#id20"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.input_splits</span></code></a></li>
-<li><a class="reference internal" href="#id21"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.total_input_size</span></code></a></li>
+<li><a class="reference internal" href="#id21"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.input_sizes</span></code></a></li>
+<li><a class="reference internal" href="#id22"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.input_splits</span></code></a></li>
+<li><a class="reference internal" href="#id23"><code class="docutils literal notranslate"><span class="pre">ReduceScatterVInfo.total_input_size</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterV_Req"><code class="docutils literal notranslate"><span class="pre">ReduceScatterV_Req</span></code></a><ul>
@@ -7097,7 +7118,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan"><code class="docutils literal notranslate"><span class="pre">ShardingPlan</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan.plan"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan.get_plan_for_module"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.get_plan_for_module()</span></code></a></li>
-<li><a class="reference internal" href="#id22"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
+<li><a class="reference internal" href="#id24"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlanner"><code class="docutils literal notranslate"><span class="pre">ShardingPlanner</span></code></a><ul>
