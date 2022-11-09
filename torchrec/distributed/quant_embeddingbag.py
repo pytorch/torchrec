@@ -251,7 +251,7 @@ class ShardedQuantEmbeddingBagCollection(
         if self._has_uninitialized_output_dist:
             self._create_output_dist(device)
             self._has_uninitialized_output_dist = False
-        return self
+        return super().copy(device)
 
     @property
     def shardings(self) -> Dict[str, FeatureShardingMixIn]:
