@@ -11,7 +11,12 @@ from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.comm import get_local_size, intra_and_cross_node_pg
+from torchrec.distributed.comm import (
+    get_local_size,
+    input_dist_new_pg,
+    input_dist_pg,
+    intra_and_cross_node_pg,
+)
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
@@ -324,9 +329,11 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
-        assert pg.size() % local_size == 0, "currently group granularity must be node"
-
-        self._world_size: int = pg.size()
+        self._pg: dist.ProcessGroup = input_dist_pg() if input_dist_new_pg() else pg
+        assert (
+            self._pg.size() % local_size == 0
+        ), "currently group granularity must be node"
+        self._world_size: int = self._pg.size()
         self._local_size: int = local_size
         self._num_cross_nodes: int = self._world_size // self._local_size
         id_list_feature_block_sizes = [
@@ -377,7 +384,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             ),
         )
         self._dist = SparseFeaturesAllToAll(
-            pg=pg,
+            pg=self._pg,
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
@@ -585,7 +592,7 @@ class TwRwPooledEmbeddingSharding(
         assert self._intra_pg is not None
         return TwRwSparseFeaturesDist(
             pg=self._pg,
-            local_size=self._intra_pg.size(),
+            local_size=self._local_size,
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,

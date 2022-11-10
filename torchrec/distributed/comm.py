@@ -14,10 +14,6 @@ import torch.distributed as dist
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Global, only should be accessed via intra_and_cross_node_pg()
-_INTRA_PG: Optional[dist.ProcessGroup] = None
-_CROSS_PG: Optional[dist.ProcessGroup] = None
-
 
 def _env2int(env_list: List[str], default: int = -1) -> int:
     for e in env_list:
@@ -96,6 +92,36 @@ def get_num_groups(world_size: Optional[int] = None) -> int:
     if world_size is None:
         world_size = dist.get_world_size()
     return world_size // get_local_size(world_size)
+
+
+# Global, only should be accessed via intra_and_cross_node_pg() and input_dist_pg()
+_INTRA_PG: Optional[dist.ProcessGroup] = None
+_CROSS_PG: Optional[dist.ProcessGroup] = None
+_INPUT_DIST_PG: Optional[dist.ProcessGroup] = None
+
+_INPUT_DIST_NEW_PG: bool = False
+
+
+def set_input_dist_new_pg(val: bool) -> None:
+    global _INPUT_DIST_NEW_PG
+
+    _INPUT_DIST_NEW_PG = val
+
+
+def input_dist_new_pg() -> bool:
+    global _INPUT_DIST_NEW_PG
+
+    return _INPUT_DIST_NEW_PG
+
+
+def input_dist_pg() -> dist.ProcessGroup:
+    global _INPUT_DIST_PG
+
+    if _INPUT_DIST_PG is None:
+        _INPUT_DIST_PG = dist.new_group()
+        dist.barrier()
+    assert _INPUT_DIST_PG is not None
+    return _INPUT_DIST_PG
 
 
 def intra_and_cross_node_pg(

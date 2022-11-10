@@ -105,9 +105,8 @@ class RwSequenceEmbeddingSharding(
         num_id_score_list_features = self._get_id_score_list_features_num()
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
+        assert self._pg is not None
         return RwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             pg=self._pg,
             num_id_list_features=num_id_list_features,
             num_id_score_list_features=num_id_score_list_features,

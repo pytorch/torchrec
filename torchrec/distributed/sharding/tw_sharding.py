@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
+from torchrec.distributed.comm import input_dist_new_pg, input_dist_pg
 from torchrec.distributed.dist_data import EmbeddingsAllToOne, PooledEmbeddingsAllToAll
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -288,8 +289,9 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
+        self._pg: dist.ProcessGroup = input_dist_pg() if input_dist_new_pg() else pg
         self._dist = SparseFeaturesAllToAll(
-            pg=pg,
+            pg=self._pg,
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
