@@ -888,6 +888,10 @@ class All2All_Seq_Req(Function):
         lengths_after_sparse_data_all2all = a2ai.lengths_after_sparse_data_all2all * D
         input_splits = [i * D for i in a2ai.output_splits]
         output_splits = [i * D for i in a2ai.input_splits]
+
+        a2ai.input_splits = input_splits
+        a2ai.output_splits = output_splits
+
         local_T = lengths_after_sparse_data_all2all.shape[0]
         if local_T > 0:
             with record_function("## alltoall_seq_embedding_fwd_permute ##"):
@@ -921,9 +925,23 @@ class All2All_Seq_Req(Function):
             permuted_lengths_after_sparse_data_all2all = None
 
         if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.forward.create_context()
+            # pyre-ignore [16]
             sharded_input_embeddings = a2ai.codecs.forward.encode(
-                sharded_input_embeddings
+                sharded_input_embeddings, qcomm_ctx
             )
+            output_splits = [
+                a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
+                for x in output_splits
+            ]
+            input_splits = [
+                a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
+                for x in input_splits
+            ]
+        else:
+            qcomm_ctx = None
+
         sharded_output_embeddings = torch.empty(
             sum(output_splits),
             dtype=sharded_input_embeddings.dtype,
@@ -942,13 +960,12 @@ class All2All_Seq_Req(Function):
         a2ai.permuted_lengths_after_sparse_data_all2all = (
             permuted_lengths_after_sparse_data_all2all
         )
-        a2ai.input_splits = input_splits
-        a2ai.output_splits = output_splits
         myreq.req = req
         myreq.tensor = sharded_output_embeddings
         myreq.a2ai = a2ai
         myreq.wait_function = All2All_Seq_Req_Wait
         ctx.myreq = myreq
+        myreq.qcomm_ctx = qcomm_ctx
         ctx.pg = pg
         ctx.my_rank = my_rank
         ctx.world_size = world_size
@@ -970,7 +987,10 @@ class All2All_Seq_Req(Function):
         myreq.req.wait()
         sharded_grad_input = myreq.tensor
         if a2ai.codecs is not None:
-            sharded_grad_input = a2ai.codecs.backward.decode(sharded_grad_input)
+            codecs = none_throws(a2ai.codecs)
+            sharded_grad_input = codecs.backward.decode(
+                sharded_grad_input, myreq.qcomm_ctx
+            )
         myreq.req = None
         myreq.tensor = None
         myreq.dummy_tensor = None
@@ -1017,8 +1037,9 @@ class All2All_Seq_Req_Wait(Function):
         ctx.pg = pg
         ctx.myreq = myreq
         if a2ai.codecs is not None:
-            sharded_output_embeddings = a2ai.codecs.forward.decode(
-                sharded_output_embeddings
+            codecs = none_throws(a2ai.codecs)
+            sharded_output_embeddings = codecs.forward.decode(
+                sharded_output_embeddings, myreq.qcomm_ctx
             )
         return sharded_output_embeddings.view(-1, D)
 
@@ -1033,7 +1054,22 @@ class All2All_Seq_Req_Wait(Function):
         output_splits = a2ai.input_splits
 
         if a2ai.codecs is not None:
-            sharded_grad_output = a2ai.codecs.backward.encode(sharded_grad_output)
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.backward.create_context()
+            sharded_grad_output = a2ai.codecs.backward.encode(
+                sharded_grad_output, qcomm_ctx
+            )
+            output_splits = [
+                a2ai.codecs.backward.calc_quantized_size(x, qcomm_ctx)
+                for x in output_splits
+            ]
+            input_splits = [
+                a2ai.codecs.backward.calc_quantized_size(x, qcomm_ctx)
+                for x in input_splits
+            ]
+        else:
+            qcomm_ctx = None
+
         sharded_grad_input = torch.empty(
             sum(output_splits),
             device=sharded_grad_output.device,
@@ -1050,6 +1086,7 @@ class All2All_Seq_Req_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = sharded_grad_input
+        myreq.qcomm_ctx = qcomm_ctx
 
         return (None, None, myreq.dummy_tensor)
 
