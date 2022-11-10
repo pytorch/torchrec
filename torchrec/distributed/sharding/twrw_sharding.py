@@ -313,7 +313,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
-        intra_pg: dist.ProcessGroup,
+        local_size: int,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         id_list_feature_hash_sizes: List[int],
@@ -324,12 +324,10 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
-        assert (
-            pg.size() % intra_pg.size() == 0
-        ), "currently group granularity must be node"
+        assert pg.size() % local_size == 0, "currently group granularity must be node"
 
         self._world_size: int = pg.size()
-        self._local_size: int = intra_pg.size()
+        self._local_size: int = local_size
         self._num_cross_nodes: int = self._world_size // self._local_size
         id_list_feature_block_sizes = [
             math.ceil(hash_size / self._local_size)
@@ -584,9 +582,10 @@ class TwRwPooledEmbeddingSharding(
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         assert self._pg is not None
+        assert self._intra_pg is not None
         return TwRwSparseFeaturesDist(
             pg=self._pg,
-            intra_pg=cast(dist.ProcessGroup, self._intra_pg),
+            local_size=self._intra_pg.size(),
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,
