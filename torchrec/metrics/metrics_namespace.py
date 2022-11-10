@@ -44,6 +44,7 @@ class MetricName(MetricNameBase):
     MSE = "mse"
     RMSE = "rmse"
     AUC = "auc"
+    MULTICLASS_RECALL = "multiclass_recall"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -62,6 +63,8 @@ class MetricNamespace(MetricNamespaceBase):
 
     OPTIMIZERS = "optimizers"
     MODEL_CONFIGURATOR = "model_configurator"
+
+    MULTICLASS_RECALL = "multiclass_recall"
 
 
 class MetricPrefix(StrValueMixin, Enum):
