@@ -38,21 +38,20 @@ def parse_model_outputs(
     assert isinstance(predictions, torch.Tensor)
     weights = model_out[weight_name].squeeze()
     assert isinstance(weights, torch.Tensor)
-    # If the model output for the metric is empty, pass it forward
-    if not (
-        (torch.numel(labels) == torch.numel(predictions))
-        and (torch.numel(labels) == torch.numel(weights))
-    ):
-        assert is_empty_signals(labels, predictions, weights)
 
     if not is_empty_signals(labels, predictions, weights):
-        assert (torch.numel(labels) == torch.numel(predictions)) and (
-            torch.numel(labels) == torch.numel(weights)
-        ), (
-            "Expect the same number of elements in labels, predictions, and weights. "
-            f"Instead got {torch.numel(labels)}, {torch.numel(predictions)}, "
-            f"{torch.numel(weights)}"
-        )
+        if labels.dim() == predictions.dim():
+            assert (torch.numel(labels) == torch.numel(predictions)) and (
+                torch.numel(labels) == torch.numel(weights)
+            ), (
+                "Expect the same number of elements in labels, predictions, and weights. "
+                f"Instead got {torch.numel(labels)}, {torch.numel(predictions)}, "
+                f"{torch.numel(weights)}"
+            )
+        else:  # For multiclass models, labels.size() = (batch_size), and predictions.size() = (batch_size, number_of_classes)
+            assert torch.numel(labels) == torch.numel(predictions) / predictions.size()[
+                -1
+            ] and torch.numel(labels) == torch.numel(weights)
 
         # non-empty tensors need to have rank 1
         if len(labels.size()) == 0:
