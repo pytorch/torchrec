@@ -273,7 +273,7 @@ class BinaryCriteoUtils:
         world_size: int,
         start_row: int = 0,
         last_row: Optional[int] = None,
-    ) -> Dict[int, Tuple[int, int]]:
+    ) -> Tuple[Dict[int, Tuple[int, int]], int]:
         """
         Given a rank, world_size, and the lengths (number of rows) for a list of files,
         return which files and which portions of those files (represented as row ranges
@@ -339,7 +339,7 @@ class BinaryCriteoUtils:
                 overlap_right_l = overlap_right_g - file_left_g
                 output[idx] = (overlap_left_l, overlap_right_l)
 
-        return output
+        return output, remainder
 
     @staticmethod
     def load_npy_range(
@@ -728,10 +728,14 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
         self.num_batches: int = math.ceil(sum(self.num_rows_per_file) / batch_size)
 
+        if self.rank < self.remainder and (
+            sum(self.num_rows_per_file) % batch_size == 1 or batch_size == 1
+        ):
+            self.num_batches -= 1
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
         # functions.
-        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * batch_size
+        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size + 1)
         self.keys: List[str] = DEFAULT_CAT_NAMES
         self.lengths: torch.Tensor = torch.ones(
             (self._num_ids_in_batch,), dtype=torch.int32
@@ -739,6 +743,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.offsets: torch.Tensor = torch.arange(
             0, self._num_ids_in_batch + 1, dtype=torch.int32
         )
+        self._num_ids_in_batch -= CAT_FEATURE_COUNT
         self.length_per_key: List[int] = CAT_FEATURE_COUNT * [batch_size]
         self.offset_per_key: List[int] = [
             batch_size * i for i in range(CAT_FEATURE_COUNT + 1)
@@ -761,7 +766,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 dataset_len = samples_in_file - start_row
             last_row = start_row + dataset_len - 1
 
-        file_idx_to_row_range = BinaryCriteoUtils.get_file_idx_to_row_range(
+        file_idx_to_row_range, remainder = BinaryCriteoUtils.get_file_idx_to_row_range(
             lengths=[
                 BinaryCriteoUtils.get_shape_from_npy(
                     path, path_manager_key=self.path_manager_key
@@ -773,7 +778,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             start_row=start_row,
             last_row=last_row,
         )
-
+        self.remainder = remainder
         self.dense_arrs, self.sparse_arrs, self.labels_arrs = [], [], []
         for arrs, paths in zip(
             [self.dense_arrs, self.sparse_arrs, self.labels_arrs],
@@ -855,15 +860,18 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         file_idx = 0
         row_idx = 0
         batch_idx = 0
+        cur_batch_size = self.batch_size
         while batch_idx < self.num_batches:
             buffer_row_count = 0 if buffer is None else none_throws(buffer)[0].shape[0]
-            if buffer_row_count == self.batch_size or file_idx == len(self.dense_arrs):
+            if buffer_row_count == cur_batch_size or file_idx == len(self.dense_arrs):
                 yield self._np_arrays_to_batch(*none_throws(buffer))
                 batch_idx += 1
                 buffer = None
+                if batch_idx + 1 == self.num_batches and self.rank < self.remainder:
+                    cur_batch_size += 1
             else:
                 rows_to_get = min(
-                    self.batch_size - buffer_row_count,
+                    cur_batch_size - buffer_row_count,
                     self.num_rows_per_file[file_idx] - row_idx,
                 )
                 slice_ = slice(row_idx, row_idx + rows_to_get)
