@@ -77,6 +77,17 @@ class Tracer(torch.fx.Tracer):
             )
         return super().create_arg(a)
 
+    def path_of_module(self, mod: torch.nn.Module) -> str:
+        """
+        Allows trace-ability of non registered modules. This is typically used for Table Batched Embeddings
+        made to look like nn.EmbeddingBags
+        """
+
+        if hasattr(mod, "_fx_path"):
+            # pyre-ignore
+            return mod._fx_path
+        return super().path_of_module(mod)
+
 
 def symbolic_trace(
     # pyre-ignore[24]
