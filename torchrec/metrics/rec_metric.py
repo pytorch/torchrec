@@ -469,10 +469,17 @@ class RecMetric(nn.Module, abc.ABC):
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
-                assert isinstance(predictions, torch.Tensor)
-                # Reshape the predictions to size([len(self._tasks), self._batch_size])
-                predictions = predictions.view(-1, self._batch_size)
-                assert isinstance(labels, torch.Tensor)
+                assert isinstance(predictions, torch.Tensor) and isinstance(
+                    labels, torch.Tensor
+                )
+
+                predictions = (
+                    # Reshape the predictions to size([len(self._tasks), self._batch_size])
+                    predictions.view(-1, self._batch_size)
+                    if predictions.dim() == labels.dim()
+                    # predictions.dim() == labels.dim() + 1 for multiclass models
+                    else predictions.view(-1, self._batch_size, predictions.size()[-1])
+                )
                 labels = labels.view(-1, self._batch_size)
                 if weights is None:
                     weights = self._create_default_weights(predictions)
@@ -505,8 +512,14 @@ class RecMetric(nn.Module, abc.ABC):
                         assert torch.numel(labels[task.name]) == 0
                         assert weights is None or torch.numel(weights[task.name]) == 0
                         continue
-                    # Reshape the predictions to size([1, self._batch_size])
-                    task_predictions = predictions[task.name].view(1, -1)
+                    task_predictions = (
+                        predictions[task.name].view(1, -1)
+                        if predictions[task.name].dim() == labels[task.name].dim()
+                        # predictions[task.name].dim() == labels[task.name].dim() + 1 for multiclass models
+                        else predictions[task.name].view(
+                            1, -1, predictions[task.name].size()[-1]
+                        )
+                    )
                     task_labels = labels[task.name].view(1, -1)
                     if weights is None:
                         task_weights = self._create_default_weights(task_predictions)
