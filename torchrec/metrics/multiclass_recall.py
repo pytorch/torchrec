@@ -90,7 +90,7 @@ def get_multiclass_recall_states(
 
 class MulticlassRecallMetricComputation(RecMetricComputation):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self._n_classes: int = kwargs.pop("n_classes")
+        self._n_classes: int = kwargs.pop("number_of_classes")
         super().__init__(*args, **kwargs)
         self._add_state(
             "tp_sum",
