@@ -365,6 +365,13 @@ be used as arguments to nodes in the <code class="docutils literal notranslate">
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.path_of_module">
+<span class="sig-name descname"><span class="pre">path_of_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mod</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.path_of_module" title="Permalink to this definition">¶</a></dt>
+<dd><p>Allows trace-ability of non registered modules. This is typically used for Table Batched Embeddings
+made to look like nn.EmbeddingBags</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.trace">
 <span class="sig-name descname"><span class="pre">trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Graph</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.trace" title="Permalink to this definition">¶</a></dt>
 <dd><div class="admonition note">
@@ -461,6 +468,7 @@ into a Graph representation.</p></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer"><code class="docutils literal notranslate"><span class="pre">Tracer</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.create_arg"><code class="docutils literal notranslate"><span class="pre">Tracer.create_arg()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.graph"><code class="docutils literal notranslate"><span class="pre">Tracer.graph</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.path_of_module"><code class="docutils literal notranslate"><span class="pre">Tracer.path_of_module()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.trace"><code class="docutils literal notranslate"><span class="pre">Tracer.trace()</span></code></a></li>
 </ul>
 </li>
