@@ -324,7 +324,6 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         tables = [eb1_config, eb2_config]
 
         ebc = EmbeddingBagCollection(tables=tables)
-
         # test forward
         # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
@@ -342,6 +341,63 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         state_dict = test_model.state_dict()
         self.assertEqual(state_dict.keys(), before_quant_state_dict.keys())
         test_model.load_state_dict(state_dict)
+
+    def test_trace_and_script(self) -> None:
+        data_type = DataType.FP16
+        quant_type = torch.half
+        output_type = torch.half
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+            data_type=data_type,
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        # pyre-ignore
+        ebc.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qebc = QuantEmbeddingBagCollection.from_float(ebc)
+
+        from torchrec.fx import symbolic_trace
+        from torchrec.quant.utils import populate_fx_names
+
+        populate_fx_names(qebc)
+        gm = symbolic_trace(qebc)
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.as_tensor([0, 1]),
+            lengths=torch.as_tensor([1, 1]),
+        )
+
+        original_out = qebc(features)
+        traced_out = gm(features)
+
+        scripted_module = torch.jit.script(gm)
+        scripted_out = scripted_module(features)
+
+        self.assertEqual(original_out.keys(), traced_out.keys())
+        torch.testing.assert_close(original_out.values(), traced_out.values())
+        self.assertEqual(original_out.offset_per_key(), traced_out.offset_per_key())
+
+        self.assertEqual(original_out.keys(), scripted_out.keys())
+        torch.testing.assert_close(original_out.values(), scripted_out.values())
+        self.assertEqual(original_out.offset_per_key(), scripted_out.offset_per_key())
 
 
 class EmbeddingCollectionTest(unittest.TestCase):
