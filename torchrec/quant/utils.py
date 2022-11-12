@@ -14,6 +14,21 @@ from torchrec.quant.embedding_modules import (
 )
 
 
+def populate_fx_names(quant_ebc: QuantEmbeddingBagCollection) -> None:
+    """
+    Assigns fx path to non registered lookup modules. This allows the Torchrec tracer to fallback to
+    emb_module._fx_path for table batched embeddings.
+    """
+    for emb_configs, emb_module in zip(
+        quant_ebc._key_to_tables, quant_ebc._emb_modules
+    ):
+        table_names = []
+        for config in emb_configs:
+            table_names.append(config.name)
+        joined_table_names = ",".join(table_names)
+        emb_module._fx_path = f"emb_module.{joined_table_names}"
+
+
 def meta_to_cpu_placement(module: DistributedModelParallel) -> None:
     assert hasattr(module, "_dmp_wrapped_module")
     _meta_to_cpu_placement(module.module, module, "_dmp_wrapped_module")
