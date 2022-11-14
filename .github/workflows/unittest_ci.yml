@@ -77,6 +77,11 @@ jobs:
       download-artifact: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-version }}.whl
       script: |
         set -x
+        nvidia-smi
+        whereis nvcc
+        ls /usr/local/cuda-11.3/lib64  | grep cudart
+        ls /usr/local/cuda/lib | grep cudart
+        ls /usr/local/cuda-11.7/lib64  | grep cudart
         ldd --version
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
