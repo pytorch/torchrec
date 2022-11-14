@@ -79,9 +79,6 @@ jobs:
         set -x
         nvidia-smi
         whereis nvcc
-        ls /usr/local/cuda-11.3/lib64  | grep cudart
-        ls /usr/local/cuda/lib | grep cudart
-        ls /usr/local/cuda-11.7/lib64  | grep cudart
         ldd --version
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
@@ -89,5 +86,6 @@ jobs:
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         # Install torchrec binary
         pip install ${RUNNER_ARTIFACT_DIR}/*.whl
+        pip uninstall fbgemm_gpu + pip install fbgemm_gpu_nightly
         conda install -y pytest
         pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
