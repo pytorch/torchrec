@@ -86,7 +86,7 @@ jobs:
         conda install -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
         # Install torchrec binary
         pip install ${RUNNER_ARTIFACT_DIR}/*.whl
-        pip uninstall fbgemm_gpu
-        pip install fbgemm_gpu_nightly
+        pip uninstall --yes fbgemm_gpu
+        pip install --no-input fbgemm_gpu_nightly
         conda install -y pytest
         pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
