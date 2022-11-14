@@ -306,7 +306,7 @@ class RecMetric(nn.Module, abc.ABC):
         compute_on_all_ranks: bool = False,
         should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
-        **kwargs: Any,
+        **kwargs: Dict[str, Any],
     ) -> None:
         # TODO(stellaya): consider to inherit from TorchMetrics.Metric or
         # TorchMetrics.MetricCollection.
@@ -333,11 +333,9 @@ class RecMetric(nn.Module, abc.ABC):
             self.WEIGHTS: [],
         }
         if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
-            n_metrics = 1
             task_per_metric = len(self._tasks)
             self._tasks_iter = self._fused_tasks_iter
         else:
-            n_metrics = len(self._tasks)
             task_per_metric = 1
             self._tasks_iter = self._unfused_tasks_iter
 
@@ -354,11 +352,20 @@ class RecMetric(nn.Module, abc.ABC):
                     compute_on_all_ranks,
                     self._should_validate_update,
                     process_group,
-                    **kwargs,
+                    **{**kwargs, **self._get_task_kwargs(task_config)},
                 )
-                for _ in range(n_metrics)
+                for task_config in (
+                    [self._tasks]
+                    if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
+                    else self._tasks
+                )
             ]
         )
+
+    def _get_task_kwargs(
+        self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
+    ) -> Dict[str, Any]:
+        return {}
 
     # TODO(stellaya): Refactor the _[fused, unfused]_tasks_iter methods and replace the
     # compute_scope str input with an enum
