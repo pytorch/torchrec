@@ -33,9 +33,10 @@ class IDTransformer:
         """
         Transform `global_ids` and store the results in `cache_ids`.
         """
-        return self._transformer.transform(
+        result = self._transformer.transform(
             global_ids.tensor_list, cache_ids.tensor_list, time
         )
+        return result.success, result.ids_to_fetch
 
     def evict(self, num_to_evict):
         """
