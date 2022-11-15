@@ -18,16 +18,8 @@ if(NOT hiredis_POPULATED)
     add_subdirectory(${hiredis_SOURCE_DIR} ${hiredis_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
-FetchContent_Declare(
-        foonathan_lexy  # used for parsing redis config string
-        GIT_REPOSITORY https://github.com/foonathan/lexy.git
-        GIT_TAG v2022.05.1
-)
-
-FetchContent_MakeAvailable(foonathan_lexy)
-
 add_library(redis_io SHARED redis_io.cpp)
 target_include_directories(redis_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../)
 target_include_directories(redis_io PUBLIC ${TORCH_INCLUDE_DIRS})
 target_compile_options(redis_io PUBLIC -fPIC)
-target_link_libraries(redis_io PUBLIC hiredis::hiredis_static foonathan::lexy::core)
+target_link_libraries(redis_io PUBLIC hiredis::hiredis_static)

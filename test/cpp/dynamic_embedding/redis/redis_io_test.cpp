@@ -13,21 +13,21 @@
 namespace torchrec::redis {
 
 TEST(TDE, redis_Option) {
-  auto opt = Option::parse(
+  auto opt = parse_option(
       "192.168.3.1:3948/?db=3&&num_threads=2&&timeout=3s&&chunk_size=3000");
-  ASSERT_EQ(opt.host_, "192.168.3.1");
-  ASSERT_EQ(opt.port_, 3948);
-  ASSERT_EQ(opt.db_, 3);
-  ASSERT_EQ(opt.num_io_threads_, 2);
-  ASSERT_EQ(opt.chunk_size_, 3000);
-  ASSERT_EQ(opt.timeout_ms_, 3000);
-  ASSERT_TRUE(opt.prefix_.empty());
+  ASSERT_EQ(opt.host, "192.168.3.1");
+  ASSERT_EQ(opt.port, 3948);
+  ASSERT_EQ(opt.db, 3);
+  ASSERT_EQ(opt.num_io_threads, 2);
+  ASSERT_EQ(opt.chunk_size, 3000);
+  ASSERT_EQ(opt.timeout_ms, 3000);
+  ASSERT_TRUE(opt.prefix.empty());
 }
 
 TEST(TDE, redis_Option_ParseError) {
   ASSERT_ANY_THROW(
-      Option::parse("192.168.3.1:3948/?db=3&&no_opt=3000&&num_threads=2"));
-  ASSERT_ANY_THROW(Option::parse("192.168.3.1:3948/?timeout=3d"));
+      parse_option("192.168.3.1:3948/?db=3&&no_opt=3000&&num_threads=2"));
+  ASSERT_ANY_THROW(parse_option("192.168.3.1:3948/?timeout=3d"));
 }
 
 struct PullContext {
@@ -36,7 +36,7 @@ struct PullContext {
 };
 
 TEST(TDE, redis_push_pull) {
-  auto opt = Option::parse("127.0.0.1:6379");
+  auto opt = parse_option("127.0.0.1:6379");
   Redis redis(opt);
 
   constexpr static int64_t global_ids[] = {1, 3, 4};

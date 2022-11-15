@@ -21,29 +21,22 @@ namespace torchrec::redis {
 
 struct Option {
  public:
-  std::string host_;
-  std::string username_;
-  std::string password_;
-  uint16_t port_{6379};
-  uint16_t db_{0};
-  uint32_t num_io_threads_{1};
-  std::string prefix_;
-  uint32_t timeout_ms_{10000};
-  uint32_t heart_beat_interval_ms_{100000};
-  uint32_t retry_limit_{3};
-  uint32_t chunk_size_{100};
-
-  Option() = default;
-
-  static Option parse(std::string_view config_str) {
-    return Option(config_str);
-  }
-
- private:
-  Option(std::string_view config_str);
+  std::string host;
+  std::string username;
+  std::string password;
+  uint16_t port{6379};
+  uint16_t db{0};
+  uint32_t num_io_threads{1};
+  std::string prefix;
+  uint32_t timeout_ms{10000};
+  uint32_t heart_beat_interval_ms{100000};
+  uint32_t retry_limit{3};
+  uint32_t chunk_size{100};
 };
 
-namespace redis {
+Option parse_option(std::string_view config_str);
+
+namespace helper {
 struct ContextDeleter {
   void operator()(void* ctx) {
     if (ctx == nullptr) {
@@ -65,7 +58,7 @@ struct ReplyDeleter {
 
 using ReplyPtr = std::unique_ptr<redisReply, ReplyDeleter>;
 
-} // namespace redis
+} // namespace helper
 
 class Redis {
  public:
@@ -79,27 +72,27 @@ class Redis {
 
  private:
   void start_thread();
-  void heartbeat(redis::ContextPtr& connection);
-  [[nodiscard]] redis::ContextPtr Connect() const;
+  void heartbeat(helper::ContextPtr& connection);
+  [[nodiscard]] helper::ContextPtr connect() const;
 
   void do_fetch(
       uint32_t gid_offset,
       void* fetch_param,
-      redis::ContextPtr& connection) const;
+      helper::ContextPtr& connection) const;
 
   void do_push(
       uint32_t gid_offset,
       void* push_ctx,
-      redis::ContextPtr& connection) const;
+      helper::ContextPtr& connection) const;
 
   void check_status(
       std::string_view label,
-      redis::ContextPtr& connection,
-      redis::ReplyPtr& reply) const;
+      helper::ContextPtr& connection,
+      helper::ReplyPtr& reply) const;
 
   Option opt_;
   std::vector<std::thread> io_threads_;
-  std::deque<std::function<void(redis::ContextPtr&)>> jobs_;
+  std::deque<std::function<void(helper::ContextPtr&)>> jobs_;
   std::condition_variable jobs_not_empty_;
   std::mutex jobs_mutex_;
 };

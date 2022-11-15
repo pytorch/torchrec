@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <lexy/callback.hpp>
-#include <lexy/dsl.hpp>
 #include <torchrec/csrc/dynamic_embedding/details/redis/redis_io.h>
 #include <torchrec/csrc/dynamic_embedding/details/redis/url.h>
 #include <iostream>
@@ -15,234 +13,108 @@
 
 namespace torchrec::redis {
 
-struct NumThreadsOpt {
-  uint32_t num_threads_;
-};
-struct DBOpt {
-  uint32_t db_;
-};
-struct PrefixOpt {
-  std::string prefix_;
-};
+int parse_integer(std::string_view param_str, std::string_view param_key) {
+  return std::stoi(std::string(param_str.substr(param_key.size())));
+}
 
-struct TimeoutMsOpt {
-  uint32_t timeout_;
-};
-
-struct HeartBeatMsOpt {
-  uint32_t heartbeat_;
-};
-
-struct RetryLimitOpt {
-  uint32_t limit_;
-};
-
-struct ChunkSizeOpt {
-  uint32_t chunk_size_;
-};
-
-using OptVar = std::variant<
-    NumThreadsOpt,
-    DBOpt,
-    PrefixOpt,
-    TimeoutMsOpt,
-    HeartBeatMsOpt,
-    RetryLimitOpt,
-    ChunkSizeOpt>;
-
-struct OptionSetter {
-  void operator()(Option* self, NumThreadsOpt opt) {
-    TORCH_CHECK(opt.num_threads_ != 0);
-    self->num_io_threads_ = opt.num_threads_;
+uint32_t parse_duration(
+    std::string_view param_str,
+    std::string_view param_key) {
+  auto param_value = param_str.substr(param_key.size());
+  if (param_value.empty()) {
+    throw std::invalid_argument("no value for " + std::string(param_str));
   }
-  void operator()(Option* self, DBOpt opt) {
-    self->db_ = opt.db_;
+  double duration;
+  if (param_value.ends_with("ms")) {
+    duration =
+        std::stod(std::string(param_value.substr(0, param_value.size() - 2)));
+  } else if (param_value.ends_with("s")) {
+    duration =
+        std::stod(std::string(param_value.substr(0, param_value.size() - 1))) *
+        1000;
+  } else if (param_value.ends_with("m")) {
+    duration =
+        std::stod(std::string(param_value.substr(0, param_value.size() - 1))) *
+        1000 * 60;
+  } else {
+    throw std::invalid_argument(
+        "no supported time unit (ms, s, m) in " + std::string(param_str));
   }
-  void operator()(Option* self, PrefixOpt opt) {
-    self->prefix_ = std::move(opt.prefix_);
+  return static_cast<uint32_t>(duration);
+}
+
+Option parse_option(std::string_view config_str) {
+  Option option;
+  url_parser::Url url = url_parser::parse_url(config_str);
+
+  if (url.authority.has_value()) {
+    option.username = std::move(url.authority->username);
+    option.password = std::move(url.authority->password);
   }
-  void operator()(Option* self, TimeoutMsOpt opt) {
-    TORCH_CHECK(opt.timeout_ != 0);
-    self->timeout_ms_ = opt.timeout_;
+
+  option.host = std::move(url.host);
+
+  if (url.port.has_value()) {
+    option.port = url.port.value();
   }
-  void operator()(Option* self, HeartBeatMsOpt opt) {
-    TORCH_CHECK(opt.heartbeat_ != 0);
-    self->heart_beat_interval_ms_ = opt.heartbeat_;
-  }
-  void operator()(Option* self, RetryLimitOpt opt) {
-    TORCH_CHECK(opt.limit_ != 0);
-    self->retry_limit_ = opt.limit_;
-  }
-  void operator()(Option* self, ChunkSizeOpt opt) {
-    TORCH_CHECK(opt.chunk_size_ != 0);
-    self->chunk_size_ = opt.chunk_size_;
-  }
-};
 
-namespace option_rules {
-namespace dsl = lexy::dsl;
-struct Integer {
-  constexpr static auto rule =
-      dsl::integer<uint32_t>(dsl::digits<>.no_leading_zero());
-  constexpr static auto value = lexy::construct<uint32_t>;
-};
+  if (url.param.has_value()) {
+    std::string_view param_str = url.param.value();
+    while (!param_str.empty()) {
+      auto and_pos = param_str.find("&&");
+      std::string_view single_param_str;
+      if (and_pos != std::string_view::npos) {
+        single_param_str = param_str.substr(0, and_pos);
+        param_str = param_str.substr(and_pos + 2);
+      } else {
+        single_param_str = param_str;
+        param_str = "";
+      }
 
-struct NumThreads {
-  constexpr static auto rule = LEXY_LIT("num_threads=") >> dsl::p<Integer>;
-  constexpr static auto value = lexy::construct<NumThreadsOpt>;
-};
-
-struct DB {
-  constexpr static auto rule = LEXY_LIT("db=") >> dsl::p<Integer>;
-  constexpr static auto value = lexy::construct<DBOpt>;
-};
-
-struct Prefix {
-  constexpr static auto rule = LEXY_LIT("prefix=") >>
-      dsl::capture(dsl::token(dsl::identifier(
-          dsl::ascii::alpha_underscore,
-          dsl::ascii::alpha_digit_underscore)));
-  constexpr static auto value =
-      lexy::callback<PrefixOpt>([](auto&& str) -> PrefixOpt {
-        return PrefixOpt{std::string(str.data(), str.size())};
-      });
-};
-
-struct Duration {
-  struct UnknownUnit {
-    constexpr static auto name = "unknown unit";
-  };
-
-  constexpr static auto rule =
-      dsl::integer<uint32_t>(dsl::digits<>.no_leading_zero()) >>
-      dsl::opt(LEXY_LIT(".") >> dsl::capture(dsl::digits<>)) >>
-      (dsl::capture(
-           dsl::literal_set(LEXY_LIT("ms"), LEXY_LIT("s"), LEXY_LIT("m"))) |
-       dsl::error<UnknownUnit>);
-
-  constexpr static auto value = lexy::callback<uint32_t>(
-      [](auto&& dec, std::optional<lexy::lexeme<lexy::_prd>> fp, auto&& unit) {
-        double scale;
-        auto unit_sv = std::string_view{unit.data(), unit.size()};
-        if (unit_sv == "s") {
-          scale = 1000;
-        } else if (unit_sv == "m") {
-          scale = 1000 * 60;
-        } else if (unit_sv == "ms") {
-          scale = 1;
-        } else {
-          TORCH_CHECK(false, "unit should in [s, m, ms]");
-        }
-        double val = dec;
-        if (fp.has_value()) {
-          double scale_fp = 10.0;
-          for (auto& ch : fp.value()) {
-            val += (ch - '0') / scale_fp;
-            scale_fp *= 10;
-          }
-        }
-        val *= scale;
-        auto timeout_ = static_cast<uint32_t>(val);
-        return timeout_;
-      });
-};
-
-struct Timeout {
-  constexpr static auto rule = LEXY_LIT("timeout=") >> dsl::p<Duration>;
-  constexpr static auto value = lexy::construct<TimeoutMsOpt>;
-};
-
-struct HeartBeat {
-  constexpr static auto rule = LEXY_LIT("heartbeat=") >> dsl::p<Duration>;
-  constexpr static auto value = lexy::construct<HeartBeatMsOpt>;
-};
-
-struct RetryLimit {
-  constexpr static auto rule = LEXY_LIT("retry_limit=") >> dsl::p<Integer>;
-  constexpr static auto value = lexy::construct<RetryLimitOpt>;
-};
-
-struct ChunkSize {
-  constexpr static auto rule = LEXY_LIT("chunk_size=") >> dsl::p<Integer>;
-  constexpr static auto value = lexy::construct<ChunkSizeOpt>;
-};
-
-struct UnknownOption {
-  constexpr static auto name = "unknown option";
-};
-
-struct Option {
-  constexpr static auto rule = dsl::p<NumThreads> | dsl::p<DB> |
-      dsl::p<Prefix> | dsl::p<Timeout> | dsl::p<HeartBeat> |
-      dsl::p<RetryLimit> | dsl::p<ChunkSize> | dsl::error<UnknownOption>;
-  constexpr static auto value = lexy::construct<OptVar>;
-};
-
-struct Options {
-  constexpr static auto rule =
-      dsl::list(dsl::p<Option>, dsl::sep(LEXY_LIT("&&")));
-
-  constexpr static auto value = lexy::as_list<std::vector<OptVar>>;
-};
-
-} // namespace option_rules
-
-Option::Option(std::string_view config_str) {
-  auto url = url_parser::parse_url(config_str);
-  if (url.auth_.has_value()) {
-    username_ = std::move(url.auth_->username_);
-    if (url.auth_->password_.has_value()) {
-      password_ = std::move(url.auth_->password_.value());
+      if (single_param_str.starts_with("num_threads=")) {
+        option.num_io_threads = parse_integer(single_param_str, "num_threads=");
+      } else if (single_param_str.starts_with("db=")) {
+        option.db = parse_integer(single_param_str, "db=");
+      } else if (single_param_str.starts_with("prefix=")) {
+        option.prefix = single_param_str.substr(std::string("prefix=").size());
+      } else if (single_param_str.starts_with("timeout=")) {
+        option.timeout_ms = parse_duration(single_param_str, "timeout=");
+      } else if (single_param_str.starts_with("heartbeat=")) {
+        option.heart_beat_interval_ms =
+            parse_duration(single_param_str, "heartbeat=");
+      } else if (single_param_str.starts_with("retry_limit=")) {
+        option.retry_limit = parse_integer(single_param_str, "retry_limit=");
+      } else if (single_param_str.starts_with("chunk_size=")) {
+        option.chunk_size = parse_integer(single_param_str, "chunk_size=");
+      } else {
+        throw std::invalid_argument(
+            "unknown parameter: " + std::string(single_param_str));
+      }
     }
   }
 
-  host_ = std::move(url.host_);
-
-  if (url.port_.has_value()) {
-    port_ = url.port_.value();
-  }
-
-  if (url.param_.has_value()) {
-    std::ostringstream err_oss_;
-    url_parser::ErrorCollector collector{err_oss_};
-
-    auto result = lexy::parse<option_rules::Options>(
-        lexy::string_input(url.param_.value()), collector);
-    auto err_str = err_oss_.str();
-
-    TORCH_CHECK(
-        result.has_value() && err_str.empty(), "parse param error ", err_str);
-
-    for (auto&& opt_var : result.value()) {
-      std::visit(
-          [this](auto&& opt) {
-            OptionSetter setter;
-            setter(this, std::move(opt));
-          },
-          opt_var);
-    }
-  }
+  return option;
 }
 
 Redis::Redis(Option opt) : opt_(std::move(opt)) {
-  TORCH_CHECK(opt_.num_io_threads_ != 0, "num_io_threads must not be empty");
+  TORCH_CHECK(opt_.num_io_threads != 0, "num_io_threads must not be empty");
   TORCH_CHECK(
-      opt_.heart_beat_interval_ms_ != 0,
+      opt_.heart_beat_interval_ms != 0,
       "heart beat interval must not be zero.");
-  for (size_t i = 0; i < opt_.num_io_threads_; ++i) {
+  for (size_t i = 0; i < opt_.num_io_threads; ++i) {
     start_thread();
   }
 }
 
 void Redis::start_thread() {
-  auto connection = Connect();
+  auto connection = connect();
   heartbeat(connection);
 
   io_threads_.emplace_back(
       [connection = std::move(connection), this]() mutable {
-        std::chrono::milliseconds heart_beat(opt_.heart_beat_interval_ms_);
+        std::chrono::milliseconds heart_beat(opt_.heart_beat_interval_ms);
         while (true) {
-          std::function<void(redis::ContextPtr&)> todo;
+          std::function<void(helper::ContextPtr&)> todo;
           bool heartbeat_timeout;
           {
             std::unique_lock<std::mutex> lock(this->jobs_mutex_);
@@ -267,10 +139,10 @@ void Redis::start_thread() {
       });
 }
 
-void Redis::heartbeat(redis::ContextPtr& connection) {
-  for (uint32_t retry = 0; retry < opt_.retry_limit_; ++retry) {
+void Redis::heartbeat(helper::ContextPtr& connection) {
+  for (uint32_t retry = 0; retry < opt_.retry_limit; ++retry) {
     try {
-      auto reply = redis::ReplyPtr(reinterpret_cast<redisReply*>(
+      auto reply = helper::ReplyPtr(reinterpret_cast<redisReply*>(
           redisCommand(connection.get(), "PING")));
       TORCH_CHECK(
           reply && reply->type == REDIS_REPLY_STRING,
@@ -279,48 +151,47 @@ void Redis::heartbeat(redis::ContextPtr& connection) {
       TORCH_CHECK(rsp == "PONG", "ping/pong error");
     } catch (...) {
       // reconnect if heart beat error
-      connection = Connect();
+      connection = connect();
     }
   }
 }
 
-redis::ContextPtr Redis::Connect() const {
-  redis::ContextPtr connection;
-  if (opt_.timeout_ms_ == 0) {
-    connection =
-        redis::ContextPtr(redisConnect(opt_.host_.c_str(), opt_.port_));
+helper::ContextPtr Redis::connect() const {
+  helper::ContextPtr connection;
+  if (opt_.timeout_ms == 0) {
+    connection = helper::ContextPtr(redisConnect(opt_.host.c_str(), opt_.port));
   } else {
     struct timeval interval {};
-    interval.tv_sec = opt_.timeout_ms_ / 1000;
-    interval.tv_usec = opt_.timeout_ms_ % 1000 * 1000;
-    connection = redis::ContextPtr(
-        redisConnectWithTimeout(opt_.host_.c_str(), opt_.port_, interval));
+    interval.tv_sec = opt_.timeout_ms / 1000;
+    interval.tv_usec = opt_.timeout_ms % 1000 * 1000;
+    connection = helper::ContextPtr(
+        redisConnectWithTimeout(opt_.host.c_str(), opt_.port, interval));
   }
   TORCH_CHECK(
       !connection->err,
       "connect to %s:%d error occurred %s",
-      opt_.host_,
-      opt_.port_,
+      opt_.host,
+      opt_.port,
       connection->errstr);
 
-  if (!opt_.password_.empty()) {
-    redis::ReplyPtr reply;
-    if (opt_.username_.empty()) {
-      reply = redis::ReplyPtr(reinterpret_cast<redisReply*>(
-          redisCommand(connection.get(), "AUTH %s", opt_.password_.c_str())));
+  if (!opt_.password.empty()) {
+    helper::ReplyPtr reply;
+    if (opt_.username.empty()) {
+      reply = helper::ReplyPtr(reinterpret_cast<redisReply*>(
+          redisCommand(connection.get(), "AUTH %s", opt_.password.c_str())));
     } else {
-      reply = redis::ReplyPtr(reinterpret_cast<redisReply*>(redisCommand(
+      reply = helper::ReplyPtr(reinterpret_cast<redisReply*>(redisCommand(
           connection.get(),
           "AUTH %s %s",
-          opt_.username_.c_str(),
-          opt_.password_.c_str())));
+          opt_.username.c_str(),
+          opt_.password.c_str())));
     }
     check_status("auth error", connection, reply);
   }
 
-  if (opt_.db_ != 0) {
-    auto reply = redis::ReplyPtr(reinterpret_cast<redisReply*>(
-        redisCommand(connection.get(), "SELECT %d", opt_.db_)));
+  if (opt_.db != 0) {
+    auto reply = helper::ReplyPtr(reinterpret_cast<redisReply*>(
+        redisCommand(connection.get(), "SELECT %d", opt_.db)));
     check_status("select db error", connection, reply);
   }
 
@@ -328,7 +199,7 @@ redis::ContextPtr Redis::Connect() const {
 }
 
 Redis::~Redis() {
-  for (uint32_t i = 0; i < opt_.num_io_threads_; ++i) {
+  for (uint32_t i = 0; i < opt_.num_io_threads; ++i) {
     jobs_.emplace_back();
   }
   jobs_not_empty_.notify_all();
@@ -383,14 +254,15 @@ struct RedisPullContext {
 };
 
 void Redis::pull(IOPullParameter param) {
-  auto* fetch_param = new RedisPullContext(opt_.chunk_size_, param);
+  auto* fetch_param = new RedisPullContext(opt_.chunk_size, param);
   {
     std::lock_guard<std::mutex> guard(this->jobs_mutex_);
     for (uint32_t i = 0; i < param.num_global_ids;
          i += fetch_param->chunk_size) {
-      jobs_.emplace_back([i, fetch_param, this](redis::ContextPtr& connection) {
-        do_fetch(i, fetch_param, connection);
-      });
+      jobs_.emplace_back(
+          [i, fetch_param, this](helper::ContextPtr& connection) {
+            do_fetch(i, fetch_param, connection);
+          });
     }
   }
   jobs_not_empty_.notify_all();
@@ -399,7 +271,7 @@ void Redis::pull(IOPullParameter param) {
 void Redis::do_fetch(
     uint32_t gid_offset,
     void* fetch_param_void,
-    redis::ContextPtr& connection) const {
+    helper::ContextPtr& connection) const {
   auto& fetch_param = *reinterpret_cast<RedisPullContext*>(fetch_param_void);
 
   uint32_t end = std::min(
@@ -423,7 +295,7 @@ void Redis::do_fetch(
     redisAppendCommand(
         connection.get(),
         "GET %s_table_%s_gid_%d_cid_%d_osid_%d",
-        opt_.prefix_.c_str(),
+        opt_.prefix.c_str(),
         fetch_param.table_name.c_str(),
         gid,
         col_id,
@@ -437,9 +309,9 @@ void Redis::do_fetch(
         status != REDIS_ERR,
         "get reply error: %s, from redis %s, %d",
         connection->errstr,
-        opt_.host_,
-        opt_.port_);
-    auto reply_ptr = redis::ReplyPtr(reinterpret_cast<redisReply*>(reply));
+        opt_.host,
+        opt_.port);
+    auto reply_ptr = helper::ReplyPtr(reinterpret_cast<redisReply*>(reply));
 
     if (reply_ptr->type == REDIS_REPLY_NIL) {
       fetch_param.on_global_id_fetched(
@@ -498,11 +370,11 @@ struct RedisPushContext {
 };
 
 void Redis::push(IOPushParameter param) {
-  auto* ctx = new RedisPushContext(opt_.chunk_size_, param);
+  auto* ctx = new RedisPushContext(opt_.chunk_size, param);
   {
     std::lock_guard<std::mutex> guard(this->jobs_mutex_);
     for (uint32_t i = 0; i < param.num_global_ids; i += ctx->chunk_size) {
-      jobs_.emplace_back([i, ctx, this](redis::ContextPtr& connection) {
+      jobs_.emplace_back([i, ctx, this](helper::ContextPtr& connection) {
         do_push(i, ctx, connection);
       });
     }
@@ -512,7 +384,7 @@ void Redis::push(IOPushParameter param) {
 void Redis::do_push(
     uint32_t gid_offset,
     void* push_ctx_ptr,
-    redis::ContextPtr& connection) const {
+    helper::ContextPtr& connection) const {
   auto& push_ctx = *reinterpret_cast<RedisPushContext*>(push_ctx_ptr);
 
   uint32_t end = gid_offset + push_ctx.chunk_size;
@@ -543,7 +415,7 @@ void Redis::do_push(
     redisAppendCommand(
         connection.get(),
         "SET %s_table_%s_gid_%d_cid_%d_osid_%d %b",
-        opt_.prefix_.c_str(),
+        opt_.prefix.c_str(),
         push_ctx.table_name.c_str(),
         gid,
         cid,
@@ -559,9 +431,9 @@ void Redis::do_push(
         status != REDIS_ERR,
         "get reply error: %s, from redis %s, %d",
         connection->errstr,
-        opt_.host_,
-        opt_.port_);
-    redis::ReplyPtr reply(reinterpret_cast<redisReply*>(replay_ptr));
+        opt_.host,
+        opt_.port);
+    helper::ReplyPtr reply(reinterpret_cast<redisReply*>(replay_ptr));
     check_status("reply should be ok", connection, reply);
   });
 
@@ -574,17 +446,17 @@ void Redis::do_push(
 }
 void Redis::check_status(
     std::string_view label,
-    redis::ContextPtr& connection,
-    redis::ReplyPtr& reply) const {
+    helper::ContextPtr& connection,
+    helper::ReplyPtr& reply) const {
   TORCH_CHECK(
       connection->err == 0,
       label,
       " connection error: (",
       connection->errstr,
       "), from redis://",
-      opt_.host_,
+      opt_.host,
       ":",
-      opt_.port_);
+      opt_.port);
 
   TORCH_CHECK(
       reply->type == REDIS_REPLY_STATUS,
@@ -592,9 +464,9 @@ void Redis::check_status(
       " reply should be status, but actual type is ",
       reply->type,
       ". from redis://",
-      opt_.host_,
+      opt_.host,
       ":",
-      opt_.port_);
+      opt_.port);
 
   auto status = std::string_view{reply->str, reply->len};
   TORCH_CHECK(
@@ -603,9 +475,9 @@ void Redis::check_status(
       " reply status should be OK, but actual is ",
       status,
       ". from redis://",
-      opt_.host_,
+      opt_.host,
       ":",
-      opt_.port_);
+      opt_.port);
 }
 
 extern "C" {
@@ -613,7 +485,7 @@ extern "C" {
 const char* IO_type = "redis";
 
 void* IO_Initialize(const char* cfg) {
-  auto opt = Option::parse(cfg);
+  auto opt = parse_option(cfg);
   return new Redis(opt);
 }
 
