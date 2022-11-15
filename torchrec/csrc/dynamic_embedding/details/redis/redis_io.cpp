@@ -217,7 +217,7 @@ static uint32_t CalculateChunkSizeByGlobalIDs(
       chunk_size / std::max(num_cols, low) / std::max(num_os, low), low);
 }
 
-struct RedisPullContext {
+struct RedisFetchContext {
   std::atomic<uint32_t> num_complete_ids{0};
   uint32_t chunk_size;
   std::string table_name;
@@ -233,7 +233,7 @@ struct RedisPullContext {
       uint32_t data_len);
   void (*on_all_fetched)(void* ctx);
 
-  explicit RedisPullContext(uint32_t chunk_size, IOPullParameter param)
+  explicit RedisFetchContext(uint32_t chunk_size, IOFetchParameter param)
       : chunk_size(CalculateChunkSizeByGlobalIDs(
             chunk_size,
             param.num_cols,
@@ -253,8 +253,8 @@ struct RedisPullContext {
   }
 };
 
-void Redis::pull(IOPullParameter param) {
-  auto* fetch_param = new RedisPullContext(opt_.chunk_size, param);
+void Redis::fetch(IOFetchParameter param) {
+  auto* fetch_param = new RedisFetchContext(opt_.chunk_size, param);
   {
     std::lock_guard<std::mutex> guard(this->jobs_mutex_);
     for (uint32_t i = 0; i < param.num_global_ids;
@@ -272,7 +272,7 @@ void Redis::do_fetch(
     uint32_t gid_offset,
     void* fetch_param_void,
     helper::ContextPtr& connection) const {
-  auto& fetch_param = *reinterpret_cast<RedisPullContext*>(fetch_param_void);
+  auto& fetch_param = *reinterpret_cast<RedisFetchContext*>(fetch_param_void);
 
   uint32_t end = std::min(
       gid_offset + fetch_param.chunk_size,
@@ -493,8 +493,8 @@ void IO_Finalize(void* instance) {
   delete reinterpret_cast<Redis*>(instance);
 }
 
-void IO_Pull(void* instance, IOPullParameter param) {
-  reinterpret_cast<Redis*>(instance)->pull(param);
+void IO_Fetch(void* instance, IOFetchParameter param) {
+  reinterpret_cast<Redis*>(instance)->fetch(param);
 }
 
 void IO_Push(void* instance, IOPushParameter param) {

@@ -20,7 +20,7 @@ namespace torchrec {
 struct IOProvider {
   const char* type;
   void* (*initialize)(const char* cfg);
-  void (*pull)(void* instance, IOPullParameter cfg);
+  void (*fetch)(void* instance, IOFetchParameter cfg);
   void (*push)(void* instance, IOPushParameter cfg);
   void (*finalize)(void*);
 };

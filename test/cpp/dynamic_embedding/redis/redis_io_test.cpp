@@ -30,12 +30,12 @@ TEST(TDE, redis_Option_ParseError) {
   ASSERT_ANY_THROW(parse_option("192.168.3.1:3948/?timeout=3d"));
 }
 
-struct PullContext {
+struct FetchContext {
   Notification* notification_;
   std::function<void(uint32_t, uint32_t, void*, uint32_t)> on_data_;
 };
 
-TEST(TDE, redis_push_pull) {
+TEST(TDE, redis_push_fetch) {
   auto opt = parse_option("127.0.0.1:6379");
   Redis redis(opt);
 
@@ -73,7 +73,7 @@ TEST(TDE, redis_push_pull) {
 
   notification.clear();
 
-  PullContext ctx{
+  FetchContext ctx{
       .notification_ = &notification,
       .on_data_ =
           [&](uint32_t offset, uint32_t os_id, void* data, uint32_t len) {
@@ -90,7 +90,7 @@ TEST(TDE, redis_push_pull) {
             ASSERT_EQ(expect[1], actual[1]);
           }};
 
-  IOPullParameter pull{
+  IOFetchParameter fetch{
       .table_name = "table",
       .num_global_ids = sizeof(global_ids) / sizeof(global_ids[0]),
       .global_ids = global_ids,
@@ -102,15 +102,15 @@ TEST(TDE, redis_push_pull) {
               uint32_t os_id,
               void* data,
               uint32_t len) {
-            auto c = reinterpret_cast<PullContext*>(ctx);
+            auto c = reinterpret_cast<FetchContext*>(ctx);
             c->on_data_(offset, os_id, data, len);
           },
       .on_all_fetched =
           +[](void* ctx) {
-            auto c = reinterpret_cast<PullContext*>(ctx);
+            auto c = reinterpret_cast<FetchContext*>(ctx);
             c->notification_->done();
           }};
-  redis.pull(pull);
+  redis.fetch(fetch);
   notification.wait();
 }
 } // namespace torchrec::redis

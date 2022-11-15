@@ -66,7 +66,7 @@ class Redis {
 
   ~Redis();
 
-  void pull(IOPullParameter param);
+  void fetch(IOFetchParameter param);
 
   void push(IOPushParameter param);
 
@@ -103,7 +103,7 @@ extern const char* IO_type;
 
 void* IO_Initialize(const char* cfg);
 void IO_Finalize(void* instance);
-void IO_Pull(void* instance, IOPullParameter param);
+void IO_Fetch(void* instance, IOFetchParameter param);
 void IO_Push(void* instance, IOPushParameter param);
 }
 

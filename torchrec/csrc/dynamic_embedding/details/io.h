@@ -44,7 +44,7 @@ class IO {
    * copied inside, so it is safe to free `col_ids`/`global_ids` before
    * `on_fetch_complete`.
    */
-  void pull(
+  void fetch(
       const std::string& table_name,
       std::span<const int64_t> global_ids,
       std::span<const int64_t> col_ids,

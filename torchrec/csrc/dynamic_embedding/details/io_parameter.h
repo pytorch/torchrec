@@ -9,7 +9,7 @@ using GlobalIDFetchCallback = void (*)(
     void* data,
     uint32_t data_len);
 
-struct IOPullParameter {
+struct IOFetchParameter {
   const char* table_name;
   uint32_t num_cols;
   uint32_t num_global_ids;

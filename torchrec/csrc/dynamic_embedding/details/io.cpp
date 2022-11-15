@@ -77,7 +77,7 @@ static void on_all_fetched(void* ctx) {
   delete c;
 }
 
-void IO::pull(
+void IO::fetch(
     const std::string& table_name,
     std::span<const int64_t> global_ids,
     std::span<const int64_t> col_ids,
@@ -93,7 +93,7 @@ void IO::pull(
   ctx->tensors.resize(
       global_ids.size() * std::max(col_ids.size(), static_cast<size_t>(1)));
 
-  IOPullParameter param{
+  IOFetchParameter param{
       .table_name = table_name.c_str(),
       .num_cols = static_cast<uint32_t>(col_ids.size()),
       .num_global_ids = static_cast<uint32_t>(global_ids.size()),
@@ -104,7 +104,7 @@ void IO::pull(
       .on_all_fetched = on_all_fetched,
   };
   param.on_complete_context = ctx.release();
-  provider_.pull(instance_, param);
+  provider_.fetch(instance_, param);
 }
 
 struct PushContext {
