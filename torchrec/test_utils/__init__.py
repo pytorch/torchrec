@@ -12,12 +12,13 @@ import socket
 import time
 from contextlib import closing
 from functools import wraps
-from typing import Callable, Optional, TypeVar
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 import numpy as np
 import torch
 import torch.distributed as dist
 from pyre_extensions import ParameterSpecification
+from torch import nn
 
 TParams = ParameterSpecification("TParams")
 TReturn = TypeVar("TReturn")
@@ -95,3 +96,46 @@ def seed_and_log(wrapped_func: Callable) -> Callable:
         return wrapped_func(*args, **kwargs)
 
     return _wrapper
+
+
+def get_state_buffers_parameters(model: nn.Module) -> Dict[str, Any]:
+    return {
+        "state_dict": model.state_dict(),
+        "named_buffers": dict(model.named_buffers()),
+        "named_parameters": dict(model.named_parameters()),
+    }
+
+
+def assert_state_buffers_parameters_equal(
+    model_1: nn.Module,
+    model_2: nn.Module,
+    check_named_buffers: bool = True,
+    check_named_parameters: bool = True,
+    check_state_dict: bool = True,
+) -> None:
+    """
+    Checks to see if the keys of top level PyTorch API calls are the same
+    between two modules.
+    """
+
+    model_characteristics = {}
+    model_characteristics["model_1"] = get_state_buffers_parameters(model_1)
+    model_characteristics["model_2"] = get_state_buffers_parameters(model_2)
+
+    assert (
+        not check_named_buffers
+        or model_characteristics["model_1"]["named_buffers"].keys()
+        == model_characteristics["model_2"]["named_buffers"].keys()
+    ), "named buffers keys are not the same"
+
+    assert (
+        not check_named_parameters
+        or model_characteristics["model_1"]["named_parameters"].keys()
+        == model_characteristics["model_2"]["named_parameters"].keys()
+    ), "named parameter keys are not the same"
+
+    assert (
+        not check_state_dict
+        or model_characteristics["model_1"]["state_dict"].keys()
+        == model_characteristics["model_2"]["state_dict"].keys()
+    ), f"state dict key are not the same, {model_characteristics['model_1']['state_dict'].keys()} vs {model_characteristics['model_2']['state_dict'].keys()}"

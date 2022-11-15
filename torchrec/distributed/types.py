@@ -662,6 +662,13 @@ class ShardedModule(
 
         return "\n ".join(rep)
 
+    def _initialize_torch_state(self) -> None:
+        """
+        This provides consistency between this class and the ShardedModule's
+        nn.Module API calls (state_dict, named_modules, etc)
+        """
+        pass
+
 
 class ModuleSharder(abc.ABC, Generic[M]):
     """
