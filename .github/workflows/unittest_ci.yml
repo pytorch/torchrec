@@ -1,18 +1,19 @@
 name: Unit Test CI
 
 on:
-  push:
-    paths-ignore:
-      - "docs/*"
-      - "third_party/*"
-      - .gitignore
-      - "*.md"
-  pull_request:
-    paths-ignore:
-      - "docs/*"
-      - "third_party/*"
-      - .gitignore
-      - "*.md"
+  # TODO: re-enable when GPU unit tests are working
+  # push:
+  #   paths-ignore:
+  #     - "docs/*"
+  #     - "third_party/*"
+  #     - .gitignore
+  #     - "*.md"
+  # pull_request:
+  #   paths-ignore:
+  #     - "docs/*"
+  #     - "third_party/*"
+  #     - .gitignore
+  #     - "*.md"
   workflow_dispatch:
 
 jobs:
