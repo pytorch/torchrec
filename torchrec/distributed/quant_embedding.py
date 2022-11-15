@@ -333,7 +333,7 @@ class ShardedQuantEmbeddingCollection(
         if self._has_uninitialized_output_dist:
             self._create_output_dist(device)
             self._has_uninitialized_output_dist = False
-        return self
+        return super().copy(device)
 
     def create_context(self) -> EmbeddingCollectionContext:
         return EmbeddingCollectionContext(sharding_contexts=[])

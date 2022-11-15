@@ -19,114 +19,71 @@ on:
 
 jobs:
   build_test:
-    runs-on: ${{ matrix.os }}
     strategy:
-      matrix:
-        include:
-         - os: linux.2xlarge
-          # ideally we run on 3.8 and 3.9 as well, however we are limited in resources.
-           python-version: 3.7
-           python-tag: "py37"
-           cuda-tag: "cpu"
-    # build and test on cpu hosts
-    steps:
-    - name: Check ldd --version
-      run: ldd --version
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Update pip
-      run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
-        sudo pip3 install --upgrade pip
-    - name: Setup conda
-      run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda -u
-    - name: setup Path
-      run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
-    - name: create conda env
-      run: |
-        conda create --name build_binary python=${{ matrix.python-version }}
+        matrix:
+          include:
+            - os: linux.2xlarge
+              python-version: 3.7
+              python-tag: "py37"
+            - os: linux.2xlarge
+              python-version: 3.8
+              python-tag: "py38"
+            - os: linux.2xlarge
+              python-version: 3.9
+              python-tag: "py39"
+            - os: linux.2xlarge
+              python-version: '3.10'
+              python-tag: "py310"
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: ${{ matrix.os }}
+      timeout: 30
+      script: |
+        ldd --version
+        conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
-    - name: check python version no Conda
-      run: |
         python --version
-    - name: check python version
-      run: |
         conda run -n build_binary python --version
-    - name: Install gcc
-      shell: bash
-      run: |
-        sudo yum group install -y "Development Tools"
-    - name: setup Path
-      run: |
-        echo /usr/local/bin >> $GITHUB_PATH
-    - name: Install PyTorch
-      shell: bash
-      run: |
-        conda run -n build_binary python -m pip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        conda run -n build_binary python -m pip install -r requirements.txt
-    - name: Replace fbgemm_gpu_gpu to fbgemm_gpu_cpu
-      shell: bash
-      run: |
-        conda run -n build_binary python -m pip uninstall fbgemm_gpu-nightly -y
-        conda run -n build_binary python -m pip install fbgemm-gpu-nightly-cpu
-    - name: Test Installation of dependencies
-      run: |
-        conda run -n build_binary python -c "import torch.distributed"
+        conda install -n build_binary \
+          --yes \
+          -c pytorch-nightly \
+          "pytorch-nightly"::pytorch[build="*cpu*"]
+        conda run -n build_binary \
+          pip install -r requirements.txt
+        conda run -n build_binary \
+          pip uninstall fbgemm_gpu-nightly -y
+        conda run -n build_binary \
+          pip install fbgemm-gpu-nightly-cpu
+        conda run -n build_binary \
+          python -c "import torch.distributed"
         echo "torch.distributed succeeded"
-        conda run -n build_binary python -c "import skbuild"
+        conda run -n build_binary \
+          python -c "import skbuild"
         echo "skbuild succeeded"
-        conda run -n build_binary python -c "import numpy"
+        conda run -n build_binary \
+          python -c "import numpy"
         echo "numpy succeeded"
-        conda run -n build_binary python -c "import fbgemm_gpu"
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"
-    # for the conda run with quotes, we have to use "\" and double quotes
-    # here is the issue: https://github.com/conda/conda/issues/10972
-    - name: Build TorchRec
-      run: |
+
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-test-cpu \
           --python-tag=${{ matrix.python-tag }}
-    - name: Test torchrec installation
-      shell: bash
-      run: |
         conda run -n build_binary \
           python -c "import torchrec"
-    - name: Test with pytest
-      run: |
-        conda run -n build_binary \
-          python -m pip install pytest
+        conda install -n build_binary -y pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw'
-    - name: Install gcc and cmake
-      # for C++20
-      run: |
-        conda install -n build_binary gxx_linux-64
-        conda run -n build_binary x86_64-conda-linux-gnu-g++ --version
-        conda run -n build_binary python -m pip install cmake
-        conda run -n build_binary cmake --version
-    - name: create cpp build folder
-      shell: bash
-      run: |
+        echo "Starting C++ Tests"
+        conda install -n build_binary -y gxx_linux-64
+        conda run -n build_binary \
+          x86_64-conda-linux-gnu-g++ --version
         mkdir cpp-build
-    - name: compile tests
-      working-directory: ./cpp-build
-      shell: bash
-      run: |
+        cd cpp-build
         conda run -n build_binary cmake \
             -DBUILD_TEST=ON \
-            -DCMAKE_PREFIX_PATH=/home/ec2-user/miniconda/envs/build_binary/lib/python3.7/site-packages/torch/share/cmake ..
+            -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake ..
         conda run -n build_binary make -j
-    - name: Test
-      working-directory: ./cpp-build
-      shell: bash
-      run: |
         conda run -n build_binary ctest -v .

@@ -531,11 +531,11 @@ class ShardedEmbeddingBagCollection(
         yield from [(prefix, self)]
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for lookup in self._lookups:
             yield from lookup.named_parameters(
-                append_prefix(prefix, "embedding_bags"), recurse
+                append_prefix(prefix, "embedding_bags"), recurse, remove_duplicate
             )
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
@@ -789,8 +789,9 @@ class ShardedEmbeddingBag(
         yield from [(prefix, self)]
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
+        # TODO: add remove_duplicate
         for name, parameter in self._lookup.named_parameters("", recurse):
             # update name to match embeddingBag parameter name
             yield append_prefix(prefix, name.split(".")[-1]), parameter

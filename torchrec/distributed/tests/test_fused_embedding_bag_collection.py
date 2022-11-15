@@ -85,7 +85,7 @@ def sharding_single_rank(
         sharded_pred = sharded_model(kjt_input).values().detach().clone().cpu()
 
         # Compare predictions of sharded vs unsharded models.
-        torch.testing.assert_allclose(sharded_pred, unsharded_model_pred)
+        torch.testing.assert_close(sharded_pred, unsharded_model_pred)
 
 
 @skip_if_asan_class

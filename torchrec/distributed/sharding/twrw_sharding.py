@@ -76,10 +76,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
-            intra_pg.size()
-            if intra_pg
-            else get_local_size(self._world_size)
+            intra_pg.size() if intra_pg else get_local_size(self._world_size)
         )
 
         sharded_tables_per_rank = self._shard(sharding_infos)
@@ -316,7 +313,7 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
     def __init__(
         self,
         pg: dist.ProcessGroup,
-        intra_pg: dist.ProcessGroup,
+        local_size: int,
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         id_list_feature_hash_sizes: List[int],
@@ -327,14 +324,10 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
-        assert (
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
-            pg.size() % intra_pg.size()
-            == 0
-        ), "currently group granularity must be node"
+        assert pg.size() % local_size == 0, "currently group granularity must be node"
 
         self._world_size: int = pg.size()
-        self._local_size: int = intra_pg.size()
+        self._local_size: int = local_size
         self._num_cross_nodes: int = self._world_size // self._local_size
         id_list_feature_block_sizes = [
             math.ceil(hash_size / self._local_size)
@@ -532,7 +525,6 @@ class TwRwPooledEmbeddingDist(
                 batch_size_per_rank_by_cross_group,
                 batch_size_sum_by_cross_group,
             ) = self._preprocess_batch_size_per_rank(
-                # pyre-ignore[16]
                 self._intra_pg.size(),
                 self._cross_pg.size(),
                 sharding_ctx.batch_size_per_rank,
@@ -590,9 +582,10 @@ class TwRwPooledEmbeddingSharding(
         id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
         id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
         assert self._pg is not None
+        assert self._intra_pg is not None
         return TwRwSparseFeaturesDist(
             pg=self._pg,
-            intra_pg=cast(dist.ProcessGroup, self._intra_pg),
+            local_size=self._intra_pg.size(),
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             id_list_feature_hash_sizes=id_list_feature_hash_sizes,

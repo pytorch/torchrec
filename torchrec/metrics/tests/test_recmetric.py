@@ -13,7 +13,7 @@ from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecComputeMode
-from torchrec.metrics.tests.test_utils import gen_test_batch, gen_test_tasks
+from torchrec.metrics.test_utils import gen_test_batch, gen_test_tasks
 
 
 class RecMetricTest(unittest.TestCase):

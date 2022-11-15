@@ -176,8 +176,12 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "GroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
@@ -346,8 +350,12 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "GroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
         for emb_module in self._score_emb_modules:
@@ -461,8 +469,12 @@ class MetaInferGroupedEmbeddingsLookup(
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "MetaInferGroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
@@ -617,8 +629,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "MetaInferGroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
         for emb_module in self._score_emb_modules:

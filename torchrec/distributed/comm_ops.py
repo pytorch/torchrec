@@ -125,20 +125,22 @@ class All2AllSequenceInfo(object):
         embedding_dim (int): embedding dimension.
         lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
             AlltoAll.
-        forward_recat_tensor (Tensor): recat tensor for forward.
+        forward_recat_tensor (Optional[Tensor]): recat tensor for forward.
         backward_recat_tensor (Tensor): recat tensor for backward.
         input_splits (List[int]): input splits.
         output_splits (List[int]): output splits.
-        lengths_sparse_before_features_all2all (Optional[Tensor]): lengths of sparse
+        variable_batch_size (bool): whether variable batch size is enabled
+        permuted_lengths_after_sparse_data_all2all (Optional[Tensor]): lengths of sparse
             features before AlltoAll.
     """
 
     embedding_dim: int
     lengths_after_sparse_data_all2all: Tensor
-    forward_recat_tensor: Tensor
+    forward_recat_tensor: Optional[Tensor]
     backward_recat_tensor: Tensor
     input_splits: List[int]
     output_splits: List[int]
+    variable_batch_size: bool = False
     codecs: Optional[QuantizedCommCodecs] = None
     permuted_lengths_after_sparse_data_all2all: Optional[Tensor] = None
 
@@ -295,6 +297,7 @@ def alltoall_pooled(
             `_recat_pooled_embedding_grad_out`.
         group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
             default process group will be used.
+        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -330,6 +333,7 @@ def alltoall_sequence(
     lengths_after_sparse_data_all2all: Tensor,
     input_splits: List[int],
     output_splits: List[int],
+    variable_batch_size: bool = False,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
@@ -340,21 +344,21 @@ def alltoall_sequence(
     and returns a single output tensor.
 
     NOTE:
-        AlltoAll operator for (T * B * L_i, D) tensors.
+        AlltoAll operator for Sequence embedding tensors.
         Does not support mixed dimensions.
 
     Args:
-        a2a_sequence_embs_tensor (Tensor): input embeddings. Usually with the shape of
-            (T * B * L_i, D), where B - batch size, T - number of embedding tables,
-            D - embedding dimension.
+        a2a_sequence_embs_tensor (Tensor): input embeddings.
         forward_recat_tensor (Tensor): recat tensor for forward.
         backward_recat_tensor (Tensor): recat tensor for backward.
         lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
             AlltoAll.
         input_splits (Tensor): input splits.
         output_splits (Tensor): output splits.
+        variable_batch_size (bool): whether varibale batch size is enabled
         group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
             default process group will be used.
+        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -377,6 +381,7 @@ def alltoall_sequence(
         backward_recat_tensor=backward_recat_tensor,
         input_splits=input_splits,
         output_splits=output_splits,
+        variable_batch_size=variable_batch_size,
         codecs=codecs,
     )
     # sequence of embeddings, bags are definitely non-uniform
@@ -662,8 +667,6 @@ class All2All_Pooled_Req(Function):
         a2ai: All2AllPooledInfo,
         input_embeddings: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         (B_global, D_local_sum) = input_embeddings.shape
 
@@ -766,8 +769,6 @@ class All2All_Pooled_Wait(Function):
         myreq: Request[Tensor],
         *dummy_tensor: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
@@ -810,8 +811,6 @@ class All2All_Pooled_Wait(Function):
 
         D_local_sum = dim_sum_per_rank[my_rank]
         (B_local, D_global_sum) = grad_output.shape
-        B_global = sum(batch_size_per_rank)
-        sharded_grad_input_sizes = B_global * D_local_sum
         assert sum(dim_sum_per_rank) == D_global_sum
 
         sharded_grad_output = _recat_pooled_embedding_grad_out(
@@ -881,39 +880,68 @@ class All2All_Seq_Req(Function):
         a2ai: All2AllSequenceInfo,
         sharded_input_embeddings: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         world_size = dist.get_world_size(pg)
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
         D = a2ai.embedding_dim
         forward_recat_tensor = a2ai.forward_recat_tensor
+        variable_batch_size = a2ai.variable_batch_size
         lengths_after_sparse_data_all2all = a2ai.lengths_after_sparse_data_all2all * D
         input_splits = [i * D for i in a2ai.output_splits]
         output_splits = [i * D for i in a2ai.input_splits]
+
+        a2ai.input_splits = input_splits
+        a2ai.output_splits = output_splits
+
         local_T = lengths_after_sparse_data_all2all.shape[0]
         if local_T > 0:
             with record_function("## alltoall_seq_embedding_fwd_permute ##"):
-                (
-                    permuted_lengths_after_sparse_data_all2all,
-                    sharded_input_embeddings,
-                    _,
-                ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                    forward_recat_tensor,
-                    lengths_after_sparse_data_all2all.view(local_T * world_size, -1),
-                    sharded_input_embeddings.view(-1),
-                    None,
-                    sharded_input_embeddings.numel(),
-                )
-
+                if not variable_batch_size:
+                    (
+                        permuted_lengths_after_sparse_data_all2all,
+                        sharded_input_embeddings,
+                        _,
+                    ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                        forward_recat_tensor,
+                        lengths_after_sparse_data_all2all.view(
+                            local_T * world_size, -1
+                        ),
+                        sharded_input_embeddings.view(-1),
+                        None,
+                        sharded_input_embeddings.numel(),
+                    )
+                else:
+                    (
+                        permuted_lengths_after_sparse_data_all2all,
+                        sharded_input_embeddings,
+                        _,
+                    ) = torch.ops.fbgemm.permute_1D_sparse_data(
+                        forward_recat_tensor,
+                        lengths_after_sparse_data_all2all.view(-1),
+                        sharded_input_embeddings.view(-1),
+                        None,
+                        sharded_input_embeddings.numel(),
+                    )
         else:
             permuted_lengths_after_sparse_data_all2all = None
 
         if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.forward.create_context()
+            # pyre-ignore [16]
             sharded_input_embeddings = a2ai.codecs.forward.encode(
-                sharded_input_embeddings
+                sharded_input_embeddings, qcomm_ctx
             )
+            output_splits = [
+                a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
+                for x in output_splits
+            ]
+            input_splits = [
+                a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
+                for x in input_splits
+            ]
+        else:
+            qcomm_ctx = None
+
         sharded_output_embeddings = torch.empty(
             sum(output_splits),
             dtype=sharded_input_embeddings.dtype,
@@ -932,13 +960,12 @@ class All2All_Seq_Req(Function):
         a2ai.permuted_lengths_after_sparse_data_all2all = (
             permuted_lengths_after_sparse_data_all2all
         )
-        a2ai.input_splits = input_splits
-        a2ai.output_splits = output_splits
         myreq.req = req
         myreq.tensor = sharded_output_embeddings
         myreq.a2ai = a2ai
         myreq.wait_function = All2All_Seq_Req_Wait
         ctx.myreq = myreq
+        myreq.qcomm_ctx = qcomm_ctx
         ctx.pg = pg
         ctx.my_rank = my_rank
         ctx.world_size = world_size
@@ -951,6 +978,7 @@ class All2All_Seq_Req(Function):
         myreq = ctx.myreq
         a2ai = myreq.a2ai
         D = a2ai.embedding_dim
+        variable_batch_size = a2ai.variable_batch_size
         backward_recat_tensor = a2ai.backward_recat_tensor
         permuted_lengths_after_sparse_data_all2all = (
             a2ai.permuted_lengths_after_sparse_data_all2all
@@ -959,20 +987,32 @@ class All2All_Seq_Req(Function):
         myreq.req.wait()
         sharded_grad_input = myreq.tensor
         if a2ai.codecs is not None:
-            sharded_grad_input = a2ai.codecs.backward.decode(sharded_grad_input)
+            codecs = none_throws(a2ai.codecs)
+            sharded_grad_input = codecs.backward.decode(
+                sharded_grad_input, myreq.qcomm_ctx
+            )
         myreq.req = None
         myreq.tensor = None
         myreq.dummy_tensor = None
 
         if permuted_lengths_after_sparse_data_all2all is not None:
             with record_function("## alltoall_seq_embedding_bwd_permute ##"):
-                _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
-                    backward_recat_tensor,
-                    permuted_lengths_after_sparse_data_all2all,
-                    sharded_grad_input,
-                    None,
-                    sharded_grad_input.numel(),
-                )
+                if not variable_batch_size:
+                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_2D_sparse_data(
+                        backward_recat_tensor,
+                        permuted_lengths_after_sparse_data_all2all,
+                        sharded_grad_input,
+                        None,
+                        sharded_grad_input.numel(),
+                    )
+                else:
+                    _, sharded_grad_input, _ = torch.ops.fbgemm.permute_1D_sparse_data(
+                        backward_recat_tensor,
+                        permuted_lengths_after_sparse_data_all2all,
+                        sharded_grad_input,
+                        None,
+                        sharded_grad_input.numel(),
+                    )
         return (None, None, None, sharded_grad_input.view(-1, D))
 
 
@@ -997,8 +1037,9 @@ class All2All_Seq_Req_Wait(Function):
         ctx.pg = pg
         ctx.myreq = myreq
         if a2ai.codecs is not None:
-            sharded_output_embeddings = a2ai.codecs.forward.decode(
-                sharded_output_embeddings
+            codecs = none_throws(a2ai.codecs)
+            sharded_output_embeddings = codecs.forward.decode(
+                sharded_output_embeddings, myreq.qcomm_ctx
             )
         return sharded_output_embeddings.view(-1, D)
 
@@ -1013,7 +1054,22 @@ class All2All_Seq_Req_Wait(Function):
         output_splits = a2ai.input_splits
 
         if a2ai.codecs is not None:
-            sharded_grad_output = a2ai.codecs.backward.encode(sharded_grad_output)
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.backward.create_context()
+            sharded_grad_output = a2ai.codecs.backward.encode(
+                sharded_grad_output, qcomm_ctx
+            )
+            output_splits = [
+                a2ai.codecs.backward.calc_quantized_size(x, qcomm_ctx)
+                for x in output_splits
+            ]
+            input_splits = [
+                a2ai.codecs.backward.calc_quantized_size(x, qcomm_ctx)
+                for x in input_splits
+            ]
+        else:
+            qcomm_ctx = None
+
         sharded_grad_input = torch.empty(
             sum(output_splits),
             device=sharded_grad_output.device,
@@ -1030,6 +1086,7 @@ class All2All_Seq_Req_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = sharded_grad_input
+        myreq.qcomm_ctx = qcomm_ctx
 
         return (None, None, myreq.dummy_tensor)
 
@@ -1163,8 +1220,6 @@ class ReduceScatter_Req(Function):
         rsi: ReduceScatterInfo,
         *inputs: Any,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
 
         if rsi.codecs is not None:
@@ -1273,8 +1328,6 @@ class ReduceScatterBase_Req(Function):
         rsi: ReduceScatterBaseInfo,
         inputs: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_size = dist.get_world_size(pg)
         assert inputs.size(0) % my_size == 0
         if rsi.codecs is not None:
@@ -1366,8 +1419,6 @@ class AllGatherBase_Req(Function):
         agi: AllGatherBaseInfo,
         input: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_size = dist.get_world_size(pg)
 
         if agi.codecs is not None:
@@ -1461,8 +1512,6 @@ class ReduceScatterV_Req(Function):
         rsi: ReduceScatterVInfo,
         input: Tensor,
     ) -> Tensor:
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         my_rank = dist.get_rank(pg)
 
         if rsi.codecs is not None:

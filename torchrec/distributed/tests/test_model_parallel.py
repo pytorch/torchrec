@@ -96,7 +96,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_rw(
@@ -219,7 +219,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_cw(
@@ -300,7 +300,7 @@ class ModelParallelTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding_nccl_tw(
@@ -732,6 +732,8 @@ class ModelParallelStateDictTest(unittest.TestCase):
         )
 
     def test_meta_device_dmp_state_dict(self) -> None:
+        # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+        #  `Optional[ProcessGroup]`.
         env = ShardingEnv.from_process_group(dist.GroupMember.WORLD)
 
         m1 = TestSparseNN(

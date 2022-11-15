@@ -163,15 +163,15 @@ class TestBinaryCriteoUtils(CriteoTest):
             self.assertEqual(sparse_shape, (num_rows, CAT_FEATURE_COUNT))
             self.assertEqual(labels_shape, (num_rows, 1))
 
-    def test_get_file_idx_to_row_range(self) -> None:
+    def test_get_file_row_ranges_and_remainder(self) -> None:
         lengths = [14, 17, 20]
         world_size = 3
         expected = [{0: (0, 13), 1: (0, 2)}, {1: (3, 16), 2: (0, 2)}, {2: (3, 19)}]
 
         for i in range(world_size):
             self.assertEqual(
-                expected[i],
-                BinaryCriteoUtils.get_file_idx_to_row_range(
+                (expected[i], 0),
+                BinaryCriteoUtils.get_file_row_ranges_and_remainder(
                     lengths=lengths,
                     rank=i,
                     world_size=world_size,
@@ -380,12 +380,16 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
 
             lens = []
             remainder = dataset_len % world_size
+            total_samples_count = 0
             for rank in range(world_size):
-                incomplete_last_batch_size = (
-                    dataset_len // world_size % batch_size + int(rank < remainder)
-                )
-                num_samples = dataset_len // world_size + int(rank < remainder)
-                num_batches = math.ceil(num_samples / batch_size)
+                end_batch_size = (dataset_len // world_size) % batch_size
+                num_batches = math.ceil(dataset_len // world_size / batch_size)
+                if rank < remainder:
+                    if end_batch_size == 0:
+                        end_batch_size = batch_size + 1
+                    else:
+                        end_batch_size += 1
+
                 datapipe = InMemoryBinaryCriteoIterDataPipe(
                     stage=stage,
                     dense_paths=[f[0] for f in files],
@@ -400,33 +404,27 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 self.assertEqual(datapipe_len, num_batches)
 
                 len_ = 0
-                samples_count = 0
                 for batch in datapipe:
                     if stage in ["val", "test"] and len_ == 0 and rank == 0:
                         self.assertEqual(
                             batch.dense_features[0, 0].item(),
                             dataset_start,
                         )
-                    if len_ < num_batches - 1 or incomplete_last_batch_size == 0:
+                    if len_ < num_batches - 1 or end_batch_size == 0:
                         self._validate_batch(batch, batch_size=batch_size)
                     else:
-                        self._validate_batch(
-                            batch, batch_size=incomplete_last_batch_size
-                        )
+                        self._validate_batch(batch, batch_size=end_batch_size)
                     len_ += 1
-                    samples_count += batch.dense_features.shape[0]
+                    total_samples_count += batch.dense_features.shape[0]
 
                 # Check that dataset __len__ matches true length.
                 self.assertEqual(datapipe_len, len_)
                 lens.append(len_)
-                self.assertEqual(samples_count, num_samples)
 
-            # Ensure all ranks return the correct number of batches.
-            if remainder > 0:
-                self.assertEqual(len(set(lens[:remainder])), 1)
-                self.assertEqual(len(set(lens[remainder:])), 1)
-            else:
-                self.assertEqual(len(set(lens)), 1)
+            # Ensure all ranks return the same number of batches.
+            self.assertEqual(len(set(lens)), 1)
+            # Ensure the number of samples read match the number of samples in the dataset
+            self.assertEqual(dataset_len, total_samples_count)
 
     def test_dataset_small_files(self) -> None:
         self._test_dataset([1] * 20, 4, 2)
@@ -435,14 +433,14 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
         random.seed(0)
         self._test_dataset([random.randint(1, 100) for _ in range(100)], 16, 3)
 
-    def test_dataset_val_and_test_sets(self) -> None:
+    def test_dataset_train_val_and_test_sets(self) -> None:
         for stage in ["train", "val", "test"]:
             # Test cases where batch_size evenly divides dataset_len.
-            self._test_dataset([100], 1, 2, stage=stage)
-            self._test_dataset([101], 1, 2, stage=stage)
+            self._test_dataset([100], batch_size=1, world_size=2, stage=stage)
+            self._test_dataset([101], batch_size=1, world_size=2, stage=stage)
             # Test cases where the first and only batch is an incomplete batch.
-            self._test_dataset([100], 32, 8, stage=stage)
-            self._test_dataset([101], 32, 8, stage=stage)
+            self._test_dataset([100], batch_size=32, world_size=8, stage=stage)
+            self._test_dataset([101], batch_size=32, world_size=8, stage=stage)
             # Test cases where batches are full size followed by a last batch that is incomplete.
-            self._test_dataset([10000], 128, 8, stage=stage)
-            self._test_dataset([10001], 128, 8, stage=stage)
+            self._test_dataset([10000], batch_size=128, world_size=8, stage=stage)
+            self._test_dataset([10001], batch_size=128, world_size=8, stage=stage)

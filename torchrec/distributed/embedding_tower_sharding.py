@@ -125,17 +125,11 @@ class ShardedEmbeddingTower(
         self._device = device
         self._output_dist: Optional[PooledEmbeddingsAllToAll] = None
         self._cross_pg_global_batch_size: int = 0
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         self._cross_pg_world_size: int = dist.get_world_size(self._cross_pg)
 
         self._has_uninitialized_output_dist = True
 
         # make sure all sharding on single physical node
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         devices_per_host = dist.get_world_size(intra_pg)
         tower_devices = set()
         for sharding in table_name_to_parameter_sharding.values():
@@ -161,19 +155,10 @@ class ShardedEmbeddingTower(
         if self._active_device:
             _replace_sharding_with_intra_node(
                 table_name_to_parameter_sharding,
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 dist.get_world_size(self._intra_pg),
             )
             intra_env: ShardingEnv = ShardingEnv(
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 world_size=dist.get_world_size(self._intra_pg),
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 rank=dist.get_rank(self._intra_pg),
                 pg=self._intra_pg,
             )
@@ -185,7 +170,6 @@ class ShardedEmbeddingTower(
                 device,
             )
             # Hierarchical DDP
-            # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
                 device_ids=[self._device],
@@ -228,9 +212,6 @@ class ShardedEmbeddingTower(
                 ),
             )
 
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         node_count = dist.get_world_size(self._cross_pg)
         kjt_features_per_node = [
             len(self._kjt_feature_names) if node == self._tower_node else 0
@@ -342,9 +323,6 @@ class ShardedEmbeddingTower(
                 dtype=torch.int64,
                 device=self._device,
             )
-            # pyre-fixme[6]: For 1st param expected
-            #  `Optional[_distributed_c10d.ProcessGroup]` but got
-            #  `Optional[dist.ProcessGroup]`.
             for i in range(dist.get_world_size(self._cross_pg))
         ]
         dist.all_gather(
@@ -497,13 +475,7 @@ class ShardedEmbeddingTowerCollection(
         intra_pg, cross_pg = intra_and_cross_node_pg(device)
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         self._cross_pg_world_size: int = dist.get_world_size(self._cross_pg)
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got
-        #  `Optional[dist.ProcessGroup]`.
         self._intra_pg_world_size: int = dist.get_world_size(self._intra_pg)
         self._device = device
         self._tower_id: int = dist.get_rank() // self._intra_pg_world_size
@@ -594,19 +566,10 @@ class ShardedEmbeddingTowerCollection(
         if local_towers:
             _replace_sharding_with_intra_node(
                 table_name_to_parameter_sharding,
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 dist.get_world_size(self._intra_pg),
             )
             intra_env: ShardingEnv = ShardingEnv(
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 world_size=dist.get_world_size(self._intra_pg),
-                # pyre-fixme[6]: For 1st param expected
-                #  `Optional[_distributed_c10d.ProcessGroup]` but got
-                #  `Optional[dist.ProcessGroup]`.
                 rank=dist.get_rank(self._intra_pg),
                 pg=self._intra_pg,
             )
@@ -620,7 +583,6 @@ class ShardedEmbeddingTowerCollection(
                 )
                 self.input_dist_params.append(tower_input_params(tower.embedding))
                 # Hierarchical DDP
-                # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
                     device_ids=[self._device],
@@ -787,9 +749,6 @@ class ShardedEmbeddingTowerCollection(
                 dtype=torch.int64,
                 device=self._device,
             )
-            # pyre-fixme[6]: For 1st param expected
-            #  `Optional[_distributed_c10d.ProcessGroup]` but got
-            #  `Optional[dist.ProcessGroup]`.
             for i in range(dist.get_world_size(self._cross_pg))
         ]
         dist.all_gather(

@@ -365,7 +365,7 @@ def sharding_single_rank_test(
 
         # Compare predictions of sharded vs unsharded models.
         if qcomms_config is None:
-            torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+            torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
         else:
             # With quantized comms, we can relax constraints a bit
             rtol = 0.003
@@ -374,8 +374,8 @@ def sharding_single_rank_test(
                 qcomms_config.backward_precision,
             ]:
                 rtol = 0.05
-            atol = global_pred.max() * rtol
-            torch.testing.assert_allclose(
+            atol = global_pred.max().item() * rtol
+            torch.testing.assert_close(
                 global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
             )
 

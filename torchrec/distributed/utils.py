@@ -6,13 +6,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torch import nn
 from torchrec import optim as trec_optim
 from torchrec.distributed.types import ShardedModule
+from torchrec.types import CopyMixIn
 
 
 _T = TypeVar("_T")
@@ -205,6 +208,34 @@ class sharded_model_copy:
         torch._C._distributed_c10d.Work.__deepcopy__ = None
         # pyre-ignore [16]
         torch.cuda.streams.Stream.__deepcopy__ = None
+
+
+def copy_to_device(
+    module: nn.Module,
+    current_device: torch.device,
+    to_device: torch.device,
+) -> nn.Module:
+
+    with sharded_model_copy(device=None):
+        copy_module = copy.deepcopy(module)
+
+    # Copy only weights with matching device.
+    def _copy_if_device_match(tensor: torch.Tensor) -> torch.Tensor:
+        if tensor.device == current_device:
+            return tensor.to(to_device)
+        return tensor
+
+    # if this is a sharded module, customize the copy
+    if isinstance(copy_module, CopyMixIn):
+        return copy_module.copy(to_device)
+
+    for child_name, child in copy_module.named_children():
+        if not any([isinstance(submodule, CopyMixIn) for submodule in child.modules()]):
+            child_copy = child._apply(_copy_if_device_match)
+        else:
+            child_copy = copy_to_device(child, current_device, to_device)
+        copy_module.register_module(child_name, child_copy)
+    return copy_module
 
 
 def optimizer_type_to_emb_opt_type(

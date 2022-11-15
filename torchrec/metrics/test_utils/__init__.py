@@ -10,7 +10,7 @@ import os
 import random
 import tempfile
 import uuid
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 from unittest.mock import Mock, patch
 
 import torch
@@ -38,15 +38,20 @@ def gen_test_batch(
     prediction_value: Optional[torch.Tensor] = None,
     weight_value: Optional[torch.Tensor] = None,
     mask: Optional[torch.Tensor] = None,
+    n_classes: Optional[int] = None,
 ) -> Dict[str, torch.Tensor]:
     if label_value is not None:
         label = label_value
     else:
-        label = torch.randint(0, 2, (batch_size,)).double()
+        label = torch.randint(0, n_classes or 2, (batch_size,)).double()
     if prediction_value is not None:
         prediction = prediction_value
     else:
-        prediction = torch.rand(batch_size, dtype=torch.double)
+        prediction = (
+            torch.rand(batch_size, dtype=torch.double)
+            if n_classes is None
+            else torch.rand(batch_size, n_classes, dtype=torch.double)
+        )
     if weight_value is not None:
         weight = weight_value
     else:
@@ -218,6 +223,7 @@ def rec_metric_value_test_helper(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
+    n_classes: Optional[int] = None,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
     tasks = gen_test_tasks(task_names)
     model_outs = []
@@ -228,6 +234,7 @@ def rec_metric_value_test_helper(
                 prediction_name=task.prediction_name,
                 weight_name=task.weight_name,
                 batch_size=batch_size,
+                n_classes=n_classes,
             )
             for task in tasks
         ]
@@ -240,6 +247,9 @@ def rec_metric_value_test_helper(
         time_mock: Optional[Mock] = None,
     ) -> Dict[str, torch.Tensor]:
         window_size = world_size * batch_size * batch_window_size
+        kwargs: Dict[str, Any] = {}
+        if n_classes:
+            kwargs["number_of_classes"] = n_classes
         target_metric_obj = target_clazz(
             world_size=world_size,
             my_rank=my_rank,
@@ -250,6 +260,7 @@ def rec_metric_value_test_helper(
             fused_update_limit=fused_update_limit,
             compute_on_all_ranks=compute_on_all_ranks,
             should_validate_update=should_validate_update,
+            **kwargs,
         )
         for i in range(nsteps):
             labels, predictions, weights = parse_task_model_outputs(
@@ -327,6 +338,7 @@ def rec_metric_value_test_launcher(
     world_size: int,
     entry_point: Callable[..., None],
     test_nsteps: int = 1,
+    n_classes: Optional[int] = None,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lc = get_launch_config(
@@ -348,6 +360,7 @@ def rec_metric_value_test_launcher(
             batch_size=32,
             nsteps=test_nsteps,
             batch_window_size=1,
+            n_classes=n_classes,
         )
         pet.elastic_launch(lc, entrypoint=entry_point)(
             target_clazz,

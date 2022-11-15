@@ -12,6 +12,7 @@ from enum import Enum, unique
 from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
 from torch.autograd.profiler import record_function
+from torchrec.types import ModuleNoCopyMixin
 
 try:
     # For python 3.6 and below, GenericMeta will be used by
@@ -485,8 +486,6 @@ class ShardingEnv:
         NOTE:
             Typically used during training.
         """
-        # pyre-fixme[6]: For 1st param expected
-        #  `Optional[_distributed_c10d.ProcessGroup]` but got `ProcessGroup`.
         return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
 
     @classmethod
@@ -498,16 +497,6 @@ class ShardingEnv:
             Typically used during single host inference.
         """
         return cls(world_size, rank, None)
-
-
-class ModuleCopyMixin:
-    """
-    A mixin to allow modules to override copy behaviors in DMP.
-    """
-
-    def copy(self, device: torch.device) -> nn.Module:
-        # pyre-ignore [16]
-        return self.to(device)
 
 
 class FeatureShardingMixIn:
@@ -554,7 +543,7 @@ class ShardedModule(
     abc.ABC,
     nn.Module,
     Generic[CompIn, DistOut, Out, ShrdCtx],
-    ModuleCopyMixin,
+    ModuleNoCopyMixin,
     ModuleShardingMixIn,
 ):
     """
