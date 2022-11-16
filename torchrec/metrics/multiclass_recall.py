@@ -18,10 +18,10 @@ from torchrec.metrics.rec_metric import (
 )
 
 
-def get_true_positives_list(
-    predictions: Optional[torch.Tensor],
+def compute_true_positives_at_k(
+    predictions: torch.Tensor,
     labels: torch.Tensor,
-    weights: Optional[torch.Tensor],
+    weights: torch.Tensor,
     n_classes: int,
 ) -> torch.Tensor:
     """
@@ -42,11 +42,11 @@ def get_true_positives_list(
 
         >>> predictions = torch.tensor([[0.9, 0.1, 0, 0, 0], [0.1, 0.2, 0.25, 0.15, 0.3], [0, 1.0, 0, 0, 0], [0, 0, 0.2, 0.7, 0.1]])
         >>> labels = torch.tensor([0, 3, 1, 2])
-        >>> weights = torch.tensor([1, 2, 2, 1])
+        >>> weights = torch.tensor([1, 0.25, 0.5, 0.25])
         >>> n_classes = 5
         >>> true_positives_list = compute_multiclass_k_sum(predictions, labels, n_classes)
         >>> true_positives_list
-        tensor([3., 4., 4., 6., 6.])
+        tensor([1.5000, 1.7500, 1.7500, 2.0000, 2.0000])
 
     """
     ranks = torch.argsort(predictions, dim=-1, descending=True)
@@ -59,31 +59,31 @@ def get_true_positives_list(
 
     for k in range(n_classes):
         mask = torch.unsqueeze(labels, dim=-1) == ranks[..., k : k + 1]
-        mask *= torch.unsqueeze(weights, dim=-1)
+        mask = mask * torch.unsqueeze(weights, dim=-1)
         true_positives += mask.sum(dim=-2)
         true_positives_list = torch.cat((true_positives_list, true_positives), dim=-1)
 
     return true_positives_list
 
 
-def compute_multiclass_recall_at_k_sum(
-    tp_sum: torch.Tensor,
+def compute_multiclass_recall_at_k(
+    tp_at_k: torch.Tensor,
     total_weights: torch.Tensor,
 ) -> torch.Tensor:
-    return tp_sum / torch.unsqueeze(total_weights, dim=-1)
+    return tp_at_k / torch.unsqueeze(total_weights, dim=-1)
 
 
 def get_multiclass_recall_states(
-    predictions: Optional[torch.Tensor],
+    predictions: torch.Tensor,
     labels: torch.Tensor,
-    weights: Optional[torch.Tensor],
+    weights: torch.Tensor,
     n_classes: int,
 ) -> Dict[str, torch.Tensor]:
-    true_positives_list = get_true_positives_list(
+    true_positives_at_k_sum = compute_true_positives_at_k(
         predictions, labels, weights, n_classes
     )
     return {
-        "tp_sum": true_positives_list,
+        "tp_at_k": true_positives_at_k_sum,
         "total_weights": torch.sum(weights, dim=-1),
     }
 
@@ -93,7 +93,7 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
         self._n_classes: int = kwargs.pop("number_of_classes")
         super().__init__(*args, **kwargs)
         self._add_state(
-            "tp_sum",
+            "tp_at_k",
             torch.zeros(self._n_tasks, self._n_classes, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
@@ -119,7 +119,9 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
                 "Inputs 'predictions' and 'weights' should not be None for MulticlassRecallMetricComputation update"
             )
 
-        states = get_multiclass_recall_states(predictions, labels, self._n_classes)
+        states = get_multiclass_recall_states(
+            predictions, labels, weights, self._n_classes
+        )
         num_samples = predictions.shape[-2]
         for state_name, state_value in states.items():
             state = getattr(self, state_name)
@@ -131,16 +133,16 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
             MetricComputationReport(
                 name=MetricName.MULTICLASS_RECALL,
                 metric_prefix=MetricPrefix.LIFETIME,
-                value=compute_multiclass_recall_at_k_sum(
-                    cast(torch.Tensor, self.tp_sum),
+                value=compute_multiclass_recall_at_k(
+                    cast(torch.Tensor, self.tp_at_k),
                     cast(torch.Tensor, self.total_weights),
                 ),
             ),
             MetricComputationReport(
                 name=MetricName.MULTICLASS_RECALL,
                 metric_prefix=MetricPrefix.WINDOW,
-                value=compute_multiclass_recall_at_k_sum(
-                    self.get_window_state("tp_sum"),
+                value=compute_multiclass_recall_at_k(
+                    self.get_window_state("tp_at_k"),
                     self.get_window_state("total_weights"),
                 ),
             ),
