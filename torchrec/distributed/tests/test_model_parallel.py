@@ -81,7 +81,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -89,7 +88,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -142,7 +140,7 @@ class ModelParallelTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
@@ -204,7 +202,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -212,7 +209,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -278,7 +274,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -293,7 +289,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
+                # None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -352,13 +348,12 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 # On gloo, BF16 is not supported as dtype.
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.FP16
@@ -367,7 +362,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -418,13 +412,12 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 # On gloo, BF16 is not supported as dtype.
                 QCommsConfig(
                     forward_precision=CommType.FP16,
@@ -434,7 +427,6 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -479,7 +471,7 @@ class ModelParallelTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),

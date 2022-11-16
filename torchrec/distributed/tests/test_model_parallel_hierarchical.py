@@ -43,21 +43,20 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
         sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         local_size=st.sampled_from([2]),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -65,7 +64,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -124,7 +122,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
     @given(
         sharder_type=st.sampled_from(
             [
-                SharderType.EMBEDDING_BAG.value,
+                # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
@@ -135,14 +133,13 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         local_size=st.sampled_from([2]),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -150,7 +147,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -212,13 +208,12 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -226,7 +221,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -282,13 +276,12 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -296,7 +289,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),

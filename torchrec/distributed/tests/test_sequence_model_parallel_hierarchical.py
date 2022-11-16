@@ -52,13 +52,12 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),

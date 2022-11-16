@@ -43,13 +43,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -57,7 +56,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -149,13 +147,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         qcomms_config=st.sampled_from(
             [
-                None,
                 QCommsConfig(
                     forward_precision=CommType.FP16, backward_precision=CommType.BF16
                 ),
@@ -163,7 +160,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
@@ -215,13 +211,12 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
         apply_optimizer_in_backward_config=st.sampled_from(
             [
-                None,
                 {
                     "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
