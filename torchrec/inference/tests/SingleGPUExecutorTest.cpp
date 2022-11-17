@@ -41,7 +41,7 @@ void assert_tensors_eq(const at::Tensor& expected, const at::Tensor& got) {
 
 TEST(TorchDeployGPUTest, SimpleModelSingleGPU) {
   if (!torch::cuda::is_available()) {
-    GTEST_SKIP();
+    GTEST_SKIP() << "Test is skipped as it requires CUDA.";
   }
 
   const char* model_filename = path("TORCH_PACKAGE_SIMPLE", "/tmp/simple");
@@ -121,96 +121,9 @@ c10::IValue execute(
   return std::move(future).get()->predictions;
 }
 
-TEST(TorchDeployGPUTest, SimpleModel_multiGPU) {
-  if (!torch::cuda::is_available()) {
-    GTEST_SKIP();
-  }
-
-  const size_t numGpu = torch::cuda::device_count();
-  if (numGpu <= 1) {
-    GTEST_SKIP();
-  }
-
-  const char* model_filename = path("TORCH_PACKAGE_SIMPLE", "/tmp/simple");
-
-  auto device = c10::Device(c10::kCUDA, 0);
-
-  auto manager =
-      std::make_shared<torch::deploy::InterpreterManager>(2 * numGpu);
-  torch::deploy::Package package = manager->loadPackage(model_filename);
-
-  std::vector<torch::deploy::ReplicatedObj> models;
-  torch::deploy::ReplicatedObj model_control;
-  const size_t gpu_rank_control = 0;
-
-  {
-    auto I = package.acquireSession();
-
-    auto pyModel = I.fromMovable(package.loadPickle("model", "model.pkl"));
-
-    for (size_t i = 0; i < numGpu; i++) {
-      auto model = I.createMovable(
-          pyModel.attr("to")(c10::IValue(c10::Device(c10::kCUDA, i))));
-      if (i == gpu_rank_control) {
-        model_control = model;
-      }
-      models.push_back(std::move(model));
-    }
-  }
-
-  std::vector<std::unique_ptr<torchrec::SingleGPUExecutor>> workExecutors;
-  for (size_t i = 0; i < numGpu; i++) {
-    const std::vector<size_t> interp_idxs = {static_cast<size_t>(i)};
-    workExecutors.push_back(std::make_unique<torchrec::SingleGPUExecutor>(
-        manager,
-        torchrec::SingleGPUExecutor::ExecInfos{{i, numGpu + i, models[i]}},
-        numGpu));
-  }
-
-  std::vector<torchrec::SingleGPUExecutor::ExecInfo> execInfos;
-  for (size_t i = 0; i < numGpu; i++) {
-    execInfos.push_back({i, numGpu + i, models[i]});
-  }
-
-  auto controlExecutor =
-      std::make_unique<torchrec::SingleGPUExecutor>(manager, execInfos, numGpu);
-
-  std::vector<at::IValue> example_inputs;
-  {
-    auto I = package.acquireSession();
-    example_inputs = get_input_example(I);
-  }
-  auto example_input0 = example_inputs[0].toTensor();
-  auto expected_forward0 = example_input0 + at::ones(example_input0.sizes());
-
-  for (size_t i = 0; i < numGpu; i++) {
-    auto result =
-        execute(*workExecutors[i], "forward", example_inputs).toTensor();
-    assert_tensors_eq(expected_forward0, result);
-  }
-
-  execute(*controlExecutor, "set_weight", {at::zeros(example_input0.sizes())});
-
-  auto checkFn = [&](size_t set_weight_count) {
-    for (size_t i = 0; i < numGpu; i++) {
-      auto result =
-          execute(*workExecutors[i], "forward", example_inputs).toTensor();
-      if (i < set_weight_count) {
-        assert_tensors_eq(example_input0, result);
-      } else {
-        assert_tensors_eq(expected_forward0, result);
-      }
-    }
-  };
-  checkFn(1u);
-
-  execute(*controlExecutor, "set_weight", {at::zeros(example_input0.sizes())});
-  checkFn(2u);
-}
-
 TEST(TorchDeployGPUTest, NestedModelSingleGPU) {
   if (!torch::cuda::is_available()) {
-    GTEST_SKIP();
+    GTEST_SKIP() << "Test is skipped as it requires CUDA.";
   }
 
   const char* model_filename = path("TORCH_PACKAGE_NESTED", "/tmp/nested");
@@ -255,7 +168,7 @@ class TestSingleGPUExecutorObserver
 
 TEST(TorchDeployGPUTest, SimpleModelSingleGPUObserver) {
   if (!torch::cuda::is_available()) {
-    GTEST_SKIP();
+    GTEST_SKIP() << "Test is skipped as it requires CUDA.";
   }
 
   const char* model_filename = path("TORCH_PACKAGE_NESTED", "/tmp/simple");
