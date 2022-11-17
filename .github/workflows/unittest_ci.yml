@@ -82,4 +82,5 @@ jobs:
         conda install -y pytest
         python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
           -k "not test_load_state_dict and not test_kjt_bucketize_before_all2all and \
-          not test_fuse_embedding_optimizer_replacement_cuda and not test_fuse_embedding_optimizer_replacement_cuda_uvm_caching and not test_forward_with_state_dict and not test_optimizer_fusion"
+          not test_fuse_embedding_optimizer_replacement_cuda and not test_fuse_embedding_optimizer_replacement_cuda_uvm_caching and \
+          not test_forward_with_state_dict and not test_optimizer_fusion and not test_quantized_comm_codec"
