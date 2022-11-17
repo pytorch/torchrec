@@ -110,7 +110,7 @@ def get_qcomm_codecs_registry(
     qcomms_config: QCommsConfig,
     comm_ops: Optional[List[CommOp]] = None,
     device: Optional[torch.device] = None,
-) -> Dict[str, QuantizedCommCodecs]:
+) -> Optional[Dict[str, QuantizedCommCodecs]]:
     """
      This method constructs QuantizedCommCodecs from a given QCommConfig. It assumes
      that you want to use the same QComm configs for all comm-types passed in.
@@ -128,6 +128,12 @@ def get_qcomm_codecs_registry(
             qcomms_config=QCommsConfig(forward_precision=FP16, backward_precision=BF16),
             device=torch.device("cuda"))
     """
+
+    if (
+        qcomms_config.forward_precision == CommType.FP32
+        and qcomms_config.backward_precision == CommType.FP32
+    ):
+        return None
 
     if device is None:
         device = torch.device("cuda")
