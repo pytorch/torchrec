@@ -63,7 +63,7 @@ jobs:
           python-version: ['3.7', '3.8', '3.9', '3.10']
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      runner: linux.4xlarge.nvidia.gpu
+      runner: linux.8xlarge.nvidia.gpu
       timeout: 60
       gpu-arch-type: cuda
       gpu-arch-version: "11.7"
