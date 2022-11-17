@@ -51,11 +51,11 @@ def compute_true_positives_at_k(
     """
     ranks = torch.argsort(predictions, dim=-1, descending=True)
     true_positives = (
-        torch.zeros(1)
+        torch.zeros(1, device=predictions.device)
         if predictions.ndim == 2
-        else torch.zeros(predictions.shape[0], 1)
+        else torch.zeros(predictions.shape[0], 1, device=predictions.device)
     )
-    true_positives_list = torch.tensor([])
+    true_positives_list = torch.tensor([], device=predictions.device)
 
     for k in range(n_classes):
         mask = torch.unsqueeze(labels, dim=-1) == ranks[..., k : k + 1]
@@ -118,7 +118,6 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Inputs 'predictions' and 'weights' should not be None for MulticlassRecallMetricComputation update"
             )
-
         states = get_multiclass_recall_states(
             predictions, labels, weights, self._n_classes
         )
