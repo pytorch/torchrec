@@ -145,6 +145,7 @@ def gen_model_and_input(
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -159,6 +160,7 @@ def gen_model_and_input(
             embedding_groups=embedding_groups,
             dense_device=dense_device,
             sparse_device=sparse_device,
+            feature_processor_modules=feature_processor_modules,
         )
     else:
         model = model_class(
@@ -171,6 +173,7 @@ def gen_model_and_input(
             embedding_groups=embedding_groups,
             dense_device=dense_device,
             sparse_device=sparse_device,
+            feature_processor_modules=feature_processor_modules,
         )
     inputs = [
         generate_inputs(
@@ -243,6 +246,7 @@ def sharding_single_rank_test(
     ] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -256,6 +260,7 @@ def sharding_single_rank_test(
             num_float_features=16,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
+            feature_processor_modules=feature_processor_modules,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
@@ -269,6 +274,7 @@ def sharding_single_rank_test(
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
             num_float_features=16,
+            feature_processor_modules=feature_processor_modules,
         )
 
         global_model_named_params_as_dict = dict(global_model.named_parameters())
