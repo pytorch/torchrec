@@ -66,7 +66,7 @@ class QuantizeKernelTest(unittest.TestCase):
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
         os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_ADDR"] = str("127.0.0.1")
         os.environ["MASTER_PORT"] = str(get_free_port())
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
         self.device = torch.device("cuda:0")
