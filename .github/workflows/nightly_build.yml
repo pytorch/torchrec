@@ -94,6 +94,7 @@ jobs:
     - name: Build TorchRec Nightly
       run: |
         rm -r dist || true
+        CHANNEL="nightly"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-nightly \
