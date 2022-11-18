@@ -90,7 +90,6 @@ def shard(
             plan = planner.plan(module, sharders)
 
     sharded_param_names: List[str] = []
-
     if type(module) in sharder_map:
         # If the top level module is itself a shardable module, return the sharded variant.
         # Note, we cannot do an inplace replacement in this case.
