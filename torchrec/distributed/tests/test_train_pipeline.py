@@ -78,7 +78,7 @@ class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
+        return [EmbeddingComputeKernel.FUSED.value]
 
 
 @dataclass
@@ -270,7 +270,12 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             env=ShardingEnv.from_process_group(self.pg),
             init_data_parallel=True,
             device=self.device,
-            sharders=[cast(ModuleSharder[nn.Module], TestCustomEBCSharder())],
+            sharders=[
+                cast(
+                    ModuleSharder[nn.Module],
+                    TestCustomEBCSharder(fused_params={"learning_rate": 0.1}),
+                )
+            ],
         )
         test_unsharded_model = TestSparseNN(
             tables=self.tables + fp_tables,

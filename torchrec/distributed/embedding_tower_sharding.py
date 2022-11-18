@@ -929,7 +929,10 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         if isinstance(embedding, EmbeddingBagCollection):
             # pyre-ignore [7]
             return EmbeddingBagCollectionSharder(
-                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+                self.fused_params,
+                qcomm_codecs_registry=self.qcomm_codecs_registry,
+                # TODO enable composability with ETC through DistributedTensor
+                is_composable=False,
             )
         elif isinstance(embedding, EmbeddingCollection):
             # pyre-ignore [7]
