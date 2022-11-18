@@ -75,7 +75,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -278,7 +278,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -352,7 +352,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -418,7 +418,7 @@ class ModelParallelTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
+                # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -510,6 +510,9 @@ class ModelParallelTest(ModelParallelTestShared):
 
 
 class ModelParallelSparseOnlyTest(unittest.TestCase):
+    def tearDown(self) -> None:
+        dist.destroy_process_group()
+
     def test_sharding_ebc_as_top_level(self) -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
@@ -545,46 +548,6 @@ class ModelParallelSparseOnlyTest(unittest.TestCase):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
-        dist.destroy_process_group()
-
-    def test_sharding_fused_ebc_as_top_level(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
-
-        if torch.cuda.is_available():
-            curr_device = torch.device("cuda:0")
-            torch.cuda.set_device(curr_device)
-            backend = "nccl"
-        else:
-            curr_device = torch.device("cpu")
-            backend = "gloo"
-        dist.init_process_group(backend=backend)
-
-        embedding_dim = 128
-        num_embeddings = 256
-        ebc = FusedEmbeddingBagCollection(
-            device=torch.device("meta"),
-            tables=[
-                EmbeddingBagConfig(
-                    name="large_table",
-                    embedding_dim=embedding_dim,
-                    num_embeddings=num_embeddings,
-                    feature_names=["my_feature"],
-                    pooling=PoolingType.SUM,
-                ),
-            ],
-            optimizer_type=torch.optim.SGD,
-            optimizer_kwargs={"lr": 0.02},
-        )
-
-        model = DistributedModelParallel(ebc, device=curr_device)
-
-        self.assertTrue(isinstance(model.module, ShardedFusedEmbeddingBagCollection))
-        dist.destroy_process_group()
 
 
 class ModelParallelStateDictTest(unittest.TestCase):
@@ -900,9 +863,8 @@ class ModelParallelStateDictTest(unittest.TestCase):
         ]
         # pyre-ignore[6]
         (m, _), batch = self._generate_dmps_and_batch(sharders=sharders)
-        print(f"Sharding Plan: {m._plan}")
         state_dict_keys = set(m.state_dict().keys())
-        param_keys = {key for (key, _) in m.named_parameters()}
+        param_keys = {key for (key, _) in m.named_parameters(include_fused=True)}
         buffer_keys = {key for (key, _) in m.named_buffers()}
         self.assertEqual(state_dict_keys, {*param_keys, *buffer_keys})
 
