@@ -154,6 +154,7 @@ class TestSequenceTowerSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -256,6 +257,7 @@ class TestSequenceSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),

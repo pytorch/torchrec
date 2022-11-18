@@ -518,6 +518,7 @@ class TestSparseNNBase(nn.Module):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__()
         if dense_device is None:
@@ -557,6 +558,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
         max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -671,6 +673,7 @@ class TestTowerSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -766,6 +769,7 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),

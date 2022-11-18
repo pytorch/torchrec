@@ -10,7 +10,7 @@
 #include <torch/torch.h>
 #include <torchrec/csrc/dynamic_embedding/details/io_registry.h>
 
-namespace tde::details {
+namespace torchrec {
 
 void IORegistry::register_provider(IOProvider provider) {
   std::string type = provider.type;
@@ -41,9 +41,9 @@ void IORegistry::register_plugin(const char* filename) {
   provider.finalize =
       reinterpret_cast<decltype(provider.finalize)>(finalize_ptr);
 
-  auto pull_ptr = dlsym(ptr.get(), "IO_Pull");
-  TORCH_CHECK(pull_ptr != nullptr, "cannot find IO_Pull symbol");
-  provider.pull = reinterpret_cast<decltype(provider.pull)>(pull_ptr);
+  auto fetch_ptr = dlsym(ptr.get(), "IO_Fetch");
+  TORCH_CHECK(fetch_ptr != nullptr, "cannot find IO_Fetch symbol");
+  provider.fetch = reinterpret_cast<decltype(provider.fetch)>(fetch_ptr);
 
   auto push_ptr = dlsym(ptr.get(), "IO_Push");
   TORCH_CHECK(push_ptr != nullptr, "cannot find IO_Push symbol");
@@ -72,4 +72,4 @@ IORegistry& IORegistry::Instance() {
   return instance;
 }
 
-} // namespace tde::details
+} // namespace torchrec

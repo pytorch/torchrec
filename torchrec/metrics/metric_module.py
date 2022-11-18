@@ -323,6 +323,9 @@ class RecMetricModule(nn.Module):
     def reset(self) -> None:
         self.rec_metrics.reset()
 
+    def get_required_inputs(self) -> List[str]:
+        return self.rec_metrics.get_required_inputs()
+
 
 def _generate_rec_metrics(
     metrics_config: MetricsConfig,

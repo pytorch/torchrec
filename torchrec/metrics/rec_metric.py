@@ -24,6 +24,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -290,6 +291,8 @@ class RecMetric(nn.Module, abc.ABC):
     _update_buffers: Dict[str, List[RecModelOutput]]
     _default_weights: Dict[Tuple[int, ...], torch.Tensor]
 
+    _required_inputs: Set[str]
+
     PREDICTIONS: str = "predictions"
     LABELS: str = "labels"
     WEIGHTS: str = "weights"
@@ -322,11 +325,13 @@ class RecMetric(nn.Module, abc.ABC):
         self._my_rank = my_rank
         self._window_size = math.ceil(window_size / world_size)
         self._batch_size = batch_size
+        self._metrics_computations = nn.ModuleList()
         self._tasks = tasks
         self._compute_mode = compute_mode
         self._fused_update_limit = fused_update_limit
         self._should_validate_update = should_validate_update
         self._default_weights = {}
+        self._required_inputs = set()
         self._update_buffers = {
             self.PREDICTIONS: [],
             self.LABELS: [],
@@ -339,33 +344,38 @@ class RecMetric(nn.Module, abc.ABC):
             task_per_metric = 1
             self._tasks_iter = self._unfused_tasks_iter
 
-        self._metrics_computations: nn.ModuleList = nn.ModuleList(
-            [
-                # This Pyre error seems to be Pyre's bug as it can be inferred by mypy
-                # according to https://github.com/python/mypy/issues/3048.
-                # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
-                self._computation_class(
-                    my_rank,
-                    batch_size,
-                    task_per_metric,
-                    self._window_size,
-                    compute_on_all_ranks,
-                    self._should_validate_update,
-                    process_group,
-                    **{**kwargs, **self._get_task_kwargs(task_config)},
-                )
-                for task_config in (
-                    [self._tasks]
-                    if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
-                    else self._tasks
-                )
-            ]
-        )
+        for task_config in (
+            [self._tasks]
+            if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
+            else self._tasks
+        ):
+            # This Pyre error seems to be Pyre's bug as it can be inferred by mypy
+            # according to https://github.com/python/mypy/issues/3048.
+            # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
+            metric_computation = self._computation_class(
+                my_rank,
+                batch_size,
+                task_per_metric,
+                self._window_size,
+                compute_on_all_ranks,
+                self._should_validate_update,
+                process_group,
+                **{**kwargs, **self._get_task_kwargs(task_config)},
+            )
+            required_inputs = self._get_task_required_inputs(task_config)
+
+            self._metrics_computations.append(metric_computation)
+            self._required_inputs.update(required_inputs)
 
     def _get_task_kwargs(
         self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
     ) -> Dict[str, Any]:
         return {}
+
+    def _get_task_required_inputs(
+        self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
+    ) -> Set[str]:
+        return set()
 
     # TODO(stellaya): Refactor the _[fused, unfused]_tasks_iter methods and replace the
     # compute_scope str input with an enum
@@ -639,6 +649,9 @@ class RecMetric(nn.Module, abc.ABC):
             keep_vars=keep_vars,
         )
 
+    def get_required_inputs(self) -> Set[str]:
+        return self._required_inputs
+
 
 class RecMetricList(nn.Module):
     """
@@ -666,6 +679,7 @@ class RecMetricList(nn.Module):
     """
 
     rec_metrics: nn.ModuleList
+    required_inputs: List[str]
 
     def __init__(self, rec_metrics: List[RecMetric]) -> None:
         # TODO(stellaya): consider to inherit from TorchMetrics.MetricCollection.
@@ -674,12 +688,20 @@ class RecMetricList(nn.Module):
 
         super().__init__()
         self.rec_metrics = nn.ModuleList(rec_metrics)
+        self.required_inputs = list(
+            set().union(
+                *[rec_metric.get_required_inputs() for rec_metric in rec_metrics]
+            )
+        )
 
     def __len__(self) -> int:
         return len(self.rec_metrics)
 
     def __getitem__(self, idx: int) -> nn.Module:
         return self.rec_metrics[idx]
+
+    def get_required_inputs(self) -> List[str]:
+        return self.required_inputs
 
     def update(
         self,

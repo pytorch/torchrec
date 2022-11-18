@@ -14,3 +14,8 @@ add_tde_test(bits_op_test bits_op_test.cpp)
 add_tde_test(naive_id_transformer_test naive_id_transformer_test.cpp)
 add_tde_test(random_bits_generator_test random_bits_generator_test.cpp)
 add_tde_test(mixed_lfu_lru_strategy_test mixed_lfu_lru_strategy_test.cpp)
+add_tde_test(notification_test notification_test.cpp)
+
+if (BUILD_REDIS_IO)
+    add_subdirectory(redis)
+endif()
