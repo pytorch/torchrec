@@ -156,7 +156,7 @@ class TrainPipelineBaseTest(unittest.TestCase):
 
 class TrainPipelineSparseDistTest(unittest.TestCase):
     def setUp(self) -> None:
-        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_ADDR"] = str("127.0.0.1")
         os.environ["MASTER_PORT"] = str(get_free_port())
         self.pg = init_distributed_single_host(backend="gloo", rank=0, world_size=1)
 

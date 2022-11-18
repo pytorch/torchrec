@@ -43,7 +43,7 @@ class TestKeyedOptimizer(unittest.TestCase):
         )
 
     def test_load_state_dict(self) -> None:
-        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_ADDR"] = str("127.0.0.1")
         os.environ["MASTER_PORT"] = str(get_free_port())
         dist.init_process_group("gloo", rank=0, world_size=1)
 

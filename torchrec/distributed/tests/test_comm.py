@@ -21,7 +21,7 @@ from torchrec.test_utils import get_free_port, seed_and_log
 class TestAllToAll(unittest.TestCase):
     @seed_and_log
     def setUp(self) -> None:
-        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_ADDR"] = str("127.0.0.1")
         os.environ["MASTER_PORT"] = str(get_free_port())
         os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
