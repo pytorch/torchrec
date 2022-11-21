@@ -31,6 +31,13 @@ def get_nightly_version():
     return f"{today.year}.{today.month}.{today.day}"
 
 
+def get_channel():
+    # Channel typically takes on the following values:
+    # - NIGHTLY: for nightly published binaries
+    # - TEST: for binaries build from release candidate branches
+    return os.getenv("CHANNEL")
+
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec setup")
     parser.add_argument(
@@ -46,9 +53,8 @@ def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
 
     # Set up package name and version
+    channel = get_channel()
     name = args.package_name
-    is_nightly = "nightly" in name
-    is_test = "test" in name
 
     with open(
         os.path.join(os.path.dirname(__file__), "README.MD"), encoding="utf8"
@@ -60,15 +66,13 @@ def main(argv: List[str]) -> None:
         reqs = f.read()
         install_requires = reqs.strip().split("\n")
 
-    version = get_nightly_version() if is_nightly else get_version()
+    version = get_nightly_version() if channel == "nightly" else get_version()
 
-    if not is_nightly:
+    if channel != "nightly":
         if "fbgemm-gpu-nightly" in install_requires:
             install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu")
 
-    if is_test:
-        version = (f"0.0.{random.randint(0, 1000)}",)
     print(f"-- {name} building version: {version}")
 
     packages = find_packages(exclude=("*tests",))
