@@ -177,7 +177,10 @@ class InferenceModelParallelTestBase(unittest.TestCase):
         torch.testing.assert_close(global_pred, shard_pred, rtol=rtol, atol=atol)
 
 
-class ModelParallelSparseOnlyTest(unittest.TestCase):
+class ModelParallelSparseOnlyBase(unittest.TestCase):
+    def tearDown(self) -> None:
+        dist.destroy_process_group()
+
     def test_sharding_ebc_as_top_level(self) -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
@@ -213,7 +216,6 @@ class ModelParallelSparseOnlyTest(unittest.TestCase):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
-        dist.destroy_process_group()
 
     def test_sharding_fused_ebc_as_top_level(self) -> None:
         os.environ["RANK"] = "0"
@@ -252,10 +254,9 @@ class ModelParallelSparseOnlyTest(unittest.TestCase):
         model = DistributedModelParallel(ebc, device=curr_device)
 
         self.assertTrue(isinstance(model.module, ShardedFusedEmbeddingBagCollection))
-        dist.destroy_process_group()
 
 
-class ModelParallelStateDictTest(unittest.TestCase):
+class ModelParallelStateDictBase(unittest.TestCase):
     def setUp(self) -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
