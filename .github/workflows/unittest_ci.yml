@@ -90,8 +90,8 @@ jobs:
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
       with:
-        name: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
-        path: dist/torchrec-test-*.whl
+        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        path: dist/*.whl
 
   # download from GHA, test on gpu
   test_on_gpu:
@@ -171,7 +171,7 @@ jobs:
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
-        name: torchrec-test_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
       run: ls -R
     - name: Install TorchRec GPU
