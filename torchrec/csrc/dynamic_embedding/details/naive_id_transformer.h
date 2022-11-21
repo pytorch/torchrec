@@ -48,7 +48,6 @@ class NaiveIDTransformer {
  public:
   using lxu_record_t = LXURecord;
   using record_t = TransformerRecord<lxu_record_t>;
-  static constexpr std::string_view type_ = "naive";
 
   explicit NaiveIDTransformer(int64_t num_embedding);
   NaiveIDTransformer(const NaiveIDTransformer<LXURecord, Bitmap>&) = delete;

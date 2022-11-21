@@ -11,6 +11,7 @@ function(add_tde_test NAME)
 endfunction()
 
 add_tde_test(bits_op_test bits_op_test.cpp)
+add_tde_test(id_transformer_variant_test id_transformer_variant_test.cpp)
 add_tde_test(naive_id_transformer_test naive_id_transformer_test.cpp)
 add_tde_test(random_bits_generator_test random_bits_generator_test.cpp)
 add_tde_test(mixed_lfu_lru_strategy_test mixed_lfu_lru_strategy_test.cpp)

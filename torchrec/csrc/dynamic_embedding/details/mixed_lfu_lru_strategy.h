@@ -42,8 +42,6 @@ class MixedLFULRUStrategy {
   using lxu_record_t = uint32_t;
   using transformer_record_t = TransformerRecord<lxu_record_t>;
 
-  static constexpr std::string_view type_ = "mixed_lru_lfu";
-
   /**
    * @param min_used_freq_power min usage is 2^min_used_freq_power. Set this to
    * avoid recent values evict too fast.
@@ -60,8 +58,10 @@ class MixedLFULRUStrategy {
     return static_cast<int64_t>(reinterpret_cast<Record*>(&record)->time_);
   }
 
-  lxu_record_t
-  update(int64_t global_id, int64_t cache_id, std::optional<lxu_record_t> val);
+  lxu_record_t update(
+      int64_t global_id,
+      int64_t cache_id,
+      std::optional<lxu_record_t> val);
 
   struct EvictItem {
     int64_t global_id_;
