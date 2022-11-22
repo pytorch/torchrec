@@ -75,6 +75,7 @@ class ShardedFusedEmbeddingBagCollection(
                     broadcast_buffers=False,
                     static_graph=True,
                 )
+                # pyre-ignore
                 self._lookups[index]._register_fused_optim(
                     optimizer_type, **optimizer_kwargs
                 )

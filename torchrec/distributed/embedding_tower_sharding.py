@@ -28,7 +28,10 @@ from torchrec.distributed.embedding_types import (
     SparseFeatures,
     SparseFeaturesList,
 )
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.embeddingbag import (
+    EmbeddingBagCollectionSharder,
+    ShardedEmbeddingBagCollection,
+)
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
@@ -384,13 +387,26 @@ class ShardedEmbeddingTower(
             return CombinedOptimizer([])
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self,
+        prefix: str = "",
+        recurse: bool = True,
+        remove_duplicate: bool = True,
+        # TODO remove when note needed
+        include_fused: bool = False,
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         if self._active_device:
-            # pyre-ignore[16]
-            yield from self.embedding.named_parameters(
-                append_prefix(prefix, "embedding"), recurse
-            )
+            if isinstance(self.embedding, ShardedEmbeddingBagCollection):
+                yield from self.embedding.named_parameters(
+                    append_prefix(prefix, "embedding"),
+                    recurse,
+                    include_fused=include_fused,
+                )
+            else:
+                # pyre-ignore
+                yield from self.embedding.named_parameters(
+                    append_prefix(prefix, "embedding"),
+                    recurse,
+                )
             # pyre-ignore[16]
             yield from self.interaction.module.named_parameters(
                 append_prefix(prefix, "interaction"), recurse
@@ -814,14 +830,29 @@ class ShardedEmbeddingTowerCollection(
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self,
+        prefix: str = "",
+        recurse: bool = True,
+        remove_duplicate: bool = True,
+        # TODO remove when note needed
+        include_fused: bool = True,
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for i, embedding in self.embeddings.items():
-            yield from (
-                embedding.named_parameters(
-                    append_prefix(prefix, f"towers.{i}.embedding"), recurse
+            if isinstance(embedding, ShardedEmbeddingBagCollection):
+                yield from (
+                    embedding.named_parameters(
+                        append_prefix(prefix, f"towers.{i}.embedding"),
+                        recurse,
+                        include_fused=include_fused,
+                    )
                 )
-            )
+            else:
+                yield from (
+                    embedding.named_parameters(
+                        append_prefix(prefix, f"towers.{i}.embedding"),
+                        recurse,
+                    )
+                )
         for i, interaction in self.interactions.items():
             yield from (
                 interaction.module.named_parameters(
@@ -929,7 +960,8 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         if isinstance(embedding, EmbeddingBagCollection):
             # pyre-ignore [7]
             return EmbeddingBagCollectionSharder(
-                self.fused_params, qcomm_codecs_registry=self.qcomm_codecs_registry
+                self.fused_params,
+                qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
         elif isinstance(embedding, EmbeddingCollection):
             # pyre-ignore [7]
