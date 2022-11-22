@@ -299,9 +299,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         sharding_type: str,
         compute_device_type: str,
     ) -> List[str]:
-        ret = [
-            EmbeddingComputeKernel.DENSE.value,
-        ]
+        ret: List[str] = []
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
                 EmbeddingComputeKernel.FUSED.value,
@@ -311,6 +309,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM.value,
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
+        else:
+            ret += [
+                EmbeddingComputeKernel.DENSE.value,
+            ]
         return ret
 
     @property

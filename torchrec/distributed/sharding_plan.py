@@ -184,9 +184,7 @@ def _get_compute_kernel(
     # TODO add placement support for compute_kernel
     compute_kernels = sharder.compute_kernels(sharding_type, device_type)
 
-    if sharding_type == ShardingType.DATA_PARALLEL or not hasattr(
-        param, "_optimizer_class"
-    ):
+    if sharding_type == ShardingType.DATA_PARALLEL.value:
         if EmbeddingComputeKernel.DENSE.value in compute_kernels:
             return EmbeddingComputeKernel.DENSE.value
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
@@ -197,7 +195,9 @@ def _get_compute_kernel(
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
             return EmbeddingComputeKernel.QUANT.value
 
-    raise ValueError(f"Could not find compute kernel for sharding_type={sharding_type}")
+    raise ValueError(
+        f"Could not find compute kernel for sharding_type={sharding_type} in {compute_kernels}"
+    )
 
 
 def _get_parameter_sharding(
