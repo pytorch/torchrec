@@ -161,7 +161,7 @@ class TestSingleGPUExecutorObserver
     : public torchrec::EmptySingleGPUExecutorObserver {
  public:
   double requestCount = 0.f;
-  void addRequestsCount(double value) override {
+  void addRequestsCount(uint32_t value) override {
     requestCount += value;
   }
 };
