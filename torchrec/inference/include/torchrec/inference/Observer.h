@@ -19,14 +19,14 @@ class IBatchingQueueObserver {
   // in the batching queue waits before they are read and allocated
   // onto a GPU device.
   virtual void recordBatchingQueueLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Record the amount of time it takes for a batching function
   // to execute.
   virtual void recordBatchingFuncLatency(
-      double value,
+      uint32_t value,
       std::string batchingFuncName,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
@@ -34,30 +34,30 @@ class IBatchingQueueObserver {
   // Record the amount of time it takes to create a batch of
   // requests.
   virtual void recordBatchCreationLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Increment the number of batching queue timeouts experienced.
-  virtual void addBatchingQueueTimeoutCount(double value) = 0;
+  virtual void addBatchingQueueTimeoutCount(uint32_t value) = 0;
 
   // Increment the number of times a GPU could not be chosen
   // for allocation.
-  virtual void addGPUBusyCount(double value) = 0;
+  virtual void addGPUBusyCount(uint32_t value) = 0;
 
   // Increment the number of requests entering the batching queue.
-  virtual void addRequestsCount(double value) = 0;
+  virtual void addRequestsCount(uint32_t value) = 0;
 
   // Increment the number of bytes of tensors moved to cuda.
-  virtual void addBytesMovedToGPUCount(double value) = 0;
+  virtual void addBytesMovedToGPUCount(uint32_t value) = 0;
 
   // Increment the number of batches processed by the batching
   // queue (moved onto the GPU executor).
-  virtual void addBatchesProcessedCount(double value) = 0;
+  virtual void addBatchesProcessedCount(uint32_t value) = 0;
 
   // Increment the number of requests processed by the batching
   // queue (moved onto the GPU executor).
-  virtual void addRequestsProcessedCount(double value) = 0;
+  virtual void addRequestsProcessedCount(uint32_t value) = 0;
 
   // The obervations that should be made when a batch is completed.
   virtual void observeBatchCompletion(
@@ -75,29 +75,29 @@ class IBatchingQueueObserver {
 class EmptyBatchingQueueObserver : public IBatchingQueueObserver {
  public:
   void recordBatchingQueueLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordBatchingFuncLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::string /* batchingFuncName */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordBatchCreationLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
-  void addBatchingQueueTimeoutCount(double /* value */) override {}
+  void addBatchingQueueTimeoutCount(uint32_t /* value */) override {}
 
-  void addGPUBusyCount(double /* value */) override {}
+  void addGPUBusyCount(uint32_t /* value */) override {}
 
-  void addRequestsCount(double /* value */) override {}
+  void addRequestsCount(uint32_t /* value */) override {}
 
-  void addBytesMovedToGPUCount(double /* value */) override {}
+  void addBytesMovedToGPUCount(uint32_t /* value */) override {}
 
-  void addBatchesProcessedCount(double /* value */) override {}
+  void addBatchesProcessedCount(uint32_t /* value */) override {}
 
-  void addRequestsProcessedCount(double /* value */) override {}
+  void addRequestsProcessedCount(uint32_t /* value */) override {}
 };
 
 class IGPUExecutorObserver {
@@ -105,60 +105,60 @@ class IGPUExecutorObserver {
   // Record the amount of time a batch spends in the GPU Executor
   // queue.
   virtual void recordQueueLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Record the latency of prediction (forward call, H2D).
   virtual void recordPredictionLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Record the latency of device to host transfer facilitated
   // by result split function.
   virtual void recordDeviceToHostLatency(
-      double value,
+      uint32_t value,
       std::string resultSplitFuncName,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Record the latency of splitting the result.
   virtual void recordResultSplitLatency(
-      double value,
+      uint32_t value,
       std::string resultSplitFuncName,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Record the latency from enqueue to completion.
   virtual void recordTotalLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
   // Increment the number of GPUExecutor queue timeouts.
-  virtual void addQueueTimeoutCount(double value) = 0;
+  virtual void addQueueTimeoutCount(uint32_t value) = 0;
 
   // Increment the number of predict exceptions.
-  virtual void addPredictionExceptionCount(double value) = 0;
+  virtual void addPredictionExceptionCount(uint32_t value) = 0;
 
   // Increment the number of batches successfully processed.
-  virtual void addBatchesProcessedCount(double value) = 0;
+  virtual void addBatchesProcessedCount(uint32_t value) = 0;
 
   virtual ~IGPUExecutorObserver() {}
 };
 
 class ISingleGPUExecutorObserver {
  public:
-  virtual void addRequestsCount(double value) = 0;
-  virtual void addRequestProcessingExceptionCount(double value) = 0;
+  virtual void addRequestsCount(uint32_t value) = 0;
+  virtual void addRequestProcessingExceptionCount(uint32_t value) = 0;
   virtual void recordQueueLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point =
           std::chrono::steady_clock::now()) = 0;
 
   virtual void recordRequestProcessingLatency(
-      double value,
+      uint32_t value,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) = 0;
 
@@ -166,15 +166,15 @@ class ISingleGPUExecutorObserver {
 };
 
 class EmptySingleGPUExecutorObserver : public ISingleGPUExecutorObserver {
-  void addRequestsCount(double) override {}
-  void addRequestProcessingExceptionCount(double) override {}
+  void addRequestsCount(uint32_t) override {}
+  void addRequestProcessingExceptionCount(uint32_t) override {}
   void recordQueueLatency(
-      double,
+      uint32_t,
       std::chrono::steady_clock::time_point =
           std::chrono::steady_clock::now()) override {}
 
   void recordRequestProcessingLatency(
-      double,
+      uint32_t,
       std::chrono::steady_clock::time_point now =
           std::chrono::steady_clock::now()) override {}
 };
@@ -183,32 +183,76 @@ class EmptySingleGPUExecutorObserver : public ISingleGPUExecutorObserver {
 class EmptyGPUExecutorObserver : public IGPUExecutorObserver {
  public:
   void recordQueueLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordPredictionLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordDeviceToHostLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::string /* resultSplitFuncName */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordResultSplitLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::string /* resultSplitFuncName */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
   void recordTotalLatency(
-      double /* value */,
+      uint32_t /* value */,
       std::chrono::steady_clock::time_point /* now */) override {}
 
-  void addQueueTimeoutCount(double /* value */) override {}
+  void addQueueTimeoutCount(uint32_t /* value */) override {}
 
-  void addPredictionExceptionCount(double /* value */) override {}
+  void addPredictionExceptionCount(uint32_t /* value */) override {}
 
-  void addBatchesProcessedCount(double /* value */) override {}
+  void addBatchesProcessedCount(uint32_t /* value */) override {}
+};
+
+class IResourceManagerObserver {
+ public:
+  // Add the number of requests in flight for a gpu
+  virtual void addOutstandingRequestsCount(uint32_t value, int gpuIdx) = 0;
+
+  // Add the most in flight requests on a gpu ever
+  virtual void addAllTimeHighOutstandingCount(uint32_t value, int gpuIdx) = 0;
+
+  // Record the latency for finding a device
+  virtual void addWaitingForDeviceLatency(
+      uint32_t value,
+      int gpuIdx,
+      std::chrono::steady_clock::time_point now =
+          std::chrono::steady_clock::now()) = 0;
+
+  // Recording all stats related to resource manager at once.
+  virtual void recordAllStats(
+      uint32_t outstandingRequests,
+      uint32_t allTimeHighOutstanding,
+      uint32_t waitedForMs,
+      int gpuIdx) {
+    addOutstandingRequestsCount(outstandingRequests, gpuIdx);
+    addAllTimeHighOutstandingCount(allTimeHighOutstanding, gpuIdx);
+    addWaitingForDeviceLatency(waitedForMs, gpuIdx);
+  }
+
+  virtual ~IResourceManagerObserver() {}
+};
+
+// Can be used for testing or for opt-ing out of observation.
+class EmptyResourceManagerObserver : public IResourceManagerObserver {
+ public:
+  void addOutstandingRequestsCount(uint32_t /* value */, int /* gpuIdx */)
+      override {}
+
+  void addAllTimeHighOutstandingCount(uint32_t /* value */, int /* gpuIdx */)
+      override {}
+
+  void addWaitingForDeviceLatency(
+      uint32_t /* value */,
+      int /* gpuIdx */,
+      std::chrono::steady_clock::time_point /* now */) override {}
 };
 
 // Helper for determining how much time has elapsed in milliseconds since a

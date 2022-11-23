@@ -23,11 +23,15 @@ namespace torchrec {
 ResourceManager::ResourceManager(
     int worldSize,
     size_t maxOutstandingBatches,
-    int logFrequency)
+    int logFrequency,
+    std::unique_ptr<IResourceManagerObserver> observer)
     : gpuToOutstandingBatches_(worldSize),
       allTimeHigh_(worldSize),
       maxOutstandingBatches_(maxOutstandingBatches),
-      logFrequency_(logFrequency) {}
+      logFrequency_(logFrequency),
+      observer_(std::move(observer)) {
+  CHECK(observer_ != nullptr);
+}
 
 bool ResourceManager::occupyDevice(
     int gpuIdx,
@@ -41,8 +45,6 @@ bool ResourceManager::occupyDevice(
       // With lock, try to get device.
       std::lock_guard<std::mutex> lock(mu_);
       if (gpuToOutstandingBatches_[gpuIdx] < maxOutstandingBatches_) {
-        // GPU has too many outstanding batches. Try again later.
-
         // Pick GPU and update stats.
         LOG_EVERY_N(INFO, logFrequency_)
             << "Picked device " << gpuIdx << ", with load "
@@ -55,6 +57,12 @@ bool ResourceManager::occupyDevice(
             << " ms. Slack: " << slack.count() << " ms.";
 
         gpuToOutstandingBatches_[gpuIdx] += 1;
+        observer_->recordAllStats(
+            gpuToOutstandingBatches_[gpuIdx],
+            allTimeHigh_[gpuIdx],
+            waitedFor.count(),
+            gpuIdx);
+
         if (gpuToOutstandingBatches_[gpuIdx] > allTimeHigh_[gpuIdx]) {
           allTimeHigh_[gpuIdx] = gpuToOutstandingBatches_[gpuIdx];
         }
@@ -78,6 +86,11 @@ bool ResourceManager::occupyDevice(
     waitedFor = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     if (waitedFor >= slack) {
+      observer_->recordAllStats(
+          gpuToOutstandingBatches_[gpuIdx],
+          allTimeHigh_[gpuIdx],
+          waitedFor.count(),
+          gpuIdx);
       // We have used up all the slack -- requests should time out.
       LOG(WARNING) << "Timing out a batch of requests after slack of "
                    << slack.count() << " ms was exceeded!";
@@ -89,6 +102,8 @@ bool ResourceManager::occupyDevice(
 void ResourceManager::release(int gpuIdx) {
   std::lock_guard<std::mutex> lock(mu_);
   gpuToOutstandingBatches_[gpuIdx] -= 1;
+  observer_->addOutstandingRequestsCount(
+      gpuToOutstandingBatches_[gpuIdx], gpuIdx);
 }
 
 } // namespace torchrec
