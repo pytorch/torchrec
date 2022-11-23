@@ -264,7 +264,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
             "table_1": ParameterSharding(
                 sharding_type="table_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[1],
                 sharding_spec=EnumerableShardingSpec(
                     shards=[
@@ -278,7 +278,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
             "table_2": ParameterSharding(
                 sharding_type="row_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[
                     0,
                     1,
@@ -480,7 +480,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
             "table_3": ParameterSharding(
                 sharding_type="column_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[8, 9],
                 sharding_spec=EnumerableShardingSpec(
                     shards=[
@@ -499,7 +499,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
             "table_4": ParameterSharding(
                 sharding_type="table_row_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[24, 25, 26, 27, 28, 29, 30, 31],
                 sharding_spec=EnumerableShardingSpec(
                     shards=[
@@ -584,7 +584,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
         expected = {
             "table_0": ParameterSharding(
                 sharding_type="column_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[0, 1],
                 sharding_spec=EnumerableShardingSpec(
                     shards=[
@@ -603,7 +603,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
             "table_1": ParameterSharding(
                 sharding_type="column_wise",
-                compute_kernel="dense",
+                compute_kernel="fused",
                 ranks=[0, 1],
                 sharding_spec=EnumerableShardingSpec(
                     shards=[
