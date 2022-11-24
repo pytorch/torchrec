@@ -426,6 +426,95 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
             # Ensure the number of samples read match the number of samples in the dataset
             self.assertEqual(dataset_len, total_samples_count)
 
+    def _test_in_memory_training_set_shuffle(
+        self,
+        rows_per_file: List[int],
+        batch_size: int,
+        world_size: int,
+        random_seed: int = 0,
+    ) -> None:
+        with contextlib.ExitStack() as stack:
+            num_rows_csr = np.cumsum([0] + rows_per_file)
+            dense, sparse, labels = [], [], []
+            for i, _ in enumerate(rows_per_file):
+                start = num_rows_csr[i]
+                end = num_rows_csr[i + 1]
+                dense.append(np.mgrid[start:end, 0:INT_FEATURE_COUNT][0])
+                sparse.append(np.mgrid[start:end, 0:CAT_FEATURE_COUNT][0])
+                labels.append(np.mgrid[start:end, 0:1][0])
+            files = [
+                stack.enter_context(
+                    self._create_dataset_npys(
+                        num_rows=num_rows,
+                        dense=dense[i],
+                        sparse=sparse[i],
+                        labels=labels[i],
+                    )
+                )
+                for i, num_rows in enumerate(rows_per_file)
+            ]
+            hashes = [i + 1 for i in range(CAT_FEATURE_COUNT)]
+            dataset_len = num_rows = sum(rows_per_file)
+            lens = []
+            remainder = dataset_len % world_size
+            total_samples_count = 0
+            for rank in range(world_size):
+                end_batch_size = (dataset_len // world_size) % batch_size
+                num_batches = math.ceil(dataset_len // world_size / batch_size)
+                if rank < remainder:
+                    if end_batch_size == 0:
+                        end_batch_size = batch_size + 1
+                    else:
+                        end_batch_size += 1
+
+                datapipe = InMemoryBinaryCriteoIterDataPipe(
+                    stage="train",
+                    dense_paths=[f[0] for f in files],
+                    sparse_paths=[f[1] for f in files],
+                    labels_paths=[f[2] for f in files],
+                    batch_size=batch_size,
+                    rank=rank,
+                    world_size=world_size,
+                    shuffle_training_set=True,
+                    shuffle_training_set_random_seed=random_seed,
+                    hashes=hashes,
+                )
+                datapipe_len = len(datapipe)
+                self.assertEqual(datapipe_len, num_batches)
+
+                np.random.seed(random_seed)
+                permutation_arr = np.random.permutation(num_rows)
+                src_arr = np.arange(num_rows)
+                target_shuffled_arr = np.empty(num_rows)
+                target_shuffled_arr[permutation_arr] = src_arr
+                target_shuffled_arr_ = np.array(
+                    [b for a, b in sorted(zip(permutation_arr, src_arr))]
+                )
+                np.testing.assert_array_equal(target_shuffled_arr, target_shuffled_arr_)
+                len_ = 0
+                for batch in datapipe:
+                    target_batch_start = total_samples_count
+                    target_batch_end = total_samples_count + len(batch.labels)
+                    np.testing.assert_array_equal(
+                        batch.labels,
+                        target_shuffled_arr[target_batch_start:target_batch_end],
+                    )
+                    if len_ < num_batches - 1 or end_batch_size == 0:
+                        self._validate_batch(batch, batch_size=batch_size)
+                    else:
+                        self._validate_batch(batch, batch_size=end_batch_size)
+                    len_ += 1
+                    total_samples_count += batch.dense_features.shape[0]
+
+                # Check that dataset __len__ matches true length.
+                self.assertEqual(datapipe_len, len_)
+                lens.append(len_)
+
+            # Ensure all ranks return the same number of batches.
+            self.assertEqual(len(set(lens)), 1)
+            # Ensure the number of samples read match the number of samples in the dataset
+            self.assertEqual(dataset_len, total_samples_count)
+
     def test_dataset_small_files(self) -> None:
         self._test_dataset([1] * 20, 4, 2)
 
@@ -444,3 +533,9 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
             # Test cases where batches are full size followed by a last batch that is incomplete.
             self._test_dataset([10000], batch_size=128, world_size=8, stage=stage)
             self._test_dataset([10001], batch_size=128, world_size=8, stage=stage)
+
+    def test_in_memory_training_set_shuffle_driver(self) -> None:
+        self._test_in_memory_training_set_shuffle([100] * 10, 32, 4, random_seed=0)
+        self._test_in_memory_training_set_shuffle([100] * 10, 32, 4, random_seed=100)
+        self._test_in_memory_training_set_shuffle([10000], 128, 8, random_seed=0)
+        self._test_in_memory_training_set_shuffle([10000], 128, 8, random_seed=100)
