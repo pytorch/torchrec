@@ -50,7 +50,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -135,7 +134,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -212,7 +210,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -282,7 +279,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),

@@ -54,7 +54,7 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
         return
     torch.cuda.current_stream().wait_stream(stream)
     # As mentioned in https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html,
-    # PyTorch uses the "caching allocator" for memroy allocation for tensors. When a tensor is
+    # PyTorch uses the "caching allocator" for memory allocation for tensors. When a tensor is
     # freed, its memory is likely to be reused by newly constructed tenosrs.  By default,
     # this allocator traces whether a tensor is still in use by only the CUDA stream where it
     # was created.   When a tensor is used by additional CUDA streams, we need to call record_stream
