@@ -65,6 +65,7 @@ class CTRMetricComputation(RecMetricComputation):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(
