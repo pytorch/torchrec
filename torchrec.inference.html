@@ -497,6 +497,12 @@ and will shard model according to torch.distributed.get_world_size().</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.qualname_metadata_json">
+<span class="sig-name descname"><span class="pre">qualname_metadata_json</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.qualname_metadata_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Serialize the qualname metadata to JSON, for ease of parsing with torch::deploy environments.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.modules.PredictFactory.result_metadata">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">result_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.inference.modules.PredictFactory.result_metadata" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a string which represents the result type. This information is used for result split.</p>
@@ -763,6 +769,7 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.create_predict_module"><code class="docutils literal notranslate"><span class="pre">PredictFactory.create_predict_module()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.model_inputs_data"><code class="docutils literal notranslate"><span class="pre">PredictFactory.model_inputs_data()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.qualname_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.qualname_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.qualname_metadata_json"><code class="docutils literal notranslate"><span class="pre">PredictFactory.qualname_metadata_json()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.result_metadata"><code class="docutils literal notranslate"><span class="pre">PredictFactory.result_metadata()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.run_weights_dependent_transformations"><code class="docutils literal notranslate"><span class="pre">PredictFactory.run_weights_dependent_transformations()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.inference.modules.PredictFactory.run_weights_independent_tranformations"><code class="docutils literal notranslate"><span class="pre">PredictFactory.run_weights_independent_tranformations()</span></code></a></li>
