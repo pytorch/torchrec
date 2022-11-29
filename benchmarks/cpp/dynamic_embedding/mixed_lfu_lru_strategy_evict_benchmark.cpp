@@ -18,13 +18,13 @@ class RecordIterator {
  public:
   RecordIterator(Container::const_iterator begin, Container::const_iterator end)
       : begin_(begin), end_(end) {}
-  std::optional<TransformerRecord<uint32_t>> operator()() {
+  std::optional<record_t> operator()() {
     if (begin_ == end_) {
       return std::nullopt;
     }
-    TransformerRecord<uint32_t> record{};
-    record.global_id_ = next_global_id_++;
-    record.lxu_record_ = *reinterpret_cast<const uint32_t*>(&(*begin_++));
+    record_t record{};
+    record.global_id = next_global_id_++;
+    record.lxu_record = *reinterpret_cast<const uint32_t*>(&(*begin_++));
     return record;
   }
 
@@ -52,8 +52,8 @@ class RandomizeMixedLXUSet {
     std::uniform_int_distribution<uint32_t> time_dist(0, max_time - 1);
     for (size_t i = 0; i < n; ++i) {
       MixedLFULRUStrategy::Record record{};
-      record.freq_power_ = freq_dist(engine) + min_freq;
-      record.time_ = time_dist(engine);
+      record.freq_power = freq_dist(engine) + min_freq;
+      record.time = time_dist(engine);
       records_.emplace_back(record);
     }
   }
@@ -68,8 +68,9 @@ class RandomizeMixedLXUSet {
 
 void BM_MixedLFULRUStrategyEvict(benchmark::State& state) {
   RandomizeMixedLXUSet lxuSet(state.range(0), state.range(1), state.range(2));
+  MixedLFULRUStrategy strategy;
   for (auto _ : state) {
-    MixedLFULRUStrategy::evict(lxuSet.Iterator(), state.range(3));
+    strategy.evict(lxuSet.Iterator(), state.range(3));
   }
 }
 

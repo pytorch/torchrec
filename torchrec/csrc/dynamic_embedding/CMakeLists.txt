@@ -6,13 +6,9 @@
 
 add_library(tde_cpp_objs
             OBJECT
-            bind.cpp
-            id_transformer.cpp
-            details/id_transformer_variant.cpp
             details/clz_impl.cpp
             details/ctz_impl.cpp
             details/random_bits_generator.cpp
-            details/mixed_lfu_lru_strategy.cpp
             details/io_registry.cpp
             details/io.cpp
             details/notification.cpp)

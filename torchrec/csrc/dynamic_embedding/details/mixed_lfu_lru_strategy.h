@@ -7,7 +7,8 @@
  */
 
 #pragma once
-#include <torchrec/csrc/dynamic_embedding/details/naive_id_transformer.h>
+#include <torch/torch.h>
+#include <torchrec/csrc/dynamic_embedding/details/lxu_strategy.h>
 #include <torchrec/csrc/dynamic_embedding/details/random_bits_generator.h>
 #include <atomic>
 #include <optional>
@@ -37,49 +38,56 @@ namespace torchrec {
  *
  * Use `update` to update extended value when every time global id that used.
  */
-class MixedLFULRUStrategy {
+class MixedLFULRUStrategy : public LXUStrategy {
  public:
-  using lxu_record_t = uint32_t;
-  using transformer_record_t = TransformerRecord<lxu_record_t>;
-
   /**
    * @param min_used_freq_power min usage is 2^min_used_freq_power. Set this to
    * avoid recent values evict too fast.
    */
-  explicit MixedLFULRUStrategy(uint16_t min_used_freq_power = 5);
+  explicit MixedLFULRUStrategy(uint16_t min_used_freq_power = 5)
+      : min_lfu_power_(min_used_freq_power),
+        time_(new std::atomic<uint32_t>()) {}
 
   MixedLFULRUStrategy(const MixedLFULRUStrategy&) = delete;
   MixedLFULRUStrategy(MixedLFULRUStrategy&& o) noexcept = default;
 
-  void update_time(uint32_t time);
-  template <typename T>
-  static int64_t time(T record) {
-    static_assert(sizeof(T) == sizeof(Record));
-    return static_cast<int64_t>(reinterpret_cast<Record*>(&record)->time_);
+  void update_time(lxu_record_t time) override {
+    time_->store(time);
+  }
+
+  int64_t time(lxu_record_t record) override {
+    return static_cast<int64_t>(reinterpret_cast<Record*>(&record)->time);
   }
 
   lxu_record_t update(
       int64_t global_id,
       int64_t cache_id,
-      std::optional<lxu_record_t> val);
+      std::optional<lxu_record_t> val) override {
+    Record r{};
+    r.time = time_->load();
+
+    if (C10_UNLIKELY(!val.has_value())) {
+      r.freq_power = min_lfu_power_;
+    } else {
+      auto freq_power = reinterpret_cast<Record*>(&val.value())->freq_power;
+      bool should_carry = generator_.is_next_n_bits_all_zero(freq_power);
+      if (should_carry) {
+        ++freq_power;
+      }
+      r.freq_power = freq_power;
+    }
+    return *reinterpret_cast<lxu_record_t*>(&r);
+  }
 
   struct EvictItem {
-    int64_t global_id_;
-    lxu_record_t record_;
+    int64_t global_id;
+    lxu_record_t record;
     bool operator<(const EvictItem& item) const {
-      return record_ < item.record_;
+      return record < item.record;
     }
   };
 
-  /**
-   * Analysis all ids and returns the num_elems that are most need to evict.
-   * @param iterator Returns each global_id to ExtValue pair. Returns nullopt
-   * when at ends.
-   * @param num_to_evict
-   * @return
-   */
-  template <typename Iterator>
-  static std::vector<int64_t> evict(Iterator iterator, uint64_t num_to_evict) {
+  std::vector<int64_t> evict(iterator_t iterator, uint64_t num_to_evict) {
     std::priority_queue<EvictItem> items;
     while (true) {
       auto val = iterator();
@@ -87,8 +95,8 @@ class MixedLFULRUStrategy {
         break;
       }
       EvictItem item{
-          .global_id_ = val->global_id_,
-          .record_ = reinterpret_cast<Record*>(&val->lxu_record_)->ToUint32(),
+          .global_id = val->global_id,
+          .record = reinterpret_cast<Record*>(&val->lxu_record)->ToUint32(),
       };
       if (items.size() == num_to_evict) {
         if (!(item < items.top())) {
@@ -105,7 +113,7 @@ class MixedLFULRUStrategy {
     result.reserve(items.size());
     while (!items.empty()) {
       auto item = items.top();
-      result.emplace_back(item.global_id_);
+      result.emplace_back(item.global_id);
       items.pop();
     }
     std::reverse(result.begin(), result.end());
@@ -114,17 +122,16 @@ class MixedLFULRUStrategy {
 
   // Record should only be used in unittest or internally.
   struct Record {
-    uint32_t time_ : 27;
-    uint16_t freq_power_ : 5;
+    uint32_t time : 27;
+    uint16_t freq_power : 5;
 
     [[nodiscard]] uint32_t ToUint32() const {
-      return time_ | (freq_power_ << (32 - 5));
+      return time | (freq_power << (32 - 5));
     }
   };
-
- private:
   static_assert(sizeof(Record) == sizeof(lxu_record_t));
 
+ private:
   RandomBitsGenerator generator_;
   uint16_t min_lfu_power_;
   std::unique_ptr<std::atomic<uint32_t>> time_;

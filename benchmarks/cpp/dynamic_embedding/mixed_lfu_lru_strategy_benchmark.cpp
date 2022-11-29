@@ -12,7 +12,7 @@
 namespace torchrec {
 void BM_MixedLFULRUStrategy(benchmark::State& state) {
   size_t num_ext_values = state.range(0);
-  std::vector<MixedLFULRUStrategy::lxu_record_t> ext_values(num_ext_values);
+  std::vector<lxu_record_t> ext_values(num_ext_values);
 
   MixedLFULRUStrategy strategy;
   for (auto& v : ext_values) {

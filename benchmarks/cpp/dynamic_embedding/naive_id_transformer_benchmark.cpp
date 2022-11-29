@@ -13,8 +13,7 @@
 namespace torchrec {
 
 static void BM_NaiveIDTransformer(benchmark::State& state) {
-  using Tag = int32_t;
-  NaiveIDTransformer<Tag> transformer(2e8);
+  NaiveIDTransformer transformer(2e8);
   torch::Tensor global_ids = torch::empty({1024, 1024}, torch::kLong);
   torch::Tensor cache_ids = torch::empty_like(global_ids);
   for (auto _ : state) {
