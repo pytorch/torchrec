@@ -54,7 +54,7 @@ class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
         self,
         ctx: EmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
         return super().input_dist(ctx, features)
 
 

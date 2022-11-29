@@ -64,7 +64,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(
@@ -87,7 +87,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
                     qcomms_config=qcomms_config,
-                    variable_batch_size=variable_batch_size,
                 )
             ],
             backend="nccl",
@@ -170,7 +169,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(
@@ -193,7 +192,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
                     qcomms_config=qcomms_config,
-                    variable_batch_size=variable_batch_size,
                 )
             ],
             backend="nccl",
@@ -228,7 +226,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_cw(
@@ -249,7 +247,6 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 TestEmbeddingCollectionSharder(
                     sharding_type=sharding_type,
                     kernel_type=kernel_type,
-                    variable_batch_size=variable_batch_size,
                 )
             ],
             backend="nccl",

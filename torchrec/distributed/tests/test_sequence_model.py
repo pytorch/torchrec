@@ -302,7 +302,6 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
@@ -315,7 +314,6 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         super().__init__(
             fused_params=fused_params,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
 
     """

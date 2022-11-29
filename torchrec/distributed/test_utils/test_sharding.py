@@ -60,7 +60,6 @@ def create_test_sharder(
     fused_params: Optional[Dict[str, Any]] = None,
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
-    variable_batch_size: bool = False,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
@@ -79,7 +78,6 @@ def create_test_sharder(
             kernel_type,
             fused_params,
             qcomm_codecs_registry,
-            variable_batch_size,
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(

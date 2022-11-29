@@ -835,14 +835,13 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         if fused_params is None:
             fused_params = {}
 
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
-        super().__init__(fused_params, qcomm_codecs_registry, variable_batch_size)
+        super().__init__(fused_params, qcomm_codecs_registry)
 
     """
     Restricts sharding to single type only.

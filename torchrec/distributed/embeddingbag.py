@@ -18,8 +18,7 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
     Multistreamable,
-    SparseFeaturesIndicesAwaitable,
-    SparseFeaturesListAwaitable,
+    SparseFeaturesListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -96,7 +95,6 @@ def create_embedding_bag_sharding(
     permute_embeddings: bool = False,
     need_pos: bool = False,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-    variable_batch_size: bool = False,
 ) -> EmbeddingSharding[
     EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
 ]:
@@ -108,7 +106,6 @@ def create_embedding_bag_sharding(
             env,
             device,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
         return RwPooledEmbeddingSharding(
@@ -117,7 +114,6 @@ def create_embedding_bag_sharding(
             device,
             need_pos=need_pos,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpPooledEmbeddingSharding(sharding_infos, env, device)
@@ -128,7 +124,6 @@ def create_embedding_bag_sharding(
             device,
             need_pos=need_pos,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwPooledEmbeddingSharding(
@@ -137,13 +132,8 @@ def create_embedding_bag_sharding(
             device,
             permute_embeddings=permute_embeddings,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
-        if variable_batch_size:
-            raise ValueError(
-                f"Variable batch size not supported for sharding type {sharding_type}"
-            )
         return TwCwPooledEmbeddingSharding(
             sharding_infos,
             env,
@@ -305,7 +295,6 @@ class ShardedEmbeddingBagCollection(
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
@@ -332,7 +321,6 @@ class ShardedEmbeddingBagCollection(
                 permute_embeddings=True,
                 need_pos=need_pos,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
-                variable_batch_size=variable_batch_size,
             )
             for sharding_type, embedding_configs in sharding_type_to_sharding_infos.items()
         }
@@ -414,7 +402,7 @@ class ShardedEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: EmbeddingBagCollectionContext, features: KeyedJaggedTensor
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
@@ -429,41 +417,23 @@ class ShardedEmbeddingBagCollection(
                 self._feature_splits,
             )
             awaitables = []
-            for module, features_by_shard in zip(self._input_dists, features_by_shards):
-                lengths_awaitable = module(
-                    SparseFeatures(
-                        id_list_features=None
-                        if self._is_weighted
-                        else features_by_shard,
-                        id_score_list_features=features_by_shard
-                        if self._is_weighted
-                        else None,
+            for input_dist, features_by_shard in zip(
+                self._input_dists, features_by_shards
+            ):
+                awaitables.append(
+                    input_dist(
+                        SparseFeatures(
+                            id_list_features=None
+                            if self._is_weighted
+                            else features_by_shard,
+                            id_score_list_features=features_by_shard
+                            if self._is_weighted
+                            else None,
+                        )
                     )
                 )
-                indices_awaitable = lengths_awaitable.wait()
-                if isinstance(indices_awaitable, SparseFeaturesIndicesAwaitable):
-                    if indices_awaitable._id_list_features_awaitable is not None:
-                        batch_size_per_rank = (
-                            # pyre-fixme[16]
-                            indices_awaitable._id_list_features_awaitable._batch_size_per_rank
-                        )
-                    elif (
-                        indices_awaitable._id_score_list_features_awaitable is not None
-                    ):
-                        batch_size_per_rank = (
-                            indices_awaitable._id_score_list_features_awaitable._batch_size_per_rank
-                        )
-                    else:
-                        batch_size_per_rank = []
-                    ctx.sharding_contexts.append(
-                        EmbeddingShardingContext(
-                            batch_size_per_rank=batch_size_per_rank,
-                        )
-                    )
-                else:
-                    ctx.sharding_contexts.append(None)
-                awaitables.append(indices_awaitable)
-            return SparseFeaturesListAwaitable(awaitables)
+                ctx.sharding_contexts.append(EmbeddingShardingContext())
+            return SparseFeaturesListSplitsAwaitable(awaitables, ctx)
 
     def compute(
         self,
@@ -616,7 +586,6 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
             fused_params=self.fused_params,
             device=device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
-            variable_batch_size=self.variable_batch_size,
         )
 
     def shardable_parameters(
@@ -733,7 +702,7 @@ class ShardedEmbeddingBag(
         input: Tensor,
         offsets: Optional[Tensor] = None,
         per_sample_weights: Optional[Tensor] = None,
-    ) -> Awaitable[SparseFeatures]:
+    ) -> Awaitable[Awaitable[SparseFeatures]]:
         if per_sample_weights is None:
             per_sample_weights = torch.ones_like(input, dtype=torch.float)
         features = KeyedJaggedTensor(
@@ -747,7 +716,7 @@ class ShardedEmbeddingBag(
                 id_list_features=None,
                 id_score_list_features=features,
             )
-        ).wait()
+        )
 
     def compute(
         self, ctx: NullShardedModuleContext, dist_input: SparseFeatures

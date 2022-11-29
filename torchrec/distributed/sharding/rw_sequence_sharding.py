@@ -117,7 +117,6 @@ class RwSequenceEmbeddingSharding(
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
-            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(

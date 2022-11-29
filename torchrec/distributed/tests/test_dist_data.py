@@ -20,7 +20,7 @@ from hypothesis import given, settings
 from numpy.testing import assert_array_equal
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
-    KJTAllToAllLengthsAwaitable,
+    KJTAllToAllSplitsAwaitable,
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
@@ -173,10 +173,8 @@ class KJTAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
-        actual_output_awaitable: Union[KJTAllToAllLengthsAwaitable, KeyedJaggedTensor],
-        expected_output_awaitable: Union[
-            KJTAllToAllLengthsAwaitable, KeyedJaggedTensor
-        ],
+        actual_output_awaitable: Union[KJTAllToAllSplitsAwaitable, KeyedJaggedTensor],
+        expected_output_awaitable: Union[KJTAllToAllSplitsAwaitable, KeyedJaggedTensor],
     ) -> None:
         actual_output = (
             actual_output_awaitable
@@ -233,7 +231,6 @@ class KJTAllToAllTest(MultiProcessTestBase):
             pg=pg,
             splits=splits,
             device=device,
-            variable_batch_size=len(set(batch_size_per_rank)) > 1,
         )
         cls._validate(lengths_a2a(_input), output)
         dist.destroy_process_group()

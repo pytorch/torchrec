@@ -355,7 +355,7 @@ def alltoall_sequence(
             AlltoAll.
         input_splits (Tensor): input splits.
         output_splits (Tensor): output splits.
-        variable_batch_size (bool): whether varibale batch size is enabled
+        variable_batch_size (bool): whether variable batch size is enabled
         group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
             default process group will be used.
         codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs

@@ -57,14 +57,12 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(
             sharding_infos,
             env,
             device,
             qcomm_codecs_registry=qcomm_codecs_registry,
-            variable_batch_size=variable_batch_size,
         )
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
@@ -217,7 +215,6 @@ class CwPooledEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
-            self._variable_batch_size,
         )
 
     def create_lookup(
