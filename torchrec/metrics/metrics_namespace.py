@@ -42,6 +42,7 @@ class MetricName(MetricNameBase):
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
+    MAE = "mae"
     RMSE = "rmse"
     AUC = "auc"
     MULTICLASS_RECALL = "multiclass_recall"
@@ -60,6 +61,7 @@ class MetricNamespace(MetricNamespaceBase):
     CALIBRATION = "calibration"
     MSE = "mse"
     AUC = "auc"
+    MAE = "mae"
 
     OPTIMIZERS = "optimizers"
     MODEL_CONFIGURATOR = "model_configurator"
