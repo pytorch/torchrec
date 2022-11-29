@@ -16,7 +16,7 @@ struct record_t {
 
 using iterator_t = std::function<std::optional<record_t>()>;
 using update_t =
-    std::function<lxu_record_t(std::optional<lxu_record_t>, int64_t, int64_t)>;
+    std::function<lxu_record_t(int64_t, int64_t, std::optional<lxu_record_t>)>;
 using fetch_t = std::function<void(int64_t, int64_t)>;
 
 } // namespace torchrec

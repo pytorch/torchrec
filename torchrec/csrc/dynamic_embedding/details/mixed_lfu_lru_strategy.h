@@ -66,7 +66,7 @@ class MixedLFULRUStrategy : public LXUStrategy {
     Record r{};
     r.time = time_->load();
 
-    if (C10_UNLIKELY(!val.has_value())) {
+    if (!val.has_value()) [[unlikely]] {
       r.freq_power = min_lfu_power_;
     } else {
       auto freq_power = reinterpret_cast<Record*>(&val.value())->freq_power;

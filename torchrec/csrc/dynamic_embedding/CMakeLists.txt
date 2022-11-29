@@ -6,6 +6,8 @@
 
 add_library(tde_cpp_objs
             OBJECT
+            bind.cpp
+            id_transformer_wrapper.cpp
             details/clz_impl.cpp
             details/ctz_impl.cpp
             details/random_bits_generator.cpp

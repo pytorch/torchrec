@@ -15,9 +15,9 @@ namespace torchrec {
 
 namespace transform_default {
 inline lxu_record_t no_update(
-    std::optional<lxu_record_t> record,
     int64_t global_id,
-    int64_t cache_id) {
+    int64_t cache_id,
+    std::optional<lxu_record_t> record) {
   return record.value_or(lxu_record_t{});
 };
 
@@ -25,6 +25,7 @@ inline void no_fetch(int64_t global_id, int64_t cache_id) {}
 } // namespace transform_default
 
 class IDTransformer {
+ public:
   /**
    * Transform global ids to cache ids
    *

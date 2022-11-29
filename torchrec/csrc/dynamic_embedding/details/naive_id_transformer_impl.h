@@ -31,15 +31,15 @@ bool NaiveIDTransformer<T>::transform(
     if (iter != global_id2cache_value_.end()) {
       cache_id = iter->second.cache_id;
       iter->second.lxu_record =
-          update(iter->second.lxu_record, global_id, cache_id);
+          update(global_id, cache_id, iter->second.lxu_record);
     } else {
       // The transformer is full.
-      if (C10_UNLIKELY(bitmap_.full())) {
+      if (bitmap_.full()) [[unlikely]] {
         return false;
       }
       auto stored_cache_id = bitmap_.next_free_bit();
       cache_id = stored_cache_id;
-      lxu_record_t record = update(std::nullopt, global_id, cache_id);
+      lxu_record_t record = update(global_id, cache_id, std::nullopt);
       global_id2cache_value_.emplace(
           global_id, CacheValue{stored_cache_id, record});
       fetch(global_id, cache_id);
