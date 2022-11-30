@@ -775,8 +775,8 @@ If this value is negative, batches will be generated on the fly.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.to">
 <span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.datasets.utils.Batch" title="torchrec.datasets.utils.Batch"><span class="pre">Batch</span></a></span></span><a class="headerlink" href="#torchrec.datasets.utils.Batch.to" title="Permalink to this definition">¶</a></dt>
-<dd><p>Please be aware that accoarding to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
-to might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
+<dd><p>Please be aware that according to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
+<cite>to</cite> might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
 for example, <cite>in = in.to(new_device)</cite>.</p>
 </dd></dl>
 

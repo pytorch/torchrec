@@ -790,8 +790,6 @@
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PartitionByType.DEVICE">DEVICE (torchrec.distributed.planner.types.PartitionByType attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.BatchingMetadata.device">device (torchrec.inference.modules.BatchingMetadata attribute)</a>
 
       <ul>
@@ -804,6 +802,8 @@
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.device">(torchrec.quant.embedding_modules.EmbeddingCollection property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device">device() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.DeviceHardware">DeviceHardware (class in torchrec.distributed.planner.types)</a>
@@ -821,6 +821,14 @@
       <li><a href="torchrec.distributed.html#id3">dim_sum_per_rank_tensor (torchrec.distributed.comm_ops.All2AllPooledInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllPooledInfo.dim_sum_per_rank_tensor">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.dims_sum_per_rank">dims_sum_per_rank (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_init">dist_init() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor static method)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_labels">dist_labels() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_splits">dist_splits() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_tensors">dist_tensors() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel">DistributedModelParallel (class in torchrec.distributed.model_parallel)</a>
 </li>
@@ -1624,9 +1632,9 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll">KJTAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAll">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllIndicesAwaitable">KJTAllToAllIndicesAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllIndicesAwaitable">[1]</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllSplitsAwaitable">KJTAllToAllSplitsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllSplitsAwaitable">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllLengthsAwaitable">KJTAllToAllLengthsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllLengthsAwaitable">[1]</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllTensorsAwaitable">KJTAllToAllTensorsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllTensorsAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTOneToAll">KJTOneToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTOneToAll">[1]</a>
 </li>
@@ -1666,8 +1674,6 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#id8">lengths_after_sparse_data_all2all (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.lengths_after_sparse_data_all2all">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.lengths_dist">lengths_dist() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
-</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.lengths_or_none">lengths_or_none() (torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
 
       <ul>
@@ -1681,6 +1687,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ListOfSparseFeaturesList">ListOfSparseFeaturesList (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfSparseFeaturesListAwaitable">ListOfSparseFeaturesListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfSparseFeaturesListSplitsAwaitable">ListOfSparseFeaturesListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.load">load() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
@@ -2675,19 +2683,21 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll">SparseFeaturesAllToAll (class in torchrec.distributed.embedding_sharding)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesIndicesAwaitable">SparseFeaturesIndicesAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesLengthsAwaitable">SparseFeaturesLengthsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeaturesList">SparseFeaturesList (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesListAwaitable">SparseFeaturesListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesListIndicesAwaitable">SparseFeaturesListIndicesAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesListSplitsAwaitable">SparseFeaturesListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll">SparseFeaturesOneToAll (class in torchrec.distributed.embedding_sharding)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesSplitsAwaitable">SparseFeaturesSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesTensorsAwaitable">SparseFeaturesTensorsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split">split() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">SplitsAllToAllAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.state">state (torchrec.optim.keyed.CombinedOptimizer property)</a>
 </li>
@@ -3526,11 +3536,7 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id11">variable_batch_size (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.variable_batch_size">[1]</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder.variable_batch_size">(torchrec.distributed.embedding_types.BaseEmbeddingSharder property)</a>
 </li>
-      </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.VectorCrossNet">VectorCrossNet (class in torchrec.modules.crossnet)</a>
 </li>
   </ul></td>
