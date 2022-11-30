@@ -17,7 +17,7 @@ from torchrec.distributed.embedding import (
 )
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
-    ListOfSparseFeaturesListAwaitable,
+    ListOfSparseFeaturesListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
@@ -251,12 +251,12 @@ class ShardedQuantEmbeddingCollection(
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist(device))
 
-    # pyre-ignore [3, 14]
+    # pyre-ignore [14]
     def input_dist(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Any]:
+    ) -> Awaitable[Awaitable[ListOfSparseFeaturesList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(
                 input_feature_names=features.keys() if features is not None else [],
@@ -277,18 +277,17 @@ class ShardedQuantEmbeddingCollection(
             features_by_sharding = features.split(
                 self._feature_splits,
             )
-            # save input splits and output splits in sharding context which
-            # will be reused in sequence embedding all2all
             awaitables = []
-            for module, features in zip(self._input_dists, features_by_sharding):
-                tensor_awaitable = module(
-                    SparseFeatures(
-                        id_list_features=features,
-                        id_score_list_features=None,
+            for input_dist, features in zip(self._input_dists, features_by_sharding):
+                awaitables.append(
+                    input_dist(
+                        SparseFeatures(
+                            id_list_features=features,
+                            id_score_list_features=None,
+                        )
                     )
-                ).wait()  # a dummy wait since now length indices comm is splited
-                awaitables.append(tensor_awaitable)
-            return ListOfSparseFeaturesListAwaitable(awaitables)
+                )
+            return ListOfSparseFeaturesListSplitsAwaitable(awaitables)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: ListOfSparseFeaturesList

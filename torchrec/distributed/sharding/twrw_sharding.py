@@ -63,7 +63,6 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -112,7 +111,6 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         ]:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
-        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -321,7 +319,6 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         device: Optional[torch.device] = None,
         has_feature_processor: bool = False,
         need_pos: bool = False,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         assert pg.size() % local_size == 0, "currently group granularity must be node"
@@ -382,7 +379,6 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
             stagger=self._num_cross_nodes,
-            variable_batch_size=variable_batch_size,
         )
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
@@ -593,7 +589,6 @@ class TwRwPooledEmbeddingSharding(
             device=device if device is not None else self._device,
             has_feature_processor=self._has_feature_processor,
             need_pos=self._need_pos,
-            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(

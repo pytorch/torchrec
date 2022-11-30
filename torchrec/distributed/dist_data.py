@@ -7,7 +7,7 @@
 
 import itertools
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
@@ -57,8 +57,9 @@ def _get_recat(
         num_splits (int): how many splits (typically WORLD_SIZE).
         stagger (int): secondary reordering, (typically 1, but
             `WORLD_SIZE/LOCAL_WORLD_SIZE` for TWRW).
-        device (torch.device): device on which buffer will be allocated.
-        batch_size_per_rank: batch size per rank, needed for variable batch size.
+        device (Optional[torch.device]): device on which buffer will be allocated.
+        batch_size_per_rank (Optional[List[int]]): batch size per rank, needed for
+            variable batch size.
 
     Returns:
         torch.Tensor: recat tensor.
@@ -124,109 +125,131 @@ def _get_recat(
             return torch.tensor(recat, device=device, dtype=torch.int32)
 
 
-def _split_lengths(
-    splits: List[int], keys: List[str], offset_per_key: List[int]
-) -> List[int]:
-    # Calculates lengths [x1, x2, x3, ..., y1, y2], splits [3, ..., 2]
-    #   -> [x1+x2+x3, ..., y1+y2]
-    length_per_split: List[int] = []
-    i = 0
-    offset = 0
-    for split in splits:
-        new_offset = offset_per_key[i + split]
-        length_per_split.append(new_offset - offset)
-        i += split
-        offset = new_offset
-    return length_per_split
-
-
-class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
+class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
     """
-    Awaitable for KJT indices and weights All2All.
+    Awaitable for splits AlltoAll.
 
     Args:
-        pg  (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        input (KeyedJaggedTensor): input KJT tensor.
-        lengths (torch.Tensor): output lengths tensor.
-        splits (List[int]): List of len(pg.size()) which indicates how many features to
+        input_tensors (List[torch.Tensor]): tensor of splits to redistribute.
+        num_workers (int): total ranks.
+        device (torch.device): device on which buffers are allocated.
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+    """
+
+    def __init__(
+        self,
+        input_tensors: List[torch.Tensor],
+        num_workers: int,
+        device: torch.device,
+        pg: dist.ProcessGroup,
+    ) -> None:
+        super().__init__()
+        self.num_workers: int = num_workers
+
+        with record_function("## all2all_data:kjt splits ##"):
+            self._output_tensor: torch.Tensor = torch.empty(
+                [num_workers * len(input_tensors)],
+                device=device,
+                dtype=input_tensors[0].dtype,
+            )
+            input_tensor = torch.stack(input_tensors, dim=1).flatten()
+            self._splits_awaitable: dist.Work = dist.all_to_all_single(
+                output=self._output_tensor,
+                input=input_tensor,
+                group=pg,
+                async_op=True,
+            )
+
+    def _wait_impl(self) -> List[List[int]]:
+        self._splits_awaitable.wait()
+        return self._output_tensor.view(self.num_workers, -1).T.tolist()
+
+
+class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
+    """
+    Awaitable for KJT tensors AlltoAll.
+
+    Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        input (KeyedJaggedTensor): input KJT.
+        splits (List[int]): list of len(pg.size()) which indicates how many features to
             send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
+        input_splits (List[List[int]]): input splits (number of values each rank will
+            get) for each tensor in AlltoAll.
+        output_splits (List[List[int]]): output splits (number of values per rank in
+            output) for each tensor in AlltoAll.
+        input_tensors (List[torch.Tensor]): provided KJT tensors (ie. lengths, values)
+            to redistribute according to splits.
+        labels (List[str]): labels for each provided tensor.
+        batch_size_per_rank (List[int]): batch size per rank, to support variable batch
+            size.
         keys (List[str]): KJT keys after AlltoAll.
-        recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
-        in_lengths_per_worker (List[int]): number of indices each rank will get.
-        out_lengths_per_worker (List[int]): number of indices per rank in output.
-        batch_size_per_rank (List[int]): batch size per rank, need to support variable
-            batch size.
+        device (torch.device): device on which buffers will be allocated.
+        stagger (int): stagger value to apply to recat tensor.
     """
 
     def __init__(
         self,
         pg: dist.ProcessGroup,
         input: KeyedJaggedTensor,
-        lengths: torch.Tensor,
         splits: List[int],
-        keys: List[str],
-        recat: torch.Tensor,
-        in_lengths_per_worker: List[int],
-        out_lengths_per_worker: List[int],
+        input_splits: List[List[int]],
+        output_splits: List[List[int]],
+        input_tensors: List[torch.Tensor],
+        labels: List[str],
         batch_size_per_rank: List[int],
+        keys: List[str],
+        device: torch.device,
+        stagger: int,
     ) -> None:
         super().__init__()
         self._workers: int = pg.size()
-        self._device: torch.device = input.values().device
-        self._recat = recat
-        self._splits = splits
         self._pg: dist.ProcessGroup = pg
-        self._keys = keys
-        self._lengths: torch.Tensor = lengths
-        self._in_lengths_per_worker: List[int] = []
-        self._out_lengths_per_worker: List[int] = []
+        self._device: torch.device = device
         self._input = input
+        self._splits = splits
+        self._input_splits: Dict[str, List[int]] = dict(zip(labels, input_splits))
+        self._output_splits: Dict[str, List[int]] = dict(zip(labels, output_splits))
         self._batch_size_per_rank = batch_size_per_rank
+        self._keys = keys
+        self._stagger = stagger
+        self._recat: torch.Tensor = _get_recat(
+            local_split=splits[pg.rank()],
+            num_splits=len(splits),
+            stagger=stagger,
+            device=device,
+            batch_size_per_rank=batch_size_per_rank
+            if len(set(batch_size_per_rank)) > 1
+            else None,
+        )
         if self._workers == 1:
             return
 
-        self._in_lengths_per_worker = in_lengths_per_worker
-        self._out_lengths_per_worker = out_lengths_per_worker
+        self._output_tensors: List[torch.Tensor] = []
+        self._awaitables: List[dist.Work] = []
 
-        in_values = self._input.values().view(-1)
-        out_values = torch.empty(
-            sum(self._out_lengths_per_worker),
-            device=self._device,
-            dtype=in_values.dtype,
-        )
-        with record_function("## all2all_data:indices ##"):
-            self._values_awaitable: dist.Work = dist.all_to_all_single(
-                output=out_values,
-                input=in_values,
-                output_split_sizes=self._out_lengths_per_worker,
-                input_split_sizes=self._in_lengths_per_worker,
-                group=self._pg,
-                async_op=True,
+        for input_split, output_split, input_tensor, label in zip(
+            input_splits,
+            output_splits,
+            input_tensors,
+            labels,
+        ):
+            output_tensor = torch.empty(
+                sum(output_split), device=self._device, dtype=input_tensor.dtype
             )
-
-        self._values: torch.Tensor = out_values
-
-        self._weights_awaitable: Optional[dist.Work] = None
-        self._weights: Optional[torch.Tensor] = None
-
-        if self._input.weights_or_none() is not None:
-            in_weights = self._input.weights().view(-1)
-            out_weights = torch.empty(
-                sum(self._out_lengths_per_worker),
-                device=self._device,
-                dtype=in_weights.dtype,
-            )
-            with record_function("## all2all_data:weights ##"):
-                self._weights_awaitable: dist.Work = dist.all_to_all_single(
-                    output=out_weights,
-                    input=in_weights,
-                    output_split_sizes=self._out_lengths_per_worker,
-                    input_split_sizes=self._in_lengths_per_worker,
+            with record_function(f"## all2all_data:kjt {label} ##"):
+                awaitable = dist.all_to_all_single(
+                    output=output_tensor,
+                    input=input_tensor,
+                    output_split_sizes=output_split,
+                    input_split_sizes=input_split,
                     group=self._pg,
                     async_op=True,
                 )
-            self._weights: torch.Tensor = out_weights
+
+            self._output_tensors.append(output_tensor)
+            self._awaitables.append(awaitable)
 
     def _wait_impl(self) -> KeyedJaggedTensor:
         """
@@ -240,64 +263,33 @@ class KJTAllToAllIndicesAwaitable(Awaitable[KeyedJaggedTensor]):
             self._input.sync()
             return self._input
 
-        self._values_awaitable.wait()
+        for awaitable in self._awaitables:
+            awaitable.wait()
 
-        if self._weights_awaitable:
-            self._weights_awaitable.wait()
-
-        keys = self._keys
-        lengths = self._lengths
-        values = self._values
-        weights = self._weights
-
-        with record_function("## all2all_data:recat_values ##"):
-            if self._recat.numel() > 0:
-                if self._recat.numel() == lengths.numel():  # variable batch size
-                    lengths, values, weights = torch.ops.fbgemm.permute_1D_sparse_data(
-                        self._recat,
-                        lengths.view(-1),
-                        values,
-                        weights,
-                        values.numel(),
-                    )
-                else:
-                    lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
-                        self._recat,
-                        lengths.view(self._workers * self._splits[self._pg.rank()], -1),
-                        values,
-                        weights,
-                        values.numel(),
-                    )
-                    lengths = lengths.view(-1)
-
-        ret = KeyedJaggedTensor.from_lengths_sync(
-            keys=keys,
-            values=values,
-            weights=weights,
-            lengths=lengths,
-            stride=sum(self._batch_size_per_rank),
+        return type(self._input).dist_init(
+            keys=self._keys,
+            tensors=self._output_tensors,
+            batch_size_per_rank=self._batch_size_per_rank,
+            recat=self._recat,
         )
-        return ret
 
 
-class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
+class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
     """
-    Awaitable for KJT's lengths AlltoAll.
-
-    wait() waits on lengths AlltoAll, then instantiates `KJTAllToAllIndicesAwaitable`
-    awaitable where indices and weights AlltoAll will be issued.
+    Awaitable for KJT tensors splits AlltoAll.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
-        input (KeyedJaggedTensor): input KJT tensor
+        input (KeyedJaggedTensor): input KJT.
         splits (List[int]): list of len(pg.size()) which indicates how many features to
             send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
-        keys (List[str]): KJT keys after AlltoAll
-        stagger (int): stagger value to apply to recat tensor, see `_recat` function for
-            more detail.
-        recat (torch.Tensor): recat tensor for reordering tensor order after AlltoAll.
-        variable_batch_size (bool): whether variable batch size is enabled.
+        tensor_splits (Dict[str, List[int]]): tensor splits provided by input KJT.
+        input_tensors (List[torch.Tensor]): provided KJT tensors (ie. lengths, values)
+            to redistribute according to splits.
+        keys (List[str]): KJT keys after AlltoAll.
+        device (torch.device): device on which buffers will be allocated.
+        stagger (int): stagger value to apply to recat tensor.
     """
 
     def __init__(
@@ -305,127 +297,67 @@ class KJTAllToAllLengthsAwaitable(Awaitable[KJTAllToAllIndicesAwaitable]):
         pg: dist.ProcessGroup,
         input: KeyedJaggedTensor,
         splits: List[int],
+        labels: List[str],
+        tensor_splits: List[List[int]],
+        input_tensors: List[torch.Tensor],
         keys: List[str],
+        device: torch.device,
         stagger: int,
-        recat: torch.Tensor,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._workers: int = pg.size()
         self._pg: dist.ProcessGroup = pg
-        self._device: torch.device = input.values().device
+        self._device: torch.device = device
         self._input = input
-        self._keys = keys
-        self._lengths: torch.Tensor = input.lengths()
         self._splits = splits
-        self._recat: torch.Tensor = recat
-        self._in_lengths_per_worker: List[int] = []
-        self._variable_batch_size = variable_batch_size
-        dim_0 = splits[pg.rank()]
-        dim_1 = input.stride()
-        self._batch_size_per_rank: List[int] = [dim_1] * self._workers
+        self._labels = labels
+        self._input_splits = tensor_splits
+        self._input_tensors = input_tensors
+        self._keys = keys
+        self._stagger = stagger
+        self._output_splits: List[List[int]] = self._input_splits
+        self._batch_size_per_rank: List[int] = [input.stride()]
         if self._workers == 1:
             return
 
-        if variable_batch_size:
-            batch_size_per_rank_tensor = torch.empty(
-                self._workers,
-                device=self._device,
-                dtype=torch.torch.int32,
-            )
-            local_batch_sizes = torch.tensor(
-                [dim_1] * self._workers,
-                device=self._device,
-                dtype=torch.torch.int32,
-            )
-            with record_function("## all2all_data: Batch size ##"):
-                dist.all_to_all_single(
-                    output=batch_size_per_rank_tensor,
-                    input=local_batch_sizes,
-                    output_split_sizes=[1] * self._workers,
-                    input_split_sizes=[1] * self._workers,
-                    group=self._pg,
-                    async_op=False,
-                )
-            self._batch_size_per_rank = batch_size_per_rank_tensor.cpu().tolist()
-            self._recat = _get_recat(
-                local_split=dim_0,
-                num_splits=len(splits),
-                stagger=stagger,
-                device=self._device,
-                batch_size_per_rank=self._batch_size_per_rank,
-            )
-        else:
-            assert self._recat is not None
-
-        in_lengths = input.lengths().view(-1)
-        out_lengths = torch.empty(
-            dim_0 * sum(self._batch_size_per_rank),
-            device=self._device,
-            dtype=in_lengths.dtype,
-        )
-        self._lengths = out_lengths
-        with record_function("## all2all_data:split length ##"):
-            self._in_lengths_per_worker = _split_lengths(
-                splits, input.keys(), input.offset_per_key()
-            )
-
-        self._output_split_sizes: List[int] = [
-            dim_0 * B_rank for B_rank in self._batch_size_per_rank
+        input_tensors = [
+            torch.tensor(split, device=device) for split in self._input_splits
         ]
-        with record_function("## all2all_data:lengths ##"):
-            self._lengths_awaitable: dist.Work = dist.all_to_all_single(
-                output=out_lengths,
-                input=in_lengths,
-                output_split_sizes=self._output_split_sizes,
-                input_split_sizes=[split * dim_1 for split in self._splits],
-                group=self._pg,
-                async_op=True,
-            )
+        batch_size_tensor = torch.tensor(
+            [input.stride()] * self._workers, device=device
+        )
+        input_tensors.append(batch_size_tensor)
 
-    def _wait_impl(self) -> KJTAllToAllIndicesAwaitable:
+        self._splits_awaitable = SplitsAllToAllAwaitable(
+            input_tensors, self._workers, self._device, self._pg
+        )
+
+    def _wait_impl(self) -> KJTAllToAllTensorsAwaitable:
         """
         Overwrites wait function as we don't handle callbacks here.
 
         Returns:
-            KJTAllToAllIndicesAwaitable.
+            KJTAllToAllTensorsAwaitable.
         """
-        kjt = self._input
-        out_lengths_per_worker: List[int] = []
-        if self._workers > 1:
-            self._lengths_awaitable.wait()
-            if self._variable_batch_size:
-                with record_function("## all2all_data:split length for a2a ##"):
-                    lengths_per_rank: List[torch.Tensor] = list(
-                        self._lengths.split(self._output_split_sizes)
-                    )
-                    out_lengths_per_worker = (
-                        torch.cat(
-                            [
-                                length.sum(keepdim=True, dim=0)
-                                for length in lengths_per_rank
-                            ],
-                        )
-                        .cpu()
-                        .tolist()
-                    )
-            else:
-                out_lengths_per_worker = (
-                    self._lengths.view(self._workers, -1).sum(dim=1).cpu().tolist()
-                )
 
-        ret = KJTAllToAllIndicesAwaitable(
+        if self._workers > 1:
+            output_list = self._splits_awaitable.wait()
+            self._output_splits = output_list[:-1]
+            self._batch_size_per_rank = output_list[-1]
+
+        return KJTAllToAllTensorsAwaitable(
             pg=self._pg,
-            input=kjt,
-            lengths=self._lengths,
+            input=self._input,
             splits=self._splits,
-            keys=self._keys,
-            recat=self._recat,
-            in_lengths_per_worker=self._in_lengths_per_worker,
-            out_lengths_per_worker=out_lengths_per_worker,
+            input_splits=self._input_splits,
+            output_splits=self._output_splits,
+            input_tensors=self._input_tensors,
+            labels=self._labels,
             batch_size_per_rank=self._batch_size_per_rank,
+            keys=self._keys,
+            device=self._device,
+            stagger=self._stagger,
         )
-        return ret
 
 
 class KJTAllToAll(nn.Module):
@@ -433,18 +365,21 @@ class KJTAllToAll(nn.Module):
     Redistributes `KeyedJaggedTensor` to a `ProcessGroup` according to splits.
 
     Implementation utilizes AlltoAll collective as part of torch.distributed.
-    Requires two collective calls, one to transmit final tensor lengths (to allocate
-    correct space), and one to transmit actual sparse values.
+
+    The input provides the necessary tensors and input splits to distribute.
+    The first collective call in `KJTAllToAllSplitsAwaitable` will transmit output
+    splits (to allocate correct space for tensors) and batch size per rank. The
+    following collective calls in `KJTAllToAllTensorsAwaitable` will transmit the actual
+    tensors asynchronously.
 
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         splits (List[int]): List of len(pg.size()) which indicates how many features to
-            send to each pg.rank(). It is assumed the KeyedJaggedTensor is ordered by
+            send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
         device (Optional[torch.device]): device on which buffers will be allocated.
-        stagger (int): stagger value to apply to recat tensor, see `_recat` function for
-            more detail.
-        variable_batch_size (bool): whether variable batch size in each rank is enabled.
+        stagger (int): stagger value to apply to recat tensor, see `_get_recat` function
+            for more detail.
 
     Example::
 
@@ -488,40 +423,33 @@ class KJTAllToAll(nn.Module):
         splits: List[int],
         device: Optional[torch.device] = None,
         stagger: int = 1,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         assert len(splits) == pg.size()
         self._pg: dist.ProcessGroup = pg
+        self._workers: int = pg.size()
         self._splits = splits
         self._no_dist: bool = all(s == 0 for s in splits)
         self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
         self._stagger = stagger
-        self._variable_batch_size = variable_batch_size
-        self.register_buffer(
-            "_recat",
-            _get_recat(
-                local_split=splits[pg.rank()],
-                num_splits=len(splits),
-                stagger=stagger,
-                device=device,
-            ),
-        )
 
     def forward(
         self, input: KeyedJaggedTensor
-    ) -> Awaitable[KJTAllToAllIndicesAwaitable]:
+    ) -> Awaitable[KJTAllToAllTensorsAwaitable]:
         """
         Sends input to relevant `ProcessGroup` ranks.
-        First wait will have lengths results and issue indices/weights AlltoAll.
-        Second wait will have indices/weights results.
+
+        The first wait will get the output splits for the provided tensors and issue
+        tensors AlltoAll. The second wait will get the tensors.
 
         Args:
-            input (KeyedJaggedTensor): input KeyedJaggedTensor of values to distribute.
+            input (KeyedJaggedTensor): `KeyedJaggedTensor` of values to distribute.
 
         Returns:
-            Awaitable[KeyedJaggedTensor]: awaitable of a KeyedJaggedTensor.
+            Awaitable[KJTAllToAllTensorsAwaitable]: awaitable of a `KJTAllToAllTensorsAwaitable`.
         """
+
+        device = input.values().device
 
         with torch.no_grad():
             assert len(input.keys()) == sum(self._splits)
@@ -530,14 +458,16 @@ class KJTAllToAll(nn.Module):
                 self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
             ]
 
-            return KJTAllToAllLengthsAwaitable(
+            return KJTAllToAllSplitsAwaitable(
                 pg=self._pg,
                 input=input,
                 splits=self._splits,
+                labels=input.dist_labels(),
+                tensor_splits=input.dist_splits(self._splits),
+                input_tensors=input.dist_tensors(),
                 keys=local_keys,
+                device=device,
                 stagger=self._stagger,
-                recat=self._recat,
-                variable_batch_size=self._variable_batch_size,
             )
 
 

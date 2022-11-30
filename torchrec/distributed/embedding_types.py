@@ -270,10 +270,8 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-        self._variable_batch_size = variable_batch_size
 
         # TODO remove after decoupling
         self._fused_params = fused_params
@@ -318,10 +316,6 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
-
-    @property
-    def variable_batch_size(self) -> bool:
-        return self._variable_batch_size
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str

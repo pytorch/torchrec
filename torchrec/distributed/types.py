@@ -590,7 +590,7 @@ class ShardedModule(
         *input,
         # pyre-ignore[2]
         **kwargs,
-    ) -> Awaitable[CompIn]:
+    ) -> Awaitable[Awaitable[CompIn]]:
         pass
 
     @abc.abstractmethod
@@ -625,7 +625,7 @@ class ShardedModule(
             LazyAwaitable[Out]: awaitable of output from output dist.
         """
         ctx = self.create_context()
-        dist_input = self.input_dist(ctx, *input, **kwargs).wait()
+        dist_input = self.input_dist(ctx, *input, **kwargs).wait().wait()
         return self.compute_and_output_dist(ctx, dist_input)
 
     def sparse_grad_parameter_names(
