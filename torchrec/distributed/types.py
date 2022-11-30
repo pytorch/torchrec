@@ -628,14 +628,6 @@ class ShardedModule(
         dist_input = self.input_dist(ctx, *input, **kwargs).wait().wait()
         return self.compute_and_output_dist(ctx, dist_input)
 
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
-
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for key, _ in self.named_parameters(prefix):
             yield key

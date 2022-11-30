@@ -635,18 +635,6 @@ class ShardedEmbeddingCollection(
             missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for lookup in self._lookups:
-            lookup.sparse_grad_parameter_names(
-                destination, append_prefix(prefix, "embeddings")
-            )
-        return destination
-
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for lookup, sharding_type in zip(
             self._lookups, self._sharding_type_to_sharding.keys()

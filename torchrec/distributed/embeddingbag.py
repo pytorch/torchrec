@@ -547,18 +547,6 @@ class ShardedEmbeddingBagCollection(
             missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for lookup in self._lookups:
-            lookup.sparse_grad_parameter_names(
-                destination, append_prefix(prefix, "embedding_bags")
-            )
-        return destination
-
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
@@ -803,20 +791,6 @@ class ShardedEmbeddingBag(
         return _IncompatibleKeys(
             missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
-
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        # pyre-ignore [29]
-        lookup_sparse_grad_parameter_names = self._lookup.sparse_grad_parameter_names(
-            None, ""
-        )
-        for name in lookup_sparse_grad_parameter_names:
-            destination.append(name.split(".")[-1])
-        return destination
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
