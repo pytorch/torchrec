@@ -484,6 +484,7 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
@@ -553,10 +554,16 @@ class RecMetric(nn.Module, abc.ABC):
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
+                    if "required_inputs" in kwargs:
+                        kwargs["required_inputs"] = {
+                            k: v.view(task_labels.size())
+                            for k, v in kwargs["required_inputs"].items()
+                        }
                     metric_.update(
                         predictions=task_predictions,
                         labels=task_labels,
                         weights=task_weights,
+                        **kwargs,
                     )
 
     def update(
@@ -574,7 +581,9 @@ class RecMetric(nn.Module, abc.ABC):
                 self._update_buffers[self.WEIGHTS].append(weights)
             self._check_fused_update(force=False)
         else:
-            self._update(predictions=predictions, labels=labels, weights=weights)
+            self._update(
+                predictions=predictions, labels=labels, weights=weights, **kwargs
+            )
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
