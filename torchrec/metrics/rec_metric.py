@@ -218,6 +218,7 @@ class RecMetricComputation(Metric, abc.ABC):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:  # pragma: no cover
         pass
 
@@ -564,6 +565,7 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if self._fused_update_limit > 0:
             self._update_buffers[self.PREDICTIONS].append(predictions)
@@ -709,6 +711,7 @@ class RecMetricList(nn.Module):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: RecModelOutput,
+        **kwargs: Dict[str, Any],
     ) -> None:
         for metric in self.rec_metrics:
             metric.update(predictions=predictions, labels=labels, weights=weights)
