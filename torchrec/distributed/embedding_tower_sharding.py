@@ -21,7 +21,7 @@ from torchrec.distributed.dist_data import (
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_sharding import (
     SparseFeaturesAllToAll,
-    SparseFeaturesListAwaitable,
+    SparseFeaturesListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -236,7 +236,7 @@ class ShardedEmbeddingTower(
         ctx: NullShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
 
         # optional_features are populated only if both kjt and weighted kjt present in tower
         if self._wkjt_feature_names and self._kjt_feature_names:
@@ -277,7 +277,7 @@ class ShardedEmbeddingTower(
                     id_score_list_features=wkjt_features,
                 )
             )
-            return SparseFeaturesListAwaitable([tensor_awaitable.wait()])
+            return SparseFeaturesListSplitsAwaitable([tensor_awaitable], ctx)
 
     def compute(
         self, ctx: NullShardedModuleContext, dist_input: SparseFeaturesList
@@ -640,7 +640,7 @@ class ShardedEmbeddingTowerCollection(
         ctx: EmbeddingTowerCollectionContext,
         kjt_features: Optional[KeyedJaggedTensor] = None,
         wkjt_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
         if self._has_uninitialized_input_dist:
             # pyre-ignore [16]
             stride = kjt_features.stride() if kjt_features else wkjt_features.stride()
@@ -698,7 +698,7 @@ class ShardedEmbeddingTowerCollection(
                             embedding_ctx, sparse_features.id_score_list_features
                         )
                     )
-            return SparseFeaturesListAwaitable(input_dists)
+            return SparseFeaturesListSplitsAwaitable(input_dists, ctx)
 
     def compute(
         self, ctx: EmbeddingTowerCollectionContext, dist_input: SparseFeaturesList

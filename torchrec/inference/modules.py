@@ -160,6 +160,14 @@ class PredictFactory(abc.ABC):
         """
         return {}
 
+    def qualname_metadata_json(self) -> str:
+        """
+        Serialize the qualname metadata to JSON, for ease of parsing with torch::deploy environments.
+        """
+        return json.dumps(
+            {key: asdict(value) for key, value in self.qualname_metadata().items()}
+        )
+
     def model_inputs_data(self) -> Dict[str, Any]:
         """
         Returns a dict of various data for benchmarking input generation.

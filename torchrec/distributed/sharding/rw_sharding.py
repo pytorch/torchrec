@@ -58,7 +58,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(
             qcomm_codecs_registry=qcomm_codecs_registry,
@@ -94,8 +93,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         for group_config in self._grouped_embedding_configs:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
-
-        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -241,7 +238,6 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         is_sequence: bool = False,
         has_feature_processor: bool = False,
         need_pos: bool = False,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._world_size: int = pg.size()
@@ -277,7 +273,6 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_score_list_features_per_rank=self._world_size
             * [self._num_id_score_list_features],
             device=device,
-            variable_batch_size=variable_batch_size,
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
@@ -412,7 +407,6 @@ class RwPooledEmbeddingSharding(
             is_sequence=False,
             has_feature_processor=self._has_feature_processor,
             need_pos=self._need_pos,
-            variable_batch_size=self._variable_batch_size,
         )
 
     def create_lookup(

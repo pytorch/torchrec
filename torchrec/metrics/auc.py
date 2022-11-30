@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, cast, List, Optional, Type
+from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
@@ -107,6 +107,7 @@ class AUCMetricComputation(RecMetricComputation):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(

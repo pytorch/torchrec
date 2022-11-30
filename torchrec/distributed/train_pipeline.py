@@ -276,6 +276,10 @@ def _start_data_dist(
             module_ctx, *args, **kwargs
         )
 
+    # Call wait on the first awaitable in the input dist for the tensor splits
+    for key, awaitable in context.input_dist_requests.items():
+        context.input_dist_requests[key] = awaitable.wait()
+
 
 def _get_node_args_helper(
     # pyre-ignore

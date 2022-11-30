@@ -9,11 +9,10 @@ from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch import nn
-from torch.nn.modules.module import _addindent
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    ListOfSparseFeaturesListAwaitable,
+    ListOfSparseFeaturesListSplitsAwaitable,
     NullShardingContext,
 )
 from torchrec.distributed.embedding_types import (
@@ -188,7 +187,7 @@ class ShardedQuantEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[ListOfSparseFeaturesList]:
+    ) -> Awaitable[Awaitable[ListOfSparseFeaturesList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
@@ -206,7 +205,7 @@ class ShardedQuantEmbeddingBagCollection(
                 self._feature_splits,
             )
             awaitables = [
-                module(
+                input_dist(
                     SparseFeatures(
                         id_list_features=None
                         if self._is_weighted
@@ -215,19 +214,20 @@ class ShardedQuantEmbeddingBagCollection(
                         if self._is_weighted
                         else None,
                     )
-                ).wait()  # a dummy wait since now length indices comm is splited
-                for module, features_by_shard in zip(
+                )
+                for input_dist, features_by_shard in zip(
                     self._input_dists, features_by_shards
                 )
             ]
-            return ListOfSparseFeaturesListAwaitable(awaitables)
+            return ListOfSparseFeaturesListSplitsAwaitable(awaitables)
 
     def compute(
         self,
         ctx: NullShardedModuleContext,
         dist_input: ListOfSparseFeaturesList,
     ) -> List[List[torch.Tensor]]:
-        return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
+        # syntax for torchscript
+        return [lookup(dist_input[i]) for i, lookup in enumerate(self._lookups)]
 
     def output_dist(
         self,
@@ -235,9 +235,8 @@ class ShardedQuantEmbeddingBagCollection(
         output: List[List[torch.Tensor]],
     ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(embeddings) for dist, embeddings in zip(self._output_dists, output)
-            ],
+            # syntax for torchscript
+            awaitables=[dist(output[i]) for i, dist in enumerate(self._output_dists)],
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
         )

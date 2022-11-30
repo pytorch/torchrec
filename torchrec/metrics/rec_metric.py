@@ -52,11 +52,12 @@ class MetricComputationReport:
     name: MetricNameBase
     metric_prefix: MetricPrefix
     value: torch.Tensor
+    description: Optional[str] = None
 
 
 DefaultValueT = TypeVar("DefaultValueT")
 ComputeIterType = Iterator[
-    Tuple[RecTaskInfo, MetricNameBase, torch.Tensor, MetricPrefix]
+    Tuple[RecTaskInfo, MetricNameBase, torch.Tensor, MetricPrefix, str]
 ]
 
 MAX_BUFFER_COUNT = 1000
@@ -218,6 +219,7 @@ class RecMetricComputation(Metric, abc.ABC):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:  # pragma: no cover
         pass
 
@@ -404,7 +406,7 @@ class RecMetric(nn.Module, abc.ABC):
                     if has_valid_update > 0
                     else torch.zeros_like(metric_value)
                 )
-                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _unfused_tasks_iter(self, compute_scope: str) -> ComputeIterType:
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
@@ -422,7 +424,7 @@ class RecMetric(nn.Module, abc.ABC):
                     or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
-                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _fuse_update_buffers(self) -> Dict[str, RecModelOutput]:
         def fuse(outputs: List[RecModelOutput]) -> RecModelOutput:
@@ -483,6 +485,7 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
@@ -552,10 +555,16 @@ class RecMetric(nn.Module, abc.ABC):
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
+                    if "required_inputs" in kwargs:
+                        kwargs["required_inputs"] = {
+                            k: v.view(task_labels.size())
+                            for k, v in kwargs["required_inputs"].items()
+                        }
                     metric_.update(
                         predictions=task_predictions,
                         labels=task_labels,
                         weights=task_weights,
+                        **kwargs,
                     )
 
     def update(
@@ -564,6 +573,7 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if self._fused_update_limit > 0:
             self._update_buffers[self.PREDICTIONS].append(predictions)
@@ -572,16 +582,20 @@ class RecMetric(nn.Module, abc.ABC):
                 self._update_buffers[self.WEIGHTS].append(weights)
             self._check_fused_update(force=False)
         else:
-            self._update(predictions=predictions, labels=labels, weights=weights)
+            self._update(
+                predictions=predictions, labels=labels, weights=weights, **kwargs
+            )
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
     def compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}
-        for task, metric_name, metric_value, prefix in self._tasks_iter(""):
+        for task, metric_name, metric_value, prefix, description in self._tasks_iter(
+            ""
+        ):
             metric_key = compose_metric_key(
-                self._namespace, task.name, metric_name, prefix
+                self._namespace, task.name, metric_name, prefix, description
             )
             ret[metric_key] = metric_value
         return ret
@@ -589,9 +603,11 @@ class RecMetric(nn.Module, abc.ABC):
     def local_compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}
-        for task, metric_name, metric_value, prefix in self._tasks_iter("local_"):
+        for task, metric_name, metric_value, prefix, description in self._tasks_iter(
+            "local_"
+        ):
             metric_key = compose_metric_key(
-                self._namespace, task.name, metric_name, prefix
+                self._namespace, task.name, metric_name, prefix, description
             )
             ret[metric_key] = metric_value
         return ret
@@ -709,6 +725,7 @@ class RecMetricList(nn.Module):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: RecModelOutput,
+        **kwargs: Dict[str, Any],
     ) -> None:
         for metric in self.rec_metrics:
             metric.update(predictions=predictions, labels=labels, weights=weights)

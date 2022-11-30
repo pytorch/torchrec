@@ -21,6 +21,7 @@ The key is defined as the following format:
 """
 
 from enum import Enum
+from typing import Optional
 
 
 class StrValueMixin:
@@ -42,6 +43,7 @@ class MetricName(MetricNameBase):
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
+    MAE = "mae"
     RMSE = "rmse"
     AUC = "auc"
     MULTICLASS_RECALL = "multiclass_recall"
@@ -60,6 +62,7 @@ class MetricNamespace(MetricNamespaceBase):
     CALIBRATION = "calibration"
     MSE = "mse"
     AUC = "auc"
+    MAE = "mae"
 
     OPTIMIZERS = "optimizers"
     MODEL_CONFIGURATOR = "model_configurator"
@@ -97,12 +100,13 @@ def compose_metric_namespace(
 def compose_customized_metric_key(
     namespace: str,
     metric_name: str,
+    description: Optional[str] = None,
 ) -> str:
     r"""Get the metric key. The input are unrestricted (string) namespace and
     metric_name. This API should only be used by compose_metric_key() and
     state metrics as the keys of state metrics are unknown.
     """
-    return f"{namespace}|{metric_name}"
+    return f"{namespace}|{metric_name}{description or ''}"
 
 
 def compose_metric_key(
@@ -110,8 +114,11 @@ def compose_metric_key(
     task_name: str,
     metric_name: MetricNameBase,
     metric_prefix: MetricPrefix = MetricPrefix.DEFAULT,
+    description: Optional[str] = None,
 ) -> str:
     r"""Get the metric key based on the input parameters"""
     return compose_customized_metric_key(
-        compose_metric_namespace(namespace, task_name), f"{metric_prefix}{metric_name}"
+        compose_metric_namespace(namespace, task_name),
+        f"{metric_prefix}{metric_name}",
+        description,
     )
