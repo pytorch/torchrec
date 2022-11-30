@@ -562,9 +562,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             id_list_features_by_group = sparse_features.id_list_features.split(
                 self._id_list_feature_splits,
             )
-            for config, emb_op, features in zip(
-                self.grouped_configs, self._emb_modules, id_list_features_by_group
+            # syntax for torchscript
+            for i, (config, emb_op) in enumerate(
+                zip(self.grouped_configs, self._emb_modules)
             ):
+                features = id_list_features_by_group[i]
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
@@ -659,11 +661,12 @@ class InferGroupedLookupMixin(ABC):
         sparse_features: SparseFeaturesList,
     ) -> List[torch.Tensor]:
         embeddings: List[torch.Tensor] = []
-        for sparse_features_rank, embedding_lookup in zip(
-            sparse_features,
+        # syntax for torchscript
+        for i, embedding_lookup in enumerate(
             # pyre-fixme[16]
             self._embedding_lookups_per_rank,
         ):
+            sparse_features_rank = sparse_features[i]
             assert (
                 sparse_features_rank.id_list_features is not None
                 or sparse_features_rank.id_score_list_features is not None
@@ -740,7 +743,8 @@ class InferGroupedPooledEmbeddingsLookup(
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     grouped_score_configs=grouped_score_configs_per_rank[rank],
-                    device=torch.device("cuda", rank),
+                    # syntax for torchscript
+                    device=torch.device(f"cuda:{rank}"),
                     fused_params=fused_params,
                 )
             )
@@ -762,7 +766,8 @@ class InferGroupedEmbeddingsLookup(
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    device=torch.device("cuda", rank),
+                    # syntax for torchscript
+                    device=torch.device(f"cuda:{rank}"),
                     fused_params=fused_params,
                 )
             )

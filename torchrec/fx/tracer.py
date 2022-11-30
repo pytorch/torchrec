@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 from torch.fx._compatibility import compatibility
@@ -31,8 +31,17 @@ class Tracer(torch.fx.Tracer):
     TorchScript if needed
     """
 
-    def __init__(self) -> None:
+    def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
         super().__init__()
+        self._leaf_modules: List[str] = leaf_modules if leaf_modules is not None else []
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        """
+        Override FX definition to include quantized embedding bags
+        """
+        if type(m).__name__ in self._leaf_modules:
+            return True
+        return super().is_leaf_module(m, module_qualified_name)
 
     @compatibility(is_backward_compatible=True)
     def trace(
@@ -93,6 +102,7 @@ def symbolic_trace(
     # pyre-ignore[24]
     root: Union[torch.nn.Module, Callable],
     concrete_args: Optional[Dict[str, Any]] = None,
+    leaf_modules: Optional[List[str]] = None,
 ) -> torch.fx.GraphModule:
     """
     Symbolic tracing API
@@ -110,6 +120,6 @@ def symbolic_trace(
     Returns:
         GraphModule: a Module created from the recorded operations from ``root``.
     """
-    tracer = Tracer()
+    tracer = Tracer(leaf_modules)
     graph = tracer.trace(root, concrete_args)
     return torch.fx.GraphModule(root, graph)

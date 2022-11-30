@@ -686,7 +686,8 @@ class EmbeddingsAllToOne(nn.Module):
             torch.ops.fbgemm.merge_pooled_embeddings(
                 tensors,
                 non_cat_size,
-                self._device,
+                # syntax for torchscript
+                str(self._device),
                 self._cat_dim,
             )
         )
