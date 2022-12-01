@@ -21,6 +21,7 @@ from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
+    FeatureShardingMixIn,
     GroupedEmbeddingConfig,
     ListOfSparseFeaturesList,
     ShardedEmbeddingTable,
@@ -29,7 +30,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    FeatureShardingMixIn,
     NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -685,11 +685,6 @@ class ListOfSparseFeaturesListSplitsAwaitable(
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
 W = TypeVar("W")
-
-
-class NullShardingContext(Multistreamable):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        pass
 
 
 @dataclass

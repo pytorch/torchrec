@@ -21,7 +21,9 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
+    FeatureShardingMixIn,
     ListOfSparseFeaturesList,
+    ShardedEmbeddingModule,
     ShardingType,
     SparseFeatures,
     SparseFeaturesList,
@@ -32,10 +34,8 @@ from torchrec.distributed.sharding.tw_sequence_sharding import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    FeatureShardingMixIn,
     LazyAwaitable,
     ParameterSharding,
-    ShardedModule,
     ShardingEnv,
 )
 from torchrec.modules.embedding_configs import (
@@ -141,7 +141,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
 
 
 class ShardedQuantEmbeddingCollection(
-    ShardedModule[
+    ShardedEmbeddingModule[
         ListOfSparseFeaturesList,
         List[List[torch.Tensor]],
         Dict[str, JaggedTensor],

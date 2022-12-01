@@ -13,11 +13,12 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
     ListOfSparseFeaturesListSplitsAwaitable,
-    NullShardingContext,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
+    FeatureShardingMixIn,
     ListOfSparseFeaturesList,
+    ShardedEmbeddingModule,
     SparseFeatures,
     SparseFeaturesList,
 )
@@ -28,11 +29,10 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
-    FeatureShardingMixIn,
     LazyAwaitable,
     NullShardedModuleContext,
+    NullShardingContext,
     ParameterSharding,
-    ShardedModule,
     ShardingEnv,
     ShardingType,
 )
@@ -62,7 +62,7 @@ def create_infer_embedding_bag_sharding(
 
 
 class ShardedQuantEmbeddingBagCollection(
-    ShardedModule[
+    ShardedEmbeddingModule[
         ListOfSparseFeaturesList,
         List[List[torch.Tensor]],
         KeyedTensor,

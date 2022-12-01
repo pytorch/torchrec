@@ -25,6 +25,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
+    ShardedEmbeddingModule,
     SparseFeatures,
     SparseFeaturesList,
 )
@@ -37,7 +38,6 @@ from torchrec.distributed.types import (
     NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
-    ShardedModule,
     ShardingEnv,
     ShardingType,
 )
@@ -98,7 +98,7 @@ class EmbeddingTowerCollectionContext(Multistreamable):
 
 
 class ShardedEmbeddingTower(
-    ShardedModule[
+    ShardedEmbeddingModule[
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
@@ -439,7 +439,7 @@ class ShardedEmbeddingTower(
 
 
 class ShardedEmbeddingTowerCollection(
-    ShardedModule[
+    ShardedEmbeddingModule[
         SparseFeaturesList,
         torch.Tensor,
         torch.Tensor,
