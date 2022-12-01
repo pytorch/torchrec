@@ -1365,11 +1365,6 @@ registered hooks while the latter silently ignores them.</p>
 </div>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.sparse_grad_parameter_names">
-<span class="sig-name descname"><span class="pre">sparse_grad_parameter_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.sparse_grad_parameter_names" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.training">
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.training" title="Permalink to this definition">¶</a></dt>
@@ -1500,11 +1495,6 @@ are direct members of this module. Defaults to True.</p></li>
 </pre></div>
 </div>
 </dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedProcessor.sparse_grad_parameter_names">
-<span class="sig-name descname"><span class="pre">sparse_grad_parameter_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.sparse_grad_parameter_names" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedProcessor.state_dict">
@@ -2053,7 +2043,6 @@ passed to provided interaction module.</p></li>
 </li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.forward"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.forward()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.sparse_grad_parameter_names"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.sparse_grad_parameter_names()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor.training"><code class="docutils literal notranslate"><span class="pre">BaseGroupedFeatureProcessor.training</span></code></a></li>
 </ul>
 </li>
@@ -2065,7 +2054,6 @@ passed to provided interaction module.</p></li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.forward"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.forward()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.named_buffers"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.named_buffers()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.sparse_grad_parameter_names"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.sparse_grad_parameter_names()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.state_dict"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.state_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.modules.feature_processor.PositionWeightedProcessor.training"><code class="docutils literal notranslate"><span class="pre">PositionWeightedProcessor.training</span></code></a></li>
 </ul>
