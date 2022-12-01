@@ -14,17 +14,50 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Protocol,
+    runtime_checkable,
     Set,
     Tuple,
     Union,
 )
 
 import torch
+
 from torch import optim
 from torchrec.distributed.types import ShardedTensor
 
 
 OptimizerFactory = Callable[[List[Union[torch.Tensor, ShardedTensor]]], optim.Optimizer]
+
+
+@runtime_checkable
+class Stateful(Protocol):
+    """
+    PyTorch stateful protocol defines how a component can expose the state
+    as a bag of data.
+
+    The Any type today is mostly to be aligned with the current PyTorch
+    existing APIs with the components which include but are not limited to:
+    1. nn.Module
+    2. Optimizer
+    3. TorchMetrics
+    4. DataModule (Lightning)
+
+    All serialization customization
+    (e.g. abitrary object -> BytesIO) should be done in component `state_dict()`
+    before it returns.
+
+    All deserialization customization can be done in `load_state_dict()`
+    to allow proper state restoration from persisted data to
+    actual component state
+    (e.g. deserialization + synchronization can be done here).
+    """
+
+    def state_dict(self) -> Dict[str, Any]:
+        ...
+
+    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        ...
 
 
 class KeyedOptimizer(optim.Optimizer):
@@ -71,6 +104,9 @@ class KeyedOptimizer(optim.Optimizer):
         Returned state and param_groups will contain parameter keys
         instead of parameter indices in torch.Optimizer.
         This allows for advanced functionality like optimizer re-sharding to be implemented.
+
+        Can also handle classes and supported data structures that follow the PyTorch stateful
+        protocol.
         """
 
         state = self.state
@@ -78,9 +114,17 @@ class KeyedOptimizer(optim.Optimizer):
         params = self.params
         param_to_key = {param: key for key, param in params.items()}
 
-        ret_state = {
-            param_to_key[param]: state_val for param, state_val in state.items()
-        }
+        ret_state = {}
+        for param, state_val in state.items():
+            if isinstance(state_val, dict):
+                ret_state[param_to_key[param]] = {}
+                for k, v in state_val.items():
+                    if isinstance(v, Stateful):
+                        ret_state[param_to_key[param]][k] = v.state_dict()
+                    else:
+                        ret_state[param_to_key[param]][k] = v
+            else:
+                ret_state[param_to_key[param]] = state_val
 
         ret_groups = []
         for group in param_groups:
@@ -156,6 +200,8 @@ class KeyedOptimizer(optim.Optimizer):
                 elif isinstance(state_val, torch.Tensor):
                     assert isinstance(new_state_val, torch.Tensor)
                     state_val.detach().copy_(new_state_val)
+                elif isinstance(state_val, Stateful):
+                    state_val.load_state_dict(new_state_val)
                 else:
                     state[param][state_key] = deepcopy(new_state_val)
 
