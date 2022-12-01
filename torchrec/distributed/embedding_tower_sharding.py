@@ -412,19 +412,6 @@ class ShardedEmbeddingTower(
             )
         yield from ()
 
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        if self._active_device:
-            # pyre-ignore[16]
-            self.embedding.sparse_grad_parameter_names(
-                destination, append_prefix(prefix, "embedding")
-            )
-        return destination
-
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         if self._active_device:
             # pyre-ignore[16]
@@ -844,18 +831,6 @@ class ShardedEmbeddingTowerCollection(
                     append_prefix(prefix, f"towers.{i}.interaction"), recurse
                 )
             )
-
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for i, embedding in self.embeddings.items():
-            embedding.sparse_grad_parameter_names(
-                destination, append_prefix(prefix, f"towers.{i}.embedding")
-            )
-        return destination
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for i, embedding in self.embeddings.items():

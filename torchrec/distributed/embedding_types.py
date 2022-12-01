@@ -255,12 +255,6 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
     ) -> T:
         pass
 
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
-
 
 M = TypeVar("M", bound=nn.Module)
 
@@ -351,12 +345,6 @@ class BaseGroupedFeatureProcessor(nn.Module):
         features: KeyedJaggedTensor,
     ) -> KeyedJaggedTensor:
         pass
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):
