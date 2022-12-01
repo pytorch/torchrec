@@ -13,10 +13,12 @@ from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torch import fx, nn
+from torch.nn.modules.module import _addindent
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
     QuantizedCommCodecs,
+    ShardedModule,
     ShardedTensorMetadata,
     ShardingType,
     ShardMetadata,
@@ -254,6 +256,91 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
         sparse_features: F,
     ) -> T:
         pass
+
+
+class FeatureShardingMixIn:
+    """
+    Feature Sharding Interface to provide sharding-aware feature metadata.
+    """
+
+    def id_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+    def id_score_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+
+class ModuleShardingMixIn:
+    """
+    The interface to access a sharded module's sharding scheme.
+    """
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        raise NotImplementedError
+
+
+Out = TypeVar("Out")
+CompIn = TypeVar("CompIn", bound=Multistreamable)
+DistOut = TypeVar("DistOut")
+ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+
+class ShardedEmbeddingModule(
+    ShardedModule[CompIn, DistOut, Out, ShrdCtx],
+    ModuleShardingMixIn,
+):
+    """
+    All model-parallel embedding modules implement this interface.
+    Inputs and outputs are data-parallel.
+
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
+    """
+
+    @abc.abstractmethod
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
+        super().__init__(qcomm_codecs_registry)
+
+        self._input_dists: List[nn.Module] = []
+        self._lookups: List[nn.Module] = []
+        self._output_dists: List[nn.Module] = []
+
+    def extra_repr(self) -> str:
+        """
+        Pretty prints representation of the module's lookup modules, input_dists and output_dists
+        """
+
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        rep = []
+        rep.extend(loop("lookups", self._lookups))
+        rep.extend(loop("_input_dists", self._input_dists))
+        rep.extend(loop("_output_dists", self._output_dists))
+
+        return "\n ".join(rep)
 
 
 M = TypeVar("M", bound=nn.Module)

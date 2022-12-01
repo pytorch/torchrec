@@ -23,6 +23,7 @@ from torchrec.distributed.embedding_sharding import (
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    ShardedEmbeddingModule,
     SparseFeatures,
     SparseFeaturesList,
 )
@@ -39,7 +40,6 @@ from torchrec.distributed.types import (
     NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
-    ShardedModule,
     ShardedTensor,
     ShardingEnv,
     ShardingType,
@@ -273,7 +273,7 @@ class EmbeddingBagCollectionContext(Multistreamable):
 
 
 class ShardedEmbeddingBagCollection(
-    ShardedModule[
+    ShardedEmbeddingModule[
         SparseFeaturesList,
         List[torch.Tensor],
         KeyedTensor,
@@ -603,7 +603,9 @@ class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
 
 
 class ShardedEmbeddingBag(
-    ShardedModule[SparseFeatures, torch.Tensor, torch.Tensor, NullShardedModuleContext],
+    ShardedEmbeddingModule[
+        SparseFeatures, torch.Tensor, torch.Tensor, NullShardedModuleContext
+    ],
     FusedOptimizerModule,
 ):
     """

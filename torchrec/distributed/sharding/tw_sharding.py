@@ -22,7 +22,6 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
-    NullShardingContext,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
 )
@@ -38,6 +37,7 @@ from torchrec.distributed.types import (
     Awaitable,
     CommOp,
     NoWait,
+    NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
