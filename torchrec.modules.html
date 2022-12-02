@@ -403,9 +403,9 @@ over the input tensor.</p>
 (NxN), such that the crossing effect can cover all bits on each layer. On each layer
 l, the tensor is transformed into:</p>
 <div class="math notranslate nohighlight">
-\[x_{l+1} = x_0 * (W_l \dot x_l + b_l) + x_l\]</div>
+\[x_{l+1} = x_0 * (W_l \cdot x_l + b_l) + x_l\]</div>
 <p>where <span class="math notranslate nohighlight">\(W_l\)</span> is a square matrix <span class="math notranslate nohighlight">\((NxN)\)</span>, <span class="math notranslate nohighlight">\(*\)</span> means element-wise
-multiplication, <span class="math notranslate nohighlight">\(\dot\)</span> means matrix multiplication.</p>
+multiplication, <span class="math notranslate nohighlight">\(\cdot\)</span> means matrix multiplication.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -451,13 +451,13 @@ multiplication, <span class="math notranslate nohighlight">\(\dot\)</span> means
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.crossnet.</span></span><span class="sig-name descname"><span class="pre">LowRankCrossNet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.crossnet.LowRankCrossNet" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
 <p>Low Rank Cross Net is a highly efficient cross net. Instead of using full rank cross
-matrices (NxN) at each layer, it will use two kernels <span class="math notranslate nohighlight">\(W (N * r)\)</span> and
-<span class="math notranslate nohighlight">\(V (r * N)\)</span>, where <cite>r &lt;&lt; N</cite>, to simplify the matrix multiplication.</p>
+matrices (NxN) at each layer, it will use two kernels <span class="math notranslate nohighlight">\(W (N x r)\)</span> and
+<span class="math notranslate nohighlight">\(V (r x N)\)</span>, where <cite>r &lt;&lt; N</cite>, to simplify the matrix multiplication.</p>
 <p>On each layer l, the tensor is transformed into:</p>
 <div class="math notranslate nohighlight">
-\[x_{l+1} = x_0 * (W_l \dot (V_l \dot x_l) + b_l) + x_l\]</div>
+\[x_{l+1} = x_0 * (W_l \cdot (V_l \cdot x_l) + b_l) + x_l\]</div>
 <p>where <span class="math notranslate nohighlight">\(W_l\)</span> is either a vector, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication,
-and <span class="math notranslate nohighlight">\(\dot\)</span> means matrix multiplication.</p>
+and <span class="math notranslate nohighlight">\(\cdot\)</span> means matrix multiplication.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Rank <cite>r</cite> should be chosen smartly. Usually, we  expect <cite>r &lt; N/2</cite> to have
@@ -469,8 +469,8 @@ accuracy of the full rank cross net.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_features</strong> (<em>int</em>) – the dimension of the input.</p></li>
 <li><p><strong>num_layers</strong> (<em>int</em>) – the number of layers in the module.</p></li>
-<li><p><strong>low_rank</strong> (<em>int</em>) – the rank setup of the cross matrix (default = 0).
-Value must be always &gt;= 0.</p></li>
+<li><p><strong>low_rank</strong> (<em>int</em>) – the rank setup of the cross matrix (default = 1).
+Value must be always &gt;= 1.</p></li>
 </ul>
 </dd>
 </dl>
@@ -522,7 +522,7 @@ mechanism that depends on input <span class="math notranslate nohighlight">\(x\)
 \[x_{l+1} = MoE({expert_i : i \in K_{experts}}) + x_l\]</div>
 <p>and each <span class="math notranslate nohighlight">\(expert_i\)</span> is defined as:</p>
 <div class="math notranslate nohighlight">
-\[expert_i = x_0 * (U_{li} \dot g(C_{li} \dot g(V_{li} \dot x_l)) + b_l)\]</div>
+\[expert_i = x_0 * (U_{li} \cdot g(C_{li} \cdot g(V_{li} \cdot x_l)) + b_l)\]</div>
 <p>where <span class="math notranslate nohighlight">\(U_{li} (N, r)\)</span>, <span class="math notranslate nohighlight">\(C_{li} (r, r)\)</span> and <span class="math notranslate nohighlight">\(V_{li} (r, N)\)</span> are
 low-rank matrices, <span class="math notranslate nohighlight">\(*\)</span> means element-wise multiplication, <span class="math notranslate nohighlight">\(x\)</span> means
 matrix multiplication, and <span class="math notranslate nohighlight">\(g()\)</span> is the non-linear activation function.</p>
@@ -533,8 +533,8 @@ computation.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>in_features</strong> (<em>int</em>) – the dimension of the input.</p></li>
 <li><p><strong>num_layers</strong> (<em>int</em>) – the number of layers in the module.</p></li>
-<li><p><strong>low_rank</strong> (<em>int</em>) – the rank setup of the cross matrix (default = 0).
-Value must be always &gt;= 0</p></li>
+<li><p><strong>low_rank</strong> (<em>int</em>) – the rank setup of the cross matrix (default = 1).
+Value must be always &gt;= 1</p></li>
 <li><p><strong>activation</strong> (<em>Union</em><em>[</em><em>torch.nn.Module</em><em>, </em><em>Callable</em><em>[</em><em>[</em><em>torch.Tensor</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em>) – the non-linear activation function, used in defining experts.
 Default is relu.</p></li>
 </ul>
