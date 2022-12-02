@@ -648,58 +648,34 @@ class ShardedEmbeddingTowerCollection(
                     self._wkjt_features_order,
                     cast(torch.Tensor, self._wkjt_features_order_tensor),
                 )
-            sparse_features_awaitable = self._cross_dist(
+            awaitable = self._cross_dist(
                 SparseFeatures(
                     id_list_features=kjt_features,
                     id_score_list_features=wkjt_features,
                 )
             )
 
-            sparse_features = sparse_features_awaitable.wait().wait()
-
-            input_dists = []
-            for embedding, input_dist_params in zip(
-                self.embeddings.values(), self.input_dist_params
-            ):
-
-                embedding_ctx = embedding.create_context()
-                ctx.embedding_contexts.append(embedding_ctx)
-                kjt_param, wkjt_param = input_dist_params
-                if kjt_param and wkjt_param:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx,
-                            sparse_features.id_list_features,
-                            sparse_features.id_score_list_features,
-                        )
-                    )
-                elif kjt_param:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx, sparse_features.id_list_features
-                        )
-                    )
-                else:
-                    input_dists.append(
-                        embedding.input_dist(
-                            embedding_ctx, sparse_features.id_score_list_features
-                        )
-                    )
-            return SparseFeaturesListSplitsAwaitable(input_dists, ctx)
+        return SparseFeaturesListSplitsAwaitable([awaitable], ctx)
 
     def compute(
         self, ctx: EmbeddingTowerCollectionContext, dist_input: SparseFeaturesList
     ) -> torch.Tensor:
+        kjt_features = dist_input[0].id_list_features
+        wkjt_features = dist_input[0].id_score_list_features
 
         if self.embeddings:
-            embeddings = [
-                embedding.compute_and_output_dist(embedding_ctx, embedding_input)
-                for embedding_ctx, embedding, embedding_input in zip(
-                    ctx.embedding_contexts,
-                    self.embeddings.values(),
-                    dist_input,
-                )
-            ]
+            embeddings = []
+            for embedding, input_dist_params in zip(
+                self.embeddings.values(), self.input_dist_params
+            ):
+                kjt_param, wkjt_param = input_dist_params
+                if kjt_param and wkjt_param:
+                    embeddings.append(embedding(kjt_features, wkjt_features))
+                elif kjt_param:
+                    embeddings.append(embedding(kjt_features))
+                else:
+                    embeddings.append(embedding(wkjt_features))
+
             output = torch.cat(
                 [
                     interaction(embedding)
