@@ -28,10 +28,10 @@ class CrossNet(torch.nn.Module):
     (NxN), such that the crossing effect can cover all bits on each layer. On each layer
     l, the tensor is transformed into:
 
-    .. math ::    x_{l+1} = x_0 * (W_l \dot x_l + b_l) + x_l
+    .. math ::    x_{l+1} = x_0 * (W_l \cdot x_l + b_l) + x_l
 
     where :math:`W_l` is a square matrix :math:`(NxN)`, :math:`*` means element-wise
-    multiplication, :math:`\dot` means matrix multiplication.
+    multiplication, :math:`\cdot` means matrix multiplication.
 
     Args:
         in_features (int): the dimension of the input.
@@ -92,15 +92,15 @@ class CrossNet(torch.nn.Module):
 class LowRankCrossNet(torch.nn.Module):
     r"""
     Low Rank Cross Net is a highly efficient cross net. Instead of using full rank cross
-    matrices (NxN) at each layer, it will use two kernels :math:`W (N * r)` and
-    :math:`V (r * N)`, where `r << N`, to simplify the matrix multiplication.
+    matrices (NxN) at each layer, it will use two kernels :math:`W (N x r)` and
+    :math:`V (r x N)`, where `r << N`, to simplify the matrix multiplication.
 
     On each layer l, the tensor is transformed into:
 
-    .. math::    x_{l+1} = x_0 * (W_l \dot (V_l \dot x_l) + b_l) + x_l
+    .. math::    x_{l+1} = x_0 * (W_l \cdot (V_l \cdot x_l) + b_l) + x_l
 
     where :math:`W_l` is either a vector, :math:`*` means element-wise multiplication,
-    and :math:`\dot` means matrix multiplication.
+    and :math:`\cdot` means matrix multiplication.
 
     NOTE:
         Rank `r` should be chosen smartly. Usually, we  expect `r < N/2` to have
@@ -110,8 +110,8 @@ class LowRankCrossNet(torch.nn.Module):
     Args:
         in_features (int): the dimension of the input.
         num_layers (int): the number of layers in the module.
-        low_rank (int): the rank setup of the cross matrix (default = 0).
-            Value must be always >= 0.
+        low_rank (int): the rank setup of the cross matrix (default = 1).
+            Value must be always >= 1.
 
     Example::
 
@@ -279,7 +279,7 @@ class LowRankMixtureCrossNet(torch.nn.Module):
 
     and each :math:`expert_i` is defined as:
 
-    .. math::   expert_i = x_0 * (U_{li} \dot g(C_{li} \dot g(V_{li} \dot x_l)) + b_l)
+    .. math::   expert_i = x_0 * (U_{li} \cdot g(C_{li} \cdot g(V_{li} \cdot x_l)) + b_l)
 
     where :math:`U_{li} (N, r)`, :math:`C_{li} (r, r)` and :math:`V_{li} (r, N)` are
     low-rank matrices, :math:`*` means element-wise multiplication, :math:`x` means
@@ -291,8 +291,8 @@ class LowRankMixtureCrossNet(torch.nn.Module):
     Args:
         in_features (int): the dimension of the input.
         num_layers (int): the number of layers in the module.
-        low_rank (int): the rank setup of the cross matrix (default = 0).
-            Value must be always >= 0
+        low_rank (int): the rank setup of the cross matrix (default = 1).
+            Value must be always >= 1
         activation (Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]):
             the non-linear activation function, used in defining experts.
             Default is relu.
