@@ -156,7 +156,7 @@ class LowRankCrossNet(torch.nn.Module):
         )
         self.bias: torch.nn.Module = torch.nn.ParameterList(
             [
-                torch.nn.Parameter(torch.nn.init.zeros_(torch.empty(in_features, 1)))
+                torch.nn.Parameter(torch.nn.init.zeros_(torch.empty(in_features)))
                 for i in range(self._num_layers)
             ]
         )
@@ -170,22 +170,15 @@ class LowRankCrossNet(torch.nn.Module):
             torch.Tensor: tensor with shape [batch_size, in_features].
         """
 
-        x_0 = input.unsqueeze(2)  # (B, N, 1)
+        x_0 = input
         x_l = x_0
 
         for layer in range(self._num_layers):
-            xl_w = torch.matmul(
-                # pyre-ignore[29]: `Union[torch.Tensor, torch.nn.Module]` is not a
-                #  function.
-                self.W_kernels[layer],
-                # pyre-ignore[29]: `Union[torch.Tensor, torch.nn.Module]` is not a
-                #  function.
-                torch.matmul(self.V_kernels[layer], x_l),
-            )  # (B, N, 1)
-            # pyre-ignore[29]: `Union[torch.Tensor, torch.nn.Module]` is not a function.
-            x_l = x_0 * (xl_w + self.bias[layer]) + x_l  # (B, N, 1)
+            x_l_v = torch.nn.functional.linear(x_l, self.V_kernels[layer])
+            x_l_w = torch.nn.functional.linear(x_l_v, self.W_kernels[layer])
+            x_l = x_0 * (x_l_w + self.bias[layer]) + x_l  # (B, N)
 
-        return torch.squeeze(x_l, dim=2)  # (B, N)
+        return x_l
 
 
 class VectorCrossNet(torch.nn.Module):
