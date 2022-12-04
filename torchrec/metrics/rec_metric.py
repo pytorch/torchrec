@@ -10,6 +10,7 @@
 import abc
 import itertools
 import math
+
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
@@ -19,6 +20,7 @@ from typing import (
     cast,
     Deque,
     Dict,
+    Final,
     Iterator,
     List,
     Mapping,
@@ -34,6 +36,7 @@ from typing import (
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch import Tensor
 from torchmetrics import Metric
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import (
@@ -118,7 +121,7 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
-    _batch_window_buffers: Optional[Dict[str, WindowBuffer]]
+    _batch_window_buffers: Final[Optional[Dict[str, WindowBuffer]]]
 
     def __init__(
         self,
@@ -140,6 +143,10 @@ class RecMetricComputation(Metric, abc.ABC):
         self._window_size = window_size
         self._compute_on_all_ranks = compute_on_all_ranks
         self._should_validate_update = should_validate_update
+        self._fused_map: Dict[str, int] = {}
+        self._window_fused_map: Dict[str, int] = {}
+        self._fused_name = "_fused_states"
+        self._fused_backup_states: List[torch.Tensor] = []
         if self._window_size > 0:
             self._batch_window_buffers = {}
         else:
@@ -157,11 +164,34 @@ class RecMetricComputation(Metric, abc.ABC):
     def get_window_state_name(state_name: str) -> str:
         return f"window_{state_name}"
 
+    def get_fused_state_name(self) -> str:
+        return self._fused_name
+
+    def get_fused_window_state_name(self) -> str:
+        return self.get_window_state_name(self.get_fused_state_name())
+
     def get_window_state(self, state_name: str) -> torch.Tensor:
-        return getattr(self, self.get_window_state_name(state_name))
+        if state_name in self._fused_map:
+            fused_window_states = getattr(
+                self, self.get_window_state_name(self._fused_name)
+            )
+            return fused_window_states[self._fused_map[state_name]]
+        else:
+            return getattr(self, self.get_window_state_name(state_name))
+
+    def get_state(self, state_name: str) -> torch.Tensor:
+        if state_name in self._fused_map:
+            fused_states = getattr(self, self._fused_name)
+            return fused_states[self._fused_map[state_name]]
+        else:
+            return getattr(self, state_name)
 
     def _add_state(
-        self, name: str, default: DefaultValueT, add_window_state: bool, **kwargs: Any
+        self,
+        name: Union[str, List[str]],
+        default: Tensor,
+        add_window_state: bool,
+        **kwargs: Any,
     ) -> None:
         """
         name (str): the name of this state. The state will be accessible
@@ -180,23 +210,34 @@ class RecMetricComputation(Metric, abc.ABC):
         persistent (bool): set this to True if you want to save/checkpoint the
             metric and this state is required to compute the checkpointed metric.
         """
-        # pyre-fixme[6]: Expected `Union[List[typing.Any], torch.Tensor]` for 2nd
-        #  param but got `DefaultValueT`.
-        super().add_state(name, default, **kwargs)
+        if isinstance(name, List):
+            super().add_state(self._fused_name, default, **kwargs)
+        else:
+            super().add_state(name, default, **kwargs)
+
         if add_window_state:
             if self._batch_window_buffers is None:
                 raise RuntimeError(
                     "Users is adding a window state while window metric is disabled."
                 )
             kwargs["persistent"] = False
-            window_state_name = self.get_window_state_name(name)
-            # Avoid pyre error
+            # add fused window state
+            if isinstance(name, List):
+                window_state_name = self.get_window_state_name(self._fused_name)
+            else:
+                window_state_name = self.get_window_state_name(name)
+
             assert isinstance(default, torch.Tensor)
             super().add_state(window_state_name, default.detach().clone(), **kwargs)
+
             self._batch_window_buffers[window_state_name] = WindowBuffer(
                 max_size=self._window_size,
                 max_buffer_count=MAX_BUFFER_COUNT,
             )
+
+        if isinstance(name, List):
+            for i, _name in enumerate(name):
+                self._fused_map[_name] = i
 
     def _aggregate_window_state(
         self, state_name: str, state: torch.Tensor, num_samples: int
