@@ -622,6 +622,9 @@ def _maybe_compute_kjt_to_jt_dict(
     weights: Optional[torch.Tensor],
     jt_dict: Optional[Dict[str, JaggedTensor]],
 ) -> Dict[str, JaggedTensor]:
+    if not length_per_key:
+        return {}
+
     if jt_dict is None:
         _jt_dict: Dict[str, JaggedTensor] = {}
         values_list = torch.split(values, length_per_key)
