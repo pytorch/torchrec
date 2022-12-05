@@ -20,6 +20,7 @@ from typing import (
 )
 
 import torch
+
 from torch import optim
 from torchrec.distributed.types import ShardedTensor
 
@@ -71,6 +72,9 @@ class KeyedOptimizer(optim.Optimizer):
         Returned state and param_groups will contain parameter keys
         instead of parameter indices in torch.Optimizer.
         This allows for advanced functionality like optimizer re-sharding to be implemented.
+
+        Can also handle classes and supported data structures that follow the PyTorch stateful
+        protocol.
         """
 
         state = self.state
@@ -78,9 +82,17 @@ class KeyedOptimizer(optim.Optimizer):
         params = self.params
         param_to_key = {param: key for key, param in params.items()}
 
-        ret_state = {
-            param_to_key[param]: state_val for param, state_val in state.items()
-        }
+        ret_state = {}
+        for param, state_val in state.items():
+            if isinstance(state_val, dict):
+                ret_state[param_to_key[param]] = {}
+                for k, v in state_val.items():
+                    if hasattr(v, "state_dict") and callable(v.state_dict):
+                        ret_state[param_to_key[param]][k] = v.state_dict()
+                    else:
+                        ret_state[param_to_key[param]][k] = v
+            else:
+                ret_state[param_to_key[param]] = state_val
 
         ret_groups = []
         for group in param_groups:
@@ -156,6 +168,10 @@ class KeyedOptimizer(optim.Optimizer):
                 elif isinstance(state_val, torch.Tensor):
                     assert isinstance(new_state_val, torch.Tensor)
                     state_val.detach().copy_(new_state_val)
+                elif hasattr(state_val, "load_state_dict") and callable(
+                    state_val.load_state_dict
+                ):
+                    state_val.load_state_dict(new_state_val)
                 else:
                     state[param][state_key] = deepcopy(new_state_val)
 
