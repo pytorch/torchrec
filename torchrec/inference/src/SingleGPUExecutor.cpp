@@ -165,6 +165,7 @@ void SingleGPUExecutor::process() {
           request->event->synchronize();
           for (auto& context : request->contexts) {
             auto response = std::make_unique<PredictionResponse>();
+            response->batchSize = context.batchSize;
             response->predictions = result;
             context.promise.setValue(std::move(response));
           }
