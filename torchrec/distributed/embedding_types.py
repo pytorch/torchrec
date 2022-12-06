@@ -351,6 +351,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        variable_batch_size: bool = False,  # deprecated, TODO: remove on or after 03/31/2023
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
 
