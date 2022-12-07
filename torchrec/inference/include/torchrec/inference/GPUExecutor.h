@@ -71,6 +71,10 @@ class GPUExecutor {
   std::shared_ptr<IGPUExecutorObserver> observer_;
   std::function<void()> warmupFn_;
 
+  std::mutex warmUpMutex_;
+  std::condition_variable warmUpCV_;
+  int warmUpCounter_{0};
+
   size_t numThreadsPerGPU_;
 };
 
