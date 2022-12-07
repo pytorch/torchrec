@@ -6,17 +6,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <c10/macros/Macros.h>
 #include <torchrec/csrc/dynamic_embedding/details/bits_op.h>
 #include <torchrec/csrc/dynamic_embedding/details/random_bits_generator.h>
 
 namespace torchrec {
 
 bool BitScanner::is_next_n_bits_all_zero(uint16_t& n_bits) {
-  if (C10_UNLIKELY((n_bits == 0))) {
+  if ((n_bits == 0)) [[unlikely]] {
     return true;
   }
-  if (C10_UNLIKELY(array_idx_ == size_)) {
+  if (array_idx_ == size_) [[unlikely]] {
     return true;
   }
 
@@ -88,7 +87,7 @@ bool RandomBitsGenerator::is_next_n_bits_all_zero(uint16_t n_bits) {
     return false;
   }
 
-  if (C10_UNLIKELY(n_bits != 0)) {
+  if (n_bits != 0) [[unlikely]] {
     return is_next_n_bits_all_zero(n_bits);
   } else {
     return true;

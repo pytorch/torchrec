@@ -20,7 +20,7 @@ from typing import (
     cast,
     Deque,
     Dict,
-    Final,
+    # Final, TODO reintroduce once we no longer need to support 3.7
     Iterator,
     List,
     Mapping,
@@ -121,7 +121,8 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
-    _batch_window_buffers: Final[Optional[Dict[str, WindowBuffer]]]
+    # _batch_window_buffers: Final[Optional[Dict[str, WindowBuffer]]] TODO support after we drop 3.7
+    _batch_window_buffers: Optional[Dict[str, WindowBuffer]]
 
     def __init__(
         self,

@@ -12,8 +12,7 @@
 namespace torchrec {
 
 TEST(tde, NaiveThreadedIDTransformer_NoFilter) {
-  using Tag = int32_t;
-  NaiveIDTransformer<Tag, Bitmap<uint8_t>> transformer(16);
+  NaiveIDTransformer<Bitmap<uint8_t>> transformer(16);
   const int64_t global_ids[5] = {100, 101, 100, 102, 101};
   int64_t cache_ids[5];
   int64_t expected_cache_ids[5] = {0, 1, 0, 2, 1};
@@ -24,8 +23,7 @@ TEST(tde, NaiveThreadedIDTransformer_NoFilter) {
 }
 
 TEST(tde, NaiveThreadedIDTransformer_Full) {
-  using Tag = int32_t;
-  NaiveIDTransformer<Tag, Bitmap<uint8_t>> transformer(4);
+  NaiveIDTransformer<Bitmap<uint8_t>> transformer(4);
   const int64_t global_ids[5] = {100, 101, 102, 103, 104};
   int64_t cache_ids[5];
   int64_t expected_cache_ids[5] = {0, 1, 2, 3, -1};
@@ -37,8 +35,7 @@ TEST(tde, NaiveThreadedIDTransformer_Full) {
 }
 
 TEST(tde, NaiveThreadedIDTransformer_Evict) {
-  using Tag = int32_t;
-  NaiveIDTransformer<Tag, Bitmap<uint8_t>> transformer(4);
+  NaiveIDTransformer<Bitmap<uint8_t>> transformer(4);
   const int64_t global_ids[5] = {100, 101, 102, 103, 104};
   int64_t cache_ids[5];
 
@@ -60,8 +57,7 @@ TEST(tde, NaiveThreadedIDTransformer_Evict) {
 }
 
 TEST(tde, NaiveThreadedIDTransformer_Iterator) {
-  using Tag = int32_t;
-  NaiveIDTransformer<Tag, Bitmap<uint8_t>> transformer(16);
+  NaiveIDTransformer<Bitmap<uint8_t>> transformer(16);
   const int64_t global_ids[5] = {100, 101, 100, 102, 101};
   int64_t cache_ids[5];
   int64_t expected_cache_ids[5] = {3, 4, 3, 5, 4};
