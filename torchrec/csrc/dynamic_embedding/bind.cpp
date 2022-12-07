@@ -10,6 +10,7 @@
 
 #include <torchrec/csrc/dynamic_embedding/details/io_registry.h>
 #include <torchrec/csrc/dynamic_embedding/id_transformer_wrapper.h>
+#include <torchrec/csrc/dynamic_embedding/ps.h>
 
 namespace torchrec {
 TORCH_LIBRARY(tde, m) {
@@ -26,5 +27,22 @@ TORCH_LIBRARY(tde, m) {
       .def("transform", &IDTransformerWrapper::transform)
       .def("evict", &IDTransformerWrapper::evict)
       .def("save", &IDTransformerWrapper::save);
+
+  m.class_<LocalShardList>("LocalShardList")
+      .def(torch::init([]() { return c10::make_intrusive<LocalShardList>(); }))
+      .def("append", &LocalShardList::emplace_back);
+
+  m.class_<FetchHandle>("FetchHandle").def("wait", &FetchHandle::wait);
+
+  m.class_<PS>("PS")
+      .def(torch::init<
+           std::string,
+           c10::intrusive_ptr<LocalShardList>,
+           int64_t,
+           int64_t,
+           std::string,
+           int64_t>())
+      .def("fetch", &PS::fetch)
+      .def("evict", &PS::evict);
 }
 } // namespace torchrec

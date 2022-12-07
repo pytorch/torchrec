@@ -9,14 +9,17 @@
 #pragma once
 #include <condition_variable>
 #include <mutex>
+#include <torch/torch.h>
 
 namespace torchrec {
 
 /**
  * Multi-thread notification
  */
-class Notification {
+class Notification : public torch::CustomClassHolder {
  public:
+  Notification() = default;
+
   void done();
   void wait();
 
