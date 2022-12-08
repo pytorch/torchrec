@@ -14,6 +14,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    OrderedDict,
     Set,
     Tuple,
     Union,
@@ -52,7 +53,15 @@ class KeyedOptimizer(optim.Optimizer):
         param_groups: Collection[Mapping[str, Any]],
     ) -> None:
         torch._C._log_api_usage_once(f"torchrec.optim.{self.__class__.__name__}")
-        # pyre-ignore [4]
+
+        # super().__init__ calls add_param_group, which we've explicitly marked as not implemented.
+        # However, we need to ensure that all Optimizer member variables are created.
+        # pyre-ignore
+        self._optimizer_step_pre_hooks: Dict[int, Callable] = OrderedDict()
+        # pyre-ignore
+        self._optimizer_step_post_hooks: Dict[int, Callable] = OrderedDict()
+
+        # pyre-ignore
         self.state: Mapping[Any, Any] = state
         self.param_groups: Collection[Mapping[str, Any]] = param_groups
         self.params = params
