@@ -106,6 +106,17 @@ GPUExecutor::GPUExecutor(
         });
   }
 
+  // Acquire sessionn in main thread for interpreter 0 to avoid deadlock in
+  // torch deploy.
+  LOG(INFO) << " - pre-acquire deploy session of loading model: interpreter 0";
+  auto start = std::chrono::steady_clock::now();
+  model_.acquireSession(&manager_->allInstances().at(0));
+  LOG(INFO) << "   - finished pre-acquire deploy session, interpreter 0, by "
+            << getTimeElapsedMS(start).count() / 1000 << "s";
+
+  std::unique_lock<std::mutex> lock(warmUpMutex_);
+  warmUpCV_.wait(lock, [&] { return warmUpCounter_ == numThreadsPerGPU_ - 1; });
+
   completionExecutor_ =
       std::make_unique<folly::CPUThreadPoolExecutor>(2 * numThreadsPerGPU_);
 }
@@ -151,6 +162,20 @@ void GPUExecutor::process(int idx) {
 
   if (warmupFn_) {
     warmupFn_();
+  }
+
+  if (idx != 0) {
+    LOG(INFO) << " - Pre-acquire deploy session of loading model, interpreter "
+              << idx;
+    auto start = std::chrono::steady_clock::now();
+    model_.acquireSession(&manager_->allInstances().at(idx));
+    {
+      std::lock_guard<std::mutex> lock(warmUpMutex_);
+      warmUpCounter_++;
+      warmUpCV_.notify_one();
+    }
+    LOG(INFO) << "   - finished pre-acquire deploy session, interpreter " << idx
+              << ", by " << getTimeElapsedMS(start).count() / 1000 << "s";
   }
 
   while (true) {
