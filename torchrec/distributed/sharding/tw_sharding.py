@@ -22,7 +22,6 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
-    NullShardingContext,
     SparseFeaturesAllToAll,
     SparseFeaturesOneToAll,
 )
@@ -38,6 +37,7 @@ from torchrec.distributed.types import (
     Awaitable,
     CommOp,
     NoWait,
+    NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
@@ -63,7 +63,6 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -88,7 +87,6 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._score_grouped_embedding_configs: List[
             GroupedEmbeddingConfig
         ] = self._score_grouped_embedding_configs_per_rank[self._rank]
-        self._variable_batch_size = variable_batch_size
 
     def _shard(
         self,
@@ -285,7 +283,6 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         id_list_features_per_rank: List[int],
         id_score_list_features_per_rank: List[int],
         device: Optional[torch.device] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._dist = SparseFeaturesAllToAll(
@@ -293,7 +290,6 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             id_list_features_per_rank=id_list_features_per_rank,
             id_score_list_features_per_rank=id_score_list_features_per_rank,
             device=device,
-            variable_batch_size=variable_batch_size,
         )
 
     def forward(
@@ -390,7 +386,6 @@ class TwPooledEmbeddingSharding(
             self.id_list_features_per_rank(),
             self.id_score_list_features_per_rank(),
             device if device is not None else self._device,
-            self._variable_batch_size,
         )
 
     def create_lookup(

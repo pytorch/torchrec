@@ -148,7 +148,7 @@ def _test_sharding(
             # their model. output from sharded_pred is correctly on the correct device.
 
             # Compare predictions of sharded vs unsharded models.
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 sharded_model_pred.cpu(), unsharded_model_pred.cpu()
             )
 
@@ -362,7 +362,7 @@ def _test_sharding_ec(
             # their model. output from sharded_pred is correctly on the correct device.
 
             # Compare predictions of sharded vs unsharded models.
-            torch.testing.assert_allclose(
+            torch.testing.assert_close(
                 sharded_model_pred.cpu(), unsharded_model_preds[ctx.rank].cpu()
             )
 

@@ -31,6 +31,28 @@ except OSError:
     pass
 
 
+@torch.fx.wrap
+def _post_sparsenn_forward(
+    padded_embeddings: List[torch.Tensor],
+    batch_size: Optional[int] = None,
+) -> torch.Tensor:
+    if batch_size is None or padded_embeddings[0].size(0) == batch_size:
+        return torch.cat(
+            padded_embeddings,
+            dim=1,
+        )
+    else:
+        seq_emb = torch.cat(padded_embeddings, dim=1)
+        ec_values = torch.zeros(
+            batch_size,
+            seq_emb.size(1),
+            dtype=seq_emb.dtype,
+            device=seq_emb.device,
+        )
+        ec_values[: seq_emb.size(0), :] = seq_emb
+        return ec_values
+
+
 class TestSequenceSparseArch(nn.Module):
     def __init__(
         self,
@@ -50,6 +72,7 @@ class TestSequenceSparseArch(nn.Module):
     def forward(
         self,
         id_list_features: KeyedJaggedTensor,
+        batch_size: Optional[int] = None,
     ) -> torch.Tensor:
         jt_dict = self.ec(id_list_features)
         padded_embeddings = [
@@ -60,10 +83,8 @@ class TestSequenceSparseArch(nn.Module):
             ).view(-1, 20 * self.embedding_dim)
             for e in self.embedding_names
         ]
-        return torch.cat(
-            padded_embeddings,
-            dim=1,
-        )
+
+        return _post_sparsenn_forward(padded_embeddings, batch_size)
 
 
 class TestSequenceTowerInteraction(nn.Module):
@@ -133,6 +154,7 @@ class TestSequenceTowerSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -235,6 +257,7 @@ class TestSequenceSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -261,7 +284,7 @@ class TestSequenceSparseNN(TestSparseNNBase):
         input: ModelInput,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         dense_r = self.dense(input.float_features)
-        sparse_r = self.sparse(input.idlist_features)
+        sparse_r = self.sparse(input.idlist_features, input.float_features.size(0))
         over_r = self.over(dense_r, sparse_r)
         pred = torch.sigmoid(torch.mean(over_r, dim=1))
         if self.training:
@@ -289,7 +312,8 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
 
         fused_params = {"learning_rate": 0.1}
         super().__init__(
-            fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
+            fused_params=fused_params,
+            qcomm_codecs_registry=qcomm_codecs_registry,
         )
 
     """

@@ -9,6 +9,8 @@
 #pragma once
 
 #include <chrono>
+#include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -36,6 +38,16 @@ namespace torchrec {
 
 class GPUExecutor {
  public:
+  // Used to interface with python's garbage collector
+  struct GCConfig {
+    bool optimizationEnabled = false;
+    size_t collectionFreq = 1000;
+    size_t statReportingFreq = 10000;
+    std::unique_ptr<IDynamicTimeseriesObserver> observer =
+        std::make_unique<EmptyDynamicTimeseriesObserver>();
+    std::map<int, int> threadIdToNumForwards = std::map<int, int>();
+  };
+
   GPUExecutor(
       std::shared_ptr<torch::deploy::InterpreterManager> manager,
       torch::deploy::ReplicatedObj model,
@@ -46,7 +58,8 @@ class GPUExecutor {
       std::shared_ptr<IGPUExecutorObserver>
           observer, // shared_ptr because used in completion executor callback
       std::function<void()> warmupFn = {},
-      c10::optional<size_t> numThreadsPerGPU = c10::nullopt);
+      c10::optional<size_t> numThreadsPerGPU = c10::nullopt,
+      std::unique_ptr<GCConfig> gcConfig = std::make_unique<GCConfig>());
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
   ~GPUExecutor();
@@ -71,7 +84,15 @@ class GPUExecutor {
   std::shared_ptr<IGPUExecutorObserver> observer_;
   std::function<void()> warmupFn_;
 
+  std::mutex warmUpMutex_;
+  std::condition_variable warmUpCV_;
+  int warmUpCounter_{0};
+
   size_t numThreadsPerGPU_;
+
+  std::unique_ptr<GCConfig> gcConfig_;
+
+  void reportGCStats(c10::IValue stats);
 };
 
 } // namespace torchrec

@@ -13,10 +13,12 @@ from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
 from torch import fx, nn
+from torch.nn.modules.module import _addindent
 from torchrec.distributed.types import (
     ModuleSharder,
     ParameterStorage,
     QuantizedCommCodecs,
+    ShardedModule,
     ShardedTensorMetadata,
     ShardingType,
     ShardMetadata,
@@ -255,11 +257,90 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
     ) -> T:
         pass
 
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
+
+class FeatureShardingMixIn:
+    """
+    Feature Sharding Interface to provide sharding-aware feature metadata.
+    """
+
+    def id_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names(self) -> List[str]:
+        raise NotImplementedError
+
+    def id_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
+        raise NotImplementedError
+
+    def id_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+    def id_score_list_features_per_rank(self) -> List[int]:
+        raise NotImplementedError
+
+
+class ModuleShardingMixIn:
+    """
+    The interface to access a sharded module's sharding scheme.
+    """
+
+    @property
+    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+        raise NotImplementedError
+
+
+Out = TypeVar("Out")
+CompIn = TypeVar("CompIn", bound=Multistreamable)
+DistOut = TypeVar("DistOut")
+ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+
+class ShardedEmbeddingModule(
+    ShardedModule[CompIn, DistOut, Out, ShrdCtx],
+    ModuleShardingMixIn,
+):
+    """
+    All model-parallel embedding modules implement this interface.
+    Inputs and outputs are data-parallel.
+
+    Args::
+        qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]) : Mapping of CommOp name to QuantizedCommCodecs
+    """
+
+    @abc.abstractmethod
+    def __init__(
+        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+    ) -> None:
+        super().__init__(qcomm_codecs_registry)
+
+        self._input_dists: List[nn.Module] = []
+        self._lookups: List[nn.Module] = []
+        self._output_dists: List[nn.Module] = []
+
+    def extra_repr(self) -> str:
+        """
+        Pretty prints representation of the module's lookup modules, input_dists and output_dists
+        """
+
+        def loop(key: str, modules: List[nn.Module]) -> List[str]:
+            child_lines = []
+            if len(modules) > 0:
+                child_lines.append("(" + key + "): ")
+            for module in modules:
+                mod_str = repr(module)
+                mod_str = _addindent(mod_str, 2)
+                child_lines.append(mod_str)
+            return child_lines
+
+        rep = []
+        rep.extend(loop("lookups", self._lookups))
+        rep.extend(loop("_input_dists", self._input_dists))
+        rep.extend(loop("_output_dists", self._output_dists))
+
+        return "\n ".join(rep)
 
 
 M = TypeVar("M", bound=nn.Module)
@@ -270,10 +351,9 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
+        variable_batch_size: bool = False,  # deprecated, TODO: remove on or after 03/31/2023
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-        self._variable_batch_size = variable_batch_size
 
         # TODO remove after decoupling
         self._fused_params = fused_params
@@ -299,9 +379,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         sharding_type: str,
         compute_device_type: str,
     ) -> List[str]:
-        ret = [
-            EmbeddingComputeKernel.DENSE.value,
-        ]
+        ret: List[str] = []
         if sharding_type != ShardingType.DATA_PARALLEL.value:
             ret += [
                 EmbeddingComputeKernel.FUSED.value,
@@ -311,15 +389,15 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM.value,
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
+        else:
+            ret += [
+                EmbeddingComputeKernel.DENSE.value,
+            ]
         return ret
 
     @property
     def fused_params(self) -> Optional[Dict[str, Any]]:
         return self._fused_params
-
-    @property
-    def variable_batch_size(self) -> bool:
-        return self._variable_batch_size
 
     def storage_usage(
         self, tensor: torch.Tensor, compute_device_type: str, compute_kernel: str
@@ -355,12 +433,6 @@ class BaseGroupedFeatureProcessor(nn.Module):
         features: KeyedJaggedTensor,
     ) -> KeyedJaggedTensor:
         pass
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
 
 
 class BaseQuantEmbeddingSharder(ModuleSharder[M]):

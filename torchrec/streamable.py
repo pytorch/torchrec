@@ -39,8 +39,8 @@ class Pipelineable(Multistreamable):
     @abc.abstractmethod
     def to(self, device: torch.device, non_blocking: bool) -> "Pipelineable":
         """
-        Please be aware that accoarding to https://pytorch.org/docs/stable/generated/torch.Tensor.to.html,
-        to might return self or a copy of self.  So please remember to use `to` with the assignment operator,
+        Please be aware that according to https://pytorch.org/docs/stable/generated/torch.Tensor.to.html,
+        `to` might return self or a copy of self.  So please remember to use `to` with the assignment operator,
         for example, `in = in.to(new_device)`.
         """
         ...

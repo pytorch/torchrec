@@ -37,6 +37,10 @@ jobs:
            python-version: 3.9
            python-tag: "py39"
            cuda-tag: "cu11"
+         - os: linux.2xlarge
+           python-version: '3.10'
+           python-tag: "py310"
+           cuda-tag: "cu11"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -90,6 +94,7 @@ jobs:
     - name: Build TorchRec Nightly
       run: |
         rm -r dist || true
+        export CHANNEL="nightly"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --package_name torchrec-nightly \

@@ -50,7 +50,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -72,7 +71,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 },
             ]
         ),
-        variable_batch_size=st.sampled_from([True, False]),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharding_nccl_twrw(
@@ -105,7 +104,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                     kernel_type,
                     qcomms_config=qcomms_config,
                     device=torch.device("cuda"),
-                    variable_batch_size=variable_batch_size,
                 ),
             ],
             backend="nccl",
@@ -135,7 +133,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -157,8 +154,9 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_nccl_twcw(
         self,
         sharder_type: str,
@@ -169,11 +167,16 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
             apply_optimizer_in_backward_config is None
             or kernel_type != EmbeddingComputeKernel.DENSE.value
+        )
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
         )
         world_size = 4
         self._test_sharding(
@@ -196,6 +199,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             },
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -212,7 +216,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
@@ -282,7 +285,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         ),
         kernel_type=st.sampled_from(
             [
-                EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),

@@ -7,7 +7,6 @@
 
 
 import copy
-import functools
 from collections import defaultdict, deque, OrderedDict
 from dataclasses import dataclass, field
 from typing import (
@@ -30,13 +29,12 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    SparseFeaturesIndicesAwaitable,
-    SparseFeaturesListAwaitable,
-    SparseFeaturesListIndicesAwaitable,
+    SparseFeaturesListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    ShardedEmbeddingModule,
     ShardingType,
     SparseFeatures,
     SparseFeaturesList,
@@ -61,7 +59,6 @@ from torchrec.distributed.types import (
     Multistreamable,
     ParameterSharding,
     QuantizedCommCodecs,
-    ShardedModule,
     ShardedTensor,
     ShardingEnv,
     ShardMetadata,
@@ -103,25 +100,29 @@ def create_embedding_sharding(
 ]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     elif sharding_type == ShardingType.ROW_WISE.value:
         return RwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpSequenceEmbeddingSharding(sharding_infos, env, device)
+        return DpSequenceEmbeddingSharding(
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
+        )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return CwSequenceEmbeddingSharding(
-            sharding_infos,
-            env,
-            device,
+            sharding_infos=sharding_infos,
+            env=env,
+            device=device,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     else:
@@ -287,7 +288,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
 
 
 class ShardedEmbeddingCollection(
-    ShardedModule[
+    ShardedEmbeddingModule[
         SparseFeaturesList,
         List[torch.Tensor],
         Dict[str, JaggedTensor],
@@ -323,10 +324,10 @@ class ShardedEmbeddingCollection(
             ],
         ] = {
             sharding_type: create_embedding_sharding(
-                sharding_type,
-                embedding_confings,
-                env,
-                device,
+                sharding_type=sharding_type,
+                sharding_infos=embedding_confings,
+                env=env,
+                device=device,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
@@ -456,85 +457,12 @@ class ShardedEmbeddingCollection(
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist())
 
-    def lengths_dist(
-        self, ctx: EmbeddingCollectionContext, features: KeyedJaggedTensor
-    ) -> SparseFeaturesListIndicesAwaitable:
-        """
-        Creates lengths all2all awaitables.
-        """
-        if self._has_uninitialized_input_dist:
-            self._create_input_dist(input_feature_names=features.keys())
-            self._has_uninitialized_input_dist = False
-        with torch.no_grad():
-            if self._features_order:
-                features = features.permute(
-                    self._features_order,
-                    # pyre-ignore [6]
-                    self._features_order_tensor,
-                )
-            features_by_shards = features.split(
-                self._feature_splits,
-            )
-
-            # Callback to save input splits and output splits in sharding context which
-            # will be reused in sequence embedding all2all.
-            def _save_input_output_splits_to_context(
-                module: nn.Module,
-                features: KeyedJaggedTensor,
-                ctx: EmbeddingCollectionContext,
-                indices_awaitable: Awaitable[SparseFeatures],
-            ) -> Awaitable[SparseFeatures]:
-                with torch.no_grad():
-                    input_splits = []
-                    output_splits = []
-                    if isinstance(indices_awaitable, SparseFeaturesIndicesAwaitable):
-                        input_splits = (
-                            # pyre-fixme[16]: `Optional` has no attribute
-                            #  `_in_lengths_per_worker`.
-                            indices_awaitable._id_list_features_awaitable._in_lengths_per_worker
-                        )
-                        output_splits = (
-                            # pyre-fixme[16]: `Optional` has no attribute
-                            #  `_out_lengths_per_worker`.
-                            indices_awaitable._id_list_features_awaitable._out_lengths_per_worker
-                        )
-                    ctx.sharding_contexts.append(
-                        SequenceShardingContext(
-                            features_before_input_dist=features,
-                            input_splits=input_splits,
-                            output_splits=output_splits,
-                            unbucketize_permute_tensor=module.unbucketize_permute_tensor
-                            if isinstance(module, RwSparseFeaturesDist)
-                            else None,
-                        )
-                    )
-                    return indices_awaitable
-
-            awaitables = []
-            for module, features in zip(self._input_dists, features_by_shards):
-                tensor_awaitable = module(
-                    SparseFeatures(
-                        id_list_features=features,
-                        id_score_list_features=None,
-                    )
-                )
-                tensor_awaitable.callbacks.append(
-                    functools.partial(
-                        _save_input_output_splits_to_context,
-                        module,
-                        features,
-                        ctx,
-                    )
-                )
-                awaitables.append(tensor_awaitable)
-            return SparseFeaturesListIndicesAwaitable(awaitables)
-
     # pyre-ignore [14]
     def input_dist(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[SparseFeaturesList]:
+    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
@@ -548,41 +476,25 @@ class ShardedEmbeddingCollection(
             features_by_shards = features.split(
                 self._feature_splits,
             )
-            # save input splits and output splits in sharding context which
-            # will be reused in sequence embedding all2all
             awaitables = []
-            for module, features in zip(self._input_dists, features_by_shards):
-                lengths_awaitable = module(
-                    SparseFeatures(
-                        id_list_features=features,
-                        id_score_list_features=None,
+            for input_dist, features in zip(self._input_dists, features_by_shards):
+                awaitables.append(
+                    input_dist(
+                        SparseFeatures(
+                            id_list_features=features,
+                            id_score_list_features=None,
+                        )
                     )
                 )
-                indices_awaitable = lengths_awaitable.wait()  # finish lengths all2all
-                input_splits = []
-                output_splits = []
-                if isinstance(indices_awaitable, SparseFeaturesIndicesAwaitable):
-                    assert indices_awaitable._id_list_features_awaitable is not None
-                    input_splits = (
-                        # pyre-fixme[16]
-                        indices_awaitable._id_list_features_awaitable._in_lengths_per_worker
-                    )
-                    output_splits = (
-                        # pyre-fixme[16]
-                        indices_awaitable._id_list_features_awaitable._out_lengths_per_worker
-                    )
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
-                        input_splits=input_splits,
-                        output_splits=output_splits,
-                        unbucketize_permute_tensor=module.unbucketize_permute_tensor
-                        if isinstance(module, RwSparseFeaturesDist)
+                        unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
+                        if isinstance(input_dist, RwSparseFeaturesDist)
                         else None,
                     )
                 )
-                awaitables.append(indices_awaitable)
-            return SparseFeaturesListAwaitable(awaitables)
+        return SparseFeaturesListSplitsAwaitable(awaitables, ctx)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: SparseFeaturesList
@@ -722,18 +634,6 @@ class ShardedEmbeddingCollection(
         return _IncompatibleKeys(
             missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
-
-    def sparse_grad_parameter_names(
-        self,
-        destination: Optional[List[str]] = None,
-        prefix: str = "",
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        for lookup in self._lookups:
-            lookup.sparse_grad_parameter_names(
-                destination, append_prefix(prefix, "embeddings")
-            )
-        return destination
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for lookup, sharding_type in zip(

@@ -70,7 +70,7 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
         )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
         for name, param in self.position_weights.items():
             yield append_prefix(prefix, f"position_weights.{name}"), param
@@ -95,10 +95,4 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
             destination[prefix + f"position_weights.{name}"] = (
                 param if keep_vars else param.detach()
             )
-        return destination
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
         return destination

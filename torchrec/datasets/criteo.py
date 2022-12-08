@@ -16,7 +16,7 @@ import torch
 import torch.utils.data.datapipes as dp
 from iopath.common.file_io import PathManager, PathManagerFactory
 from pyre_extensions import none_throws
-from torch.utils.data import IterableDataset, IterDataPipe
+from torch.utils.data import IterDataPipe
 from torchrec.datasets.utils import (
     Batch,
     LoadFiles,
@@ -267,13 +267,13 @@ class BinaryCriteoUtils:
             return shape
 
     @staticmethod
-    def get_file_idx_to_row_range(
+    def get_file_row_ranges_and_remainder(
         lengths: List[int],
         rank: int,
         world_size: int,
         start_row: int = 0,
         last_row: Optional[int] = None,
-    ) -> Dict[int, Tuple[int, int]]:
+    ) -> Tuple[Dict[int, Tuple[int, int]], int]:
         """
         Given a rank, world_size, and the lengths (number of rows) for a list of files,
         return which files and which portions of those files (represented as row ranges
@@ -290,9 +290,9 @@ class BinaryCriteoUtils:
             world_size (int): world size.
 
         Returns:
-            output (Dict[int, Tuple[int, int]]): Mapping of which files to the range in
-                those files to be handled by the rank. The keys of this dict are indices
-                of lengths.
+            output (Tuple[Dict[int, Tuple[int, int]], int]): First item is a mapping of files
+            to the range in those files to be handled by the rank. The keys of this dict are indices.
+            The second item is the remainder of dataset length / world size.
         """
 
         # All ..._g variables are globals indices (meaning they range from 0 to
@@ -339,7 +339,7 @@ class BinaryCriteoUtils:
                 overlap_right_l = overlap_right_g - file_left_g
                 output[idx] = (overlap_left_l, overlap_right_l)
 
-        return output
+        return output, remainder
 
     @staticmethod
     def load_npy_range(
@@ -372,7 +372,7 @@ class BinaryCriteoUtils:
             if len(shape) == 2:
                 total_rows, row_size = shape
             else:
-                raise ValueError("Cannot load range for npy with ndim == 2.")
+                raise ValueError("Cannot load range for npy with ndim != 2.")
 
             if not (0 <= start_row < total_rows):
                 raise ValueError(
@@ -537,7 +537,7 @@ class BinaryCriteoUtils:
             output_dir_full_set (str): Output directory of the full dataset, if desired.
             days (int): Number of day files.
             int_columns (int): Number of columns with dense features.
-            columns (int): Total number of columns.
+            sparse_columns (int): Total number of categorical columns.
             path_manager_key (str): Path manager key used to load from different filesystems.
             random_seed (int): Random seed used for the random.shuffle operator.
         """
@@ -660,7 +660,7 @@ class BinaryCriteoUtils:
             print(f"Copying over {path_to_original} to {val_train_path}")
 
 
-class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
+class InMemoryBinaryCriteoIterDataPipe(IterDataPipe):
     """
     Datapipe designed to operate over binary (npy) versions of Criteo datasets. Loads
     the entire dataset into memory to prevent disk speed from affecting throughout. Each
@@ -707,6 +707,8 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         rank: int,
         world_size: int,
         shuffle_batches: bool = False,
+        shuffle_training_set: bool = False,
+        shuffle_training_set_random_seed: int = 0,
         mmap_mode: bool = False,
         hashes: Optional[List[int]] = None,
         path_manager_key: str = PATH_MANAGER_KEY,
@@ -719,19 +721,35 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.rank = rank
         self.world_size = world_size
         self.shuffle_batches = shuffle_batches
+        self.shuffle_training_set = shuffle_training_set
+        np.random.seed(shuffle_training_set_random_seed)
         self.mmap_mode = mmap_mode
-        self.hashes = hashes
+        self.hashes: np.ndarray = np.array(hashes).reshape((1, CAT_FEATURE_COUNT))
         self.path_manager_key = path_manager_key
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
 
-        self._load_data_for_rank()
+        if shuffle_training_set and stage == "train":
+            self._shuffle_and_load_data_for_rank()
+        else:
+            self._load_data_for_rank()
+        # When mmap_mode is enabled, sparse features are hashed when
+        # samples are batched in def __iter__. Otherwise, the dataset has been
+        # preloaded with sparse features hashed in the preload stage, here:
+        if not self.mmap_mode and self.hashes is not None:
+            for sparse_arr in self.sparse_arrs:
+                sparse_arr %= self.hashes
+
         self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
-        self.num_batches: int = math.ceil(sum(self.num_rows_per_file) / batch_size)
+        cur_rank_dataset_len = sum(self.num_rows_per_file)
+        if self.rank < self.remainder:
+            self.num_batches: int = math.ceil((cur_rank_dataset_len - 1) / batch_size)
+        else:
+            self.num_batches: int = math.ceil(cur_rank_dataset_len / batch_size)
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
         # functions.
-        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * batch_size
+        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size + 1)
         self.keys: List[str] = DEFAULT_CAT_NAMES
         self.lengths: torch.Tensor = torch.ones(
             (self._num_ids_in_batch,), dtype=torch.int32
@@ -739,6 +757,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.offsets: torch.Tensor = torch.arange(
             0, self._num_ids_in_batch + 1, dtype=torch.int32
         )
+        self._num_ids_in_batch -= CAT_FEATURE_COUNT
         self.length_per_key: List[int] = CAT_FEATURE_COUNT * [batch_size]
         self.offset_per_key: List[int] = [
             batch_size * i for i in range(CAT_FEATURE_COUNT + 1)
@@ -761,7 +780,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 dataset_len = samples_in_file - start_row
             last_row = start_row + dataset_len - 1
 
-        file_idx_to_row_range = BinaryCriteoUtils.get_file_idx_to_row_range(
+        row_ranges, remainder = BinaryCriteoUtils.get_file_row_ranges_and_remainder(
             lengths=[
                 BinaryCriteoUtils.get_shape_from_npy(
                     path, path_manager_key=self.path_manager_key
@@ -773,13 +792,13 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             start_row=start_row,
             last_row=last_row,
         )
-
+        self.remainder = remainder
         self.dense_arrs, self.sparse_arrs, self.labels_arrs = [], [], []
         for arrs, paths in zip(
             [self.dense_arrs, self.sparse_arrs, self.labels_arrs],
             [self.dense_paths, self.sparse_paths, self.labels_paths],
         ):
-            for idx, (range_left, range_right) in file_idx_to_row_range.items():
+            for idx, (range_left, range_right) in row_ranges.items():
                 arrs.append(
                     BinaryCriteoUtils.load_npy_range(
                         paths[idx],
@@ -790,14 +809,48 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                     )
                 )
 
-        # When mmap_mode is enabled, the hash is applied in def __iter__, which is
-        # where samples are batched during training.
-        # Otherwise, the ML dataset is preloaded, and the hash is applied here in
-        # the preload stage, as shown:
-        if not self.mmap_mode and self.hashes is not None:
-            hashes_np = np.array(self.hashes).reshape((1, CAT_FEATURE_COUNT))
-            for sparse_arr in self.sparse_arrs:
-                sparse_arr %= hashes_np
+    def _shuffle_and_load_data_for_rank(self) -> None:
+        world_size = self.world_size
+        rank = self.rank
+        dense_arrs = [np.load(f, mmap_mode="r") for f in self.dense_paths]
+        sparse_arrs = [np.load(f, mmap_mode="r") for f in self.sparse_paths]
+        labels_arrs = [np.load(f, mmap_mode="r") for f in self.labels_paths]
+        num_rows_per_file = list(map(len, dense_arrs))
+        total_rows = sum(num_rows_per_file)
+        permutation_arr = np.random.permutation(total_rows)
+        self.remainder = total_rows % world_size
+        rows_per_rank = total_rows // world_size
+        rows_per_rank = np.array([rows_per_rank for _ in range(world_size)])
+        rows_per_rank[: self.remainder] += 1
+        rank_rows_bins = np.cumsum(rows_per_rank)
+        rank_rows_bins_csr = np.cumsum([0] + list(rows_per_rank))
+
+        rows = rows_per_rank[rank]
+        d_sample, s_sample, l_sample = (
+            dense_arrs[0][0],
+            sparse_arrs[0][0],
+            labels_arrs[0][0],
+        )
+        shuffled_dense_arr = np.empty((rows, len(d_sample)), d_sample.dtype)
+        shuffled_sparse_arr = np.empty((rows, len(s_sample)), s_sample.dtype)
+        shuffled_labels_arr = np.empty((rows, len(l_sample)), l_sample.dtype)
+
+        day_rows_bins_csr = np.cumsum(np.array([0] + num_rows_per_file))
+        for i in range(len(dense_arrs)):
+            start = day_rows_bins_csr[i]
+            end = day_rows_bins_csr[i + 1]
+            indices_to_take = np.where(
+                rank == np.digitize(permutation_arr[start:end], rank_rows_bins)
+            )[0]
+            output_indices = (
+                permutation_arr[start + indices_to_take] - rank_rows_bins_csr[rank]
+            )
+            shuffled_dense_arr[output_indices] = dense_arrs[i][indices_to_take]
+            shuffled_sparse_arr[output_indices] = sparse_arrs[i][indices_to_take]
+            shuffled_labels_arr[output_indices] = labels_arrs[i][indices_to_take]
+        self.dense_arrs = [shuffled_dense_arr]
+        self.sparse_arrs = [shuffled_sparse_arr]
+        self.labels_arrs = [shuffled_labels_arr]
 
     def _np_arrays_to_batch(
         self, dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
@@ -855,15 +908,18 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         file_idx = 0
         row_idx = 0
         batch_idx = 0
+        cur_batch_size = self.batch_size
         while batch_idx < self.num_batches:
             buffer_row_count = 0 if buffer is None else none_throws(buffer)[0].shape[0]
-            if buffer_row_count == self.batch_size or file_idx == len(self.dense_arrs):
+            if buffer_row_count == cur_batch_size or file_idx == len(self.dense_arrs):
                 yield self._np_arrays_to_batch(*none_throws(buffer))
                 batch_idx += 1
                 buffer = None
+                if batch_idx + 1 == self.num_batches and self.rank < self.remainder:
+                    cur_batch_size += 1
             else:
                 rows_to_get = min(
-                    self.batch_size - buffer_row_count,
+                    cur_batch_size - buffer_row_count,
                     self.num_rows_per_file[file_idx] - row_idx,
                 )
                 slice_ = slice(row_idx, row_idx + rows_to_get)
@@ -873,9 +929,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 target_labels = self.labels_arrs[file_idx][slice_, :]
 
                 if self.mmap_mode and self.hashes is not None:
-                    sparse_inputs = sparse_inputs % np.array(self.hashes).reshape(
-                        (1, CAT_FEATURE_COUNT)
-                    )
+                    sparse_inputs = sparse_inputs % self.hashes
 
                 append_to_buffer(
                     dense_inputs,

@@ -10,6 +10,7 @@
 import abc
 import itertools
 import math
+
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import Enum
@@ -19,11 +20,13 @@ from typing import (
     cast,
     Deque,
     Dict,
+    # Final, TODO reintroduce once we no longer need to support 3.7
     Iterator,
     List,
     Mapping,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -33,6 +36,7 @@ from typing import (
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch import Tensor
 from torchmetrics import Metric
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import (
@@ -51,11 +55,12 @@ class MetricComputationReport:
     name: MetricNameBase
     metric_prefix: MetricPrefix
     value: torch.Tensor
+    description: Optional[str] = None
 
 
 DefaultValueT = TypeVar("DefaultValueT")
 ComputeIterType = Iterator[
-    Tuple[RecTaskInfo, MetricNameBase, torch.Tensor, MetricPrefix]
+    Tuple[RecTaskInfo, MetricNameBase, torch.Tensor, MetricPrefix, str]
 ]
 
 MAX_BUFFER_COUNT = 1000
@@ -99,24 +104,24 @@ class WindowBuffer:
 
 class RecMetricComputation(Metric, abc.ABC):
     r"""The internal computation class template.
-    A metric implementation should overwrite update() and compute(). These two
-    APIs focuses the actual mathematical meaning of the metric, without the
-    detail knowledge of model output and task information.
+    A metric implementation should overwrite `update()` and `compute()`. These two
+    APIs focus on the actual mathematical meaning of the metric, without detailed
+    knowledge of model output and task information.
 
     Args:
         my_rank (int): the rank of this trainer.
         batch_size (int): batch size used by this trainer.
-        n_tasks (int): the number tasks this communication obj
-            will have to compute.
+        n_tasks (int): the number tasks this communication object will have to compute.
         window_size (int): the window size for the window metric.
-        compute_on_all_ranks (bool): whether to compute metrics on all ranks. This
-            is necessary if non-leader rank want to consum metrics result.
-        should_validate_update (bool): whether to check the inputs of update() and skip
-            update if the inputs are invalid. Invalid inputs include the case where all
-            examples have 0 weights for a batch
+        compute_on_all_ranks (bool): whether to compute metrics on all ranks. This is
+            necessary if the non-leader rank wants to consume the metrics results.
+        should_validate_update (bool): whether to check the inputs of `update()` and
+            skip the update if the inputs are invalid. Invalid inputs include the case
+            where all examples have 0 weights for a batch.
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
+    # _batch_window_buffers: Final[Optional[Dict[str, WindowBuffer]]] TODO support after we drop 3.7
     _batch_window_buffers: Optional[Dict[str, WindowBuffer]]
 
     def __init__(
@@ -139,6 +144,10 @@ class RecMetricComputation(Metric, abc.ABC):
         self._window_size = window_size
         self._compute_on_all_ranks = compute_on_all_ranks
         self._should_validate_update = should_validate_update
+        self._fused_map: Dict[str, int] = {}
+        self._window_fused_map: Dict[str, int] = {}
+        self._fused_name = "_fused_states"
+        self._fused_backup_states: List[torch.Tensor] = []
         if self._window_size > 0:
             self._batch_window_buffers = {}
         else:
@@ -156,46 +165,80 @@ class RecMetricComputation(Metric, abc.ABC):
     def get_window_state_name(state_name: str) -> str:
         return f"window_{state_name}"
 
+    def get_fused_state_name(self) -> str:
+        return self._fused_name
+
+    def get_fused_window_state_name(self) -> str:
+        return self.get_window_state_name(self.get_fused_state_name())
+
     def get_window_state(self, state_name: str) -> torch.Tensor:
-        return getattr(self, self.get_window_state_name(state_name))
+        if state_name in self._fused_map:
+            fused_window_states = getattr(
+                self, self.get_window_state_name(self._fused_name)
+            )
+            return fused_window_states[self._fused_map[state_name]]
+        else:
+            return getattr(self, self.get_window_state_name(state_name))
+
+    def get_state(self, state_name: str) -> torch.Tensor:
+        if state_name in self._fused_map:
+            fused_states = getattr(self, self._fused_name)
+            return fused_states[self._fused_map[state_name]]
+        else:
+            return getattr(self, state_name)
 
     def _add_state(
-        self, name: str, default: DefaultValueT, add_window_state: bool, **kwargs: Any
+        self,
+        name: Union[str, List[str]],
+        default: Tensor,
+        add_window_state: bool,
+        **kwargs: Any,
     ) -> None:
         """
-        name(str): the name of this state. The state will be accessible
+        name (str): the name of this state. The state will be accessible
             with `self.THE_NAME_YOU_DEFINE`.
-        default(DefaultValueT): the initial value of this state. The most common
-            initial value is `torch.zeros(self._n_tasks, dtype=torch.float)` but
+        default (DefaultValueT): the initial value of this state. The most common
+            initial value is `torch.zeros(self._n_tasks, dtype=torch.float)`, but
             users need to check the math formula to decide what is the correct
             initial value for the metric. Note the `self._n_tasks` in the above
             code. As a metric may handle multiple tasks at the same time, the
             highest dimension of a state should be `self._n_tasks`.
-        add_window_state(bool): when this is True, a `window_{name}` state will
+        add_window_state (bool): when this is True, a `window_{name}` state will
             be created to record the window state information for this state.
-        dist_reduce_fx(str): the reduction function when aggregating the local
+        dist_reduce_fx (str): the reduction function when aggregating the local
             state. For example, tower_qps uses “sum” to aggregate the total
             trained examples.
-        persistent(bool): set this to True if you want to save/checkpoint the
+        persistent (bool): set this to True if you want to save/checkpoint the
             metric and this state is required to compute the checkpointed metric.
         """
-        # pyre-fixme[6]: Expected `Union[List[typing.Any], torch.Tensor]` for 2nd
-        #  param but got `DefaultValueT`.
-        super().add_state(name, default, **kwargs)
+        if isinstance(name, List):
+            super().add_state(self._fused_name, default, **kwargs)
+        else:
+            super().add_state(name, default, **kwargs)
+
         if add_window_state:
             if self._batch_window_buffers is None:
                 raise RuntimeError(
                     "Users is adding a window state while window metric is disabled."
                 )
             kwargs["persistent"] = False
-            window_state_name = self.get_window_state_name(name)
-            # Avoid pyre error
+            # add fused window state
+            if isinstance(name, List):
+                window_state_name = self.get_window_state_name(self._fused_name)
+            else:
+                window_state_name = self.get_window_state_name(name)
+
             assert isinstance(default, torch.Tensor)
             super().add_state(window_state_name, default.detach().clone(), **kwargs)
+
             self._batch_window_buffers[window_state_name] = WindowBuffer(
                 max_size=self._window_size,
                 max_buffer_count=MAX_BUFFER_COUNT,
             )
+
+        if isinstance(name, List):
+            for i, _name in enumerate(name):
+                self._fused_map[_name] = i
 
     def _aggregate_window_state(
         self, state_name: str, state: torch.Tensor, num_samples: int
@@ -218,6 +261,7 @@ class RecMetricComputation(Metric, abc.ABC):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:  # pragma: no cover
         pass
 
@@ -248,12 +292,12 @@ class RecMetric(nn.Module, abc.ABC):
     r"""The main class template to implement a recommendation metric.
     This class contains the recommendation tasks information (RecTaskInfo) and
     the actual computation object (RecMetricComputation). RecMetric processes
-    all the information related to RecTaskInfo and models and pass the required
+    all the information related to RecTaskInfo and models, and passes the required
     signals to the computation object, allowing the implementation of
-    RecMetricComputation to focus on the mathemetical meaning.
+    RecMetricComputation to focus on the mathematical meaning.
 
-    A new metric that inherit RecMetric must override the following attributes
-    in its own __init__(): `_namespace` and `_metrics_computations`. No other
+    A new metric that inherits RecMetric must override the following attributes
+    in its own `__init__()`: `_namespace` and `_metrics_computations`. No other
     methods should be overridden.
 
     Args:
@@ -265,27 +309,21 @@ class RecMetric(nn.Module, abc.ABC):
         window_size (int): the window size for the window metric.
         fused_update_limit (int): the maximum number of updates to be fused.
         compute_on_all_ranks (bool): whether to compute metrics on all ranks. This
-            is necessary if non-leader rank want to consume global metrics result.
-        should_validate_update (bool): whether to check the inputs of update() and skip
-            update if the inputs are invalid. Invalid inputs include the case where all
-            examples have 0 weights for a batch
+            is necessary if the non-leader rank wants to consume global metrics result.
+        should_validate_update (bool): whether to check the inputs of `update()` and
+            skip the update if the inputs are invalid. Invalid inputs include the case
+            where all examples have 0 weights for a batch.
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
-
-    Call Args:
-        Not supported.
-
-    Returns:
-        Not supported.
 
     Example::
 
         ne = NEMetric(
-                 world_size=4,
-                 my_rank=0,
-                 batch_size=128,
-                 tasks=DefaultTaskInfo,
-             )
+            world_size=4,
+            my_rank=0,
+            batch_size=128,
+            tasks=DefaultTaskInfo,
+        )
     """
     _computation_class: Type[RecMetricComputation]
     _namespace: MetricNamespaceBase
@@ -296,6 +334,8 @@ class RecMetric(nn.Module, abc.ABC):
     _tasks_iter: Callable[[str], ComputeIterType]
     _update_buffers: Dict[str, List[RecModelOutput]]
     _default_weights: Dict[Tuple[int, ...], torch.Tensor]
+
+    _required_inputs: Set[str]
 
     PREDICTIONS: str = "predictions"
     LABELS: str = "labels"
@@ -313,7 +353,7 @@ class RecMetric(nn.Module, abc.ABC):
         compute_on_all_ranks: bool = False,
         should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
-        **kwargs: Any,
+        **kwargs: Dict[str, Any],
     ) -> None:
         # TODO(stellaya): consider to inherit from TorchMetrics.Metric or
         # TorchMetrics.MetricCollection.
@@ -329,43 +369,57 @@ class RecMetric(nn.Module, abc.ABC):
         self._my_rank = my_rank
         self._window_size = math.ceil(window_size / world_size)
         self._batch_size = batch_size
+        self._metrics_computations = nn.ModuleList()
         self._tasks = tasks
         self._compute_mode = compute_mode
         self._fused_update_limit = fused_update_limit
         self._should_validate_update = should_validate_update
         self._default_weights = {}
+        self._required_inputs = set()
         self._update_buffers = {
             self.PREDICTIONS: [],
             self.LABELS: [],
             self.WEIGHTS: [],
         }
         if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
-            n_metrics = 1
             task_per_metric = len(self._tasks)
             self._tasks_iter = self._fused_tasks_iter
         else:
-            n_metrics = len(self._tasks)
             task_per_metric = 1
             self._tasks_iter = self._unfused_tasks_iter
 
-        self._metrics_computations: nn.ModuleList = nn.ModuleList(
-            [
-                # This Pyre error seems to be Pyre's bug as it can be inferred by mypy
-                # according to https://github.com/python/mypy/issues/3048.
-                # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
-                self._computation_class(
-                    my_rank,
-                    batch_size,
-                    task_per_metric,
-                    self._window_size,
-                    compute_on_all_ranks,
-                    self._should_validate_update,
-                    process_group,
-                    **kwargs,
-                )
-                for _ in range(n_metrics)
-            ]
-        )
+        for task_config in (
+            [self._tasks]
+            if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
+            else self._tasks
+        ):
+            # This Pyre error seems to be Pyre's bug as it can be inferred by mypy
+            # according to https://github.com/python/mypy/issues/3048.
+            # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
+            metric_computation = self._computation_class(
+                my_rank,
+                batch_size,
+                task_per_metric,
+                self._window_size,
+                compute_on_all_ranks,
+                self._should_validate_update,
+                process_group,
+                **{**kwargs, **self._get_task_kwargs(task_config)},
+            )
+            required_inputs = self._get_task_required_inputs(task_config)
+
+            self._metrics_computations.append(metric_computation)
+            self._required_inputs.update(required_inputs)
+
+    def _get_task_kwargs(
+        self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
+    ) -> Dict[str, Any]:
+        return {}
+
+    def _get_task_required_inputs(
+        self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
+    ) -> Set[str]:
+        return set()
 
     # TODO(stellaya): Refactor the _[fused, unfused]_tasks_iter methods and replace the
     # compute_scope str input with an enum
@@ -394,7 +448,7 @@ class RecMetric(nn.Module, abc.ABC):
                     if has_valid_update > 0
                     else torch.zeros_like(metric_value)
                 )
-                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _unfused_tasks_iter(self, compute_scope: str) -> ComputeIterType:
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
@@ -412,7 +466,7 @@ class RecMetric(nn.Module, abc.ABC):
                     or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
-                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _fuse_update_buffers(self) -> Dict[str, RecModelOutput]:
         def fuse(outputs: List[RecModelOutput]) -> RecModelOutput:
@@ -473,13 +527,21 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
-                assert isinstance(predictions, torch.Tensor)
-                # Reshape the predictions to size([len(self._tasks), self._batch_size])
-                predictions = predictions.view(-1, self._batch_size)
-                assert isinstance(labels, torch.Tensor)
+                assert isinstance(predictions, torch.Tensor) and isinstance(
+                    labels, torch.Tensor
+                )
+
+                predictions = (
+                    # Reshape the predictions to size([len(self._tasks), self._batch_size])
+                    predictions.view(-1, self._batch_size)
+                    if predictions.dim() == labels.dim()
+                    # predictions.dim() == labels.dim() + 1 for multiclass models
+                    else predictions.view(-1, self._batch_size, predictions.size()[-1])
+                )
                 labels = labels.view(-1, self._batch_size)
                 if weights is None:
                     weights = self._create_default_weights(predictions)
@@ -512,8 +574,14 @@ class RecMetric(nn.Module, abc.ABC):
                         assert torch.numel(labels[task.name]) == 0
                         assert weights is None or torch.numel(weights[task.name]) == 0
                         continue
-                    # Reshape the predictions to size([1, self._batch_size])
-                    task_predictions = predictions[task.name].view(1, -1)
+                    task_predictions = (
+                        predictions[task.name].view(1, -1)
+                        if predictions[task.name].dim() == labels[task.name].dim()
+                        # predictions[task.name].dim() == labels[task.name].dim() + 1 for multiclass models
+                        else predictions[task.name].view(
+                            1, -1, predictions[task.name].size()[-1]
+                        )
+                    )
                     task_labels = labels[task.name].view(1, -1)
                     if weights is None:
                         task_weights = self._create_default_weights(task_predictions)
@@ -529,10 +597,16 @@ class RecMetric(nn.Module, abc.ABC):
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
+                    if "required_inputs" in kwargs:
+                        kwargs["required_inputs"] = {
+                            k: v.view(task_labels.size())
+                            for k, v in kwargs["required_inputs"].items()
+                        }
                     metric_.update(
                         predictions=task_predictions,
                         labels=task_labels,
                         weights=task_weights,
+                        **kwargs,
                     )
 
     def update(
@@ -541,6 +615,7 @@ class RecMetric(nn.Module, abc.ABC):
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if self._fused_update_limit > 0:
             self._update_buffers[self.PREDICTIONS].append(predictions)
@@ -549,16 +624,20 @@ class RecMetric(nn.Module, abc.ABC):
                 self._update_buffers[self.WEIGHTS].append(weights)
             self._check_fused_update(force=False)
         else:
-            self._update(predictions=predictions, labels=labels, weights=weights)
+            self._update(
+                predictions=predictions, labels=labels, weights=weights, **kwargs
+            )
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
     def compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}
-        for task, metric_name, metric_value, prefix in self._tasks_iter(""):
+        for task, metric_name, metric_value, prefix, description in self._tasks_iter(
+            ""
+        ):
             metric_key = compose_metric_key(
-                self._namespace, task.name, metric_name, prefix
+                self._namespace, task.name, metric_name, prefix, description
             )
             ret[metric_key] = metric_value
         return ret
@@ -566,9 +645,11 @@ class RecMetric(nn.Module, abc.ABC):
     def local_compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}
-        for task, metric_name, metric_value, prefix in self._tasks_iter("local_"):
+        for task, metric_name, metric_value, prefix, description in self._tasks_iter(
+            "local_"
+        ):
             metric_key = compose_metric_key(
-                self._namespace, task.name, metric_name, prefix
+                self._namespace, task.name, metric_name, prefix, description
             )
             ret[metric_key] = metric_value
         return ret
@@ -626,6 +707,9 @@ class RecMetric(nn.Module, abc.ABC):
             keep_vars=keep_vars,
         )
 
+    def get_required_inputs(self) -> Set[str]:
+        return self._required_inputs
+
 
 class RecMetricList(nn.Module):
     """
@@ -653,6 +737,7 @@ class RecMetricList(nn.Module):
     """
 
     rec_metrics: nn.ModuleList
+    required_inputs: List[str]
 
     def __init__(self, rec_metrics: List[RecMetric]) -> None:
         # TODO(stellaya): consider to inherit from TorchMetrics.MetricCollection.
@@ -661,6 +746,11 @@ class RecMetricList(nn.Module):
 
         super().__init__()
         self.rec_metrics = nn.ModuleList(rec_metrics)
+        self.required_inputs = list(
+            set().union(
+                *[rec_metric.get_required_inputs() for rec_metric in rec_metrics]
+            )
+        )
 
     def __len__(self) -> int:
         return len(self.rec_metrics)
@@ -668,12 +758,16 @@ class RecMetricList(nn.Module):
     def __getitem__(self, idx: int) -> nn.Module:
         return self.rec_metrics[idx]
 
+    def get_required_inputs(self) -> List[str]:
+        return self.required_inputs
+
     def update(
         self,
         *,
         predictions: RecModelOutput,
         labels: RecModelOutput,
         weights: RecModelOutput,
+        **kwargs: Dict[str, Any],
     ) -> None:
         for metric in self.rec_metrics:
             metric.update(predictions=predictions, labels=labels, weights=weights)

@@ -50,7 +50,6 @@ class RwSequenceEmbeddingDist(
         super().__init__()
         self._dist = SequenceEmbeddingsAllToAll(
             pg,
-            # pyre-fixme[16]: `ProcessGroup` has no attribute `size`.
             [num_features] * pg.size(),
             device,
             codecs=qcomm_codecs_registry.get(
@@ -82,6 +81,8 @@ class RwSequenceEmbeddingDist(
             lengths=sharding_ctx.lengths_after_input_dist,
             input_splits=sharding_ctx.input_splits,
             output_splits=sharding_ctx.output_splits,
+            batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+            sparse_features_recat=sharding_ctx.sparse_features_recat,
             unbucketize_permute_tensor=sharding_ctx.unbucketize_permute_tensor,
         )
 

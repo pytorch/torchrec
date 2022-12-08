@@ -14,12 +14,14 @@ from typing import (
     List,
     Mapping,
     Optional,
+    OrderedDict,
     Set,
     Tuple,
     Union,
 )
 
 import torch
+
 from torch import optim
 from torchrec.distributed.types import ShardedTensor
 
@@ -51,7 +53,16 @@ class KeyedOptimizer(optim.Optimizer):
         param_groups: Collection[Mapping[str, Any]],
     ) -> None:
         torch._C._log_api_usage_once(f"torchrec.optim.{self.__class__.__name__}")
-        # pyre-ignore [4]
+
+        # TODO: remove these and call super().__init__()
+        # super().__init__ calls add_param_group, which we've explicitly marked as not implemented.
+        # However, we need to ensure that all Optimizer member variables are created.
+        # pyre-ignore
+        self._optimizer_step_pre_hooks: Dict[int, Callable] = OrderedDict()
+        # pyre-ignore
+        self._optimizer_step_post_hooks: Dict[int, Callable] = OrderedDict()
+
+        # pyre-ignore
         self.state: Mapping[Any, Any] = state
         self.param_groups: Collection[Mapping[str, Any]] = param_groups
         self.params = params
@@ -71,6 +82,9 @@ class KeyedOptimizer(optim.Optimizer):
         Returned state and param_groups will contain parameter keys
         instead of parameter indices in torch.Optimizer.
         This allows for advanced functionality like optimizer re-sharding to be implemented.
+
+        Can also handle classes and supported data structures that follow the PyTorch stateful
+        protocol.
         """
 
         state = self.state
@@ -78,9 +92,17 @@ class KeyedOptimizer(optim.Optimizer):
         params = self.params
         param_to_key = {param: key for key, param in params.items()}
 
-        ret_state = {
-            param_to_key[param]: state_val for param, state_val in state.items()
-        }
+        ret_state = {}
+        for param, state_val in state.items():
+            if isinstance(state_val, dict):
+                ret_state[param_to_key[param]] = {}
+                for k, v in state_val.items():
+                    if hasattr(v, "state_dict") and callable(v.state_dict):
+                        ret_state[param_to_key[param]][k] = v.state_dict()
+                    else:
+                        ret_state[param_to_key[param]][k] = v
+            else:
+                ret_state[param_to_key[param]] = state_val
 
         ret_groups = []
         for group in param_groups:
@@ -156,6 +178,10 @@ class KeyedOptimizer(optim.Optimizer):
                 elif isinstance(state_val, torch.Tensor):
                     assert isinstance(new_state_val, torch.Tensor)
                     state_val.detach().copy_(new_state_val)
+                elif hasattr(state_val, "load_state_dict") and callable(
+                    state_val.load_state_dict
+                ):
+                    state_val.load_state_dict(new_state_val)
                 else:
                     state[param][state_key] = deepcopy(new_state_val)
 

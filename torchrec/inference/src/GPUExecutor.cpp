@@ -75,7 +75,8 @@ GPUExecutor::GPUExecutor(
     std::chrono::milliseconds queueTimeout,
     std::shared_ptr<IGPUExecutorObserver> observer,
     std::function<void()> warmupFn,
-    c10::optional<size_t> numThreadsPerGPU)
+    c10::optional<size_t> numThreadsPerGPU,
+    std::unique_ptr<GCConfig> gcConfig)
     : manager_(manager),
       model_(std::move(model)),
       rank_(rank),
@@ -88,23 +89,47 @@ GPUExecutor::GPUExecutor(
       numThreadsPerGPU_(
           numThreadsPerGPU.has_value()
               ? *numThreadsPerGPU
-              : manager_->allInstances().size() / worldSize_) {
+              : manager_->allInstances().size() / worldSize_),
+      gcConfig_(std::move(gcConfig)) {
   CHECK(observer_ != nullptr);
+  CHECK(gcConfig_ != nullptr);
+
   at::cuda::CUDAGuard guard(rank_);
 
   rejectionExecutor_ =
       std::make_unique<folly::CPUThreadPoolExecutor>(2 * numThreadsPerGPU_);
   for (int i = 0; i < numThreadsPerGPU_; ++i) {
+    auto threadId = rank * numThreadsPerGPU_ + i;
+
     LOG(INFO) << "Starting Thread " << i << " for Model Shard Rank " << rank_
-              << ", as Global thread: " << rank * numThreadsPerGPU_ + i;
-    processThreads_.emplace_back(
-        [this, rank, threadsPerGPU = numThreadsPerGPU_, i] {
-          if (FLAGS_emit_nsys_nvtx) {
-            enable_nvtx_tracing();
-          }
-          process(rank * threadsPerGPU + i);
-        });
+              << ", as Global thread: " << threadId;
+
+    if (gcConfig_->optimizationEnabled) {
+      gcConfig_->threadIdToNumForwards[threadId] = 0;
+      // Freeze all python objects in each interpreter
+      auto model =
+          model_.acquireSession(&manager_->allInstances().at(threadId));
+      model.global("gc", "freeze")(at::ArrayRef<torch::deploy::Obj>());
+    }
+
+    processThreads_.emplace_back([this, threadId] {
+      if (FLAGS_emit_nsys_nvtx) {
+        enable_nvtx_tracing();
+      }
+      process(threadId);
+    });
   }
+
+  // Acquire sessionn in main thread for interpreter 0 to avoid deadlock in
+  // torch deploy.
+  LOG(INFO) << " - pre-acquire deploy session of loading model: interpreter 0";
+  auto start = std::chrono::steady_clock::now();
+  model_.acquireSession(&manager_->allInstances().at(0));
+  LOG(INFO) << "   - finished pre-acquire deploy session, interpreter 0, by "
+            << getTimeElapsedMS(start).count() / 1000 << "s";
+
+  std::unique_lock<std::mutex> lock(warmUpMutex_);
+  warmUpCV_.wait(lock, [&] { return warmUpCounter_ == numThreadsPerGPU_ - 1; });
 
   completionExecutor_ =
       std::make_unique<folly::CPUThreadPoolExecutor>(2 * numThreadsPerGPU_);
@@ -153,6 +178,20 @@ void GPUExecutor::process(int idx) {
     warmupFn_();
   }
 
+  if (idx != 0) {
+    LOG(INFO) << " - Pre-acquire deploy session of loading model, interpreter "
+              << idx;
+    auto start = std::chrono::steady_clock::now();
+    model_.acquireSession(&manager_->allInstances().at(idx));
+    {
+      std::lock_guard<std::mutex> lock(warmUpMutex_);
+      warmUpCounter_++;
+      warmUpCV_.notify_one();
+    }
+    LOG(INFO) << "   - finished pre-acquire deploy session, interpreter " << idx
+              << ", by " << getTimeElapsedMS(start).count() / 1000 << "s";
+  }
+
   while (true) {
     std::shared_ptr<PredictionBatch> batch;
     batches_.blockingRead(batch);
@@ -181,6 +220,10 @@ void GPUExecutor::process(int idx) {
     auto model = model_.acquireSession(&manager_->allInstances().at(idx));
     at::IValue predictions;
 
+    LOG_EVERY_N(INFO, 10000)
+        << "GPU " << rank_ << " is running batch size " << batch->batchSize
+        << ", avg request size " << batch->batchSize / batch->contexts.size();
+
     try {
       RECORD_USER_SCOPE("Forward");
       // Block current stream until H2D finishes.
@@ -188,14 +231,37 @@ void GPUExecutor::process(int idx) {
 
       auto forwardStart = std::chrono::steady_clock::now();
 
+      // Disable automatic garbage collection
+      if (gcConfig_->optimizationEnabled) {
+        model.global("gc", "disable")(at::ArrayRef<torch::deploy::Obj>());
+      }
+
       predictions = model.self.attr("__call__")({std::move(batch->forwardArgs)})
                         .toIValue();
+
+      // Manually call Python's garbage collector
+      if (gcConfig_->optimizationEnabled) {
+        gcConfig_->threadIdToNumForwards[idx] += 1;
+        if (gcConfig_->threadIdToNumForwards[idx] % gcConfig_->collectionFreq ==
+            0) {
+          model.global("gc", "collect")(at::ArrayRef<torch::deploy::Obj>());
+        }
+        // Report gc stats
+        if (gcConfig_->threadIdToNumForwards[idx] %
+                gcConfig_->statReportingFreq ==
+            0) {
+          reportGCStats(
+              model
+                  .global("gc", "get_stats")(at::ArrayRef<torch::deploy::Obj>())
+                  .toIValue());
+        }
+      }
 
       observer_->recordPredictionLatency(
           getTimeElapsedMS(forwardStart).count());
     } catch (const std::exception& ex) {
-      // The observer will record this in the completion executor. Don't observe
-      // twice.
+      // The observer will record this in the completion executor. Don't
+      // observe twice.
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
     }
 
@@ -258,6 +324,23 @@ void GPUExecutor::process(int idx) {
           observer->recordTotalLatency(
               getTimeElapsedMS(batch->enqueueTime).count());
         });
+  }
+}
+
+void GPUExecutor::reportGCStats(c10::IValue stats) {
+  const auto generationsList = stats.toList();
+  for (const auto generationId : c10::irange(generationsList.size())) {
+    const auto& collectionsDict =
+        generationsList.get(generationId).toGenericDict();
+    for (auto& entry : collectionsDict) {
+      const auto& key = entry.key();
+      const auto& value = entry.value();
+
+      auto stat_indicator =
+          "gc_gen_" + std::to_string(generationId) + "_" + key.toStringRef();
+      LOG(INFO) << "GC stat indicator: " << stat_indicator;
+      gcConfig_->observer->addCount(value.toInt(), stat_indicator);
+    }
   }
 }
 

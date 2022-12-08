@@ -92,12 +92,6 @@ class BaseGroupedFeatureProcessor(nn.Module):
     ) -> KeyedJaggedTensor:
         pass
 
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
-        return destination
-
 
 class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
     """
@@ -296,10 +290,4 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
             destination[prefix + f"position_weights.{name}"] = (
                 param if keep_vars else param.detach()
             )
-        return destination
-
-    def sparse_grad_parameter_names(
-        self, destination: Optional[List[str]] = None, prefix: str = ""
-    ) -> List[str]:
-        destination = [] if destination is None else destination
         return destination

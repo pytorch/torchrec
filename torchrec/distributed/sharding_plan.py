@@ -184,9 +184,7 @@ def _get_compute_kernel(
     # TODO add placement support for compute_kernel
     compute_kernels = sharder.compute_kernels(sharding_type, device_type)
 
-    if sharding_type == ShardingType.DATA_PARALLEL or not hasattr(
-        param, "_optimizer_class"
-    ):
+    if sharding_type == ShardingType.DATA_PARALLEL.value:
         if EmbeddingComputeKernel.DENSE.value in compute_kernels:
             return EmbeddingComputeKernel.DENSE.value
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
@@ -197,7 +195,9 @@ def _get_compute_kernel(
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
             return EmbeddingComputeKernel.QUANT.value
 
-    raise ValueError(f"Could not find compute kernel for sharding_type={sharding_type}")
+    raise ValueError(
+        f"Could not find compute kernel for sharding_type={sharding_type} in {compute_kernels}"
+    )
 
 
 def _get_parameter_sharding(
@@ -381,7 +381,7 @@ def column_wise(
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
-    If there are not enough shards, only the first ceil(embedding_dim/shard_dim) ranks will get shards
+    Table will the sharded column-wise evenly across specified ranks (and can reuse ranks).
 
     Args:
     ranks (List[int]): ranks to place columns
@@ -404,8 +404,17 @@ def column_wise(
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
+        if param.shape[1] % len(ranks) != 0:
+            raise ValueError(
+                f"column dim of {param.shape[1]} cannot be evenly divided across {ranks}"
+            )
+        shard_dim = param.shape[1] // len(ranks)
         size_and_offsets = _get_parameter_size_offsets(
-            param, ShardingType.COLUMN_WISE, local_size, world_size
+            param,
+            ShardingType.COLUMN_WISE,
+            local_size,
+            world_size,
+            col_wise_shard_dim=shard_dim,
         )
 
         size_offset_ranks = []

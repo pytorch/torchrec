@@ -64,6 +64,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(
@@ -74,6 +75,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -90,6 +92,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend="nccl",
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -166,6 +169,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(
@@ -176,6 +180,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -192,6 +197,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend="nccl",
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -220,6 +226,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_cw(
@@ -229,6 +236,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -243,10 +251,11 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
+                table.name: ParameterConstraints(min_partition=16)
                 for table in self.tables
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @seed_and_log
@@ -301,6 +310,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ] = None,
+        variable_batch_size: bool = False,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -315,4 +325,5 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             constraints=constraints,
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )

@@ -14,7 +14,8 @@ import torch.distributed as dist
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
-from torchrec.metrics.tests.test_utils import (
+from torchrec.metrics.test_utils import (
+    gen_test_batch,
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,
@@ -146,6 +147,31 @@ class AUCMetricTest(unittest.TestCase):
             world_size=WORLD_SIZE,
             entry_point=self._test_auc,
         )
+
+    def test_auc_reset(self) -> None:
+        batch_size = 128
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=batch_size,
+            tasks=[DefaultTaskInfo],
+        )
+
+        # Mimic that reset is called when checkpointing.
+        auc.reset()
+        self.assertEqual(len(auc._metrics_computations[0].predictions), 1)
+        self.assertEqual(len(auc._metrics_computations[0].labels), 1)
+        self.assertEqual(len(auc._metrics_computations[0].weights), 1)
+        model_output = gen_test_batch(batch_size)
+        model_output = {k: v for k, v in model_output.items()}
+        auc.update(
+            predictions={"DefaultTask": model_output["prediction"]},
+            labels={"DefaultTask": model_output["label"]},
+            weights={"DefaultTask": model_output["weight"]},
+        )
+        self.assertEqual(len(auc._metrics_computations[0].predictions), 1)
+        self.assertEqual(len(auc._metrics_computations[0].labels), 1)
+        self.assertEqual(len(auc._metrics_computations[0].weights), 1)
 
 
 class AUCMetricValueTest(unittest.TestCase):

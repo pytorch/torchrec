@@ -27,18 +27,14 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestSparseNN,
 )
-from torchrec.distributed.types import (
-    ModuleCopyMixin,
-    ShardedModule,
-    ShardingEnv,
-    ShardingType,
-)
+from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
 from torchrec.inference.modules import copy_to_device
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )
+from torchrec.types import CopyMixIn
 
 
 class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
@@ -81,7 +77,7 @@ def _quantize(
     )
 
 
-class CopyModule(nn.Module, ModuleCopyMixin):
+class CopyModule(nn.Module, CopyMixIn):
     def __init__(self) -> None:
         super().__init__()
         self.tensor: torch.Tensor = torch.empty((10), device="cpu")
@@ -91,7 +87,7 @@ class CopyModule(nn.Module, ModuleCopyMixin):
         return self
 
 
-class NoCopyModule(nn.Module, ModuleCopyMixin):
+class NoCopyModule(nn.Module, CopyMixIn):
     def __init__(self) -> None:
         super().__init__()
         self.tensor: torch.Tensor = torch.empty((10), device="cpu")

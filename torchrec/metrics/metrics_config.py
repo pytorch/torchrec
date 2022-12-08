@@ -22,6 +22,7 @@ class RecMetricEnum(RecMetricEnumBase):
     AUC = "auc"
     CALIBRATION = "calibration"
     MSE = "mse"
+    MULTICLASS_RECALL = "multiclass_recall"
 
 
 @dataclass(unsafe_hash=True, eq=True)

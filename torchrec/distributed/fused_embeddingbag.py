@@ -67,7 +67,6 @@ class ShardedFusedEmbeddingBagCollection(
             zip(self._sharding_type_to_sharding.values(), self._lookups)
         ):
             if isinstance(sharding, DpPooledEmbeddingSharding):
-                # pyre-fixme[28]: Unexpected keyword argument `gradient_as_bucket_view`.
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=[device],

@@ -176,15 +176,17 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
     def __init__(
         self,
-        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
-        embedding_configs: List[EmbeddingBagConfig],
+        tables: List[EmbeddingBagConfig],
         is_weighted: bool,
         device: torch.device,
         output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
-        self._embedding_bag_configs: List[EmbeddingBagConfig] = embedding_configs
+        self._embedding_bag_configs: List[EmbeddingBagConfig] = tables
         self._key_to_tables: Dict[
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
         ] = defaultdict(list)
@@ -193,6 +195,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         # Their states will be modified via self.embedding_bags
         self._emb_modules: List[nn.Module] = []
         self._output_dtype = output_dtype
+        self._device: torch.device = device
+        self._table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -214,7 +220,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for key, emb_configs in self._key_to_tables.items():
             (pooling, data_type) = key
             embedding_specs = []
-            weight_lists = []
+            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
+                [] if table_name_to_quantized_weights else None
+            )
             feature_table_map: List[int] = []
 
             for idx, table in enumerate(emb_configs):
@@ -227,7 +235,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                         location,
                     )
                 )
-                weight_lists.append(table_name_to_quantized_weights[table.name])
+                if table_name_to_quantized_weights:
+                    # pyre-ignore
+                    weight_lists.append(table_name_to_quantized_weights[table.name])
                 feature_table_map.extend([idx] * table.num_features())
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
@@ -239,6 +249,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=16,
                 feature_table_map=feature_table_map,
             )
+            if device != torch.device("meta") and weight_lists is None:
+                emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
 
         self._embedding_names: List[str] = list(
@@ -339,12 +351,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
         return cls(
-            table_name_to_quantized_weights,
             embedding_bag_configs,
             module.is_weighted(),
             device=device,
             # pyre-ignore [16]
             output_dtype=module.qconfig.activation().dtype,
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
         )
 
     def embedding_bag_configs(
@@ -357,6 +369,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
 
 
 class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
@@ -416,11 +432,13 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
     def __init__(  # noqa C901
         self,
-        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
         tables: List[EmbeddingConfig],
         device: torch.device,
         need_indices: bool = False,
         output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
     ) -> None:
         super().__init__()
         self.embeddings: nn.ModuleList = nn.ModuleList()
@@ -428,6 +446,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
         self._output_dtype = output_dtype
+        self._device = device
+
         table_names = set()
         for config in tables:
             if config.name in table_names:
@@ -440,28 +460,35 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
                 )
-            self.embeddings.append(
-                IntNBitTableBatchedEmbeddingBagsCodegen(
-                    embedding_specs=[
-                        (
-                            "",
-                            config.num_embeddings,
-                            config.embedding_dim,
-                            data_type_to_sparse_type(config.data_type),
-                            EmbeddingLocation.HOST
-                            if device.type == "cpu"
-                            else EmbeddingLocation.DEVICE,
-                        )
-                    ],
-                    pooling_mode=PoolingMode.NONE,
-                    weight_lists=[table_name_to_quantized_weights[config.name]],
-                    device=device,
-                    output_dtype=data_type_to_sparse_type(
-                        dtype_to_data_type(output_dtype)
-                    ),
-                    row_alignment=16,
-                )
+            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
+                [] if table_name_to_quantized_weights else None
             )
+            if table_name_to_quantized_weights:
+                # pyre-ignore
+                weight_lists.append(table_name_to_quantized_weights[config.name])
+            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=[
+                    (
+                        "",
+                        config.num_embeddings,
+                        config.embedding_dim,
+                        data_type_to_sparse_type(config.data_type),
+                        EmbeddingLocation.HOST
+                        if device.type == "cpu"
+                        else EmbeddingLocation.DEVICE,
+                    )
+                ],
+                pooling_mode=PoolingMode.NONE,
+                weight_lists=weight_lists,
+                device=device,
+                output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
+                row_alignment=16,
+            )
+            if device != torch.device("meta") and weight_lists is None:
+                emb_module.initialize_weights()
+
+            self.embeddings.append(emb_module)
+
             if not config.feature_names:
                 config.feature_names = [config.name]
 
@@ -542,10 +569,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
 
         return cls(
-            table_name_to_quantized_weights,
             tables,
             device=device,
             need_indices=module.need_indices(),
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
         )
 
     def _get_name(self) -> str:
@@ -565,3 +592,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
     def output_dtype(self) -> torch.dtype:
         return self._output_dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._device

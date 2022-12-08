@@ -26,34 +26,27 @@ def compute_ctr(ctr_num: torch.Tensor, ctr_denom: torch.Tensor) -> torch.Tensor:
 
 def get_ctr_states(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
-) -> Dict[str, torch.Tensor]:
-    return {
-        CTR_NUM: torch.sum(labels * weights, dim=-1),
-        CTR_DENOM: torch.sum(weights, dim=-1),
-    }
+) -> torch.Tensor:
+    return torch.stack(
+        [torch.sum(labels * weights, dim=-1), torch.sum(weights, dim=-1)]
+    )
 
 
 class CTRMetricComputation(RecMetricComputation):
     r"""
-    This class implementation the RecMetricComputation for CTR, i.e. Click Through Rate,
+    This class implements the RecMetricComputation for CTR, i.e. Click Through Rate,
     which is the ratio between the predicted positive examples and the total examples.
 
-    The constructer arguments are defined in RecMetricComputation.
+    The constructor arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        state_names = [CTR_NUM, CTR_DENOM]
         self._add_state(
-            CTR_NUM,
-            torch.zeros(self._n_tasks, dtype=torch.double),
-            add_window_state=True,
-            dist_reduce_fx="sum",
-            persistent=True,
-        )
-        self._add_state(
-            CTR_DENOM,
-            torch.zeros(self._n_tasks, dtype=torch.double),
+            state_names,
+            torch.zeros((len(state_names), self._n_tasks), dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
             persistent=True,
@@ -65,18 +58,18 @@ class CTRMetricComputation(RecMetricComputation):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
+        **kwargs: Dict[str, Any],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(
                 "Inputs 'predictions' and 'weights' should not be None for CTRMetricComputation update"
             )
         num_samples = predictions.shape[-1]
-        for state_name, state_value in get_ctr_states(
-            labels, predictions, weights
-        ).items():
-            state = getattr(self, state_name)
-            state += state_value
-            self._aggregate_window_state(state_name, state_value, num_samples)
+
+        states = get_ctr_states(labels, predictions, weights)
+        state = getattr(self, self._fused_name)
+        state += states
+        self._aggregate_window_state(self._fused_name, states, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
         return [
@@ -84,8 +77,8 @@ class CTRMetricComputation(RecMetricComputation):
                 name=MetricName.CTR,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_ctr(
-                    cast(torch.Tensor, self.ctr_num),
-                    cast(torch.Tensor, self.ctr_denom),
+                    self.get_state(CTR_NUM),
+                    self.get_state(CTR_DENOM),
                 ),
             ),
             MetricComputationReport(

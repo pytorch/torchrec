@@ -32,6 +32,7 @@ from torchrec.metrics.metrics_namespace import (
 )
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
+from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.throughput import ThroughputMetric
@@ -45,6 +46,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
     RecMetricEnum.MSE: MSEMetric,
+    RecMetricEnum.MULTICLASS_RECALL: MulticlassRecallMetric,
 }
 
 
@@ -322,6 +324,9 @@ class RecMetricModule(nn.Module):
 
     def reset(self) -> None:
         self.rec_metrics.reset()
+
+    def get_required_inputs(self) -> List[str]:
+        return self.rec_metrics.get_required_inputs()
 
 
 def _generate_rec_metrics(

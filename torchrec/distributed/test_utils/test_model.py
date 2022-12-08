@@ -23,7 +23,11 @@ from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
 from torchrec.inference.modules import CopyableMixin
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
+from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
+    EmbeddingBagConfig,
+    EmbeddingConfig,
+)
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
@@ -43,11 +47,19 @@ class ModelInput(Pipelineable):
         batch_size: int,
         world_size: int,
         num_float_features: int,
-        tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
-        weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+        weighted_tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
         pooling_avg: int = 10,
         dedup_tables: Optional[
-            Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
+            Union[
+                List[EmbeddingTableConfig],
+                List[EmbeddingBagConfig],
+                List[EmbeddingConfig],
+            ]
         ] = None,
         variable_batch_size: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
@@ -506,6 +518,7 @@ class TestSparseNNBase(nn.Module):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__()
         if dense_device is None:
@@ -545,6 +558,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
         max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -659,6 +673,7 @@ class TestTowerSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -754,6 +769,7 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -819,14 +835,13 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         kernel_type: str,
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        variable_batch_size: bool = False,
     ) -> None:
         if fused_params is None:
             fused_params = {}
 
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
-        super().__init__(fused_params, qcomm_codecs_registry, variable_batch_size)
+        super().__init__(fused_params, qcomm_codecs_registry)
 
     """
     Restricts sharding to single type only.
@@ -982,7 +997,7 @@ def _get_default_rtol_and_atol(
 ) -> Tuple[float, float]:
     """
     default tolerance values for torch.testing.assert_close,
-    consistent with the values of torch.testing.assert_allclose
+    consistent with the values of torch.testing.assert_close
     """
     _DTYPE_PRECISIONS = {
         torch.float16: (1e-3, 1e-3),

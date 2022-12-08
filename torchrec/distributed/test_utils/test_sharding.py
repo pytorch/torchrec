@@ -60,7 +60,6 @@ def create_test_sharder(
     fused_params: Optional[Dict[str, Any]] = None,
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
-    variable_batch_size: bool = False,
 ) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
     if fused_params is None:
         fused_params = {}
@@ -79,7 +78,6 @@ def create_test_sharder(
             kernel_type,
             fused_params,
             qcomm_codecs_registry,
-            variable_batch_size,
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(
@@ -145,6 +143,7 @@ def gen_model_and_input(
     dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -159,6 +158,7 @@ def gen_model_and_input(
             embedding_groups=embedding_groups,
             dense_device=dense_device,
             sparse_device=sparse_device,
+            feature_processor_modules=feature_processor_modules,
         )
     else:
         model = model_class(
@@ -171,6 +171,7 @@ def gen_model_and_input(
             embedding_groups=embedding_groups,
             dense_device=dense_device,
             sparse_device=sparse_device,
+            feature_processor_modules=feature_processor_modules,
         )
     inputs = [
         generate_inputs(
@@ -243,6 +244,7 @@ def sharding_single_rank_test(
     ] = None,
     variable_batch_size: bool = False,
     batch_size: int = 4,
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -256,6 +258,7 @@ def sharding_single_rank_test(
             num_float_features=16,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
+            feature_processor_modules=feature_processor_modules,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
@@ -269,6 +272,7 @@ def sharding_single_rank_test(
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
             num_float_features=16,
+            feature_processor_modules=feature_processor_modules,
         )
 
         global_model_named_params_as_dict = dict(global_model.named_parameters())
@@ -365,7 +369,7 @@ def sharding_single_rank_test(
 
         # Compare predictions of sharded vs unsharded models.
         if qcomms_config is None:
-            torch.testing.assert_allclose(global_pred, torch.cat(all_local_pred))
+            torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
         else:
             # With quantized comms, we can relax constraints a bit
             rtol = 0.003
@@ -374,8 +378,8 @@ def sharding_single_rank_test(
                 qcomms_config.backward_precision,
             ]:
                 rtol = 0.05
-            atol = global_pred.max() * rtol
-            torch.testing.assert_allclose(
+            atol = global_pred.max().item() * rtol
+            torch.testing.assert_close(
                 global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
             )
 

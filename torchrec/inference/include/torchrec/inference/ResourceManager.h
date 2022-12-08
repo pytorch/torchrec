@@ -18,6 +18,8 @@
 #include <folly/small_vector.h>
 #include <glog/logging.h>
 
+#include "torchrec/inference/Observer.h"
+
 namespace torchrec {
 
 /**
@@ -29,7 +31,9 @@ class ResourceManager {
   ResourceManager(
       int worldSize,
       size_t maxOutstandingBatches,
-      int logFrequency = 100);
+      int logFrequency = 100,
+      std::unique_ptr<IResourceManagerObserver> observer =
+          std::make_unique<EmptyResourceManagerObserver>());
 
   // Returns whether batches can be allocated onto a device based on
   // slack provided (ms) and maxOutstandingBatches_).
@@ -45,6 +49,7 @@ class ResourceManager {
   const int logFrequency_;
   // Align as 64B to avoid false sharing
   alignas(64) std::mutex mu_;
+  std::unique_ptr<IResourceManagerObserver> observer_;
 };
 
 class ResourceManagerGuard {

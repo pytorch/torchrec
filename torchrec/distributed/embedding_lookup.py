@@ -176,8 +176,12 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "GroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
@@ -346,8 +350,12 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "GroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
         for emb_module in self._score_emb_modules:
@@ -461,8 +469,12 @@ class MetaInferGroupedEmbeddingsLookup(
         return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_buffers for"
+            "MetaInferGroupedEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
@@ -550,9 +562,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             id_list_features_by_group = sparse_features.id_list_features.split(
                 self._id_list_feature_splits,
             )
-            for config, emb_op, features in zip(
-                self.grouped_configs, self._emb_modules, id_list_features_by_group
+            # syntax for torchscript
+            for i, (config, emb_op) in enumerate(
+                zip(self.grouped_configs, self._emb_modules)
             ):
+                features = id_list_features_by_group[i]
                 if (
                     config.has_feature_processor
                     and self._feature_processor is not None
@@ -617,8 +631,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True
-    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        assert remove_duplicate, (
+            "remove_duplicate=False in named_parameters for"
+            "MetaInferGroupedPooledEmbeddingsLookup is not supported"
+        )
         for emb_module in self._emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
         for emb_module in self._score_emb_modules:
@@ -643,11 +661,12 @@ class InferGroupedLookupMixin(ABC):
         sparse_features: SparseFeaturesList,
     ) -> List[torch.Tensor]:
         embeddings: List[torch.Tensor] = []
-        for sparse_features_rank, embedding_lookup in zip(
-            sparse_features,
+        # syntax for torchscript
+        for i, embedding_lookup in enumerate(
             # pyre-fixme[16]
             self._embedding_lookups_per_rank,
         ):
+            sparse_features_rank = sparse_features[i]
             assert (
                 sparse_features_rank.id_list_features is not None
                 or sparse_features_rank.id_score_list_features is not None
@@ -724,7 +743,8 @@ class InferGroupedPooledEmbeddingsLookup(
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     grouped_score_configs=grouped_score_configs_per_rank[rank],
-                    device=torch.device("cuda", rank),
+                    # syntax for torchscript
+                    device=torch.device(f"cuda:{rank}"),
                     fused_params=fused_params,
                 )
             )
@@ -746,7 +766,8 @@ class InferGroupedEmbeddingsLookup(
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    device=torch.device("cuda", rank),
+                    # syntax for torchscript
+                    device=torch.device(f"cuda:{rank}"),
                     fused_params=fused_params,
                 )
             )

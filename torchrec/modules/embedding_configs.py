@@ -31,6 +31,8 @@ class DataType(Enum):
 
     FP32 = "FP32"
     FP16 = "FP16"
+    INT64 = "INT64"
+    INT32 = "INT32"
     INT8 = "INT8"
     INT4 = "INT4"
     INT2 = "INT2"
@@ -53,6 +55,10 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.FP32
     elif dtype == torch.float16 or dtype == torch.half:
         return DataType.FP16
+    elif dtype in {torch.int, torch.int32}:
+        return DataType.INT32
+    elif dtype in {torch.long, torch.int64}:
+        return DataType.INT64
     elif dtype in {torch.quint8, torch.qint8, torch.int8, torch.uint8}:
         return DataType.INT8
     elif dtype == torch.quint4x2:
@@ -103,6 +109,10 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float32
     elif data_type == DataType.FP16:
         return torch.float16
+    elif data_type == DataType.INT64:
+        return torch.int64
+    elif data_type == DataType.INT32:
+        return torch.int32
     elif data_type == DataType.INT8:
         return torch.int8
     elif data_type == DataType.INT4:

@@ -24,30 +24,44 @@ TReturn = TypeVar("TReturn")
 
 
 def get_free_port() -> int:
-    if socket.has_ipv6:
-        family = socket.AF_INET6
-        address = "localhost6"
+    # INTERNAL
+    if os.getenv("SANDCASTLE") == "1" or os.getenv("TW_JOB_USER") == "sandcastle":
+        if socket.has_ipv6:
+            family = socket.AF_INET6
+            address = "localhost6"
+        else:
+            family = socket.AF_INET
+            address = "localhost4"
+        with socket.socket(family, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((address, 0))
+                s.listen(0)
+                with closing(s):
+                    return s.getsockname()[1]
+            except socket.gaierror:
+                if address == "localhost6":
+                    address = "::1"
+                else:
+                    address = "127.0.0.1"
+                s.bind((address, 0))
+                s.listen(0)
+                with closing(s):
+                    return s.getsockname()[1]
+            except Exception as e:
+                raise Exception(
+                    f"Binding failed with address {address} while getting free port {e}"
+                )
+    # OSS GHA: TODO remove when enable ipv6 on GHA @omkar
     else:
-        family = socket.AF_INET
-        address = "localhost4"
-    with socket.socket(family, socket.SOCK_STREAM) as s:
         try:
-            s.bind((address, 0))
-            s.listen(0)
-            with closing(s):
-                return s.getsockname()[1]
-        except socket.gaierror:
-            if address == "localhost6":
-                address = "::1"
-            else:
-                address = "127.0.0.1"
-            s.bind((address, 0))
-            s.listen(0)
-            with closing(s):
-                return s.getsockname()[1]
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", 0))
+                s.listen(0)
+                with closing(s):
+                    return s.getsockname()[1]
         except Exception as e:
             raise Exception(
-                f"Binding failed with address {address} while getting free port {e}"
+                f"Binding failed with address 127.0.0.1 while getting free port {e}"
             )
 
 

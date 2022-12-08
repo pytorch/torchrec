@@ -14,13 +14,14 @@ import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
-    KJTAllToAllIndicesAwaitable,
+    KJTAllToAllTensorsAwaitable,
     KJTOneToAll,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
+    FeatureShardingMixIn,
     GroupedEmbeddingConfig,
     ListOfSparseFeaturesList,
     ShardedEmbeddingTable,
@@ -29,7 +30,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    FeatureShardingMixIn,
     NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -44,9 +44,9 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
-class SparseFeaturesIndicesAwaitable(Awaitable[SparseFeatures]):
+class SparseFeaturesTensorsAwaitable(Awaitable[SparseFeatures]):
     """
-    Awaitable of sparse features redistributed with AlltoAll collective.
+    Awaitable of sparse features redistributed with an AlltoAll collective.
 
     Args:
         id_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]): awaitable
@@ -82,42 +82,42 @@ class SparseFeaturesIndicesAwaitable(Awaitable[SparseFeatures]):
         )
 
 
-class SparseFeaturesLengthsAwaitable(Awaitable[SparseFeaturesIndicesAwaitable]):
+class SparseFeaturesSplitsAwaitable(Awaitable[SparseFeaturesTensorsAwaitable]):
     """
-    Awaitable of sparse features indices distribution.
+    Awaitable of sparse features tensors distribution.
 
     Args:
-        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
-            awaitable of sharded id list features indices AlltoAll. Waiting on this
-            value will trigger indices AlltoAll (waiting again will yield final AlltoAll
+        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllTensorsAwaitable]]):
+            awaitable of sharded id list features tensors AlltoAll. Waiting on this
+            value will trigger tensors AlltoAll (waiting again will yield final AlltoAll
             results).
         id_score_list_features_awaitable
-            (Optional[Awaitable[KJTAllToAllIndicesAwaitable]]):
-            awaitable of sharded id score list features indices AlltoAll. Waiting on
-            this value will trigger indices AlltoAll (waiting again will yield the final
+            (Optional[Awaitable[KJTAllToAllTensorsAwaitable]]):
+            awaitable of sharded id score list features tensors AlltoAll. Waiting on
+            this value will trigger tensors AlltoAll (waiting again will yield the final
             AlltoAll results).
     """
 
     def __init__(
         self,
-        id_list_features_awaitable: Optional[Awaitable[KJTAllToAllIndicesAwaitable]],
+        id_list_features_awaitable: Optional[Awaitable[KJTAllToAllTensorsAwaitable]],
         id_score_list_features_awaitable: Optional[
-            Awaitable[KJTAllToAllIndicesAwaitable]
+            Awaitable[KJTAllToAllTensorsAwaitable]
         ],
     ) -> None:
         super().__init__()
         self._id_list_features_awaitable = id_list_features_awaitable
         self._id_score_list_features_awaitable = id_score_list_features_awaitable
 
-    def _wait_impl(self) -> SparseFeaturesIndicesAwaitable:
+    def _wait_impl(self) -> SparseFeaturesTensorsAwaitable:
         """
-        Gets lengths of AlltoAll results, instantiates `SparseFeaturesIndicesAwaitable` for
-        indices AlltoAll.
+        Gets splits from AlltoAll, instantiates `SparseFeaturesTensorsAwaitable` for
+        tensors AlltoAll.
 
         Returns:
-            SparseFeaturesIndicesAwaitable.
+            SparseFeaturesTensorsAwaitable.
         """
-        return SparseFeaturesIndicesAwaitable(
+        return SparseFeaturesTensorsAwaitable(
             id_list_features_awaitable=self._id_list_features_awaitable.wait()
             if self._id_list_features_awaitable is not None
             else None,
@@ -206,7 +206,6 @@ class SparseFeaturesAllToAll(nn.Module):
         device (Optional[torch.device]): device on which buffers will be allocated.
         stagger (int): stagger value to apply to recat tensor, see `_recat` function for
             more detail.
-        variable_batch_size (bool): variable batch size in each rank.
 
     Example::
 
@@ -282,7 +281,6 @@ class SparseFeaturesAllToAll(nn.Module):
         id_score_list_features_per_rank: List[int],
         device: Optional[torch.device] = None,
         stagger: int = 1,
-        variable_batch_size: bool = False,
     ) -> None:
         super().__init__()
         self._id_list_features_all2all: KJTAllToAll = KJTAllToAll(
@@ -290,25 +288,24 @@ class SparseFeaturesAllToAll(nn.Module):
             splits=id_list_features_per_rank,
             device=device,
             stagger=stagger,
-            variable_batch_size=variable_batch_size,
         )
         self._id_score_list_features_all2all: KJTAllToAll = KJTAllToAll(
             pg=pg,
             splits=id_score_list_features_per_rank,
             device=device,
             stagger=stagger,
-            variable_batch_size=variable_batch_size,
         )
 
     def forward(
         self,
         sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeaturesIndicesAwaitable]:
+    ) -> Awaitable[SparseFeaturesTensorsAwaitable]:
         """
-        Sends sparse features to relevant ProcessGroup ranks. Instantiates lengths
+        Sends sparse features to relevant ProcessGroup ranks. Instantiates splits
         AlltoAll.
-        First wait will get lengths AlltoAll results, then issues indices AlltoAll.
-        Second wait will get indices AlltoAll results.
+
+        First wait will get the splits AlltoAll results, then issues tensors AlltoAll.
+        Second wait will get tensors AlltoAll results.
 
         Args:
             sparse_features (SparseFeatures): sparse features to redistribute.
@@ -317,7 +314,7 @@ class SparseFeaturesAllToAll(nn.Module):
             Awaitable[SparseFeatures]: awaitable of SparseFeatures.
         """
 
-        return SparseFeaturesLengthsAwaitable(
+        return SparseFeaturesSplitsAwaitable(
             id_list_features_awaitable=self._id_list_features_all2all.forward(
                 sparse_features.id_list_features
             )
@@ -556,39 +553,82 @@ class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
         return SparseFeaturesList([w.wait() for w in self.awaitables])
 
 
-class SparseFeaturesListIndicesAwaitable(Awaitable[List[Awaitable[SparseFeatures]]]):
+C = TypeVar("C", bound=Multistreamable)
+
+
+class SparseFeaturesListSplitsAwaitable(
+    Awaitable[Awaitable[SparseFeaturesList]], Generic[C]
+):
     """
-    Handles the first wait for a list of two-layer awaitables of `SparseFeatures`.
-    Wait on this module will get lengths AlltoAll results for each `SparseFeatures`, and
-    instantiate its indices AlltoAll.
+    Awaitable of Awaitable of SparseFeaturesList.
 
     Args:
-        awaitables (List[Awaitable[Awaitable[SparseFeatures]]]): list of `Awaitable` of
-            `Awaitable` sparse features.
+        awaitables (List[Awaitable[Awaitable[SparseFeatures]]]): result from calling
+            forward on `SparseFeaturesAllToAll` with sparse features to redistribute.
+        ctx (C): sharding context to save the metadata from the input dist to for the
+            embedding AlltoAll.
     """
 
     def __init__(
         self,
         awaitables: List[Awaitable[Awaitable[SparseFeatures]]],
+        ctx: C,
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
+        self.ctx = ctx
 
-    def _wait_impl(self) -> List[Awaitable[SparseFeatures]]:
+    def _wait_impl(self) -> SparseFeaturesListAwaitable:
         """
-        Syncs sparse features in SparseFeaturesList.
+        Calls first wait on the awaitable of awaitable of sparse features and updates
+        the context with metadata from the tensors awaitable.
+
+        The first wait gets the result of splits AlltoAll and returns the tensors
+        awaitable.
 
         Returns:
-            List[Awaitable[SparseFeatures]]
+            SparseFeaturesListAwaitable: awaitables for tensors of the sparse features.
         """
-
-        return [m.wait() for m in self.awaitables]
+        tensors_awaitables = [w.wait() for w in self.awaitables]
+        for tensors_awaitable, sharding_context in zip(
+            tensors_awaitables,
+            getattr(self.ctx, "sharding_contexts", []),
+        ):
+            if isinstance(tensors_awaitable, SparseFeaturesTensorsAwaitable):
+                if (
+                    tensors_awaitable._id_list_features_awaitable is not None
+                    or tensors_awaitable._id_score_list_features_awaitable is not None
+                ):
+                    awaitable = (
+                        tensors_awaitable._id_list_features_awaitable
+                        if tensors_awaitable._id_list_features_awaitable is not None
+                        else tensors_awaitable._id_score_list_features_awaitable
+                    )
+                    if hasattr(sharding_context, "batch_size_per_rank"):
+                        sharding_context.batch_size_per_rank = (
+                            # pyre-ignore[16]
+                            awaitable._batch_size_per_rank
+                        )
+                    if hasattr(sharding_context, "input_splits"):
+                        # pyre-ignore[16]
+                        sharding_context.input_splits = awaitable._input_splits[
+                            "values"
+                        ]
+                    if hasattr(sharding_context, "output_splits"):
+                        # pyre-ignore[16]
+                        sharding_context.output_splits = awaitable._output_splits[
+                            "values"
+                        ]
+                    if hasattr(sharding_context, "sparse_features_recat"):
+                        # pyre-ignore[16]
+                        sharding_context.sparse_features_recat = awaitable._recat
+        return SparseFeaturesListAwaitable(tensors_awaitables)
 
 
 class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
     """
-    This module handles the tables-wise sharding input features distribution for inference.
-    For inference, we currently do not separate lengths from indices.
+    This module handles the tables-wise sharding input features distribution for
+    inference.
 
     Args:
         awaitables (List[Awaitable[SparseFeaturesList]]): list of `Awaitable` of
@@ -613,15 +653,38 @@ class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
         return ListOfSparseFeaturesList([w.wait() for w in self.awaitables])
 
 
-C = TypeVar("C", bound=Multistreamable)
+class ListOfSparseFeaturesListSplitsAwaitable(
+    Awaitable[Awaitable[ListOfSparseFeaturesList]]
+):
+    """
+    Awaitable of Awaitable of ListOfSparseFeaturesList.
+
+    Args:
+        awaitables (List[Awaitable[Awaitable[SparseFeaturesList]]]): list of `Awaitable`
+            of `Awaitable` of sparse features list.
+    """
+
+    def __init__(
+        self,
+        awaitables: List[Awaitable[Awaitable[SparseFeaturesList]]],
+    ) -> None:
+        super().__init__()
+        self.awaitables = awaitables
+
+    def _wait_impl(self) -> Awaitable[ListOfSparseFeaturesList]:
+        """
+        Calls first wait on the awaitable of awaitable of sparse features list.
+
+        Returns:
+            Awaitable[ListOfSparseFeaturesList]: awaitable of `ListOfSparseFeaturesList`.
+
+        """
+        return ListOfSparseFeaturesListAwaitable([w.wait() for w in self.awaitables])
+
+
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
 W = TypeVar("W")
-
-
-class NullShardingContext(Multistreamable):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        pass
 
 
 @dataclass

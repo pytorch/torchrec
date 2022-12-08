@@ -1081,9 +1081,16 @@ KeyedJaggedTensor({
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
     def test_scriptable_forward(self) -> None:
         class MyModule(torch.nn.Module):
-            def forward(self, input: KeyedJaggedTensor) -> torch.Tensor:
-                values = input["any"].values()
-                return values
+            def forward(self, input: KeyedJaggedTensor) -> KeyedJaggedTensor:
+                input["any"].values()
+                input.dist_labels()
+                input.dist_splits([1, 2])
+                return KeyedJaggedTensor.dist_init(
+                    keys=input.keys(),
+                    tensors=input.dist_tensors(),
+                    batch_size_per_rank=[2, 2],
+                    recat=torch.tensor([]),
+                )
 
         m = MyModule()
         torch.jit.script(m)
