@@ -16,7 +16,7 @@ import torch
 import torch.utils.data.datapipes as dp
 from iopath.common.file_io import PathManager, PathManagerFactory
 from pyre_extensions import none_throws
-from torch.utils.data import IterDataPipe
+from torch.utils.data import IterableDataset, IterDataPipe
 from torchrec.datasets.utils import (
     Batch,
     LoadFiles,
@@ -660,7 +660,7 @@ class BinaryCriteoUtils:
             print(f"Copying over {path_to_original} to {val_train_path}")
 
 
-class InMemoryBinaryCriteoIterDataPipe(IterDataPipe):
+class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
     """
     Datapipe designed to operate over binary (npy) versions of Criteo datasets. Loads
     the entire dataset into memory to prevent disk speed from affecting throughout. Each
