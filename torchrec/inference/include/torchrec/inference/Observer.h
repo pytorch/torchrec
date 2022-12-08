@@ -13,6 +13,20 @@
 
 namespace torchrec {
 
+// Record generic timeseries stat with a key
+class IDynamicTimeseriesObserver {
+ public:
+  virtual void addCount(uint32_t value, std::string key) = 0;
+
+  virtual ~IDynamicTimeseriesObserver() {}
+};
+
+// Can be used for testing or for opt-ing out of observation.
+class EmptyDynamicTimeseriesObserver : public IDynamicTimeseriesObserver {
+ public:
+  void addCount(uint32_t /* value */, std::string /* key */) override {}
+};
+
 class IBatchingQueueObserver {
  public:
   // Record the amount of time an entry of PredictionRequests
