@@ -76,7 +76,7 @@ def main(argv: List[str]) -> None:
     print(f"-- {name} building version: {version}")
 
     packages = find_packages(
-        exclude=("*test", "examples", "*examples.*", "*benchmarks", "*build", "*rfc"))
+        exclude=("*tests", "*test", "examples", "*examples.*", "*benchmarks", "*build", "*rfc"))
     sys.argv = [sys.argv[0]] + unknown
 
     setup(
