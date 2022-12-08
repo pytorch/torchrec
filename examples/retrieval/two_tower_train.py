@@ -108,7 +108,6 @@ def train(
         layer_sizes = [128, 64]
 
     rank = int(os.environ["LOCAL_RANK"])
-    world_size = int(os.environ["WORLD_SIZE"])
     if torch.cuda.is_available():
         device: torch.device = torch.device(f"cuda:{rank}")
         backend = "nccl"
@@ -148,20 +147,11 @@ def train(
         [EmbeddingBagCollectionSharder(fused_params=fused_params)],
     )
 
-    # TODO: move pg to the EmbeddingShardingPlanner (out of collective_plan) and make optional
-    # TODO: make Topology optional argument to EmbeddingShardingPlanner
     # TODO: give collective_plan a default sharders
     # TODO: once this is done, move defaults out of DMP and just get from ShardingPlan (eg _sharding_map should not exist - just use the plan)
-    plan = EmbeddingShardingPlanner(
-        topology=Topology(
-            world_size=world_size,
-            compute_device=device.type,
-        ),
-    ).collective_plan(
+    plan = EmbeddingShardingPlanner().collective_plan(
         module=two_tower_model,
         sharders=sharders,
-        # pyre-fixme[6]: For 3rd param expected `ProcessGroup` but got
-        #  `Optional[ProcessGroup]`.
         pg=dist.GroupMember.WORLD,
     )
     model = DistributedModelParallel(
