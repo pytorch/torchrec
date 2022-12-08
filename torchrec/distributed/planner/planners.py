@@ -10,9 +10,12 @@ from functools import reduce
 from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
 
+import torch
+
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.planner.constants import BATCH_SIZE, MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
@@ -40,7 +43,7 @@ from torchrec.distributed.planner.types import (
     StorageReservation,
     Topology,
 )
-from torchrec.distributed.sharding_plan import placement
+from torchrec.distributed.sharding_plan import get_default_sharders, placement
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
     ModuleSharder,
@@ -97,7 +100,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
     def __init__(
         self,
-        topology: Topology,
+        topology: Optional[Topology] = None,
         batch_size: Optional[int] = None,
         enumerator: Optional[Enumerator] = None,
         storage_reservation: Optional[StorageReservation] = None,
@@ -108,7 +111,13 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
     ) -> None:
-        self._topology = topology
+        if topology is None:
+            topology = Topology(
+                local_world_size=get_local_size(),
+                world_size=dist.get_world_size(),
+                compute_device="cuda" if torch.cuda.is_available() else "cpu",
+            )
+        self._topology: Topology = topology
         self._batch_size: int = batch_size if batch_size else BATCH_SIZE
         self._constraints = constraints
         self._enumerator: Enumerator = (
@@ -156,12 +165,15 @@ class EmbeddingShardingPlanner(ShardingPlanner):
     def collective_plan(
         self,
         module: nn.Module,
-        sharders: List[ModuleSharder[nn.Module]],
-        pg: dist.ProcessGroup,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        pg: Optional[dist.ProcessGroup] = dist.GroupMember.WORLD,
     ) -> ShardingPlan:
         """
         Call self.plan(...) on rank 0 and broadcast
         """
+        assert pg is not None, "Process group is not initialized"
+        if sharders is None:
+            sharders = get_default_sharders()
         return invoke_on_rank_and_broadcast_result(
             pg,
             0,
