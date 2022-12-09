@@ -5622,6 +5622,14 @@ input.</p>
 <span class="sig-name descname"><span class="pre">progress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_iter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">In</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Out</span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist.progress" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.TrainPipelineSparseDist.sync_forward">
+<span class="sig-name descname"><span class="pre">sync_forward</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist.sync_forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Syncs <cite>PipelinedForward</cite> for sharded modules with context and dist stream of the
+current train pipeline. Used when switching between train pipelines for the same
+model.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -7050,6 +7058,7 @@ value is <cite>None</cite></p>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist"><code class="docutils literal notranslate"><span class="pre">TrainPipelineSparseDist</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist.progress"><code class="docutils literal notranslate"><span class="pre">TrainPipelineSparseDist.progress()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist.sync_forward"><code class="docutils literal notranslate"><span class="pre">TrainPipelineSparseDist.sync_forward()</span></code></a></li>
 </ul>
 </li>
 </ul>
