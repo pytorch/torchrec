@@ -302,22 +302,16 @@ class BinaryCriteoUtils:
             total_length = sum(lengths) - start_row
         else:
             total_length = last_row - start_row + 1
-        rows_per_rank = total_length // world_size
-        remainder = total_length % world_size
 
         # Global indices that rank is responsible for. All ranges (left, right) are
         # inclusive.
-        if rank < remainder:
-            rank_left_g = rank * (rows_per_rank + 1)
-            rank_right_g = (rank + 1) * (rows_per_rank + 1) - 1
-        else:
-            rank_left_g = (
-                remainder * (rows_per_rank + 1) + (rank - remainder) * rows_per_rank
-            )
-            rank_right_g = rank_left_g + rows_per_rank - 1
-
-        rank_left_g += start_row
-        rank_right_g += start_row
+        rows_per_rank = total_length // world_size
+        remainder = total_length % world_size
+        rows_per_rank = np.array([rows_per_rank for _ in range(world_size)])
+        rows_per_rank[:remainder] += 1
+        rank_rows_bins_csr = np.cumsum([0] + list(rows_per_rank))
+        rank_left_g = rank_rows_bins_csr[rank] + start_row
+        rank_right_g = rank_rows_bins_csr[rank + 1] - 1 + start_row
 
         output = {}
 
@@ -706,6 +700,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         batch_size: int,
         rank: int,
         world_size: int,
+        drop_last: Optional[bool] = False,
         shuffle_batches: bool = False,
         shuffle_training_set: bool = False,
         shuffle_training_set_random_seed: int = 0,
@@ -720,6 +715,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.batch_size = batch_size
         self.rank = rank
         self.world_size = world_size
+        self.drop_last = drop_last
         self.shuffle_batches = shuffle_batches
         self.shuffle_training_set = shuffle_training_set
         np.random.seed(shuffle_training_set_random_seed)
@@ -740,11 +736,12 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 sparse_arr %= self.hashes
 
         self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
-        cur_rank_dataset_len = sum(self.num_rows_per_file)
-        if self.rank < self.remainder:
-            self.num_batches: int = math.ceil((cur_rank_dataset_len - 1) / batch_size)
+        dataset_div_world_size = sum(self.num_rows_per_file)
+        dataset_div_world_size -= self.rank < self.remainder
+        if drop_last:
+            self.num_batches: int = dataset_div_world_size // batch_size
         else:
-            self.num_batches: int = math.ceil(cur_rank_dataset_len / batch_size)
+            self.num_batches: int = math.ceil(dataset_div_world_size / batch_size)
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
@@ -915,7 +912,11 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                 yield self._np_arrays_to_batch(*none_throws(buffer))
                 batch_idx += 1
                 buffer = None
-                if batch_idx + 1 == self.num_batches and self.rank < self.remainder:
+                if (
+                    batch_idx + 1 == self.num_batches
+                    and self.rank < self.remainder
+                    and not self.drop_last
+                ):
                     cur_batch_size += 1
             else:
                 rows_to_get = min(
