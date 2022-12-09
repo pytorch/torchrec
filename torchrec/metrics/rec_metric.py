@@ -231,6 +231,7 @@ class RecMetricComputation(Metric, abc.ABC):
             assert isinstance(default, torch.Tensor)
             super().add_state(window_state_name, default.detach().clone(), **kwargs)
 
+            # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
             self._batch_window_buffers[window_state_name] = WindowBuffer(
                 max_size=self._window_size,
                 max_buffer_count=MAX_BUFFER_COUNT,
