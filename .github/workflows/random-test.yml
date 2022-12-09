@@ -1,0 +1,22 @@
+name: debug clear workspace issue
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python_version: ["3.8"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: linux.4xlarge
+      script: |
+        # Mark Build Directory Safe
+        git config --global --add safe.directory /__w/vision/vision
+        echo "Made It Through"
