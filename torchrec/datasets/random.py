@@ -5,7 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Iterator, List, Optional
+import sys
+from typing import cast, Iterator, List, Optional
 
 import torch
 from torch.utils.data.dataset import IterableDataset
@@ -183,6 +184,10 @@ class RandomRecDataset(IterableDataset[Batch]):
             num_batches=num_batches,
             num_generated_batches=num_generated_batches,
         )
+        self.num_batches: int = cast(int, num_batches if not None else sys.maxsize)
 
     def __iter__(self) -> Iterator[Batch]:
         return iter(self.batch_generator)
+
+    def __len__(self) -> int:
+        return self.num_batches
