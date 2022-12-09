@@ -575,3 +575,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip1 = batch_ip2
 
         return output
+
+    def sync_forward(self) -> None:
+        """
+        Syncs `PipelinedForward` for sharded modules with context and dist stream of the
+        current train pipeline. Used when switching between train pipelines for the same
+        model.
+        """
+        for module in self._pipelined_modules:
+            module.forward._context = self._context
+            module.forward._dist_stream = self._data_dist_stream
