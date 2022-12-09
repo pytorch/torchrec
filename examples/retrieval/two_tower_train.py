@@ -8,29 +8,27 @@
 #!/usr/bin/env python3
 
 import os
-from typing import cast, List, Optional
+from typing import List, Optional
 
 import click
 
 import faiss  # @manual=//faiss/python:pyfaiss_gpu
 import faiss.contrib.torch_utils  # @manual=//faiss/contrib:faiss_contrib_gpu
 import torch
-from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from torch import distributed as dist, nn
+from torch import distributed as dist
 from torchrec import inference as trec_infer
 from torchrec.datasets.movielens import DEFAULT_RATINGS_COLUMN_NAMES
 from torchrec.distributed import TrainPipelineSparseDist
-from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-from torchrec.distributed.types import ModuleSharder
 from torchrec.inference.state_dict_transform import (
     state_dict_gather,
     state_dict_to_device,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -137,27 +135,14 @@ def train(
         device=device,
     )
     two_tower_train_task = TwoTowerTrainTask(two_tower_model)
-
-    fused_params = {
-        "learning_rate": learning_rate,
-        "optimizer": EmbOptimType.ROWWISE_ADAGRAD,
-    }
-    sharders = cast(
-        List[ModuleSharder[nn.Module]],
-        [EmbeddingBagCollectionSharder(fused_params=fused_params)],
-    )
-
-    # TODO: give collective_plan a default sharders
-    # TODO: once this is done, move defaults out of DMP and just get from ShardingPlan (eg _sharding_map should not exist - just use the plan)
-    plan = EmbeddingShardingPlanner().collective_plan(
-        module=two_tower_model,
-        sharders=sharders,
-        pg=dist.GroupMember.WORLD,
+    apply_optimizer_in_backward(
+        RowWiseAdagrad,
+        two_tower_train_task.two_tower.ebc.parameters(),
+        {"lr": learning_rate},
     )
     model = DistributedModelParallel(
         module=two_tower_train_task,
         device=device,
-        plan=plan,
     )
 
     optimizer = KeyedOptimizerWrapper(
