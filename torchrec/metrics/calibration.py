@@ -30,12 +30,19 @@ def compute_calibration(
 
 def get_calibration_states(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+) -> Dict[str, torch.Tensor]:
+    return {
+        CALIBRATION_NUM: torch.sum(predictions * weights, dim=-1),
+        CALIBRATION_DENOM: torch.sum(labels * weights, dim=-1),
+    }
+
+
+def get_calibration_states_fused(
+    labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
     return torch.stack(
         [
-            # state "calibration_num"
             torch.sum(predictions * weights, dim=-1),
-            # state "calibration_denom"
             torch.sum(labels * weights, dim=-1),
         ]
     )
@@ -78,7 +85,7 @@ class CalibrationMetricComputation(RecMetricComputation):
             )
         num_samples = predictions.shape[-1]
 
-        states = get_calibration_states(labels, predictions, weights)
+        states = get_calibration_states_fused(labels, predictions, weights)
         state = getattr(self, self._fused_name)
         state += states
         self._aggregate_window_state(self._fused_name, states, num_samples)

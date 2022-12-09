@@ -58,6 +58,23 @@ def compute_ne(
 
 def get_ne_states(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor, eta: float
+) -> Dict[str, torch.Tensor]:
+    cross_entropy = compute_cross_entropy(
+        labels,
+        predictions,
+        weights,
+        eta,
+    )
+    return {
+        "cross_entropy_sum": torch.sum(cross_entropy, dim=-1),
+        "weighted_num_samples": torch.sum(weights, dim=-1),
+        "pos_labels": torch.sum(weights * labels, dim=-1),
+        "neg_labels": torch.sum(weights * (1.0 - labels), dim=-1),
+    }
+
+
+def get_ne_states_fused(
+    labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor, eta: float
 ) -> torch.Tensor:
     cross_entropy = compute_cross_entropy(
         labels,
@@ -67,13 +84,9 @@ def get_ne_states(
     )
     return torch.stack(
         [
-            # state "cross_entropy_sum"
             torch.sum(cross_entropy, dim=-1),
-            # state "weighted_num_samples"
             torch.sum(weights, dim=-1),
-            # state "pos_labels"
             torch.sum(weights * labels, dim=-1),
-            # state "neg_labels"
             torch.sum(weights * (1.0 - labels), dim=-1),
         ]
     )
@@ -118,7 +131,7 @@ class NEMetricComputation(RecMetricComputation):
             )
         num_samples = predictions.shape[-1]
 
-        states = get_ne_states(labels, predictions, weights, self.eta)
+        states = get_ne_states_fused(labels, predictions, weights, self.eta)
         state = getattr(self, self._fused_name)
         state += states
         self._aggregate_window_state(self._fused_name, states, num_samples)
