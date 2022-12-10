@@ -467,7 +467,7 @@ can have matching IDs between files. Hence, they must be transformed
 together. Also, the transformed IDs are not unique between columns. IDs
 that appear less than frequency_threshold amount of times will be remapped
 to have a value of 1.</p>
-<p>Example transformation, frequenchy_threshold of 2:
+<p>Example transformation, frequency_threshold of 2:
 day_0_sparse.npy
 | col_0 | col_1 |
 —————–
@@ -492,8 +492,8 @@ day_0_sparse.npy
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>List</strong><strong>[</strong><strong>str</strong><strong>]</strong> (<em>in_files</em>) – Input directory of npy files.</p></li>
-<li><p><strong>out_dir</strong> (<em>str</em>) – Output directory of processed npy files.</p></li>
-<li><p><strong>frequency_threshold</strong> – IDs occuring less than this frequency will be remapped to a value of 1.</p></li>
+<li><p><strong>output_dir</strong> (<em>str</em>) – Output directory of processed npy files.</p></li>
+<li><p><strong>frequency_threshold</strong> – IDs occurring less than this frequency will be remapped to a value of 1.</p></li>
 <li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different filesystems.</p></li>
 </ul>
 </dd>
@@ -608,7 +608,7 @@ filesystems.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>root</strong> (<em>str</em>) – local path to train or test dataset file.</p></li>
+<li><p><strong>path</strong> (<em>str</em>) – local path to train or test dataset file.</p></li>
 <li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each split TSV line.</p></li>
 <li><p><strong>open_kw</strong> – options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p></li>
 </ul>

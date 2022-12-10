@@ -1719,7 +1719,7 @@ the list to all processes in the group.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>input</strong> (<em>List</em><em>[</em><em>Tensor</em><em>]</em>) – list of tensors to scatter, one per rank. The tensors in
+<li><p><strong>inputs</strong> (<em>List</em><em>[</em><em>Tensor</em><em>]</em>) – list of tensors to scatter, one per rank. The tensors in
 the list usually have different lengths.</p></li>
 <li><p><strong>out_split</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – output split sizes (or dim_sum_per_rank), if
 not specified, we will use <cite>per_rank_split_lengths</cite> to construct a output
@@ -2081,7 +2081,7 @@ happens within.</p>
 <dd><p>Performs reduce scatter operation on pooled embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of shape [num_buckets x batch_size, dimension].</p>
+<dd class="field-odd"><p><strong>local_emb</strong> (<em>torch.Tensor</em>) – tensor of shape [num_buckets x batch_size, dimension].</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>awaitable of pooled embeddings of tensor of shape [batch_size, dimension].</p>
