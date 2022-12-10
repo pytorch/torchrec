@@ -836,7 +836,7 @@ class PooledEmbeddingsAllGather(nn.Module):
         Performs reduce scatter operation on pooled embeddings tensor.
 
         Args:
-            local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
+            local_emb (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
 
         Returns:
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].

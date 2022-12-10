@@ -403,7 +403,7 @@ def alltoallv(
     the list to all processes in the group.
 
     Args:
-        input (List[Tensor]): list of tensors to scatter, one per rank. The tensors in
+        inputs (List[Tensor]): list of tensors to scatter, one per rank. The tensors in
             the list usually have different lengths.
         out_split (Optional[List[int]]): output split sizes (or dim_sum_per_rank), if
             not specified, we will use `per_rank_split_lengths` to construct a output
