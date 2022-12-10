@@ -5549,8 +5549,23 @@ appear with the qualified name <code class="docutils literal notranslate"><span 
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer.module_stack">
+<span class="sig-name descname"><span class="pre">module_stack</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">OrderedDict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer.module_stack" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer.node_name_to_scope">
+<span class="sig-name descname"><span class="pre">node_name_to_scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer.node_name_to_scope" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer.proxy_buffer_attributes">
 <span class="sig-name descname"><span class="pre">proxy_buffer_attributes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer.proxy_buffer_attributes" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer.scope">
+<span class="sig-name descname"><span class="pre">scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Scope</span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer.scope" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -7036,7 +7051,10 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer"><code class="docutils literal notranslate"><span class="pre">Tracer</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.graph"><code class="docutils literal notranslate"><span class="pre">Tracer.graph</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.is_leaf_module"><code class="docutils literal notranslate"><span class="pre">Tracer.is_leaf_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.module_stack"><code class="docutils literal notranslate"><span class="pre">Tracer.module_stack</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.node_name_to_scope"><code class="docutils literal notranslate"><span class="pre">Tracer.node_name_to_scope</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.proxy_buffer_attributes"><code class="docutils literal notranslate"><span class="pre">Tracer.proxy_buffer_attributes</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.distributed.train_pipeline.Tracer.scope"><code class="docutils literal notranslate"><span class="pre">Tracer.scope</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.TrainPipeline"><code class="docutils literal notranslate"><span class="pre">TrainPipeline</span></code></a><ul>
