@@ -152,7 +152,7 @@ def criteo_kaggle(
     """`Kaggle/Criteo Display Advertising <https://www.kaggle.com/c/criteo-display-ad-challenge/>`_ Dataset
 
     Args:
-        root (str): local path to train or test dataset file.
+        path (str): local path to train or test dataset file.
         row_mapper (Optional[Callable[[List[str]], Any]]): function to apply to each split TSV line.
         open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.
 
@@ -411,7 +411,7 @@ class BinaryCriteoUtils:
         that appear less than frequency_threshold amount of times will be remapped
         to have a value of 1.
 
-        Example transformation, frequenchy_threshold of 2:
+        Example transformation, frequency_threshold of 2:
         day_0_sparse.npy
         | col_0 | col_1 |
         -----------------
@@ -438,8 +438,8 @@ class BinaryCriteoUtils:
 
         Args:
             in_files List[str]: Input directory of npy files.
-            out_dir (str): Output directory of processed npy files.
-            frequency_threshold: IDs occuring less than this frequency will be remapped to a value of 1.
+            output_dir (str): Output directory of processed npy files.
+            frequency_threshold: IDs occurring less than this frequency will be remapped to a value of 1.
             path_manager_key (str): Path manager key used to load from different filesystems.
 
         Returns:
