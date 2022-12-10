@@ -59,15 +59,10 @@ class RecMetricTest(unittest.TestCase):
         )
         ne1 = ne1._metrics_computations[0]
         ne2 = ne2._metrics_computations[0]
-        self.assertTrue(
-            ne1.get_state("cross_entropy_sum") == ne2.get_state("cross_entropy_sum")
-        )
-        self.assertTrue(
-            ne1.get_state("weighted_num_samples")
-            == ne2.get_state("weighted_num_samples")
-        )
-        self.assertTrue(ne1.get_state("pos_labels") == ne2.get_state("pos_labels"))
-        self.assertTrue(ne1.get_state("neg_labels") == ne2.get_state("neg_labels"))
+        self.assertTrue(ne1.cross_entropy_sum == ne2.cross_entropy_sum)
+        self.assertTrue(ne1.weighted_num_samples == ne2.weighted_num_samples)
+        self.assertTrue(ne1.pos_labels == ne2.pos_labels)
+        self.assertTrue(ne1.neg_labels == ne2.neg_labels)
 
     def test_zero_weights(self) -> None:
         # Test if weights = 0 for an update
@@ -91,10 +86,8 @@ class RecMetricTest(unittest.TestCase):
             labels=self.labels,
             weights=zero_weights,
         )
-        self.assertEqual(mse_computation.get_state("error_sum"), torch.tensor(0.0))
-        self.assertEqual(
-            mse_computation.get_state("weighted_num_samples"), torch.tensor(0.0)
-        )
+        self.assertEqual(mse_computation.error_sum, torch.tensor(0.0))
+        self.assertEqual(mse_computation.weighted_num_samples, torch.tensor(0.0))
 
         res = mse.compute()
         self.assertEqual(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
@@ -105,11 +98,12 @@ class RecMetricTest(unittest.TestCase):
             labels=self.labels,
             weights=self.weights,
         )
-
-        self.assertGreater(mse_computation.get_state("error_sum"), torch.tensor(0.0))
-        self.assertGreater(
-            mse_computation.get_state("weighted_num_samples"), torch.tensor(0.0)
-        )
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(mse_computation.error_sum, torch.tensor(0.0))
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(mse_computation.weighted_num_samples, torch.tensor(0.0))
 
         res = mse.compute()
         # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
@@ -155,20 +149,14 @@ class RecMetricTest(unittest.TestCase):
             labels=labels,
             weights=partial_zero_weights,
         )
-        self.assertEqual(
-            ne_computation[0].get_state("cross_entropy_sum"), torch.tensor(0.0)
-        )
-        self.assertEqual(
-            ne_computation[0].get_state("weighted_num_samples"), torch.tensor(0.0)
-        )
-
-        self.assertGreater(
-            ne_computation[1].get_state("cross_entropy_sum"), torch.tensor(0.0)
-        )
-
-        self.assertGreater(
-            ne_computation[1].get_state("weighted_num_samples"), torch.tensor(0.0)
-        )
+        self.assertEqual(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
+        self.assertEqual(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(ne_computation[1].cross_entropy_sum, torch.tensor(0.0))
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(ne_computation[1].weighted_num_samples, torch.tensor(0.0))
 
         res = ne.compute()
         self.assertEqual(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
@@ -181,14 +169,12 @@ class RecMetricTest(unittest.TestCase):
             labels=labels,
             weights=weights,
         )
-
-        self.assertGreater(
-            ne_computation[0].get_state("cross_entropy_sum"), torch.tensor(0.0)
-        )
-
-        self.assertGreater(
-            ne_computation[0].get_state("weighted_num_samples"), torch.tensor(0.0)
-        )
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
+        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
+        #  got `Tensor`.
+        self.assertGreater(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
 
         res = ne.compute()
         # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but

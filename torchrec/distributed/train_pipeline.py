@@ -464,6 +464,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     `DistributedDataParallel` modules.
     """
 
+    synced_pipeline_id: Dict[int, int] = {}
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -522,10 +524,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 batch_ip1, self._device, non_blocking=True
             )
         self._connected = True
+        self.__class__.synced_pipeline_id[id(self._model)] = id(self)
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._connected:
             self._connect(dataloader_iter)
+        elif self.__class__.synced_pipeline_id.get(id(self._model), None) != id(self):
+            self._sync_pipeline()
+            self.__class__.synced_pipeline_id[id(self._model)] = id(self)
 
         if self._model.training:
             with record_function("## zero_grad ##"):
@@ -575,3 +581,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip1 = batch_ip2
 
         return output
+
+    def _sync_pipeline(self) -> None:
+        """
+        Syncs `PipelinedForward` for sharded modules with context and dist stream of the
+        current train pipeline. Used when switching between train pipelines for the same
+        model.
+        """
+        for module in self._pipelined_modules:
+            module.forward._context = self._context
+            module.forward._dist_stream = self._data_dist_stream

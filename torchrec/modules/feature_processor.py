@@ -67,7 +67,7 @@ class PositionWeightedModule(BaseFeatureProcessor):
         """
 
         weighted_features: Dict[str, JaggedTensor] = {}
-        for key, pos_weight in self.position_weights.items():
+        for key, position_weight in self.position_weights.items():
             seq = torch.ops.fbgemm.offsets_range(
                 features[key].offsets().long(), torch.numel(features[key].values())
             )
@@ -75,9 +75,10 @@ class PositionWeightedModule(BaseFeatureProcessor):
                 values=features[key].values(),
                 lengths=features[key].lengths(),
                 offsets=features[key].offsets(),
-                weights=torch.gather(pos_weight, dim=0, index=seq),
+                weights=torch.gather(position_weight, dim=0, index=seq),
             )
-        return weighted_features
+        features.update(weighted_features)
+        return features
 
 
 class BaseGroupedFeatureProcessor(nn.Module):
