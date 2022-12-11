@@ -57,8 +57,8 @@ class IDTransformerGroup:
                 configs or embeddingbag configs. The plan of `module` should contain the module path
                 in `configs_dict`.
             eviction_config: configuration for eviction policy. Default is `{"type": "mixed_lru_lfu"}`
-            transformer_config: configuration for the transformer. Default is `{"type": "naive"}`
-            parallel: Whether the IDTransformerCollections will run paralell. When set to True,
+            transform_config: configuration for the transformer. Default is `{"type": "naive"}`
+            parallel: Whether the IDTransformerCollections will run parallel. When set to True,
                 IDTransformerGroup will start a thread for each IDTransformerCollection.
 
         Example:

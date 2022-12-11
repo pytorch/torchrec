@@ -27,7 +27,7 @@ class IDTransformerCollection:
             tables: list of `Embedding(Bag)Config` or `EmbeddingBagConfig` one passed to
                 `Embedding(Bag)Collection`.
             eviction_config: config of the eviction strategy for IDTransformers.
-            transformer_config: config of the transform strategy for IDTransformers.
+            transform_config: config of the transform strategy for IDTransformers.
             ps_collection: `PSCollection` of the collection, if `None`, won't do eviction or fetch.
                 By default, IDTransformerCollection will evict half the ids when full.
         """

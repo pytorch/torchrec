@@ -66,7 +66,6 @@ class EmbeddingStats(Stats):
             sharding_plan (ShardingPlan): sharding plan chosen by the planner.
             topology (Topology): device topology.
             batch_size (int): batch size.
-            storage_constraint (Topology): available storage after storage reservation.
             storage_reservation (StorageReservation): reserves storage for unsharded
                 parts of the model
             num_proposals (int): number of proposals evaluated.
@@ -284,7 +283,7 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"#{header_text: ^{self._width-2}}#")
 
         iter_text = (
-            f"--- Evalulated {num_proposals} proposal(s), "
+            f"--- Evaluated {num_proposals} proposal(s), "
             f"found {num_plans} possible plan(s), "
             f"ran for {run_time:.2f}s ---"
         )
