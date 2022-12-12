@@ -320,7 +320,6 @@ def alltoall_pooled(
         cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
         codecs=codecs,
     )
-    # pyre-fixme[16]: `All2All_Pooled_Req` has no attribute `apply`.
     All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
     return myreq
 
@@ -386,7 +385,6 @@ def alltoall_sequence(
     )
     # sequence of embeddings, bags are definitely non-uniform
 
-    # pyre-fixme[16]: `All2All_Seq_Req` has no attribute `apply`.
     All2All_Seq_Req.apply(group, myreq, a2ai, a2a_sequence_embs_tensor)
     return myreq
 
@@ -448,7 +446,6 @@ def alltoallv(
         codecs=codecs,
     )
 
-    # pyre-fixme[16]: `All2Allv_Req` has no attribute `apply`.
     All2Allv_Req.apply(group, myreq, a2ai, inputs)
 
     return myreq
@@ -486,7 +483,6 @@ def reduce_scatter_pooled(
     rsi = ReduceScatterInfo(
         input_sizes=[tensor.size() for tensor in inputs], codecs=codecs
     )
-    # pyre-fixme[16]
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)
     return myreq
 
@@ -520,7 +516,6 @@ def reduce_scatter_base_pooled(
 
     myreq = Request(group, device=inputs.device)
     rsi = ReduceScatterBaseInfo(input_sizes=inputs.size(), codecs=codecs)
-    # pyre-fixme[16]
     ReduceScatterBase_Req.apply(group, myreq, rsi, inputs)
     return myreq
 
@@ -554,7 +549,6 @@ def all_gather_base_pooled(
 
     myreq = Request(group, device=input.device)
     agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
-    # pyre-fixme[16]
     AllGatherBase_Req.apply(group, myreq, agi, input)
     return myreq
 
@@ -606,7 +600,6 @@ def reduce_scatter_v_pooled(
         total_input_size=input_size,
         codecs=codecs,
     )
-    # pyre-fixme[16]: `ReduceScatterV_Req` has no attribute `apply`.
     ReduceScatterV_Req.apply(group, myreq, rsvi, input)
     return myreq
 
