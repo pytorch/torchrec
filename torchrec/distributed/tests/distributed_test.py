@@ -214,8 +214,7 @@ class TestAllToAllSingleDistributed(unittest.TestCase):
                 self.assertEqual(t1, t2)
         self._barrier()
 
-    @sandcastle_skip_if(BACKEND != "nccl", "Only Nccl supports CUDA all_to_all_single")
-    @skip_if_no_gpu
+
     def test_all_to_all_single_equal_split_cuda(self):
         group, group_id, rank = self._init_global_test()
         rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -227,8 +226,6 @@ class TestAllToAllSingleDistributed(unittest.TestCase):
             rank_to_GPU,
         )
 
-    @sandcastle_skip_if(BACKEND != "nccl", "Only Nccl supports CUDA all_to_all_single")
-    @skip_if_no_gpu
     def test_all_to_all_single_equal_split_cuda_complex(self):
         group, group_id, rank = self._init_global_test()
         rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -236,8 +233,6 @@ class TestAllToAllSingleDistributed(unittest.TestCase):
             group, group_id, rank, True, rank_to_GPU, dtype=torch.cfloat
         )
 
-    @sandcastle_skip_if(BACKEND != "nccl", "Only Nccl supports CUDA all_to_all_single")
-    @skip_if_no_gpu
     def test_all_to_all_single_unequal_split_cuda(self):
         group, group_id, rank = self._init_global_test()
         rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
@@ -249,8 +244,6 @@ class TestAllToAllSingleDistributed(unittest.TestCase):
             rank_to_GPU,
         )
 
-    @sandcastle_skip_if(BACKEND != "nccl", "Only Nccl supports CUDA all_to_all_single")
-    @skip_if_no_gpu
     def test_all_to_all_single_unequal_split_cuda_complex(self):
         group, group_id, rank = self._init_global_test()
         rank_to_GPU = init_multigpu_helper(dist.get_world_size(), BACKEND)
