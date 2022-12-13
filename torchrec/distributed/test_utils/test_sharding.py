@@ -225,6 +225,20 @@ def copy_state_dict(
         else:
             tensor.copy_(global_tensor)
 
+def simple_all_to_all_single(
+    rank: int,
+    world_size: int,
+    backend: str,
+    local_size: Optional[int] = None,
+):
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        in_tensor = torch.ones([size, size], dtype=dtype) * rank
+        expected_tensor = torch.cat(
+            [torch.ones([1, size], dtype=dtype) * i for i in group]
+        )
+        out_tensor = torch.ones([size, size], dtype=dtype) * -1
+        dist.all_to_all_single(output=out_tensor, input=in_tensor, group=ctx.pg)
+        self.assertEqual(out_tensor, expected_tensor)
 
 def sharding_single_rank_test(
     rank: int,

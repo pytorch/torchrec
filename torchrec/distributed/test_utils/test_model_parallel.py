@@ -23,6 +23,7 @@ from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
     SharderType,
     sharding_single_rank_test,
+    simple_all_to_all_single,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -97,6 +98,17 @@ class ModelParallelTestShared(MultiProcessTestBase):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
+    def _test_distributed(
+        self, 
+        backend: str = "gloo",
+        world_size: int = 2,
+        local_size: Optional[int] = None
+    ):
+        self._run_multi_process_test(
+            callable=simple_all_to_all_single,
+            world_size=world_size, 
+            backend=backend)
+
 
 @skip_if_asan_class
 class ModelParallelBase(ModelParallelTestShared):
@@ -107,6 +119,10 @@ class ModelParallelBase(ModelParallelTestShared):
     )
     def setUp(self) -> None:
         super().setUp()
+    
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_distributed_all_to_all_single(self):
+        self._test_distributed(backend=self.backend)
 
     # pyre-fixme[56]
     @given(
