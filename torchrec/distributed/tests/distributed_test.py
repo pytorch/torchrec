@@ -74,6 +74,12 @@ def init_multigpu_helper(world_size: int, backend: str):
 class TestAllToAllSingleDistributed(unittest.TestCase):
     def _barrier(self, *args, **kwargs):
         Barrier.sync(*args, **kwargs)
+    
+    def _init_global_test(self):
+            group = list(range(0, dist.get_world_size()))
+            group_id = dist.group.WORLD
+            rank = dist.get_rank()
+            return (group, group_id, rank)
 
     def call_dist_op(
         self,
