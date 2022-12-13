@@ -7,11 +7,30 @@
 
 #!/usr/bin/env python3
 
-from typing import Iterable
+from typing import Iterable, Iterator, Tuple
 
 import torch
+from torch import nn
 
 from torch.optim.optimizer import Optimizer
+
+
+def in_backward_optimizer_filter(
+    named_parameters: Iterator[Tuple[str, nn.Parameter]], include: bool = False
+) -> Iterator[Tuple[str, nn.Parameter]]:
+    """
+    Filters named_parameters for whether they are or or not params that use
+    the in_backward_optimizer.
+
+    Args:
+    named_parameters(Iterator[Tuple[str, nn.Parameter]]): named_parameters
+    include(bool): If true, only yields params with in_backward_optimizer. If false, returns the outside set
+        Defaults to include params that are not in_backward (False)
+    """
+    for fqn, param in named_parameters:
+        # TODO: change to _in_backward_optimizer
+        if hasattr(param, "_overlapped_optimizer") == include:
+            yield fqn, param
 
 
 class SGD(Optimizer):
