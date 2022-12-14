@@ -120,7 +120,6 @@ class ModelParallelBase(ModelParallelTestShared):
     def setUp(self) -> None:
         super().setUp()
     
-    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_distributed_all_to_all_single(self):
         self._test_distributed(backend=self.backend)
 
