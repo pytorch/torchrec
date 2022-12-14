@@ -20,6 +20,7 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
+#include <folly/io/async/Request.h>
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -204,6 +205,10 @@ void GPUExecutor::process(int idx) {
       continue;
     }
 
+    if (!batch->contexts.empty()) {
+      folly::RequestContext::setContext(batch->contexts[0].follyRequestContext);
+    }
+
     auto timeInQueue = getTimeElapsedMS(batch->enqueueTime);
     observer_->recordQueueLatency(timeInQueue.count());
 
@@ -324,6 +329,9 @@ void GPUExecutor::process(int idx) {
           observer->recordTotalLatency(
               getTimeElapsedMS(batch->enqueueTime).count());
         });
+
+    // reset request tracking
+    folly::RequestContext::setContext(nullptr);
   }
 }
 

@@ -101,7 +101,10 @@ void BatchingQueue::add(
     const auto batchSize = request->batch_size;
     queue.push(QueryQueueEntry{
         std::move(request),
-        RequestContext{batchSize, std::move(promise)},
+        RequestContext{
+            batchSize,
+            std::move(promise),
+            folly::RequestContext::saveContext()},
         addedTime});
   });
 }
@@ -150,6 +153,7 @@ void BatchingQueue::createBatch() {
         }
 
         auto& context = contexts.emplace_back(std::move(front.context));
+        folly::RequestContext::setContext(context.follyRequestContext);
         requests.push_back(std::move(front.request));
         batchSize += requests.back()->batch_size;
         queue.pop();
@@ -177,6 +181,8 @@ void BatchingQueue::createBatch() {
       requests.clear();
       contexts.clear();
     }
+
+    folly::RequestContext::setContext(nullptr);
 
     if (!full) {
       /* sleep override */
@@ -207,6 +213,9 @@ void BatchingQueue::pinMemory(int gpuIdx) {
       if (!requests.empty() || !contexts.empty()) {
         RECORD_USER_SCOPE("PinMemory");
 
+        if (!contexts.empty()) {
+          folly::RequestContext::setContext(contexts[0].follyRequestContext);
+        }
         // Combine data.
         size_t combinedBatchSize = 0;
         for (auto i : c10::irange(requests.size())) {
@@ -323,6 +332,9 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         observer_->observeBatchCompletion(batch->size(), batch->batchSize);
 
         cbs_[gpuIdx](batch);
+
+        // unset request tracking
+        folly::RequestContext::setContext(nullptr);
       }
     } catch (const std::exception& ex) {
       LOG(FATAL) << "Error batching requests, ex: " << folly::exceptionStr(ex);

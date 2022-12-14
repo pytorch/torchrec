@@ -62,6 +62,8 @@ struct PredictionResponse {
 struct RequestContext {
   uint32_t batchSize;
   folly::Promise<std::unique_ptr<PredictionResponse>> promise;
+  // folly request context for request tracking in crochet
+  std::shared_ptr<folly::RequestContext> follyRequestContext;
 };
 
 using PredictionException = std::runtime_error;
