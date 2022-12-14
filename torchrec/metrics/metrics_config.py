@@ -22,6 +22,7 @@ class RecMetricEnum(RecMetricEnumBase):
     AUC = "auc"
     CALIBRATION = "calibration"
     MSE = "mse"
+    MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
 
 
