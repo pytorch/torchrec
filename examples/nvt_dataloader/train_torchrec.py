@@ -19,8 +19,6 @@ import torchmetrics as metrics
 import torchrec
 import torchrec.distributed as trec_dist
 import torchrec.optim as trec_optim
-
-from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from nvt_binary_dataloader import NvtBinaryDataloader
 from pyre_extensions import none_throws
 from torchrec import EmbeddingBagCollection
@@ -40,6 +38,7 @@ from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.fused_embedding_modules import fuse_embedding_optimizer
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -270,7 +269,7 @@ def main(argv: List[str]):
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
-        dict(model.named_parameters()),
+        dict(in_backward_optimizer_filter(model.named_parameters())),
         lambda params: torch.optim.Adagrad(params, lr=args.learning_rate)
         if args.adagrad
         else torch.optim.SGD(params, lr=args.learning_rate),

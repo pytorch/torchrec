@@ -44,6 +44,7 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
 from torchrec.test_utils import get_free_port, init_distributed_single_host
@@ -197,7 +198,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         copy_state_dict(unsharded_model.state_dict(), distributed_model.state_dict())
         optimizer_cpu = optim.SGD(unsharded_model.parameters(), lr=0.1)
         optimizer_distributed = KeyedOptimizerWrapper(
-            dict(distributed_model.named_parameters()),
+            dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
         )
         pipeline = TrainPipelineSparseDist(
@@ -289,7 +290,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         )
         optimizer_cpu = optim.SGD(model_cpu.parameters(), lr=0.1)
         optimizer_distributed = KeyedOptimizerWrapper(
-            dict(distributed_model.named_parameters()),
+            dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
         )
         pipeline = TrainPipelineSparseDist(

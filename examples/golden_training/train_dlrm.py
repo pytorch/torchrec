@@ -27,6 +27,7 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from tqdm import tqdm
 
@@ -132,7 +133,7 @@ def train(
     )
 
     non_fused_optimizer = KeyedOptimizerWrapper(
-        dict(model.named_parameters()),
+        dict(in_backward_optimizer_filter(model.named_parameters())),
         lambda params: torch.optim.Adagrad(params, lr=learning_rate),
     )
     # Overlap comm/compute/device transfer during training through train_pipeline

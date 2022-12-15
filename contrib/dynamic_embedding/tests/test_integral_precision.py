@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import unittest
 
 import torch
@@ -14,6 +21,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
 
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 
 from torchrec_dynamic_embedding.id_transformer_group import IDTransformerGroup
 from utils import init_dist, register_memory_io
@@ -93,7 +101,7 @@ class TestPSPrecision(unittest.TestCase):
             model = DMP(module=model, device=device, plan=plan, sharders=sharders)
 
             dense_optimizer = KeyedOptimizerWrapper(
-                dict(model.named_parameters()),
+                dict(in_backward_optimizer_filter(model.named_parameters())),
                 lambda params: torch.optim.Adam(params, lr=1e-1),
             )
             optimizer = CombinedOptimizer([model.fused_optimizer, dense_optimizer])

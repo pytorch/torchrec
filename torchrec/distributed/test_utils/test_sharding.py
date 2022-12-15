@@ -43,6 +43,7 @@ from torchrec.distributed.types import (
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 from typing_extensions import Protocol
 
 
@@ -343,7 +344,7 @@ def sharding_single_rank_test(
         )
 
         dense_optim = KeyedOptimizerWrapper(
-            dict(local_model.named_parameters()),
+            dict(in_backward_optimizer_filter(local_model.named_parameters())),
             lambda params: torch.optim.SGD(params, lr=0.1),
         )
         local_opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
