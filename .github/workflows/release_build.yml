@@ -101,13 +101,13 @@ jobs:
         name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
         path: dist/torchrec-*.whl
 
-  # download from GHA, test on gpu and push to pypi
-  test_on_gpu:
+  # download from GHA, sanity check on gpu and push to pypi
+  sanity_check_on_gpu_and_push:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.7, 3.8, 3.9]
+        python-version: [3.7, 3.8, 3.9, "3.10"]
         cuda-tag: ["cu11"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
@@ -190,12 +190,6 @@ jobs:
       run: |
         conda run -n build_binary \
           python -c "import torchrec"
-    - name: Test with pytest
-      run: |
-        conda run -n build_binary \
-          python -m pip install pytest
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
     # Push to Pypi
     - name: Push TorchRec Binary to PYPI
       env:
