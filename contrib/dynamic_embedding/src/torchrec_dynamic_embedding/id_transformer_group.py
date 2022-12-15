@@ -166,12 +166,6 @@ class IDTransformerGroup:
         """
         return path in self._id_transformer_collections
 
-    def __contains__(self, path):
-        """
-        Check if there is transformer for the path.
-        """
-        return path in self._id_transformer_collections
-
     def __del__(self):
         """
         Stop the parallel threads
