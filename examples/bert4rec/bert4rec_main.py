@@ -26,6 +26,7 @@ from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
 from torchrec.distributed.types import ModuleSharder
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from tqdm import tqdm
 
@@ -497,11 +498,12 @@ def main(argv: List[str]) -> None:
             ],
         )
         dense_optimizer = KeyedOptimizerWrapper(
-            dict(model.named_parameters()),
+            dict(in_backward_optimizer_filter(model.named_parameters())),
             lambda params: optim.Adam(
                 params, lr=args.lr, weight_decay=args.weight_decay
             ),
         )
+
         optimizer = CombinedOptimizer([model.fused_optimizer, dense_optimizer])
     else:
         device_ids = [rank] if backend == "nccl" else None
