@@ -18,6 +18,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.models.dlrm import DLRM
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
 
 if sys.platform not in ["linux", "linux2"]:
     raise EnvironmentError(
@@ -118,7 +119,7 @@ def main(argv: List[str]) -> None:
         device=device,
     )
     optimizer = KeyedOptimizerWrapper(
-        dict(model.named_parameters()),
+        dict(in_backward_optimizer_filter(model.named_parameters())),
         lambda params: torch.optim.SGD(params, lr=0.01),
     )
 

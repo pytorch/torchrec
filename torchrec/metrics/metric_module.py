@@ -18,6 +18,7 @@ import torch.nn as nn
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
+from torchrec.metrics.mae import MAEMetric
 from torchrec.metrics.metrics_config import (
     MetricsConfig,
     RecMetricEnum,
@@ -46,6 +47,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
     RecMetricEnum.MSE: MSEMetric,
+    RecMetricEnum.MAE: MAEMetric,
     RecMetricEnum.MULTICLASS_RECALL: MulticlassRecallMetric,
 }
 
