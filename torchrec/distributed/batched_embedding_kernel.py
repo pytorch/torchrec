@@ -413,12 +413,20 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
+        # TODO can delete this override once SEA is removed
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        yield from ()
+        for name, tensor in self.named_split_embedding_weights(
+            prefix, recurse, remove_duplicate
+        ):
+            # hack before we support optimizer on sharded parameter level
+            param = nn.Parameter(tensor)
+            # pyre-ignore
+            param._overlapped_optimizer = True
+            yield name, param
 
     def flush(self) -> None:
         self._emb_module.flush()
@@ -570,12 +578,12 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
-        for config, param in zip(
+        for config, tensor in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
-            yield key, param
+            yield key, tensor
 
 
 class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
@@ -645,12 +653,20 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         By convention, fused parameters are designated as buffers because they no longer
         have gradients available to external optimizers.
         """
-        return self.named_split_embedding_weights(prefix, recurse, remove_duplicate)
+        # TODO can delete this override once SEA is removed
+        yield from ()
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, nn.Parameter]]:
-        yield from ()
+        for name, tensor in self.named_split_embedding_weights(
+            prefix, recurse, remove_duplicate
+        ):
+            # hack before we support optimizer on sharded parameter level
+            param = nn.Parameter(tensor)
+            # pyre-ignore
+            param._overlapped_optimizer = True
+            yield name, param
 
     def flush(self) -> None:
         self._emb_module.flush()
