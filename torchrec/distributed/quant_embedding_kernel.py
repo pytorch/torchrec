@@ -196,16 +196,18 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 
+        # TODO Can we simplify this with state_dict = module.state_dict()?
         state_dict = (
             dict(module.named_split_embedding_weights())
             if isinstance(module, BatchedDenseEmbeddingBag)
-            else dict(module.named_buffers())
+            else dict(module.named_parameters())
         )
         device = next(iter(state_dict.values())).device
 
         config = _copy_config(module.config, data_type, sparse_type, device)
         ret = QuantBatchedEmbeddingBag(config=config, device=device)
 
+        # pyre-ignore
         quant_weight_list = _quantize_weight(state_dict, data_type)
         ret.emb_module.assign_embedding_weights(quant_weight_list)
 
@@ -293,16 +295,18 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 
+        # TODO Can we simplify this with state_dict = module.state_dict()?
         state_dict = (
             dict(module.named_split_embedding_weights())
             if isinstance(module, BatchedDenseEmbedding)
-            else dict(module.named_buffers())
+            else dict(module.named_parameters())
         )
         device = next(iter(state_dict.values())).device
 
         config = _copy_config(module.config, data_type, sparse_type, device)
         ret = QuantBatchedEmbedding(config=config, device=device)
 
+        # pyre-ignore
         quant_weight_list = _quantize_weight(state_dict, data_type)
         ret.emb_module.assign_embedding_weights(quant_weight_list)
 
