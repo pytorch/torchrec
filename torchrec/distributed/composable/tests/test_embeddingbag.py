@@ -105,10 +105,10 @@ def _test_sharding(  # noqa C901
                 {"lr": 4.0},
             )
         plan: ShardingPlan = planner.collective_plan(model, [sharder], ctx.pg)
-        sharded_model, _ = shard(
+        sharded_model = shard(
             module=model,
             env=ShardingEnv.from_process_group(ctx.pg),
-            plan=plan,
+            plan=plan.get_plan_for_module(""),
             sharders=[sharder],
             device=ctx.device,
         )
