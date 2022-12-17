@@ -295,8 +295,8 @@ class CombinedOptimizer(KeyedOptimizer):
 
     def __repr__(self) -> str:
         ret = []
-        for _, opt in self._optims:
-            ret.append(opt.__repr__())
+        for key, opt in self._optims:
+            ret.append(f"{key}: {opt.__repr__()}")
         return ",".join(ret)
 
     def zero_grad(self, set_to_none: bool = False) -> None:

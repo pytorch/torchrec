@@ -22,6 +22,9 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
+from torchrec.distributed.composable.table_batched_embedding_slice import (
+    TableBatchedEmbeddingSlice,
+)
 from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
@@ -80,12 +83,17 @@ def _load_state_dict(
 
 
 class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
+    """
+    Lookup modules for Pooled embeddings (i.e EmbeddingBags)
+    """
+
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
     ) -> None:
+        # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
         ) -> BaseEmbedding:
@@ -197,6 +205,10 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
 
 
 class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
+    """
+    Lookup modules for Pooled embeddings (i.e EmbeddingBags)
+    """
+
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
@@ -205,6 +217,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
+        # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
@@ -373,6 +386,21 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         for emb_module in self._score_emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
 
+    def named_parameters_by_table(
+        self,
+    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
+        """
+        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
+        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
+        Used in composability.
+        """
+        for embedding_kernel in self._emb_modules + self._score_emb_modules:
+            for (
+                table_name,
+                tbe_slice,
+            ) in embedding_kernel.named_parameters_by_table():
+                yield (table_name, tbe_slice)
+
 
 class MetaInferGroupedEmbeddingsLookup(
     BaseEmbeddingLookup[SparseFeatures, torch.Tensor]
@@ -389,6 +417,7 @@ class MetaInferGroupedEmbeddingsLookup(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
+        # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
@@ -506,6 +535,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
+        # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,

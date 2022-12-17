@@ -571,8 +571,8 @@ class ModelParallelStateDictBase(unittest.TestCase):
         (m, _), batch = self._generate_dmps_and_batch(sharders=sharders)
         print(f"Sharding Plan: {m._plan}")
         state_dict_keys = set(m.state_dict().keys())
-        param_keys = {key for (key, _) in m.named_parameters()}
-        buffer_keys = {key for (key, _) in m.named_buffers()}
+        param_keys = set(dict(m.named_parameters()).keys())
+        buffer_keys = set(dict(m.named_buffers()).keys())
         self.assertEqual(state_dict_keys, {*param_keys, *buffer_keys})
 
     # pyre-ignore

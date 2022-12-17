@@ -21,11 +21,11 @@ from torchrec.distributed.planner import (
     sharder_name,
     Topology,
 )
-
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardedModule,
+    ShardedTensor,
     ShardingEnv,
     ShardingPlan,
 )
@@ -75,21 +75,15 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         pg = env.process_group
         if pg is None:
             raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
-        sharded_parameter_names = {
-            key
-            for key in DistributedModelParallel._sharded_parameter_names(
-                dmp._dmp_wrapped_module
-            )
-        }
-        all_paramemeter_names = {key for key, _ in dmp.named_parameters()}
-        if sharded_parameter_names == all_paramemeter_names:
+        sharded_parameter_names = set(
+            DistributedModelParallel._sharded_parameter_names(dmp._dmp_wrapped_module)
+        )
+        all_parameter_names = set(dict(dmp.named_parameters()).keys())
+        if len(all_parameter_names - sharded_parameter_names) == 0:
             return
-
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
-            params_and_buffers_to_ignore=[
-                key for key in all_paramemeter_names if key in sharded_parameter_names
-            ],
+            params_and_buffers_to_ignore=sharded_parameter_names,
         )
         # initialize DDP
         dmp._dmp_wrapped_module = cast(
@@ -185,6 +179,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
         self.init_parameters = init_parameters
+
         self._ddp_wrapped: bool = False
 
         if env is None:
@@ -458,13 +453,23 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             yield from module.named_parameters(prefix, recurse=False)
             for name, child in module.named_children():
                 yield from self._named_parameters(
-                    child, append_prefix(prefix, name), recurse, strip_ddp
+                    child,
+                    append_prefix(prefix, name),
+                    recurse,
+                    strip_ddp,
                 )
 
     def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+        self,
+        prefix: str = "",
+        recurse: bool = True,
+        remove_duplicate: bool = True,
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        gen = self._named_parameters(self.module, prefix, recurse)
+        gen = self._named_parameters(
+            self.module,
+            prefix,
+            recurse,
+        )
         memo = set()
         for key, param in gen:
             if param in memo:
@@ -474,9 +479,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             yield key, param
 
     def bare_named_parameters(
-        self, prefix: str = "", recurse: bool = True
+        self,
+        prefix: str = "",
+        recurse: bool = True,
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        gen = self._named_parameters(self.module, prefix, recurse, False)
+        gen = self._named_parameters(
+            self.module,
+            prefix,
+            recurse,
+        )
         memo = set()
         for key, param in gen:
             if param in memo:

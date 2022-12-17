@@ -75,6 +75,7 @@ class ShardedFusedEmbeddingBagCollection(
                     broadcast_buffers=False,
                     static_graph=True,
                 )
+                # pyre-ignore
                 self._lookups[index]._register_fused_optim(
                     optimizer_type, **optimizer_kwargs
                 )
@@ -82,15 +83,6 @@ class ShardedFusedEmbeddingBagCollection(
                 # can be checkpointed.
                 # We need to ensure that a checkpoint from DDP and a checkpoint from a
                 # model parallel version are compatible.
-
-    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
-        # different than ShardedEmbeddingBagCollection - we consider DDP to be "sharded", so that it doesn't get wrapped up in ddp again
-        # semantics of this is actually "parameters that don't need to have their gradients reduced"
-        for lookup, _ in zip(self._lookups, self._sharding_type_to_sharding.keys()):
-            for name, _ in lookup.named_parameters(
-                append_prefix(prefix, "embedding_bags")
-            ):
-                yield name
 
 
 class FusedEmbeddingBagCollectionSharder(
