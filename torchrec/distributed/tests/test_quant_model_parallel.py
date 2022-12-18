@@ -21,7 +21,7 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
-from torchrec.distributed.shard import shard
+from torchrec.distributed.shard import shard_modules
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     ModelInput,
@@ -318,7 +318,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
         quant_model = _quantize(model, inplace=True, output_type=output_type)
 
-        sharded_model, _sharded_params = shard(
+        sharded_model = shard_modules(
             module=quant_model,
             sharders=[
                 cast(

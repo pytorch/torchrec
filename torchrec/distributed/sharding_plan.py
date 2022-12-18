@@ -503,8 +503,7 @@ def apply_to_all(
         )
     """
     if sharder is None:
-        # pyre-ignore
-        sharder = get_module_to_default_sharders.get(type(module), None)
+        sharder = get_module_to_default_sharders().get(type(module), None)
     else:
         assert isinstance(
             module, sharder.module_type

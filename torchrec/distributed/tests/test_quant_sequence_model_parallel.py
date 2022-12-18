@@ -15,7 +15,7 @@ from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.shard import shard
+from torchrec.distributed.shard import shard_modules
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     InferenceModelParallelTestBase,
@@ -152,7 +152,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
 
         quant_model = _quantize(model)
 
-        sharded_quant_model, _sharded_params = shard(
+        sharded_quant_model = shard_modules(
             module=quant_model,
             sharders=[
                 cast(
