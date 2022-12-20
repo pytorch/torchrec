@@ -100,14 +100,13 @@ class ModelParallelTestShared(MultiProcessTestBase):
 
 @skip_if_asan_class
 class ModelParallelBase(ModelParallelTestShared):
-    # pyre-ignore
+    def setUp(self) -> None:
+        super().setUp()
+
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def setUp(self) -> None:
-        super().setUp()
-
     # pyre-fixme[56]
     @given(
         sharder_type=st.sampled_from(
@@ -135,8 +134,8 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
-    def test_sharding_nccl_rw(
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    def test_sharding_rw(
         self,
         sharder_type: str,
         qcomms_config: Optional[QCommsConfig],
@@ -181,8 +180,8 @@ class ModelParallelBase(ModelParallelTestShared):
         apply_optimizer_in_backward_config=st.sampled_from([None]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_nccl_dp(
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    def test_sharding_dp(
         self,
         sharder_type: str,
         apply_optimizer_in_backward_config: Optional[
@@ -227,8 +226,8 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_nccl_cw(
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    def test_sharding_cw(
         self,
         sharder_type: str,
         qcomms_config: Optional[QCommsConfig],
@@ -292,8 +291,8 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_nccl_tw(
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    def test_sharding_tw(
         self,
         sharder_type: str,
         qcomms_config: Optional[QCommsConfig],
