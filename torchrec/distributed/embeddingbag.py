@@ -18,15 +18,14 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
+    KJTListSplitsAwaitable,
     Multistreamable,
-    SparseFeaturesListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    KJTList,
     ShardedEmbeddingModule,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
@@ -101,7 +100,7 @@ def create_embedding_bag_sharding(
     need_pos: bool = False,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
 ) -> EmbeddingSharding[
-    EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
@@ -279,7 +278,7 @@ class EmbeddingBagCollectionContext(Multistreamable):
 
 class ShardedEmbeddingBagCollection(
     ShardedEmbeddingModule[
-        SparseFeaturesList,
+        KJTList,
         List[torch.Tensor],
         KeyedTensor,
         EmbeddingBagCollectionContext,
@@ -327,7 +326,7 @@ class ShardedEmbeddingBagCollection(
             str,
             EmbeddingSharding[
                 EmbeddingShardingContext,
-                SparseFeatures,
+                KeyedJaggedTensor,
                 torch.Tensor,
                 torch.Tensor,
             ],
@@ -506,18 +505,8 @@ class ShardedEmbeddingBagCollection(
         feature_names: List[str] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist())
-            feature_names.extend(
-                sharding.id_score_list_feature_names()
-                if self._is_weighted
-                else sharding.id_list_feature_names()
-            )
-            self._feature_splits.append(
-                len(
-                    sharding.id_score_list_feature_names()
-                    if self._is_weighted
-                    else sharding.id_list_feature_names()
-                )
-            )
+            feature_names.extend(sharding.feature_names())
+            self._feature_splits.append(len(sharding.feature_names()))
 
         if feature_names == input_feature_names:
             self._has_features_permute = False
@@ -546,7 +535,7 @@ class ShardedEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: EmbeddingBagCollectionContext, features: KeyedJaggedTensor
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
@@ -564,25 +553,14 @@ class ShardedEmbeddingBagCollection(
             for input_dist, features_by_shard in zip(
                 self._input_dists, features_by_shards
             ):
-                awaitables.append(
-                    input_dist(
-                        SparseFeatures(
-                            id_list_features=None
-                            if self._is_weighted
-                            else features_by_shard,
-                            id_score_list_features=features_by_shard
-                            if self._is_weighted
-                            else None,
-                        )
-                    )
-                )
+                awaitables.append(input_dist(features_by_shard))
                 ctx.sharding_contexts.append(EmbeddingShardingContext())
-            return SparseFeaturesListSplitsAwaitable(awaitables, ctx)
+            return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(
         self,
         ctx: EmbeddingBagCollectionContext,
-        dist_input: SparseFeaturesList,
+        dist_input: KJTList,
     ) -> List[torch.Tensor]:
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
@@ -605,7 +583,7 @@ class ShardedEmbeddingBagCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: EmbeddingBagCollectionContext, input: SparseFeaturesList
+        self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingBagCollectionAwaitable(
             awaitables=[
@@ -678,7 +656,7 @@ class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
 
 class ShardedEmbeddingBag(
     ShardedEmbeddingModule[
-        SparseFeatures, torch.Tensor, torch.Tensor, NullShardedModuleContext
+        KeyedJaggedTensor, torch.Tensor, torch.Tensor, NullShardedModuleContext
     ],
     FusedOptimizerModule,
 ):
@@ -727,7 +705,7 @@ class ShardedEmbeddingBag(
             )
 
         self._embedding_sharding: EmbeddingSharding[
-            EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+            EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
         ] = create_embedding_bag_sharding(
             sharding_type=self.parameter_sharding.sharding_type,
             sharding_infos=[
@@ -766,7 +744,7 @@ class ShardedEmbeddingBag(
         input: Tensor,
         offsets: Optional[Tensor] = None,
         per_sample_weights: Optional[Tensor] = None,
-    ) -> Awaitable[Awaitable[SparseFeatures]]:
+    ) -> Awaitable[Awaitable[KeyedJaggedTensor]]:
         if per_sample_weights is None:
             per_sample_weights = torch.ones_like(input, dtype=torch.float)
         features = KeyedJaggedTensor(
@@ -775,15 +753,10 @@ class ShardedEmbeddingBag(
             offsets=offsets,
             weights=per_sample_weights,
         )
-        return self._input_dist(
-            SparseFeatures(
-                id_list_features=None,
-                id_score_list_features=features,
-            )
-        )
+        return self._input_dist(features)
 
     def compute(
-        self, ctx: NullShardedModuleContext, dist_input: SparseFeatures
+        self, ctx: NullShardedModuleContext, dist_input: KeyedJaggedTensor
     ) -> torch.Tensor:
         return self._lookup(dist_input)
 

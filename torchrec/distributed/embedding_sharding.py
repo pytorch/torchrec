@@ -10,27 +10,20 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torch
-import torch.distributed as dist
 from torch import nn
-from torchrec.distributed.dist_data import (
-    KJTAllToAll,
-    KJTAllToAllTensorsAwaitable,
-    KJTOneToAll,
-)
+from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     FeatureShardingMixIn,
     GroupedEmbeddingConfig,
-    ListOfSparseFeaturesList,
+    KJTList,
+    ListOfKJTList,
     ShardedEmbeddingTable,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.types import (
     Awaitable,
-    NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
@@ -42,89 +35,6 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
-
-
-class SparseFeaturesTensorsAwaitable(Awaitable[SparseFeatures]):
-    """
-    Awaitable of sparse features redistributed with an AlltoAll collective.
-
-    Args:
-        id_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]): awaitable
-            of sharded id list features.
-        id_score_list_features_awaitable (Optional[Awaitable[KeyedJaggedTensor]]):
-            awaitable of sharded id score list features.
-    """
-
-    def __init__(
-        self,
-        id_list_features_awaitable: Optional[Awaitable[KeyedJaggedTensor]],
-        id_score_list_features_awaitable: Optional[Awaitable[KeyedJaggedTensor]],
-    ) -> None:
-        super().__init__()
-        self._id_list_features_awaitable = id_list_features_awaitable
-        self._id_score_list_features_awaitable = id_score_list_features_awaitable
-
-    def _wait_impl(self) -> SparseFeatures:
-        """
-        Syncs sparse features after AlltoAll.
-
-        Returns:
-            SparseFeatures: synced sparse features.
-        """
-
-        return SparseFeatures(
-            id_list_features=self._id_list_features_awaitable.wait()
-            if self._id_list_features_awaitable is not None
-            else None,
-            id_score_list_features=self._id_score_list_features_awaitable.wait()
-            if self._id_score_list_features_awaitable is not None
-            else None,
-        )
-
-
-class SparseFeaturesSplitsAwaitable(Awaitable[SparseFeaturesTensorsAwaitable]):
-    """
-    Awaitable of sparse features tensors distribution.
-
-    Args:
-        id_list_features_awaitable (Optional[Awaitable[KJTAllToAllTensorsAwaitable]]):
-            awaitable of sharded id list features tensors AlltoAll. Waiting on this
-            value will trigger tensors AlltoAll (waiting again will yield final AlltoAll
-            results).
-        id_score_list_features_awaitable
-            (Optional[Awaitable[KJTAllToAllTensorsAwaitable]]):
-            awaitable of sharded id score list features tensors AlltoAll. Waiting on
-            this value will trigger tensors AlltoAll (waiting again will yield the final
-            AlltoAll results).
-    """
-
-    def __init__(
-        self,
-        id_list_features_awaitable: Optional[Awaitable[KJTAllToAllTensorsAwaitable]],
-        id_score_list_features_awaitable: Optional[
-            Awaitable[KJTAllToAllTensorsAwaitable]
-        ],
-    ) -> None:
-        super().__init__()
-        self._id_list_features_awaitable = id_list_features_awaitable
-        self._id_score_list_features_awaitable = id_score_list_features_awaitable
-
-    def _wait_impl(self) -> SparseFeaturesTensorsAwaitable:
-        """
-        Gets splits from AlltoAll, instantiates `SparseFeaturesTensorsAwaitable` for
-        tensors AlltoAll.
-
-        Returns:
-            SparseFeaturesTensorsAwaitable.
-        """
-        return SparseFeaturesTensorsAwaitable(
-            id_list_features_awaitable=self._id_list_features_awaitable.wait()
-            if self._id_list_features_awaitable is not None
-            else None,
-            id_score_list_features_awaitable=self._id_score_list_features_awaitable.wait()
-            if self._id_score_list_features_awaitable is not None
-            else None,
-        )
 
 
 def bucketize_kjt_before_all2all(
@@ -139,7 +49,7 @@ def bucketize_kjt_before_all2all(
     `lengths` are readjusted based on the bucketization results.
 
     Note: This function should be used only for row-wise sharding before calling
-    `SparseFeaturesAllToAll`.
+    `KJTAllToAll`.
 
     Args:
         num_buckets (int): number of buckets to bucketize the values into.
@@ -193,227 +103,25 @@ def bucketize_kjt_before_all2all(
     )
 
 
-class SparseFeaturesAllToAll(nn.Module):
-    """
-    Redistributes sparse features to a `ProcessGroup` utilizing an AlltoAll collective.
-
-    Args:
-        pg (dist.ProcessGroup): process group for AlltoAll communication.
-        id_list_features_per_rank (List[int]): number of id list features to send to
-            each rank.
-        id_score_list_features_per_rank (List[int]): number of id score list features to
-            send to each rank
-        device (Optional[torch.device]): device on which buffers will be allocated.
-        stagger (int): stagger value to apply to recat tensor, see `_recat` function for
-            more detail.
-
-    Example::
-
-        id_list_features_per_rank = [2, 1]
-        id_score_list_features_per_rank = [1, 3]
-        sfa2a = SparseFeaturesAllToAll(
-                pg,
-                id_list_features_per_rank,
-                id_score_list_features_per_rank
-            )
-        awaitable = sfa2a(rank0_input: SparseFeatures)
-
-        # where:
-        #     rank0_input.id_list_features is KeyedJaggedTensor holding
-
-        #             0           1           2
-        #     'A'    [A.V0]       None        [A.V1, A.V2]
-        #     'B'    None         [B.V0]      [B.V1]
-        #     'C'    [C.V0]       [C.V1]      None
-
-        #     rank1_input.id_list_features is KeyedJaggedTensor holding
-
-        #             0           1           2
-        #     'A'     [A.V3]      [A.V4]      None
-        #     'B'     None        [B.V2]      [B.V3, B.V4]
-        #     'C'     [C.V2]      [C.V3]      None
-
-        #     rank0_input.id_score_list_features is KeyedJaggedTensor holding
-
-        #             0           1           2
-        #     'A'    [A.V0]       None        [A.V1, A.V2]
-        #     'B'    None         [B.V0]      [B.V1]
-        #     'C'    [C.V0]       [C.V1]      None
-        #     'D'    None         [D.V0]      None
-
-        #     rank1_input.id_score_list_features is KeyedJaggedTensor holding
-
-        #             0           1           2
-        #     'A'     [A.V3]      [A.V4]      None
-        #     'B'     None        [B.V2]      [B.V3, B.V4]
-        #     'C'     [C.V2]      [C.V3]      None
-        #     'D'     [D.V1]      [D.V2]      [D.V3, D.V4]
-
-        rank0_output: SparseFeatures = awaitable.wait()
-
-        # rank0_output.id_list_features is KeyedJaggedTensor holding
-
-        #         0           1           2           3           4           5
-        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
-        # 'B'     None        [B.V0]    [B.V1]        None        [B.V2]     [B.V3, B.V4]
-
-        # rank1_output.id_list_features is KeyedJaggedTensor holding
-        #         0           1           2           3           4           5
-        # 'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
-
-        # rank0_output.id_score_list_features is KeyedJaggedTensor holding
-
-        #         0           1           2           3           4           5
-        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
-
-        # rank1_output.id_score_list_features is KeyedJaggedTensor holding
-
-        #         0           1           2           3           4           5
-        # 'B'     None        [B.V0]      [B.V1]      None        [B.V2]      [B.V3, B.V4]
-        # 'C'     [C.V0]       [C.V1]      None       [C.V2]      [C.V3]      None
-        # 'D      None         [D.V0]      None       [D.V1]      [D.V2]      [D.V3, D.V4]
-    """
-
-    def __init__(
-        self,
-        pg: dist.ProcessGroup,
-        id_list_features_per_rank: List[int],
-        id_score_list_features_per_rank: List[int],
-        device: Optional[torch.device] = None,
-        stagger: int = 1,
-    ) -> None:
-        super().__init__()
-        self._id_list_features_all2all: KJTAllToAll = KJTAllToAll(
-            pg=pg,
-            splits=id_list_features_per_rank,
-            device=device,
-            stagger=stagger,
-        )
-        self._id_score_list_features_all2all: KJTAllToAll = KJTAllToAll(
-            pg=pg,
-            splits=id_score_list_features_per_rank,
-            device=device,
-            stagger=stagger,
-        )
-
-    def forward(
-        self,
-        sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeaturesTensorsAwaitable]:
-        """
-        Sends sparse features to relevant ProcessGroup ranks. Instantiates splits
-        AlltoAll.
-
-        First wait will get the splits AlltoAll results, then issues tensors AlltoAll.
-        Second wait will get tensors AlltoAll results.
-
-        Args:
-            sparse_features (SparseFeatures): sparse features to redistribute.
-
-        Returns:
-            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
-        """
-
-        return SparseFeaturesSplitsAwaitable(
-            id_list_features_awaitable=self._id_list_features_all2all.forward(
-                sparse_features.id_list_features
-            )
-            if sparse_features.id_list_features is not None
-            else None,
-            id_score_list_features_awaitable=self._id_score_list_features_all2all.forward(
-                sparse_features.id_score_list_features
-            )
-            if sparse_features.id_score_list_features is not None
-            else None,
-        )
-
-
-class SparseFeaturesOneToAll(nn.Module):
-    """
-    Redistributes sparse features to all devices.
-
-    Args:
-        id_list_features_per_rank (List[int]): number of id list features to send to
-            each rank.
-        id_score_list_features_per_rank (List[int]): number of id score list features to
-            send to each rank
-        world_size (int): number of devices in the topology.
-    """
-
-    def __init__(
-        self,
-        id_list_features_per_rank: List[int],
-        id_score_list_features_per_rank: List[int],
-        world_size: int,
-    ) -> None:
-        super().__init__()
-        self._world_size = world_size
-        self._id_list_features_one2all: KJTOneToAll = KJTOneToAll(
-            id_list_features_per_rank,
-            world_size,
-        )
-        self._id_score_list_features_one2all: KJTOneToAll = KJTOneToAll(
-            id_score_list_features_per_rank, world_size
-        )
-
-    def forward(
-        self,
-        sparse_features: SparseFeatures,
-    ) -> Awaitable[SparseFeaturesList]:
-        """
-        Performs OnetoAll operation on sparse features.
-
-        Args:
-            sparse_features (SparseFeatures): sparse features to redistribute.
-
-        Returns:
-            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
-        """
-
-        return NoWait(
-            SparseFeaturesList(
-                [
-                    SparseFeatures(
-                        id_list_features=id_list_features,
-                        id_score_list_features=id_score_list_features,
-                    )
-                    for id_list_features, id_score_list_features in zip(
-                        self._id_list_features_one2all.forward(
-                            sparse_features.id_list_features
-                        ).wait()
-                        if sparse_features.id_list_features is not None
-                        else [None] * self._world_size,
-                        self._id_score_list_features_one2all.forward(
-                            sparse_features.id_score_list_features
-                        ).wait()
-                        if sparse_features.id_score_list_features is not None
-                        else [None] * self._world_size,
-                    )
-                ]
-            )
-        )
-
-
-# group tables by DataType, PoolingType, Weighted, and EmbeddingComputeKernel.
+# group tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
-) -> Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]:
+) -> List[List[GroupedEmbeddingConfig]]:
     """
-    Groups tables by `DataType`, `PoolingType`, `Weighted`, and `EmbeddingComputeKernel`.
+    Groups tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 
     Args:
-        tables_per_rank (List[List[ShardedEmbeddingTable]]): list of sharding embedding
-            tables per rank.
+        tables_per_rank (List[List[ShardedEmbeddingTable]]): list of sharded embedding
+            tables per rank with consistent weightedness.
 
     Returns:
-        Tuple[List[List[GroupedEmbeddingConfig]], List[List[GroupedEmbeddingConfig]]]: per rank list of GroupedEmbeddingConfig for unscored and scored features.
+        List[List[GroupedEmbeddingConfig]]: per rank list of GroupedEmbeddingConfig for features.
     """
 
     def _group_tables_per_rank(
         embedding_tables: List[ShardedEmbeddingTable],
-    ) -> Tuple[List[GroupedEmbeddingConfig], List[GroupedEmbeddingConfig]]:
+    ) -> List[GroupedEmbeddingConfig]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
-        score_grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
 
         # add fused params:
         fused_params_groups = []
@@ -431,154 +139,123 @@ def group_tables(
 
         for data_type in DataType:
             for pooling in PoolingType:
-                for is_weighted in [True, False]:
-                    # remove this when finishing migration
-                    for has_feature_processor in [False, True]:
-                        for fused_params_group in fused_params_groups:
-                            for compute_kernel in compute_kernels:
-                                grouped_tables: List[ShardedEmbeddingTable] = []
-                                grouped_score_tables: List[ShardedEmbeddingTable] = []
-                                for table in embedding_tables:
-                                    compute_kernel_type = table.compute_kernel
-                                    if table.compute_kernel in [
-                                        EmbeddingComputeKernel.FUSED_UVM,
-                                        EmbeddingComputeKernel.FUSED_UVM_CACHING,
-                                    ]:
-                                        compute_kernel_type = (
-                                            EmbeddingComputeKernel.FUSED
-                                        )
-                                    elif table.compute_kernel in [
-                                        EmbeddingComputeKernel.QUANT_UVM,
-                                        EmbeddingComputeKernel.QUANT_UVM_CACHING,
-                                    ]:
-                                        compute_kernel_type = (
-                                            EmbeddingComputeKernel.QUANT
-                                        )
-                                    if (
-                                        table.data_type == data_type
-                                        and table.pooling == pooling
-                                        and table.is_weighted == is_weighted
-                                        and table.has_feature_processor
-                                        == has_feature_processor
-                                        and compute_kernel_type == compute_kernel
-                                        and table.fused_params == fused_params_group
-                                    ):
-                                        if table.is_weighted:
-                                            grouped_score_tables.append(table)
-                                        else:
-                                            grouped_tables.append(table)
+                # remove this when finishing migration
+                for has_feature_processor in [False, True]:
+                    for fused_params_group in fused_params_groups:
+                        for compute_kernel in compute_kernels:
+                            grouped_tables: List[ShardedEmbeddingTable] = []
+                            is_weighted = False
+                            for table in embedding_tables:
+                                compute_kernel_type = table.compute_kernel
+                                is_weighted = table.is_weighted
+                                if table.compute_kernel in [
+                                    EmbeddingComputeKernel.FUSED_UVM,
+                                    EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                                ]:
+                                    compute_kernel_type = EmbeddingComputeKernel.FUSED
+                                elif table.compute_kernel in [
+                                    EmbeddingComputeKernel.QUANT_UVM,
+                                    EmbeddingComputeKernel.QUANT_UVM_CACHING,
+                                ]:
+                                    compute_kernel_type = EmbeddingComputeKernel.QUANT
+                                if (
+                                    table.data_type == data_type
+                                    and table.pooling == pooling
+                                    and table.has_feature_processor
+                                    == has_feature_processor
+                                    and compute_kernel_type == compute_kernel
+                                    and table.fused_params == fused_params_group
+                                ):
+                                    grouped_tables.append(table)
 
-                                if fused_params_group is None:
-                                    fused_params_group = {}
+                            if fused_params_group is None:
+                                fused_params_group = {}
 
-                                if grouped_tables:
-                                    grouped_embedding_configs.append(
-                                        GroupedEmbeddingConfig(
-                                            data_type=data_type,
-                                            pooling=pooling,
-                                            is_weighted=is_weighted,
-                                            has_feature_processor=has_feature_processor,
-                                            compute_kernel=compute_kernel,
-                                            embedding_tables=grouped_tables,
-                                            fused_params={
-                                                k: v
-                                                for k, v in fused_params_group.items()
-                                                if k
-                                                not in [
-                                                    "_batch_key"
-                                                ]  # drop '_batch_key' not a native fused param
-                                            },
-                                        )
+                            if grouped_tables:
+                                grouped_embedding_configs.append(
+                                    GroupedEmbeddingConfig(
+                                        data_type=data_type,
+                                        pooling=pooling,
+                                        is_weighted=is_weighted,
+                                        has_feature_processor=has_feature_processor,
+                                        compute_kernel=compute_kernel,
+                                        embedding_tables=grouped_tables,
+                                        fused_params={
+                                            k: v
+                                            for k, v in fused_params_group.items()
+                                            if k
+                                            not in [
+                                                "_batch_key"
+                                            ]  # drop '_batch_key' not a native fused param
+                                        },
                                     )
-                                if grouped_score_tables:
-                                    score_grouped_embedding_configs.append(
-                                        GroupedEmbeddingConfig(
-                                            data_type=data_type,
-                                            pooling=pooling,
-                                            is_weighted=is_weighted,
-                                            has_feature_processor=has_feature_processor,
-                                            compute_kernel=compute_kernel,
-                                            embedding_tables=grouped_score_tables,
-                                            fused_params={
-                                                k: v
-                                                for k, v in fused_params_group.items()
-                                                if k
-                                                not in [
-                                                    "_batch_key"
-                                                ]  # drop '_batch_key', not a native fused param
-                                            },
-                                        )
-                                    )
-        return grouped_embedding_configs, score_grouped_embedding_configs
+                                )
+        return grouped_embedding_configs
+
+    table_weightedness = [
+        table.is_weighted for tables in tables_per_rank for table in tables
+    ]
+    assert all(table_weightedness) or not any(table_weightedness)
 
     grouped_embedding_configs_by_rank: List[List[GroupedEmbeddingConfig]] = []
-    score_grouped_embedding_configs_by_rank: List[List[GroupedEmbeddingConfig]] = []
     for tables in tables_per_rank:
-        (
-            grouped_embedding_configs,
-            score_grouped_embedding_configs,
-        ) = _group_tables_per_rank(tables)
+        grouped_embedding_configs = _group_tables_per_rank(tables)
         grouped_embedding_configs_by_rank.append(grouped_embedding_configs)
-        score_grouped_embedding_configs_by_rank.append(score_grouped_embedding_configs)
-    return (
-        grouped_embedding_configs_by_rank,
-        score_grouped_embedding_configs_by_rank,
-    )
+
+    return grouped_embedding_configs_by_rank
 
 
-class SparseFeaturesListAwaitable(Awaitable[SparseFeaturesList]):
+class KJTListAwaitable(Awaitable[KJTList]):
     """
-    Awaitable of SparseFeaturesList.
+    Awaitable of KJTList.
 
     Args:
-        awaitables (List[Awaitable[SparseFeatures]]): list of `Awaitable` of sparse
+        awaitables (List[Awaitable[KeyedJaggedTensor]]): list of `Awaitable` of sparse
             features.
     """
 
     def __init__(
         self,
-        awaitables: List[Awaitable[SparseFeatures]],
+        awaitables: List[Awaitable[KeyedJaggedTensor]],
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
 
-    def _wait_impl(self) -> SparseFeaturesList:
+    def _wait_impl(self) -> KJTList:
         """
-        Syncs sparse features in `SparseFeaturesList`.
+        Syncs KJTs in `KJTList`.
 
         Returns:
-            SparseFeaturesList: synced `SparseFeaturesList`.
+            KJTList: synced `KJTList`.
         """
 
-        return SparseFeaturesList([w.wait() for w in self.awaitables])
+        return KJTList([w.wait() for w in self.awaitables])
 
 
 C = TypeVar("C", bound=Multistreamable)
 
 
-class SparseFeaturesListSplitsAwaitable(
-    Awaitable[Awaitable[SparseFeaturesList]], Generic[C]
-):
+class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
     """
-    Awaitable of Awaitable of SparseFeaturesList.
+    Awaitable of Awaitable of KJTList.
 
     Args:
-        awaitables (List[Awaitable[Awaitable[SparseFeatures]]]): result from calling
-            forward on `SparseFeaturesAllToAll` with sparse features to redistribute.
+        awaitables (List[Awaitable[Awaitable[KeyedJaggedTensor]]]): result from calling
+            forward on `KJTAllToAll` with sparse features to redistribute.
         ctx (C): sharding context to save the metadata from the input dist to for the
             embedding AlltoAll.
     """
 
     def __init__(
         self,
-        awaitables: List[Awaitable[Awaitable[SparseFeatures]]],
+        awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
         ctx: C,
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
         self.ctx = ctx
 
-    def _wait_impl(self) -> SparseFeaturesListAwaitable:
+    def _wait_impl(self) -> KJTListAwaitable:
         """
         Calls first wait on the awaitable of awaitable of sparse features and updates
         the context with metadata from the tensors awaitable.
@@ -587,99 +264,79 @@ class SparseFeaturesListSplitsAwaitable(
         awaitable.
 
         Returns:
-            SparseFeaturesListAwaitable: awaitables for tensors of the sparse features.
+            KJTListAwaitable: awaitables for tensors of the sparse features.
         """
         tensors_awaitables = [w.wait() for w in self.awaitables]
-        for tensors_awaitable, sharding_context in zip(
+        for awaitable, sharding_context in zip(
             tensors_awaitables,
             getattr(self.ctx, "sharding_contexts", []),
         ):
-            if isinstance(tensors_awaitable, SparseFeaturesTensorsAwaitable):
-                if (
-                    tensors_awaitable._id_list_features_awaitable is not None
-                    or tensors_awaitable._id_score_list_features_awaitable is not None
-                ):
-                    awaitable = (
-                        tensors_awaitable._id_list_features_awaitable
-                        if tensors_awaitable._id_list_features_awaitable is not None
-                        else tensors_awaitable._id_score_list_features_awaitable
+            if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
+                if hasattr(sharding_context, "batch_size_per_rank"):
+                    sharding_context.batch_size_per_rank = (
+                        awaitable._batch_size_per_rank
                     )
-                    if hasattr(sharding_context, "batch_size_per_rank"):
-                        sharding_context.batch_size_per_rank = (
-                            # pyre-ignore[16]
-                            awaitable._batch_size_per_rank
-                        )
-                    if hasattr(sharding_context, "input_splits"):
-                        # pyre-ignore[16]
-                        sharding_context.input_splits = awaitable._input_splits[
-                            "values"
-                        ]
-                    if hasattr(sharding_context, "output_splits"):
-                        # pyre-ignore[16]
-                        sharding_context.output_splits = awaitable._output_splits[
-                            "values"
-                        ]
-                    if hasattr(sharding_context, "sparse_features_recat"):
-                        # pyre-ignore[16]
-                        sharding_context.sparse_features_recat = awaitable._recat
-        return SparseFeaturesListAwaitable(tensors_awaitables)
+                if hasattr(sharding_context, "input_splits"):
+                    sharding_context.input_splits = awaitable._input_splits["values"]
+                if hasattr(sharding_context, "output_splits"):
+                    sharding_context.output_splits = awaitable._output_splits["values"]
+                if hasattr(sharding_context, "sparse_features_recat"):
+                    sharding_context.sparse_features_recat = awaitable._recat
+        return KJTListAwaitable(tensors_awaitables)
 
 
-class ListOfSparseFeaturesListAwaitable(Awaitable[ListOfSparseFeaturesList]):
+class ListOfKJTListAwaitable(Awaitable[ListOfKJTList]):
     """
     This module handles the tables-wise sharding input features distribution for
     inference.
 
     Args:
-        awaitables (List[Awaitable[SparseFeaturesList]]): list of `Awaitable` of
-            `SparseFeaturesList`.
+        awaitables (List[Awaitable[KJTList]]): list of `Awaitable` of `KJTList`.
     """
 
     def __init__(
         self,
-        awaitables: List[Awaitable[SparseFeaturesList]],
+        awaitables: List[Awaitable[KJTList]],
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
 
-    def _wait_impl(self) -> ListOfSparseFeaturesList:
+    def _wait_impl(self) -> ListOfKJTList:
         """
-        Syncs sparse features in List of SparseFeaturesList.
+        Syncs sparse features in list of KJTList.
 
         Returns:
-            ListOfSparseFeaturesList: synced `ListOfSparseFeaturesList`.
+            ListOfKJTList: synced `ListOfKJTList`.
 
         """
-        return ListOfSparseFeaturesList([w.wait() for w in self.awaitables])
+        return ListOfKJTList([w.wait() for w in self.awaitables])
 
 
-class ListOfSparseFeaturesListSplitsAwaitable(
-    Awaitable[Awaitable[ListOfSparseFeaturesList]]
-):
+class ListOfKJTListSplitsAwaitable(Awaitable[Awaitable[ListOfKJTList]]):
     """
-    Awaitable of Awaitable of ListOfSparseFeaturesList.
+    Awaitable of Awaitable of ListOfKJTList.
 
     Args:
-        awaitables (List[Awaitable[Awaitable[SparseFeaturesList]]]): list of `Awaitable`
+        awaitables (List[Awaitable[Awaitable[KJTList]]]): list of `Awaitable`
             of `Awaitable` of sparse features list.
     """
 
     def __init__(
         self,
-        awaitables: List[Awaitable[Awaitable[SparseFeaturesList]]],
+        awaitables: List[Awaitable[Awaitable[KJTList]]],
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
 
-    def _wait_impl(self) -> Awaitable[ListOfSparseFeaturesList]:
+    def _wait_impl(self) -> Awaitable[ListOfKJTList]:
         """
-        Calls first wait on the awaitable of awaitable of sparse features list.
+        Calls first wait on the awaitable of awaitable of ListOfKJTList.
 
         Returns:
-            Awaitable[ListOfSparseFeaturesList]: awaitable of `ListOfSparseFeaturesList`.
+            Awaitable[ListOfKJTList]: awaitable of `ListOfKJTList`.
 
         """
-        return ListOfSparseFeaturesListAwaitable([w.wait() for w in self.awaitables])
+        return ListOfKJTListAwaitable([w.wait() for w in self.awaitables])
 
 
 F = TypeVar("F", bound=Multistreamable)
@@ -703,7 +360,7 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
     @abc.abstractmethod
     def forward(
         self,
-        sparse_features: SparseFeatures,
+        sparse_features: KeyedJaggedTensor,
     ) -> Awaitable[Awaitable[F]]:
         pass
 

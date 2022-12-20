@@ -14,19 +14,17 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import (
-    BaseGroupedFeatureProcessor,
-    SparseFeatures,
-)
+from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
 from torchrec.distributed.sharding.cw_sharding import BaseCwEmbeddingSharding
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import TwSequenceEmbeddingDist
 from torchrec.distributed.sharding.tw_sharding import TwSparseFeaturesDist
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class CwSequenceEmbeddingSharding(
     BaseCwEmbeddingSharding[
-        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -37,12 +35,11 @@ class CwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         assert self._pg is not None
         return TwSparseFeaturesDist(
             self._pg,
-            self.id_list_features_per_rank(),
-            self.id_score_list_features_per_rank(),
+            self.features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -66,7 +63,7 @@ class CwSequenceEmbeddingSharding(
         assert self._pg is not None
         return TwSequenceEmbeddingDist(
             self._pg,
-            self.id_list_features_per_rank(),
+            self.features_per_rank(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

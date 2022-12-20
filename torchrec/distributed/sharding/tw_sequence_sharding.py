@@ -22,11 +22,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import (
-    BaseGroupedFeatureProcessor,
-    SparseFeatures,
-    SparseFeaturesList,
-)
+from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor, KJTList
 from torchrec.distributed.sharding.sequence_sharding import (
     InferSequenceShardingContext,
     SequenceShardingContext,
@@ -37,6 +33,7 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class TwSequenceEmbeddingDist(
@@ -102,7 +99,7 @@ class TwSequenceEmbeddingDist(
 
 class TwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[
-        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -113,13 +110,12 @@ class TwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         return TwSparseFeaturesDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self.id_list_features_per_rank(),
-            self.id_score_list_features_per_rank(),
+            self.features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -143,7 +139,7 @@ class TwSequenceEmbeddingSharding(
         assert self._pg is not None
         return TwSequenceEmbeddingDist(
             self._pg,
-            self.id_list_features_per_rank(),
+            self.features_per_rank(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
@@ -194,7 +190,7 @@ class InferTwSequenceEmbeddingDist(
 class InferTwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[
         InferSequenceShardingContext,
-        SparseFeaturesList,
+        KJTList,
         List[torch.Tensor],
         List[torch.Tensor],
     ]
@@ -206,10 +202,9 @@ class InferTwSequenceEmbeddingSharding(
 
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[SparseFeaturesList]:
+    ) -> BaseSparseFeaturesDist[KJTList]:
         return InferTwSparseFeaturesDist(
-            self.id_list_features_per_rank(),
-            self.id_score_list_features_per_rank(),
+            self.features_per_rank(),
             self._world_size,
         )
 
@@ -218,7 +213,7 @@ class InferTwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[SparseFeaturesList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
         return InferGroupedEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

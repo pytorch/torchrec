@@ -14,16 +14,14 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import (
-    BaseGroupedFeatureProcessor,
-    SparseFeatures,
-)
+from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
 from torchrec.distributed.sharding.dp_sharding import (
     BaseDpEmbeddingSharding,
     DpSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import Awaitable, NoWait
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class DpSequenceEmbeddingDist(
@@ -56,7 +54,7 @@ class DpSequenceEmbeddingDist(
 
 class DpSequenceEmbeddingSharding(
     BaseDpEmbeddingSharding[
-        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -66,7 +64,7 @@ class DpSequenceEmbeddingSharding(
 
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         return DpSparseFeaturesDist()
 
     def create_lookup(

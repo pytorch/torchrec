@@ -23,9 +23,9 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
-    SparseFeatures,
 )
 from torchrec.distributed.types import Awaitable, NoWait, ShardingEnv, ShardMetadata
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
@@ -55,19 +55,10 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
-        self._score_grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
-        (
-            self._grouped_embedding_configs_per_rank,
-            self._score_grouped_embedding_configs_per_rank,
-        ) = group_tables(sharded_tables_per_rank)
+        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[
             GroupedEmbeddingConfig
         ] = self._grouped_embedding_configs_per_rank[env.rank]
-        self._score_grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._score_grouped_embedding_configs_per_rank[env.rank]
 
     def _shard(
         self,
@@ -108,15 +99,11 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         embedding_dims = []
         for grouped_config in self._grouped_embedding_configs:
             embedding_dims.extend(grouped_config.embedding_dims())
-        for grouped_config in self._score_grouped_embedding_configs:
-            embedding_dims.extend(grouped_config.embedding_dims())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
         embedding_names = []
         for grouped_config in self._grouped_embedding_configs:
-            embedding_names.extend(grouped_config.embedding_names())
-        for grouped_config in self._score_grouped_embedding_configs:
             embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
@@ -127,24 +114,16 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         embedding_shard_metadata = []
         for grouped_config in self._grouped_embedding_configs:
             embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
-        for grouped_config in self._score_grouped_embedding_configs:
-            embedding_shard_metadata.extend(grouped_config.embedding_shard_metadata())
         return embedding_shard_metadata
 
-    def id_list_feature_names(self) -> List[str]:
-        id_list_feature_names = []
+    def feature_names(self) -> List[str]:
+        feature_names = []
         for grouped_config in self._grouped_embedding_configs:
-            id_list_feature_names.extend(grouped_config.feature_names())
-        return id_list_feature_names
-
-    def id_score_list_feature_names(self) -> List[str]:
-        id_score_list_feature_names = []
-        for grouped_config in self._score_grouped_embedding_configs:
-            id_score_list_feature_names.extend(grouped_config.feature_names())
-        return id_score_list_feature_names
+            feature_names.extend(grouped_config.feature_names())
+        return feature_names
 
 
-class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
+class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     """
     Distributes sparse features (input) to be data-parallel.
     """
@@ -154,8 +133,8 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
-    ) -> Awaitable[Awaitable[SparseFeatures]]:
+        sparse_features: KeyedJaggedTensor,
+    ) -> Awaitable[Awaitable[KeyedJaggedTensor]]:
         """
         No-op as sparse features are already distributed in data-parallel fashion.
 
@@ -166,7 +145,7 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
-        return NoWait(cast(Awaitable[SparseFeatures], NoWait(sparse_features)))
+        return NoWait(cast(Awaitable[KeyedJaggedTensor], NoWait(sparse_features)))
 
 
 class DpPooledEmbeddingDist(
@@ -199,7 +178,7 @@ class DpPooledEmbeddingDist(
 
 class DpPooledEmbeddingSharding(
     BaseDpEmbeddingSharding[
-        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -209,7 +188,7 @@ class DpPooledEmbeddingSharding(
 
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         return DpSparseFeaturesDist()
 
     def create_lookup(
@@ -220,7 +199,6 @@ class DpPooledEmbeddingSharding(
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            grouped_score_configs=self._score_grouped_embedding_configs,
             pg=self._env.process_group,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,

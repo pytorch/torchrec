@@ -12,15 +12,14 @@ from torch import nn
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    ListOfSparseFeaturesListSplitsAwaitable,
+    ListOfKJTListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
-    ListOfSparseFeaturesList,
+    KJTList,
+    ListOfKJTList,
     ShardedEmbeddingModule,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
@@ -52,9 +51,7 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
-) -> EmbeddingSharding[
-    NullShardingContext, SparseFeaturesList, List[torch.Tensor], torch.Tensor
-]:
+) -> EmbeddingSharding[NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     else:
@@ -63,7 +60,7 @@ def create_infer_embedding_bag_sharding(
 
 class ShardedQuantEmbeddingBagCollection(
     ShardedEmbeddingModule[
-        ListOfSparseFeaturesList,
+        ListOfKJTList,
         List[List[torch.Tensor]],
         KeyedTensor,
         NullShardedModuleContext,
@@ -92,7 +89,7 @@ class ShardedQuantEmbeddingBagCollection(
             str,
             EmbeddingSharding[
                 NullShardingContext,
-                SparseFeaturesList,
+                KJTList,
                 List[torch.Tensor],
                 torch.Tensor,
             ],
@@ -147,18 +144,8 @@ class ShardedQuantEmbeddingBagCollection(
         feature_names: List[str] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist())
-            feature_names.extend(
-                sharding.id_score_list_feature_names()
-                if self._is_weighted
-                else sharding.id_list_feature_names()
-            )
-            self._feature_splits.append(
-                len(
-                    sharding.id_score_list_feature_names()
-                    if self._is_weighted
-                    else sharding.id_list_feature_names()
-                )
-            )
+            feature_names.extend(sharding.feature_names())
+            self._feature_splits.append(len(sharding.feature_names()))
 
         if feature_names == input_feature_names:
             self._has_features_permute = False
@@ -187,7 +174,7 @@ class ShardedQuantEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[Awaitable[ListOfSparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[ListOfKJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
@@ -201,30 +188,19 @@ class ShardedQuantEmbeddingBagCollection(
                     # pyre-ignore [6]
                     self._features_order_tensor,
                 )
-            features_by_shards = features.split(
-                self._feature_splits,
-            )
+            features_by_shards = features.split(self._feature_splits)
             awaitables = [
-                input_dist(
-                    SparseFeatures(
-                        id_list_features=None
-                        if self._is_weighted
-                        else features_by_shard,
-                        id_score_list_features=features_by_shard
-                        if self._is_weighted
-                        else None,
-                    )
-                )
+                input_dist(features_by_shard)
                 for input_dist, features_by_shard in zip(
                     self._input_dists, features_by_shards
                 )
             ]
-            return ListOfSparseFeaturesListSplitsAwaitable(awaitables)
+            return ListOfKJTListSplitsAwaitable(awaitables)
 
     def compute(
         self,
         ctx: NullShardedModuleContext,
-        dist_input: ListOfSparseFeaturesList,
+        dist_input: ListOfKJTList,
     ) -> List[List[torch.Tensor]]:
         # syntax for torchscript
         return [lookup(dist_input[i]) for i, lookup in enumerate(self._lookups)]
@@ -242,7 +218,7 @@ class ShardedQuantEmbeddingBagCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: NullShardedModuleContext, input: ListOfSparseFeaturesList
+        self, ctx: NullShardedModuleContext, input: ListOfKJTList
     ) -> LazyAwaitable[KeyedTensor]:
         return self.output_dist(ctx, self.compute(ctx, input))
 
