@@ -6,19 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from torchrec.distributed.test_utils.test_model_parallel import ModelParallelBase
-from torchrec.distributed.test_utils.test_model_parallel_base import (
-    ModelParallelSparseOnlyBase,
-    ModelParallelStateDictBase,
-)
 
 
 class ModelParallelTestNccl(ModelParallelBase):
-    pass
-
-
-class ModelParallelStateDictTestNccl(ModelParallelStateDictBase):
-    pass
-
-
-class ModelParallelSparseOnlyTestNccl(ModelParallelSparseOnlyBase):
     pass

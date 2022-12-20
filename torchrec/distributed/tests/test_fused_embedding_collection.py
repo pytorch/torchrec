@@ -116,7 +116,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_fused_ec(
         self,
         sharding_type: str,
@@ -172,7 +172,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_fused_ebc_module_replace(
         self,
         sharding_type: str,
