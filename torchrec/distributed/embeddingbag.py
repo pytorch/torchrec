@@ -423,8 +423,9 @@ class ShardedEmbeddingBagCollection(
         This provides consistency between this class and the EmbeddingBagCollection's
         nn.Module API calls (state_dict, named_modules, etc)
         """
-
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
+        for table_name in self._table_names:
+            self.embedding_bags[table_name] = nn.Module()
         self._model_parallel_name_to_local_shards = OrderedDict()
         model_parallel_name_to_compute_kernel: Dict[str, str] = {}
         for (
@@ -462,18 +463,16 @@ class ShardedEmbeddingBagCollection(
                 table_name,
                 tbe_slice,
             ) in lookup.named_parameters_by_table():
-                self.embedding_bags[table_name] = torch.nn.Module()
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
         for table_name in self._model_parallel_name_to_local_shards.keys():
-            if table_name not in self.embedding_bags:
-                # for shards that don't exist on this rank, register with empty tensor
-                self.embedding_bags[table_name] = torch.nn.Module()
+            # for shards that don't exist on this rank, register with empty tensor
+            if not hasattr(self.embedding_bags[table_name], "weight"):
                 self.embedding_bags[table_name].register_parameter(
                     "weight", nn.Parameter(torch.empty(0))
                 )
                 if (
                     model_parallel_name_to_compute_kernel[table_name]
-                    == EmbeddingComputeKernel.FUSED.value
+                    != EmbeddingComputeKernel.DENSE.value
                 ):
                     self.embedding_bags[table_name].weight._overlapped_optimizer = True
 
