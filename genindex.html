@@ -1072,10 +1072,34 @@
         <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig.feature_names">(torchrec.modules.embedding_configs.EmbeddingConfig attribute)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.feature_names">feature_names() (torchrec.distributed.embedding_types.GroupedEmbeddingConfig method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.feature_names">feature_names() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.feature_names">(torchrec.distributed.embedding_types.GroupedEmbeddingConfig method)</a>
 </li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.feature_names">(torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding method)</a>
+</li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.feature_names">(torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding method)</a>
+</li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.feature_names">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
+</li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.feature_names">(torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.feature_names_per_rank">feature_names_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.feature_names_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.feature_processor_forwards">feature_processor_forwards (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.features_per_rank">features_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.features_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn">FeatureShardingMixIn (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.feedback">feedback() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
@@ -1156,10 +1180,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist.forward">(torchrec.distributed.embedding_sharding.BaseEmbeddingDist method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseSparseFeaturesDist.forward">(torchrec.distributed.embedding_sharding.BaseSparseFeaturesDist method)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll.forward">(torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll method)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll.forward">(torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.forward">(torchrec.distributed.embedding_types.BaseEmbeddingLookup method)</a>
 </li>
@@ -1422,58 +1442,6 @@
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_list_feature_names">id_list_feature_names() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.id_list_feature_names">(torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.id_list_feature_names">(torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_feature_names">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.id_list_feature_names">(torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_list_feature_names_per_rank">id_list_feature_names_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_feature_names_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeatures.id_list_features">id_list_features (torchrec.distributed.embedding_types.SparseFeatures attribute)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_list_features_per_rank">id_list_features_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_list_features_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_score_list_feature_names">id_score_list_feature_names() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding.id_score_list_feature_names">(torchrec.distributed.sharding.dp_sharding.BaseDpEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding.id_score_list_feature_names">(torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_feature_names">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding.id_score_list_feature_names">(torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_score_list_feature_names_per_rank">id_score_list_feature_names_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_feature_names_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeatures.id_score_list_features">id_score_list_features (torchrec.distributed.embedding_types.SparseFeatures attribute)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.id_score_list_features_per_rank">id_score_list_features_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
-
-      <ul>
-        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.id_score_list_features_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
-</li>
-      </ul></li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.utils.idx_split_train_val">idx_split_train_val() (in module torchrec.datasets.utils)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation">InferenceStorageReservation (class in torchrec.distributed.planner.storage_reservations)</a>
@@ -1512,8 +1480,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.input_dist">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.input_dist_requests">input_dist_requests (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_shape">input_shape (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
@@ -1538,6 +1504,8 @@
         <li><a href="torchrec.distributed.html#id22">(torchrec.distributed.comm_ops.ReduceScatterVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterVInfo.input_splits">[1]</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE">INSUFFICIENT_STORAGE (torchrec.distributed.planner.types.PlannerErrorType attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.DataType.INT2">INT2 (torchrec.modules.embedding_configs.DataType attribute)</a>
@@ -1626,19 +1594,25 @@
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor">KeyedTensor (class in torchrec.sparse.jagged_tensor)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys">keys() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 
       <ul>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.keys">(torchrec.sparse.jagged_tensor.KeyedTensor method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll">KJTAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAll">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllSplitsAwaitable">KJTAllToAllSplitsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllSplitsAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAllTensorsAwaitable">KJTAllToAllTensorsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAllTensorsAwaitable">[1]</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.KJTList">KJTList (class in torchrec.distributed.embedding_types)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTListAwaitable">KJTListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTListSplitsAwaitable">KJTListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTOneToAll">KJTOneToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTOneToAll">[1]</a>
 </li>
@@ -1688,11 +1662,11 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.LINEAR">LINEAR (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ListOfSparseFeaturesList">ListOfSparseFeaturesList (class in torchrec.distributed.embedding_types)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ListOfKJTList">ListOfKJTList (class in torchrec.distributed.embedding_types)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfSparseFeaturesListAwaitable">ListOfSparseFeaturesListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfKJTListAwaitable">ListOfKJTListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfSparseFeaturesListSplitsAwaitable">ListOfSparseFeaturesListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfKJTListSplitsAwaitable">ListOfKJTListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.load">load() (torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 
@@ -2410,11 +2384,9 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext.record_stream">(torchrec.distributed.embedding_sharding.EmbeddingShardingContext method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ListOfSparseFeaturesList.record_stream">(torchrec.distributed.embedding_types.ListOfSparseFeaturesList method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.KJTList.record_stream">(torchrec.distributed.embedding_types.KJTList method)</a>
 </li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeatures.record_stream">(torchrec.distributed.embedding_types.SparseFeatures method)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeaturesList.record_stream">(torchrec.distributed.embedding_types.SparseFeaturesList method)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ListOfKJTList.record_stream">(torchrec.distributed.embedding_types.ListOfKJTList method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.record_stream">(torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext method)</a>
 </li>
@@ -2437,10 +2409,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait">ReduceScatter_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
@@ -2621,6 +2593,8 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup">ShardingOptionGroup (class in torchrec.distributed.planner.partitioners)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan">ShardingPlan (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner">ShardingPlanner (class in torchrec.distributed.types)</a>
@@ -2631,8 +2605,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.shardings">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingType">ShardingType (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle">shuffle() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
@@ -2661,22 +2633,6 @@
         <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch">(class in torchrec.models.dlrm)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeatures">SparseFeatures (class in torchrec.distributed.embedding_types)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll">SparseFeaturesAllToAll (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.SparseFeaturesList">SparseFeaturesList (class in torchrec.distributed.embedding_types)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesListAwaitable">SparseFeaturesListAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesListSplitsAwaitable">SparseFeaturesListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll">SparseFeaturesOneToAll (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesSplitsAwaitable">SparseFeaturesSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesTensorsAwaitable">SparseFeaturesTensorsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
-</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split">split() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">SplitsAllToAllAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">[1]</a>
@@ -3186,6 +3142,8 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.deepfm">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.embedding_configs
 
@@ -3193,8 +3151,6 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.embedding_configs">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.embedding_modules
 
@@ -3341,10 +3297,6 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist.training">(torchrec.distributed.embedding_sharding.BaseEmbeddingDist attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseSparseFeaturesDist.training">(torchrec.distributed.embedding_sharding.BaseSparseFeaturesDist attribute)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll.training">(torchrec.distributed.embedding_sharding.SparseFeaturesAllToAll attribute)</a>
-</li>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll.training">(torchrec.distributed.embedding_sharding.SparseFeaturesOneToAll attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingLookup.training">(torchrec.distributed.embedding_types.BaseEmbeddingLookup attribute)</a>
 </li>
