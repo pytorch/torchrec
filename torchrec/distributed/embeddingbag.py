@@ -13,7 +13,6 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Typ
 import torch
 from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
-from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
@@ -38,7 +37,6 @@ from torchrec.distributed.types import (
     Awaitable,
     EnumerableShardingSpec,
     LazyAwaitable,
-    ModuleShardingPlan,
     NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -48,14 +46,11 @@ from torchrec.distributed.types import (
 )
 from torchrec.distributed.utils import (
     append_prefix,
+    filter_state_dict,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
 )
-from torchrec.modules.embedding_configs import (
-    EmbeddingBagConfig,
-    EmbeddingTableConfig,
-    PoolingType,
-)
+from torchrec.modules.embedding_configs import EmbeddingTableConfig, PoolingType
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
@@ -284,9 +279,9 @@ class ShardedEmbeddingBagCollection(
         KeyedTensor,
         EmbeddingBagCollectionContext,
     ],
-    # TODO remove after compute_kernel X sharding decoupling
     FusedOptimizerModule,
 ):
+    # TODO remove after compute_kernel X sharding decoupling
     """
     Sharded implementation of EmbeddingBagCollection.
     This is part of the public API to allow for manual data dist pipelining.
@@ -302,20 +297,6 @@ class ShardedEmbeddingBagCollection(
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-        self._embedding_bag_configs: List[
-            EmbeddingBagConfig
-        ] = module.embedding_bag_configs()
-        self._table_names: List[str] = [
-            config.name for config in self._embedding_bag_configs
-        ]
-
-        self.module_sharding_plan: ModuleShardingPlan = {
-            table_name: parameter_sharding
-            for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
-            if table_name in self._table_names
-        }
-        self._env = env
-
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,
             table_name_to_parameter_sharding,
@@ -346,10 +327,10 @@ class ShardedEmbeddingBagCollection(
 
         self._is_weighted: bool = module.is_weighted()
         self._device = device
-        self._input_dists: List[nn.Module] = []
-        self._lookups: List[nn.Module] = []
+        self._input_dists = nn.ModuleList()
+        self._lookups: nn.ModuleList = nn.ModuleList()
         self._create_lookups()
-        self._output_dists: List[nn.Module] = []
+        self._output_dists: nn.ModuleList = nn.ModuleList()
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
@@ -360,7 +341,6 @@ class ShardedEmbeddingBagCollection(
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
         self._has_features_permute: bool = True
-
         # Get all fused optimizers and combine them.
         optims = []
         for lookup in self._lookups:
@@ -374,131 +354,6 @@ class ShardedEmbeddingBagCollection(
                     module.fused_optimizer.params = params
                     optims.append(("", module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
-
-        for index, (sharding, lookup) in enumerate(
-            zip(
-                self._sharding_type_to_sharding.values(),
-                self._lookups,
-            )
-        ):
-            # TODO: can move this into DpPooledEmbeddingSharding once all modules are composable
-            if isinstance(sharding, DpPooledEmbeddingSharding):
-                self._lookups[index] = DistributedDataParallel(
-                    module=lookup,
-                    device_ids=[device]
-                    if self._device and self._device.type == "gpu"
-                    else None,
-                    process_group=env.process_group,
-                    gradient_as_bucket_view=True,
-                    broadcast_buffers=True,
-                    static_graph=True,
-                )
-        self._initialize_torch_state()
-
-    @staticmethod
-    def _pre_load_state_dict_hook(
-        self: "ShardedEmbeddingBagCollection",
-        state_dict: Dict[str, Any],
-        prefix: str,
-        *args: Any,
-    ) -> None:
-        """
-        Modify the destination state_dict for model parallel
-        to transform from ShardedTensors into tensors
-        """
-        for table_name in self._model_parallel_name_to_local_shards.keys():
-            key = f"{prefix}embedding_bags.{table_name}.weight"
-            local_shards = state_dict[key].local_shards()
-            if len(local_shards) == 0:
-                state_dict[key] = torch.empty(0)
-            else:
-                dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
-                # CW multiple shards are merged
-                state_dict[key] = torch.cat(
-                    [s.tensor.view(-1) for s in local_shards], dim=0
-                ).view(-1, dim)
-
-    def _initialize_torch_state(self) -> None:  # noqa
-        """
-        This provides consistency between this class and the EmbeddingBagCollection's
-        nn.Module API calls (state_dict, named_modules, etc)
-        """
-
-        self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
-        self._model_parallel_name_to_local_shards = OrderedDict()
-        model_parallel_name_to_compute_kernel: Dict[str, str] = {}
-        for (
-            table_name,
-            parameter_sharding,
-        ) in self.module_sharding_plan.items():
-            if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
-                continue
-            self._model_parallel_name_to_local_shards[table_name] = []
-            model_parallel_name_to_compute_kernel[
-                table_name
-            ] = parameter_sharding.compute_kernel
-
-        self._name_to_table_size = {}
-        for table in self._embedding_bag_configs:
-            self._name_to_table_size[table.name] = (
-                table.num_embeddings,
-                table.embedding_dim,
-            )
-
-        for sharding_type, lookup in zip(
-            self._sharding_type_to_sharding.keys(), self._lookups
-        ):
-            if sharding_type == ShardingType.DATA_PARALLEL.value:
-                # unwrap DDP
-                lookup = lookup.module
-            else:
-                # save local_shards for transforming MP params to shardedTensor
-                for key, v in lookup.state_dict().items():
-                    table_name = key[: -len(".weight")]
-                    self._model_parallel_name_to_local_shards[table_name].extend(
-                        v.local_shards()
-                    )
-            for (
-                table_name,
-                tbe_slice,
-            ) in lookup.named_parameters_by_table():
-                self.embedding_bags[table_name] = torch.nn.Module()
-                self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
-        for table_name in self._model_parallel_name_to_local_shards.keys():
-            if table_name not in self.embedding_bags:
-                # for shards that don't exist on this rank, register with empty tensor
-                self.embedding_bags[table_name] = torch.nn.Module()
-                self.embedding_bags[table_name].register_parameter(
-                    "weight", nn.Parameter(torch.empty(0))
-                )
-                if (
-                    model_parallel_name_to_compute_kernel[table_name]
-                    == EmbeddingComputeKernel.FUSED.value
-                ):
-                    self.embedding_bags[table_name].weight._overlapped_optimizer = True
-
-        def post_state_dict_hook(
-            module: ShardedEmbeddingBagCollection,
-            destination: Dict[str, torch.Tensor],
-            prefix: str,
-            _local_metadata: Dict[str, Any],
-        ) -> None:
-            # Adjust dense MP
-            for (
-                table_name,
-                local_shards,
-            ) in module._model_parallel_name_to_local_shards.items():
-                destination_key = f"{prefix}embedding_bags.{table_name}.weight"
-                destination[destination_key] = ShardedTensor._init_from_local_shards(
-                    local_shards,
-                    module._name_to_table_size[table_name],
-                    process_group=module._env.process_group,
-                )
-
-        self._register_state_dict_hook(post_state_dict_hook)
-        self._register_load_state_dict_pre_hook(
-            self._pre_load_state_dict_hook, with_module=True
-        )
 
     def _create_input_dist(
         self,
@@ -620,6 +475,76 @@ class ShardedEmbeddingBagCollection(
             ],
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
+        )
+
+    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+        for lookup in self._lookups:
+            lookup.state_dict(destination, prefix + "embedding_bags.", keep_vars)
+        return destination
+
+    def named_modules(
+        self,
+        memo: Optional[Set[nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, nn.Module]]:
+        yield from [(prefix, self)]
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        for lookup in self._lookups:
+            yield from lookup.named_parameters(
+                append_prefix(prefix, "embedding_bags"), recurse, remove_duplicate
+            )
+
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        for lookup, sharding_type in zip(
+            self._lookups, self._sharding_type_to_sharding.keys()
+        ):
+            if sharding_type == ShardingType.DATA_PARALLEL.value:
+                continue
+            for name, _ in lookup.named_parameters(
+                append_prefix(prefix, "embedding_bags")
+            ):
+                yield name
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        for lookup in self._lookups:
+            yield from lookup.named_buffers(
+                append_prefix(prefix, "embedding_bags"), recurse, remove_duplicate
+            )
+
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexpected_keys = []
+        for lookup in self._lookups:
+            missing, unexpected = lookup.load_state_dict(
+                filter_state_dict(state_dict, "embedding_bags"),
+                strict,
+            )
+            missing_keys.extend(missing)
+            unexpected_keys.extend(unexpected)
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
         )
 
     @property

@@ -8,7 +8,6 @@
 import abc
 import copy
 import itertools
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -20,17 +19,12 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,
-    SparseType,
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
-from torchrec.distributed.composable.table_batched_embedding_slice import (
-    TableBatchedEmbeddingSlice,
-)
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
-    EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
 )
 from torchrec.distributed.types import (
@@ -355,18 +349,6 @@ class BaseBatchedEmbedding(BaseEmbedding):
             key = append_prefix(prefix, f"{config.name}.weight")
             yield key, param
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
-
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def __init__(
@@ -449,18 +431,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def flush(self) -> None:
         self._emb_module.flush()
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
-
 
 class BatchedDenseEmbedding(BaseBatchedEmbedding):
     def __init__(
@@ -507,18 +477,6 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
             nn.Parameter, self._emb_module.weights
         )
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
-
 
 class BaseBatchedEmbeddingBag(BaseEmbedding):
     def __init__(
@@ -542,7 +500,6 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         self._feature_table_map: List[int] = []
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
-        self.table_name_to_count: Dict[str, int] = defaultdict(lambda: 0)
 
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
@@ -551,7 +508,6 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
             self._num_embeddings.append(config.num_embeddings)
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
-            self.table_name_to_count[config.name] += 1
 
     def init_parameters(self) -> None:
         # initialize embedding weights
@@ -628,18 +584,6 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
             yield key, tensor
-
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
 
 
 class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
@@ -727,48 +671,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def flush(self) -> None:
         self._emb_module.flush()
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        table_name_to_count = self.table_name_to_count.copy()
-        emb_module = self._emb_module
-        # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
-        for t_idx, (rows, dim, location, _) in enumerate(emb_module.embedding_specs):
-            table_name = self._config.embedding_tables[t_idx].name
-            if table_name not in table_name_to_count:
-                continue
-            table_count = table_name_to_count.pop(table_name)
-            if emb_module.weights_precision == SparseType.INT8:
-                dim += emb_module.int8_emb_row_dim_offset
-            # pyre-ignore[29]
-            offset = emb_module.weights_physical_offsets[t_idx]
-            weights: torch.Tensor
-            if location == EmbeddingLocation.DEVICE.value:
-                # pyre-ignore
-                weights = emb_module.weights_dev
-            elif location == EmbeddingLocation.HOST.value:
-                # pyre-ignore
-                weights = emb_module.weights_host
-            else:
-                # pyre-ignore
-                weights = emb_module.weights_uvm
-            weight = TableBatchedEmbeddingSlice(
-                original_tensor=weights,
-                start_offset=offset,
-                end_offset=offset + table_count * rows * dim,
-                num_embeddings=-1,
-                embedding_dim=dim,
-            )
-            # hack before we support optimizer on sharded parameter level
-            # pyre-ignore
-            weight._overlapped_optimizer = True
-            yield (table_name, weight)
-
 
 class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
@@ -814,28 +716,3 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
             nn.Parameter, self._emb_module.weights
         )
-
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        table_name_to_count = self.table_name_to_count.copy()
-        # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
-        for t_idx, (rows, dim) in enumerate(self._emb_module.embedding_specs):
-            table_name = self._config.embedding_tables[t_idx].name
-            if table_name not in table_name_to_count:
-                continue
-            table_count = table_name_to_count.pop(table_name)
-            offset = self._emb_module.weights_physical_offsets[t_idx]
-            weight = TableBatchedEmbeddingSlice(
-                original_tensor=self._emb_module.weights,
-                start_offset=offset,
-                end_offset=offset + table_count * rows * dim,
-                num_embeddings=-1,
-                embedding_dim=dim,
-            )
-            yield (table_name, weight)
