@@ -554,6 +554,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             },
             local_size=8,
             world_size=32,
+            device_type="cuda",
         )
         self.assertDictEqual(expected, module_sharding_plan)
 
@@ -575,6 +576,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
             },
             local_size=2,
             world_size=2,
+            device_type="cuda",
         )
         expected = {
             "table_0": ParameterSharding(
