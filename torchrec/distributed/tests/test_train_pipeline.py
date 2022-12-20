@@ -14,10 +14,7 @@ import torch
 import torch.distributed as dist
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import (
-    EmbeddingComputeKernel,
-    SparseFeaturesList,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionContext,
     EmbeddingBagCollectionSharder,
@@ -55,7 +52,7 @@ class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
         self,
         ctx: EmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
         return super().input_dist(ctx, features)
 
 

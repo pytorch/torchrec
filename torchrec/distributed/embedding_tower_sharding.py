@@ -15,19 +15,16 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import intra_and_cross_node_pg
 from torchrec.distributed.dist_data import (
+    KJTAllToAll,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsAwaitable,
 )
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embedding_sharding import (
-    SparseFeaturesAllToAll,
-    SparseFeaturesListSplitsAwaitable,
-)
+from torchrec.distributed.embedding_sharding import KJTListSplitsAwaitable
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
+    KJTList,
     ShardedEmbeddingModule,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
@@ -99,7 +96,7 @@ class EmbeddingTowerCollectionContext(Multistreamable):
 
 class ShardedEmbeddingTower(
     ShardedEmbeddingModule[
-        SparseFeaturesList,
+        KJTList,
         torch.Tensor,
         torch.Tensor,
         NullShardedModuleContext,
@@ -145,6 +142,7 @@ class ShardedEmbeddingTower(
         self._wkjt_feature_names: List[str] = wkjt_features
         self._has_uninitialized_input_dist: bool = True
         self._cross_dist: nn.Module = nn.Module()
+        self._weighted_cross_dist: nn.Module = nn.Module()
         self._kjt_features_order: List[int] = []
         self._wkjt_features_order: List[int] = []
         self._has_kjt_features_permute: bool = False
@@ -221,11 +219,17 @@ class ShardedEmbeddingTower(
             len(self._wkjt_feature_names) if node == self._tower_node else 0
             for node in range(node_count)
         ]
-        self._cross_dist = SparseFeaturesAllToAll(
+        self._cross_dist = KJTAllToAll(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             kjt_features_per_node,
+            self._device,
+        )
+        self._weighted_cross_dist = KJTAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._cross_pg,
             wkjt_features_per_node,
             self._device,
         )
@@ -236,7 +240,7 @@ class ShardedEmbeddingTower(
         ctx: NullShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
 
         # optional_features are populated only if both kjt and weighted kjt present in tower
         if self._wkjt_feature_names and self._kjt_feature_names:
@@ -271,30 +275,27 @@ class ShardedEmbeddingTower(
                     self._wkjt_features_order,
                     self._wkjt_features_order_tensor,
                 )
-            tensor_awaitable = self._cross_dist(
-                SparseFeatures(
-                    id_list_features=kjt_features,
-                    id_score_list_features=wkjt_features,
-                )
-            )
-            return SparseFeaturesListSplitsAwaitable([tensor_awaitable], ctx)
+
+            awaitables = []
+            if kjt_features is not None:
+                awaitables.append(self._cross_dist(kjt_features))
+            if wkjt_features is not None:
+                awaitables.append(self._weighted_cross_dist(wkjt_features))
+
+            return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(
-        self, ctx: NullShardedModuleContext, dist_input: SparseFeaturesList
+        self, ctx: NullShardedModuleContext, dist_input: KJTList
     ) -> torch.Tensor:
-        kjt_features = dist_input[0].id_list_features
-        wkjt_features = dist_input[0].id_score_list_features
-
         if self._active_device:
-            if kjt_features and wkjt_features:
+            if len(dist_input) == 2:
+                kjt_features = dist_input[0]
+                wkjt_features = dist_input[1]
                 # pyre-ignore [29]
                 embeddings = self.embedding(kjt_features, wkjt_features)
-            elif wkjt_features:
-                # pyre-ignore [29]
-                embeddings = self.embedding(wkjt_features)
             else:
                 # pyre-ignore [29]
-                embeddings = self.embedding(kjt_features)
+                embeddings = self.embedding(dist_input[0])
             # pyre-ignore [29]
             output = self.interaction(embeddings)
         else:
@@ -440,7 +441,7 @@ class ShardedEmbeddingTower(
 
 class ShardedEmbeddingTowerCollection(
     ShardedEmbeddingModule[
-        SparseFeaturesList,
+        KJTList,
         torch.Tensor,
         torch.Tensor,
         EmbeddingTowerCollectionContext,
@@ -483,6 +484,7 @@ class ShardedEmbeddingTowerCollection(
         self.interactions: nn.ModuleDict = nn.ModuleDict()
         self.input_dist_params: List[Tuple[bool, bool]] = []
         self._cross_dist: nn.Module = nn.Module()
+        self._weighted_cross_dist: nn.Module = nn.Module()
 
         # groups parameter sharding into physical towers
         tables_per_pt: List[Set[str]] = [
@@ -612,11 +614,18 @@ class ShardedEmbeddingTowerCollection(
                     self._wkjt_features_order, device=self._device, dtype=torch.int32
                 ),
             )
-        self._cross_dist = SparseFeaturesAllToAll(
+
+        self._cross_dist = KJTAllToAll(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             self._kjt_num_features_per_pt,
+            self._device,
+        )
+        self._weighted_cross_dist = KJTAllToAll(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            self._cross_pg,
             self._wkjt_num_features_per_pt,
             self._device,
         )
@@ -627,7 +636,7 @@ class ShardedEmbeddingTowerCollection(
         ctx: EmbeddingTowerCollectionContext,
         kjt_features: Optional[KeyedJaggedTensor] = None,
         wkjt_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
         if self._has_uninitialized_input_dist:
             # pyre-ignore [16]
             stride = kjt_features.stride() if kjt_features else wkjt_features.stride()
@@ -648,21 +657,16 @@ class ShardedEmbeddingTowerCollection(
                     self._wkjt_features_order,
                     cast(torch.Tensor, self._wkjt_features_order_tensor),
                 )
-            awaitable = self._cross_dist(
-                SparseFeatures(
-                    id_list_features=kjt_features,
-                    id_score_list_features=wkjt_features,
-                )
-            )
-
-        return SparseFeaturesListSplitsAwaitable([awaitable], ctx)
+            awaitables = []
+            if kjt_features is not None:
+                awaitables.append(self._cross_dist(kjt_features))
+            if wkjt_features is not None:
+                awaitables.append(self._weighted_cross_dist(wkjt_features))
+        return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(
-        self, ctx: EmbeddingTowerCollectionContext, dist_input: SparseFeaturesList
+        self, ctx: EmbeddingTowerCollectionContext, dist_input: KJTList
     ) -> torch.Tensor:
-        kjt_features = dist_input[0].id_list_features
-        wkjt_features = dist_input[0].id_score_list_features
-
         if self.embeddings:
             embeddings = []
             for embedding, input_dist_params in zip(
@@ -670,12 +674,10 @@ class ShardedEmbeddingTowerCollection(
             ):
                 kjt_param, wkjt_param = input_dist_params
                 if kjt_param and wkjt_param:
-                    embeddings.append(embedding(kjt_features, wkjt_features))
-                elif kjt_param:
-                    embeddings.append(embedding(kjt_features))
+                    assert len(dist_input) == 2
+                    embeddings.append(embedding(dist_input[0], dist_input[1]))
                 else:
-                    embeddings.append(embedding(wkjt_features))
-
+                    embeddings.append(embedding(dist_input[0]))
             output = torch.cat(
                 [
                     interaction(embedding)
@@ -686,7 +688,6 @@ class ShardedEmbeddingTowerCollection(
                 ],
                 dim=1,
             )
-
         else:
             output = torch.empty(
                 [self._cross_pg_global_batch_size, 0],

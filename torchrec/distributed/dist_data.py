@@ -20,6 +20,7 @@ from torchrec.distributed.comm_ops import (
     reduce_scatter_base_pooled,
     reduce_scatter_v_pooled,
 )
+from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -494,7 +495,7 @@ class KJTOneToAll(nn.Module):
         self._world_size = world_size
         assert self._world_size == len(splits)
 
-    def forward(self, kjt: KeyedJaggedTensor) -> Awaitable[List[KeyedJaggedTensor]]:
+    def forward(self, kjt: KeyedJaggedTensor) -> Awaitable[KJTList]:
         """
         Splits features first and then sends the slices to the corresponding devices.
 
@@ -510,7 +511,7 @@ class KJTOneToAll(nn.Module):
             split_kjt.to(torch.device("cuda", rank), non_blocking=True)
             for rank, split_kjt in enumerate(kjts)
         ]
-        return NoWait(dist_kjts)
+        return NoWait(KJTList(dist_kjts))
 
 
 class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):

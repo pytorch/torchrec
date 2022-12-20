@@ -29,15 +29,14 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    SparseFeaturesListSplitsAwaitable,
+    KJTListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     EmbeddingComputeKernel,
+    KJTList,
     ShardedEmbeddingModule,
     ShardingType,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     CwSequenceEmbeddingSharding,
@@ -96,7 +95,7 @@ def create_embedding_sharding(
     device: Optional[torch.device] = None,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
 ) -> EmbeddingSharding[
-    SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+    SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return TwSequenceEmbeddingSharding(
@@ -289,7 +288,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
 
 class ShardedEmbeddingCollection(
     ShardedEmbeddingModule[
-        SparseFeaturesList,
+        KJTList,
         List[torch.Tensor],
         Dict[str, JaggedTensor],
         EmbeddingCollectionContext,
@@ -320,7 +319,7 @@ class ShardedEmbeddingCollection(
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
-                SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+                SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
             ],
         ] = {
             sharding_type: create_embedding_sharding(
@@ -432,8 +431,8 @@ class ShardedEmbeddingCollection(
         self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist())
-            feature_names.extend(sharding.id_list_feature_names())
-            self._feature_splits.append(len(sharding.id_list_feature_names()))
+            feature_names.extend(sharding.feature_names())
+            self._feature_splits.append(len(sharding.feature_names()))
         self._features_order: List[int] = []
         for f in feature_names:
             self._features_order.append(input_feature_names.index(f))
@@ -462,7 +461,7 @@ class ShardedEmbeddingCollection(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
@@ -478,14 +477,7 @@ class ShardedEmbeddingCollection(
             )
             awaitables = []
             for input_dist, features in zip(self._input_dists, features_by_shards):
-                awaitables.append(
-                    input_dist(
-                        SparseFeatures(
-                            id_list_features=features,
-                            id_score_list_features=None,
-                        )
-                    )
-                )
+                awaitables.append(input_dist(features))
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
@@ -494,10 +486,10 @@ class ShardedEmbeddingCollection(
                         else None,
                     )
                 )
-        return SparseFeaturesListSplitsAwaitable(awaitables, ctx)
+        return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(
-        self, ctx: EmbeddingCollectionContext, dist_input: SparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, dist_input: KJTList
     ) -> List[torch.Tensor]:
         ret: List[torch.Tensor] = []
         for lookup, features, sharding_ctx, sharding_type in zip(
@@ -506,10 +498,8 @@ class ShardedEmbeddingCollection(
             ctx.sharding_contexts,
             self._sharding_type_to_sharding,
         ):
-            sharding_ctx.lengths_after_input_dist = (
-                features.id_list_features.lengths().view(
-                    -1, features.id_list_features.stride()
-                )
+            sharding_ctx.lengths_after_input_dist = features.lengths().view(
+                -1, features.stride()
             )
             embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
             ret.append(lookup(features).view(-1, embedding_dim))
@@ -538,7 +528,7 @@ class ShardedEmbeddingCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: EmbeddingCollectionContext, input: SparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, input: KJTList
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         awaitables_per_sharding: List[Awaitable[torch.Tensor]] = []
         features_before_all2all_per_sharding: List[KeyedJaggedTensor] = []
@@ -549,10 +539,8 @@ class ShardedEmbeddingCollection(
             ctx.sharding_contexts,
             self._sharding_type_to_sharding,
         ):
-            sharding_ctx.lengths_after_input_dist = (
-                features.id_list_features.lengths().view(
-                    -1, features.id_list_features.stride()
-                )
+            sharding_ctx.lengths_after_input_dist = features.lengths().view(
+                -1, features.stride()
             )
             embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
             awaitables_per_sharding.append(

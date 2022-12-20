@@ -149,7 +149,6 @@ class QuantizeKernelTest(unittest.TestCase):
         config = self._create_config(compute_kernel)
         sharded = GroupedPooledEmbeddingsLookup(
             grouped_configs=[config],
-            grouped_score_configs=[],
             device=torch.device("cuda:0"),
         )
 

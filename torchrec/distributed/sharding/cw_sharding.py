@@ -24,7 +24,6 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     ShardedEmbeddingTable,
-    SparseFeatures,
 )
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
@@ -37,6 +36,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 C = TypeVar("C", bound=Multistreamable)
@@ -197,7 +197,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
 
 class CwPooledEmbeddingSharding(
     BaseCwEmbeddingSharding[
-        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -208,12 +208,11 @@ class CwPooledEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         assert self._pg is not None
         return TwSparseFeaturesDist(
             self._pg,
-            self.id_list_features_per_rank(),
-            self.id_score_list_features_per_rank(),
+            self.features_per_rank(),
             device if device is not None else self._device,
         )
 
@@ -225,7 +224,6 @@ class CwPooledEmbeddingSharding(
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs,
-            grouped_score_configs=self._score_grouped_embedding_configs,
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
