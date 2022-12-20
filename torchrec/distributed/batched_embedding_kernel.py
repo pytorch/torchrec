@@ -8,7 +8,6 @@
 import abc
 import copy
 import itertools
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -542,7 +541,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         self._feature_table_map: List[int] = []
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
-        self.table_name_to_count: Dict[str, int] = defaultdict(lambda: 0)
+        self.table_name_to_count: Dict[str, int] = {}
 
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
@@ -551,6 +550,8 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
             self._num_embeddings.append(config.num_embeddings)
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
+            if config.name not in self.table_name_to_count:
+                self.table_name_to_count[config.name] = 0
             self.table_name_to_count[config.name] += 1
 
     def init_parameters(self) -> None:
