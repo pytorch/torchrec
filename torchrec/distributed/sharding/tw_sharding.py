@@ -74,6 +74,11 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         sharded_tables_per_rank = self._shard(sharding_infos)
+
+        self._sharded_tables_per_rank: List[
+            List[ShardedEmbeddingTable]
+        ] = sharded_tables_per_rank
+
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
