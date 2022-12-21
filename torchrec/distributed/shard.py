@@ -67,7 +67,10 @@ def shard(
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        device = torch.device("cpu")
+        if torch.cuda.is_available():
+            device = torch.device(torch.cuda.current_device())
+        else:
+            device = torch.device("cpu")
 
     sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
         sharder.module_type: sharder for sharder in sharders
@@ -129,7 +132,10 @@ def shard_modules(
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        device = torch.device("cpu")
+        if torch.cuda.is_available():
+            device = torch.device(torch.cuda.current_device())
+        else:
+            device = torch.device("cpu")
 
     sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
         sharder.module_type: sharder for sharder in sharders
