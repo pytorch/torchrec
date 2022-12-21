@@ -188,7 +188,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
@@ -231,7 +231,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_state_dict(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
 
@@ -305,7 +305,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")

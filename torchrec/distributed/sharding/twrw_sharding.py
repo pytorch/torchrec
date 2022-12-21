@@ -13,6 +13,7 @@ import torch
 import torch.distributed as dist
 from torchrec.distributed.comm import get_local_size, intra_and_cross_node_pg
 from torchrec.distributed.dist_data import (
+    KJTAllToAll,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
 )
@@ -26,14 +27,12 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
     group_tables,
-    SparseFeaturesAllToAll,
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
-    SparseFeatures,
 )
 from torchrec.distributed.types import (
     Awaitable,
@@ -43,6 +42,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 C = TypeVar("C", bound=Multistreamable)
@@ -82,31 +82,17 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._grouped_embedding_configs_per_rank: List[
             List[GroupedEmbeddingConfig]
         ] = []
-        self._score_grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
         self._grouped_embedding_configs_per_node: List[
             List[GroupedEmbeddingConfig]
         ] = []
-        self._score_grouped_embedding_configs_per_node: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
-        (
-            self._grouped_embedding_configs_per_rank,
-            self._score_grouped_embedding_configs_per_rank,
-        ) = group_tables(sharded_tables_per_rank)
+        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs_per_node = [
             self._grouped_embedding_configs_per_rank[rank]
             for rank in range(self._world_size)
             if rank % self._local_size == 0
         ]
-        self._score_grouped_embedding_configs_per_node = [
-            self._score_grouped_embedding_configs_per_rank[rank]
-            for rank in range(self._world_size)
-            if rank % self._local_size == 0
-        ]
         self._has_feature_processor: bool = False
-        for group_config in self._score_grouped_embedding_configs_per_node[
+        for group_config in self._grouped_embedding_configs_per_rank[
             self._rank // self._local_size
         ]:
             if group_config.has_feature_processor:
@@ -171,25 +157,15 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
-        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
-            self._grouped_embedding_configs_per_node,
-            self._score_grouped_embedding_configs_per_node,
-        ):
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
             for grouped_config in grouped_embedding_configs:
-                embedding_dims.extend(grouped_config.embedding_dims())
-            for grouped_config in score_grouped_embedding_configs:
                 embedding_dims.extend(grouped_config.embedding_dims())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
         embedding_names = []
-        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
-            self._grouped_embedding_configs_per_node,
-            self._score_grouped_embedding_configs_per_node,
-        ):
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
             for grouped_config in grouped_embedding_configs:
-                embedding_names.extend(grouped_config.embedding_names())
-            for grouped_config in score_grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
@@ -201,49 +177,27 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         for grouped_config in self._grouped_embedding_configs_per_node:
             for config in grouped_config:
                 embedding_shard_metadata.extend(config.embedding_shard_metadata())
-        for grouped_config in self._score_grouped_embedding_configs_per_node:
-            for config in grouped_config:
-                embedding_shard_metadata.extend(config.embedding_shard_metadata())
         return embedding_shard_metadata
 
-    def id_list_feature_names(self) -> List[str]:
-        id_list_feature_names = []
+    def feature_names(self) -> List[str]:
+        feature_names = []
         for grouped_config in self._grouped_embedding_configs_per_node:
             for config in grouped_config:
-                id_list_feature_names.extend(config.feature_names())
-        return id_list_feature_names
+                feature_names.extend(config.feature_names())
+        return feature_names
 
-    def id_score_list_feature_names(self) -> List[str]:
-        id_score_list_feature_names = []
-        for grouped_config in self._score_grouped_embedding_configs_per_node:
-            for config in grouped_config:
-                id_score_list_feature_names.extend(config.feature_names())
-        return id_score_list_feature_names
-
-    def _get_id_list_features_hash_sizes(self) -> List[int]:
-        id_list_feature_hash_sizes: List[int] = []
+    def _get_feature_hash_sizes(self) -> List[int]:
+        feature_hash_sizes: List[int] = []
         for grouped_config in self._grouped_embedding_configs_per_node:
             for config in grouped_config:
-                id_list_feature_hash_sizes.extend(config.feature_hash_sizes())
-        return id_list_feature_hash_sizes
-
-    def _get_id_score_list_features_hash_sizes(self) -> List[int]:
-        id_score_list_feature_hash_sizes: List[int] = []
-        for grouped_config in self._score_grouped_embedding_configs_per_node:
-            for config in grouped_config:
-                id_score_list_feature_hash_sizes.extend(config.feature_hash_sizes())
-        return id_score_list_feature_hash_sizes
+                feature_hash_sizes.extend(config.feature_hash_sizes())
+        return feature_hash_sizes
 
     def _dim_sum_per_node(self) -> List[int]:
         dim_sum_per_rank = []
-        for grouped_embedding_configs, score_grouped_embedding_configs in zip(
-            self._grouped_embedding_configs_per_node,
-            self._score_grouped_embedding_configs_per_node,
-        ):
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
             dim_sum = 0
             for grouped_config in grouped_embedding_configs:
-                dim_sum += grouped_config.dim_sum()
-            for grouped_config in score_grouped_embedding_configs:
                 dim_sum += grouped_config.dim_sum()
             dim_sum_per_rank.append(dim_sum)
         return dim_sum_per_rank
@@ -260,7 +214,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         return features_per_rank
 
 
-class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
+class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     """
     Bucketizes sparse features in TWRW fashion and then redistributes with an AlltoAll
     collective operation.
@@ -312,10 +266,8 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         self,
         pg: dist.ProcessGroup,
         local_size: int,
-        id_list_features_per_rank: List[int],
-        id_score_list_features_per_rank: List[int],
-        id_list_feature_hash_sizes: List[int],
-        id_score_list_feature_hash_sizes: List[int],
+        features_per_rank: List[int],
+        feature_hash_sizes: List[int],
         device: Optional[torch.device] = None,
         has_feature_processor: bool = False,
         need_pos: bool = False,
@@ -326,57 +278,32 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
         self._world_size: int = pg.size()
         self._local_size: int = local_size
         self._num_cross_nodes: int = self._world_size // self._local_size
-        id_list_feature_block_sizes = [
-            math.ceil(hash_size / self._local_size)
-            for hash_size in id_list_feature_hash_sizes
-        ]
-        id_score_list_feature_block_sizes = [
-            math.ceil(hash_size / self._local_size)
-            for hash_size in id_score_list_feature_hash_sizes
+        feature_block_sizes = [
+            math.ceil(hash_size / self._local_size) for hash_size in feature_hash_sizes
         ]
 
-        self._id_list_sf_staggered_shuffle: List[int] = self._staggered_shuffle(
-            id_list_features_per_rank
-        )
-        self._id_score_list_sf_staggered_shuffle: List[int] = self._staggered_shuffle(
-            id_score_list_features_per_rank
+        self._sf_staggered_shuffle: List[int] = self._staggered_shuffle(
+            features_per_rank
         )
         self.register_buffer(
-            "_id_list_feature_block_sizes_tensor",
+            "_feature_block_sizes_tensor",
             torch.tensor(
-                id_list_feature_block_sizes,
+                feature_block_sizes,
                 device=device,
                 dtype=torch.int32,
             ),
         )
         self.register_buffer(
-            "_id_score_list_feature_block_sizes_tensor",
+            "_sf_staggered_shuffle_tensor",
             torch.tensor(
-                id_score_list_feature_block_sizes,
+                self._sf_staggered_shuffle,
                 device=device,
                 dtype=torch.int32,
             ),
         )
-        self.register_buffer(
-            "_id_list_sf_staggered_shuffle_tensor",
-            torch.tensor(
-                self._id_list_sf_staggered_shuffle,
-                device=device,
-                dtype=torch.int32,
-            ),
-        )
-        self.register_buffer(
-            "_id_score_list_sf_staggered_shuffle_tensor",
-            torch.tensor(
-                self._id_score_list_sf_staggered_shuffle,
-                device=device,
-                dtype=torch.int32,
-            ),
-        )
-        self._dist = SparseFeaturesAllToAll(
+        self._dist = KJTAllToAll(
             pg=pg,
-            id_list_features_per_rank=id_list_features_per_rank,
-            id_score_list_features_per_rank=id_score_list_features_per_rank,
+            splits=features_per_rank,
             device=device,
             stagger=self._num_cross_nodes,
         )
@@ -385,48 +312,35 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[SparseFeatures]):
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
-    ) -> Awaitable[Awaitable[SparseFeatures]]:
+        sparse_features: KeyedJaggedTensor,
+    ) -> Awaitable[Awaitable[KeyedJaggedTensor]]:
         """
         Bucketizes sparse feature values into local world size number of buckets,
         performs staggered shuffle on the sparse features, and then performs AlltoAll
         operation.
 
         Args:
-            sparse_features (SparseFeatures): sparse features to bucketize and
+            sparse_features (KeyedJaggedTensor): sparse features to bucketize and
                 redistribute.
 
         Returns:
-            Awaitable[SparseFeatures]: awaitable of SparseFeatures.
+            Awaitable[KeyedJaggedTensor]: awaitable of KeyedJaggedTensor.
         """
 
-        bucketized_sparse_features = SparseFeatures(
-            id_list_features=bucketize_kjt_before_all2all(
-                sparse_features.id_list_features,
-                num_buckets=self._local_size,
-                block_sizes=self._id_list_feature_block_sizes_tensor,
-                output_permute=False,
-                bucketize_pos=self._has_feature_processor,
-            )[0].permute(
-                self._id_list_sf_staggered_shuffle,
-                self._id_list_sf_staggered_shuffle_tensor,
-            )
-            if sparse_features.id_list_features is not None
-            else None,
-            id_score_list_features=bucketize_kjt_before_all2all(
-                sparse_features.id_score_list_features,
-                num_buckets=self._local_size,
-                block_sizes=self._id_score_list_feature_block_sizes_tensor,
-                output_permute=False,
-                bucketize_pos=self._need_pos,
-            )[0].permute(
-                self._id_score_list_sf_staggered_shuffle,
-                self._id_score_list_sf_staggered_shuffle_tensor,
-            )
-            if sparse_features.id_score_list_features is not None
-            else None,
+        bucketized_features = bucketize_kjt_before_all2all(
+            sparse_features,
+            num_buckets=self._local_size,
+            block_sizes=self._feature_block_sizes_tensor,
+            output_permute=False,
+            bucketize_pos=self._has_feature_processor
+            if sparse_features.weights_or_none() is None
+            else self._need_pos,
+        )[0].permute(
+            self._sf_staggered_shuffle,
+            self._sf_staggered_shuffle_tensor,
         )
-        return self._dist(bucketized_sparse_features)
+
+        return self._dist(bucketized_features)
 
     def _staggered_shuffle(self, features_per_rank: List[int]) -> List[int]:
         """
@@ -559,7 +473,7 @@ class TwRwPooledEmbeddingDist(
 
 class TwRwPooledEmbeddingSharding(
     BaseTwRwEmbeddingSharding[
-        EmbeddingShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -568,24 +482,18 @@ class TwRwPooledEmbeddingSharding(
 
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
-        id_list_features_per_rank = self._features_per_rank(
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
+        features_per_rank = self._features_per_rank(
             self._grouped_embedding_configs_per_rank
         )
-        id_score_list_features_per_rank = self._features_per_rank(
-            self._score_grouped_embedding_configs_per_rank
-        )
-        id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
-        id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
+        feature_hash_sizes = self._get_feature_hash_sizes()
         assert self._pg is not None
         assert self._intra_pg is not None
         return TwRwSparseFeaturesDist(
             pg=self._pg,
             local_size=self._intra_pg.size(),
-            id_list_features_per_rank=id_list_features_per_rank,
-            id_score_list_features_per_rank=id_score_list_features_per_rank,
-            id_list_feature_hash_sizes=id_list_feature_hash_sizes,
-            id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
+            features_per_rank=features_per_rank,
+            feature_hash_sizes=feature_hash_sizes,
             device=device if device is not None else self._device,
             has_feature_processor=self._has_feature_processor,
             need_pos=self._need_pos,
@@ -599,9 +507,6 @@ class TwRwPooledEmbeddingSharding(
     ) -> BaseEmbeddingLookup:
         return GroupedPooledEmbeddingsLookup(
             grouped_configs=self._grouped_embedding_configs_per_rank[self._rank],
-            grouped_score_configs=self._score_grouped_embedding_configs_per_rank[
-                self._rank
-            ],
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,

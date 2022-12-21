@@ -241,13 +241,13 @@ class KJTAllToAllTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        backend=st.sampled_from(["gloo", "nccl"]),
+        backend=st.sampled_from(["nccl"]),
         B=st.integers(min_value=1, max_value=2),
         features=st.integers(min_value=3, max_value=4),
         is_weighted=st.booleans(),
         variable_batch_size=st.booleans(),
     )
-    @settings(max_examples=8, deadline=None)
+    @settings(max_examples=4, deadline=None)
     def test_features(
         self,
         backend: str,
@@ -394,7 +394,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(max_examples=8, deadline=None)
+    @settings(max_examples=4, deadline=None)
     def test_pooled_embeddings(
         self,
         backend: str,
@@ -907,7 +907,7 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(max_examples=8, deadline=None)
+    @settings(max_examples=4, deadline=None)
     def test_sequence_embeddings(
         self,
         variable_batch_size: bool,

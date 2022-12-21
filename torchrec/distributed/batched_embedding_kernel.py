@@ -54,7 +54,15 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         config: GroupedEmbeddingConfig,
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
         pg: Optional[dist.ProcessGroup] = None,
+        create_for_table: Optional[str] = None,
     ) -> None:
+        """
+        Implementation of a FusedOptimizer. Designed as a base class Embedding kernels
+
+        create_for_table is an optional flag, which if passed in only creates the optimizer for a single table.
+        This optimizer shares data with the broader optimizer (one per embedding kernel)
+        and is used to share step and LR changes
+        """
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
         self._pg = pg
 
@@ -125,7 +133,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
 
         # Fused optimizers use buffers (they don't use autograd) and we want to make sure
         # that state_dict look identical to no-fused version.
-        table_to_shard_params = {}
+        table_to_shard_params: Dict[str, ShardParams] = {}
 
         split_embedding_weights = emb_module.split_embedding_weights()
         split_optimizer_states = emb_module.split_optimizer_states()
@@ -135,6 +143,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             split_optimizer_states,
             split_embedding_weights,
         ):
+            # When EmbeddingFusedOptimizer is created for composability, only create state
+            if create_for_table is not None and create_for_table != table_config.name:
+                continue
             if table_config.name not in table_to_shard_params:
                 table_to_shard_params[table_config.name] = ShardParams(
                     optimizer_states=[], local_metadata=[], embedding_weights=[]
@@ -156,6 +167,8 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
 
         seen_tables = set()
         for table_config in config.embedding_tables:
+            if create_for_table is not None and create_for_table != table_config.name:
+                continue
             if table_config.name in seen_tables:
                 continue
             seen_tables.add(table_config.name)
@@ -177,7 +190,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 table_config_global_metadata.tensor_properties.requires_grad = (
                     local_weight.requires_grad
                 )
-
+            # TODO share this logic to create the same TableBatchedEmbeddingSlice in FusedModules below
             weight = ShardedTensor._init_from_local_shards_and_global_metadata(
                 local_shards=local_weight_shards,
                 sharded_tensor_metadata=table_config_global_metadata,
@@ -440,6 +453,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             prefix, recurse, remove_duplicate
         ):
             # hack before we support optimizer on sharded parameter level
+            # can delete after SEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
             param._overlapped_optimizer = True
@@ -690,6 +704,12 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
+        # this reuses logic in EmbeddingFusedOptimizer but is per table
+        self._optim_per_table: Dict[str, EmbeddingFusedOptimizer] = {}
+        for table in config.embedding_tables:
+            self._optim_per_table[table.name] = EmbeddingFusedOptimizer(
+                config, self._emb_module, pg, table.name
+            )
 
         self.init_parameters()
 
@@ -720,6 +740,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             prefix, recurse, remove_duplicate
         ):
             # hack before we support optimizer on sharded parameter level
+            # can delete after PEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
             param._overlapped_optimizer = True
@@ -765,9 +786,9 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
                 num_embeddings=-1,
                 embedding_dim=dim,
             )
-            # hack before we support optimizer on sharded parameter level
+            # TODO: use InBackwardOptimizer
             # pyre-ignore
-            weight._overlapped_optimizer = True
+            weight._overlapped_optimizer = self._optim_per_table[table_name]
             yield (table_name, weight)
 
 

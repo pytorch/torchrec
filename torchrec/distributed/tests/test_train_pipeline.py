@@ -14,10 +14,7 @@ import torch
 import torch.distributed as dist
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import (
-    EmbeddingComputeKernel,
-    SparseFeaturesList,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionContext,
     EmbeddingBagCollectionSharder,
@@ -55,7 +52,7 @@ class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
         self,
         ctx: EmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[SparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[KJTList]]:
         return super().input_dist(ctx, features)
 
 
@@ -124,8 +121,8 @@ class TrainPipelineBaseTest(unittest.TestCase):
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPUs",
     )
     def test_equal_to_non_pipelined(self) -> None:
         model_cpu = TestModule()
@@ -233,8 +230,8 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPUs",
     )
     def test_position_weighted_feature_processor(self) -> None:
         max_feature_length = 100
@@ -323,8 +320,8 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPUs",
     )
     def test_move_cpu_gpu(self) -> None:
         unsharded_model = TestSparseNN(
@@ -352,8 +349,8 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPUs",
     )
     def test_pipelining(self) -> None:
         unsharded_model = TestSparseNN(

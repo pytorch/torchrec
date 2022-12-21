@@ -17,16 +17,15 @@ from torchrec.distributed.embedding import (
 )
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
-    ListOfSparseFeaturesListSplitsAwaitable,
+    ListOfKJTListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
-    ListOfSparseFeaturesList,
+    KJTList,
+    ListOfKJTList,
     ShardedEmbeddingModule,
     ShardingType,
-    SparseFeatures,
-    SparseFeaturesList,
 )
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
@@ -72,7 +71,7 @@ def create_infer_embedding_sharding(
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[
     InferSequenceShardingContext,
-    SparseFeaturesList,
+    KJTList,
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
@@ -142,7 +141,7 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
 
 class ShardedQuantEmbeddingCollection(
     ShardedEmbeddingModule[
-        ListOfSparseFeaturesList,
+        ListOfKJTList,
         List[List[torch.Tensor]],
         Dict[str, JaggedTensor],
         EmbeddingCollectionContext,
@@ -170,7 +169,7 @@ class ShardedQuantEmbeddingCollection(
             str,
             EmbeddingSharding[
                 InferSequenceShardingContext,
-                SparseFeaturesList,
+                KJTList,
                 List[torch.Tensor],
                 List[torch.Tensor],
             ],
@@ -225,8 +224,8 @@ class ShardedQuantEmbeddingCollection(
         self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist())
-            feature_names.extend(sharding.id_list_feature_names())
-            self._feature_splits.append(len(sharding.id_list_feature_names()))
+            feature_names.extend(sharding.feature_names())
+            self._feature_splits.append(len(sharding.feature_names()))
         self._features_order: List[int] = []
         for f in feature_names:
             self._features_order.append(input_feature_names.index(f))
@@ -256,7 +255,7 @@ class ShardedQuantEmbeddingCollection(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[ListOfSparseFeaturesList]]:
+    ) -> Awaitable[Awaitable[ListOfKJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(
                 input_feature_names=features.keys() if features is not None else [],
@@ -277,31 +276,21 @@ class ShardedQuantEmbeddingCollection(
             features_by_sharding = features.split(
                 self._feature_splits,
             )
-            awaitables = []
-            for input_dist, features in zip(self._input_dists, features_by_sharding):
-                awaitables.append(
-                    input_dist(
-                        SparseFeatures(
-                            id_list_features=features,
-                            id_score_list_features=None,
-                        )
-                    )
-                )
-            return ListOfSparseFeaturesListSplitsAwaitable(awaitables)
+            awaitables = [
+                input_dist(features)
+                for input_dist, features in zip(self._input_dists, features_by_sharding)
+            ]
+            return ListOfKJTListSplitsAwaitable(awaitables)
 
     def compute(
-        self, ctx: EmbeddingCollectionContext, dist_input: ListOfSparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, dist_input: ListOfKJTList
     ) -> List[List[torch.Tensor]]:
         ret: List[List[torch.Tensor]] = []
         for lookup, features in zip(
             self._lookups,
             dist_input,
         ):
-            ctx.sharding_contexts.append(
-                InferSequenceShardingContext(
-                    features=[feature.id_list_features for feature in features],
-                )
-            )
+            ctx.sharding_contexts.append(InferSequenceShardingContext(features))
             ret.append([o.view(-1, self._embedding_dim) for o in lookup(features)])
         return ret
 
@@ -324,7 +313,7 @@ class ShardedQuantEmbeddingCollection(
         )
 
     def compute_and_output_dist(
-        self, ctx: EmbeddingCollectionContext, input: ListOfSparseFeaturesList
+        self, ctx: EmbeddingCollectionContext, input: ListOfKJTList
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         return self.output_dist(ctx, self.compute(ctx, input))
 

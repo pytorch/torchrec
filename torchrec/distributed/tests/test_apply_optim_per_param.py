@@ -200,7 +200,7 @@ class ShardedEmbeddingBagCollectionApplyOptimPerParamTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_ebc_per_parameter_optimizer(
         self,
         sharding_type: str,
@@ -416,7 +416,7 @@ class ShardedEmbeddingCollectionApplyOptimPerParamTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_ec_per_parameter_optimizer(
         self,
         sharding_type: str,

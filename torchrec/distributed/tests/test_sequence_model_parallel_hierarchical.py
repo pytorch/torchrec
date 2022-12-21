@@ -66,7 +66,7 @@ class SequenceModelParallelHierarchicalTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_seq_emb_tower_nccl(
         self,
         sharding_type: str,

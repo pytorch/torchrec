@@ -16,16 +16,14 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import (
-    BaseGroupedFeatureProcessor,
-    SparseFeatures,
-)
+from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     RwSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class RwSequenceEmbeddingDist(
@@ -89,7 +87,7 @@ class RwSequenceEmbeddingDist(
 
 class RwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[
-        SequenceShardingContext, SparseFeatures, torch.Tensor, torch.Tensor
+        SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
     ]
 ):
     """
@@ -100,19 +98,15 @@ class RwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[SparseFeatures]:
-        num_id_list_features = self._get_id_list_features_num()
-        num_id_score_list_features = self._get_id_score_list_features_num()
-        id_list_feature_hash_sizes = self._get_id_list_features_hash_sizes()
-        id_score_list_feature_hash_sizes = self._get_id_score_list_features_hash_sizes()
+    ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
+        num_features = self._get_num_features()
+        feature_hash_sizes = self._get_feature_hash_sizes()
         return RwSparseFeaturesDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             pg=self._pg,
-            num_id_list_features=num_id_list_features,
-            num_id_score_list_features=num_id_score_list_features,
-            id_list_feature_hash_sizes=id_list_feature_hash_sizes,
-            id_score_list_feature_hash_sizes=id_score_list_feature_hash_sizes,
+            num_features=num_features,
+            feature_hash_sizes=feature_hash_sizes,
             device=device if device is not None else self._device,
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
@@ -139,7 +133,7 @@ class RwSequenceEmbeddingSharding(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._pg,
-            self._get_id_list_features_num(),
+            self._get_num_features(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )

@@ -173,7 +173,7 @@ class ConstructParameterShardingTest(MultiProcessTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_parameter_sharding_ebc(
         self,
         per_param_sharding: Dict[str, ParameterShardingGenerator],

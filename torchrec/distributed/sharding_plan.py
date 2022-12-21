@@ -525,7 +525,7 @@ def construct_module_sharding_plan(
     sharder: Optional[ModuleSharder[nn.Module]] = None,
     local_size: Optional[int] = None,
     world_size: Optional[int] = None,
-    device_type: str = "cuda",
+    device_type: Optional[str] = None,
 ) -> ModuleShardingPlan:
     """
     Helper function to create module sharding plans (ModuleShardingPlan) for an module
@@ -553,6 +553,8 @@ def construct_module_sharding_plan(
             },
         )
     """
+    if device_type is None:
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
     if sharder is None:
         sharder = get_module_to_default_sharders().get(type(module), None)
     assert (

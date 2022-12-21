@@ -217,12 +217,9 @@ class PipelinedForward:
 
         if len(self._context.feature_processor_forwards) > 0:
             with record_function("## feature_processor ##"):
-                for sparse_feature in data:
-                    if sparse_feature.id_score_list_features is not None:
-                        for fp_forward in self._context.feature_processor_forwards:
-                            sparse_feature.id_score_list_features = fp_forward(
-                                sparse_feature.id_score_list_features
-                            )
+                for i, sparse_feature in enumerate(data):
+                    for fp_forward in self._context.feature_processor_forwards:
+                        data[i] = fp_forward(sparse_feature)
 
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data

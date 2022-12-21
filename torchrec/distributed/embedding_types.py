@@ -79,43 +79,20 @@ def compute_kernel_to_embedding_location(
         raise ValueError(f"Invalid EmbeddingComputeKernel {compute_kernel}")
 
 
-@dataclass
-class SparseFeatures(Multistreamable):
-    id_list_features: Optional[KeyedJaggedTensor] = None
-    id_score_list_features: Optional[KeyedJaggedTensor] = None
-
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        if self.id_list_features is not None:
-            self.id_list_features.record_stream(stream)
-        if self.id_score_list_features is not None:
-            self.id_score_list_features.record_stream(stream)
-
-    def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
-        return tracer.create_node(
-            "call_function",
-            SparseFeatures,
-            args=(
-                tracer.create_arg(self.id_list_features),
-                tracer.create_arg(self.id_score_list_features),
-            ),
-            kwargs={},
-        )
-
-
-class SparseFeaturesList(Multistreamable):
-    def __init__(self, features: List[SparseFeatures]) -> None:
+class KJTList(Multistreamable):
+    def __init__(self, features: List[KeyedJaggedTensor]) -> None:
         self.features = features
 
     def __len__(self) -> int:
         return len(self.features)
 
-    def __setitem__(self, key: int, item: SparseFeatures) -> None:
+    def __setitem__(self, key: int, item: KeyedJaggedTensor) -> None:
         self.features[key] = item
 
-    def __getitem__(self, key: int) -> SparseFeatures:
+    def __getitem__(self, key: int) -> KeyedJaggedTensor:
         return self.features[key]
 
-    def __iter__(self) -> Iterator[SparseFeatures]:
+    def __iter__(self) -> Iterator[KeyedJaggedTensor]:
         return iter(self.features)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
@@ -125,26 +102,26 @@ class SparseFeaturesList(Multistreamable):
     def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
         return tracer.create_node(
             "call_function",
-            SparseFeaturesList,
+            KJTList,
             args=(tracer.create_arg(self.features),),
             kwargs={},
         )
 
 
-class ListOfSparseFeaturesList(Multistreamable):
-    def __init__(self, features: List[SparseFeaturesList]) -> None:
+class ListOfKJTList(Multistreamable):
+    def __init__(self, features: List[KJTList]) -> None:
         self.features_list = features
 
     def __len__(self) -> int:
         return len(self.features_list)
 
-    def __setitem__(self, key: int, item: SparseFeaturesList) -> None:
+    def __setitem__(self, key: int, item: KJTList) -> None:
         self.features_list[key] = item
 
-    def __getitem__(self, key: int) -> SparseFeaturesList:
+    def __getitem__(self, key: int) -> KJTList:
         return self.features_list[key]
 
-    def __iter__(self) -> Iterator[SparseFeaturesList]:
+    def __iter__(self) -> Iterator[KJTList]:
         return iter(self.features_list)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
@@ -154,7 +131,7 @@ class ListOfSparseFeaturesList(Multistreamable):
     def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
         return tracer.create_node(
             "call_function",
-            ListOfSparseFeaturesList,
+            ListOfKJTList,
             args=(tracer.create_arg(self.features_list),),
             kwargs={},
         )
@@ -263,22 +240,13 @@ class FeatureShardingMixIn:
     Feature Sharding Interface to provide sharding-aware feature metadata.
     """
 
-    def id_list_feature_names(self) -> List[str]:
+    def feature_names(self) -> List[str]:
         raise NotImplementedError
 
-    def id_score_list_feature_names(self) -> List[str]:
+    def feature_names_per_rank(self) -> List[List[str]]:
         raise NotImplementedError
 
-    def id_list_feature_names_per_rank(self) -> List[List[str]]:
-        raise NotImplementedError
-
-    def id_score_list_feature_names_per_rank(self) -> List[List[str]]:
-        raise NotImplementedError
-
-    def id_list_features_per_rank(self) -> List[int]:
-        raise NotImplementedError
-
-    def id_score_list_features_per_rank(self) -> List[int]:
+    def features_per_rank(self) -> List[int]:
         raise NotImplementedError
 
 

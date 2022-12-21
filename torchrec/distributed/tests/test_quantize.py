@@ -142,14 +142,13 @@ class QuantizeKernelTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_quantize_embedding_bag_kernels(
         self, compute_kernel: EmbeddingComputeKernel, dtype: torch.dtype
     ) -> None:
         config = self._create_config(compute_kernel)
         sharded = GroupedPooledEmbeddingsLookup(
             grouped_configs=[config],
-            grouped_score_configs=[],
             device=torch.device("cuda:0"),
         )
 
@@ -178,7 +177,7 @@ class QuantizeKernelTest(unittest.TestCase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_quantize_embedding_kernels(
         self, compute_kernel: EmbeddingComputeKernel, dtype: torch.dtype
     ) -> None:

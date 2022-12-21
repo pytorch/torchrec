@@ -31,14 +31,14 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
-    SparseFeatures,
-    SparseFeaturesList,
+    KJTList,
 )
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
 )
 from torchrec.distributed.types import ShardedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def _load_state_dict(
     return missing_keys, unexpected_keys
 
 
-class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
+class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]):
     """
     Lookup modules for Pooled embeddings (i.e EmbeddingBags)
     """
@@ -119,9 +119,9 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config))
 
-        self._id_list_feature_splits: List[int] = []
+        self._feature_splits: List[int] = []
         for config in grouped_configs:
-            self._id_list_feature_splits.append(config.num_features())
+            self._feature_splits.append(config.num_features())
 
         # return a dummy empty tensor when grouped_configs is empty
         self.register_buffer(
@@ -138,14 +138,13 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
+        sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
-        assert sparse_features.id_list_features is not None
         embeddings: List[torch.Tensor] = []
-        id_list_features_by_group = sparse_features.id_list_features.split(
-            self._id_list_feature_splits,
+        features_by_group = sparse_features.split(
+            self._feature_splits,
         )
-        for emb_op, features in zip(self._emb_modules, id_list_features_by_group):
+        for emb_op, features in zip(self._emb_modules, features_by_group):
             embeddings.append(emb_op(features).view(-1))
 
         if len(embeddings) == 0:
@@ -204,7 +203,9 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor])
             yield from emb_module.named_buffers(prefix, recurse)
 
 
-class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Tensor]):
+class GroupedPooledEmbeddingsLookup(
+    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
+):
     """
     Lookup modules for Pooled embeddings (i.e EmbeddingBags)
     """
@@ -212,7 +213,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
-        grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
@@ -244,19 +244,11 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device))
 
-        self._score_emb_modules: nn.ModuleList = nn.ModuleList()
-        for config in grouped_score_configs:
-            self._score_emb_modules.append(_create_lookup(config, device))
-
-        self._id_list_feature_splits: List[int] = []
+        self._feature_splits: List[int] = []
         for config in grouped_configs:
-            self._id_list_feature_splits.append(config.num_features())
-        self._id_score_list_feature_splits: List[int] = []
-        for config in grouped_score_configs:
-            self._id_score_list_feature_splits.append(config.num_features())
+            self._feature_splits.append(config.num_features())
 
-        # return a dummy empty tensor
-        # when grouped_configs and grouped_score_configs are empty
+        # return a dummy empty tensor when grouped_configs is empty
         self.register_buffer(
             "_dummy_embs_tensor",
             torch.empty(
@@ -268,47 +260,20 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         )
 
         self.grouped_configs = grouped_configs
-        self.grouped_score_configs = grouped_score_configs
         self._feature_processor = feature_processor
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
+        sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
-        assert (
-            sparse_features.id_list_features is not None
-            or sparse_features.id_score_list_features is not None
-        )
         embeddings: List[torch.Tensor] = []
         if len(self._emb_modules) > 0:
-            assert sparse_features.id_list_features is not None
-            id_list_features_by_group = sparse_features.id_list_features.split(
-                self._id_list_feature_splits,
+            assert sparse_features is not None
+            features_by_group = sparse_features.split(
+                self._feature_splits,
             )
             for config, emb_op, features in zip(
-                self.grouped_configs, self._emb_modules, id_list_features_by_group
-            ):
-                # keep this to avoid break ads code using feature_processor, for ebc
-                # the has_feature_processor will always be false. Remove this block when
-                # finishing the migration
-                if (
-                    config.has_feature_processor
-                    and self._feature_processor is not None
-                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
-                ):
-                    features = self._feature_processor(features)
-                embeddings.append(emb_op(features))
-        if len(self._score_emb_modules) > 0:
-            assert sparse_features.id_score_list_features is not None
-            id_score_list_features_by_group = (
-                sparse_features.id_score_list_features.split(
-                    self._id_score_list_feature_splits,
-                )
-            )
-            for config, emb_op, features in zip(
-                self.grouped_score_configs,
-                self._score_emb_modules,
-                id_score_list_features_by_group,
+                self.grouped_configs, self._emb_modules, features_by_group
             ):
                 if (
                     config.has_feature_processor
@@ -317,16 +282,9 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
-
         if len(embeddings) == 0:
             # a hack for empty ranks
-            batch_size: int = (
-                sparse_features.id_list_features.stride()
-                if sparse_features.id_list_features is not None
-                # pyre-fixme[16]: `Optional` has no attribute `stride`.
-                else sparse_features.id_score_list_features.stride()
-            )
-            return self._dummy_embs_tensor.view(batch_size, 0)
+            return self._dummy_embs_tensor.view(sparse_features.stride(), 0)
         elif len(embeddings) == 1:
             return embeddings[0]
         else:
@@ -346,8 +304,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
 
         for emb_module in self._emb_modules:
             emb_module.state_dict(destination, prefix, keep_vars)
-        for emb_module in self._score_emb_modules:
-            emb_module.state_dict(destination, prefix, keep_vars)
 
         return destination
 
@@ -358,9 +314,8 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        m1, u1 = _load_state_dict(self._emb_modules, state_dict)
-        m2, u2 = _load_state_dict(self._score_emb_modules, state_dict)
-        return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
+        m, u = _load_state_dict(self._emb_modules, state_dict)
+        return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -370,8 +325,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
             "GroupedPooledEmbeddingsLookup is not supported"
         )
         for emb_module in self._emb_modules:
-            yield from emb_module.named_parameters(prefix, recurse)
-        for emb_module in self._score_emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
@@ -383,8 +336,6 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
-        for emb_module in self._score_emb_modules:
-            yield from emb_module.named_buffers(prefix, recurse)
 
     def named_parameters_by_table(
         self,
@@ -394,7 +345,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
         For a single table with multiple shards (i.e CW) these are combined into one table/weight.
         Used in composability.
         """
-        for embedding_kernel in self._emb_modules + self._score_emb_modules:
+        for embedding_kernel in self._emb_modules:
             for (
                 table_name,
                 tbe_slice,
@@ -403,7 +354,7 @@ class GroupedPooledEmbeddingsLookup(BaseEmbeddingLookup[SparseFeatures, torch.Te
 
 
 class MetaInferGroupedEmbeddingsLookup(
-    BaseEmbeddingLookup[SparseFeatures, torch.Tensor]
+    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
 ):
     """
     meta embedding lookup module for inference since inference lookup has references
@@ -434,7 +385,7 @@ class MetaInferGroupedEmbeddingsLookup(
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device, fused_params))
 
-        self._id_list_feature_splits: List[int] = [
+        self._feature_splits: List[int] = [
             config.num_features() for config in grouped_configs
         ]
 
@@ -452,14 +403,13 @@ class MetaInferGroupedEmbeddingsLookup(
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
+        sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
-        assert sparse_features.id_list_features is not None
         embeddings: List[torch.Tensor] = []
-        id_list_features_by_group = sparse_features.id_list_features.split(
-            self._id_list_feature_splits,
+        features_by_group = sparse_features.split(
+            self._feature_splits,
         )
-        for emb_op, features in zip(self._emb_modules, id_list_features_by_group):
+        for emb_op, features in zip(self._emb_modules, features_by_group):
             embeddings.append(emb_op(features).view(-1))
 
         if len(embeddings) == 0:
@@ -519,7 +469,7 @@ class MetaInferGroupedEmbeddingsLookup(
 
 
 class MetaInferGroupedPooledEmbeddingsLookup(
-    BaseEmbeddingLookup[SparseFeatures, torch.Tensor]
+    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
 ):
     """
     meta embedding bag lookup module for inference since inference lookup has references
@@ -530,7 +480,6 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     def __init__(
         self,
         grouped_configs: List[GroupedEmbeddingConfig],
-        grouped_score_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
         fused_params: Optional[Dict[str, Any]] = None,
@@ -552,79 +501,47 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device, fused_params))
 
-        self._score_emb_modules: nn.ModuleList = nn.ModuleList()
-        for config in grouped_score_configs:
-            self._score_emb_modules.append(_create_lookup(config, device))
-
-        self._id_list_feature_splits: List[int] = [
+        self._feature_splits: List[int] = [
             config.num_features() for config in grouped_configs
         ]
-        self._id_score_list_feature_splits: List[int] = [
-            config.num_features() for config in grouped_score_configs
-        ]
 
-        # return a dummy empty tensor
-        # when grouped_configs and grouped_score_configs are empty
+        # return a dummy empty tensor when grouped_configs is empty
         self.register_buffer(
             "_dummy_embs_tensor",
             torch.empty(
                 [0],
-                dtype=torch.float32,
+                dtype=torch.float16,
                 device=device,
             ),
         )
 
         self.grouped_configs = grouped_configs
-        self.grouped_score_configs = grouped_score_configs
         self._feature_processor = feature_processor
 
     def forward(
         self,
-        sparse_features: SparseFeatures,
+        sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
-        assert (
-            sparse_features.id_list_features is not None
-            or sparse_features.id_score_list_features is not None
-        )
         embeddings: List[torch.Tensor] = []
-        if len(self._emb_modules) > 0:
-            assert sparse_features.id_list_features is not None
-            id_list_features_by_group = sparse_features.id_list_features.split(
-                self._id_list_feature_splits,
-            )
-            # syntax for torchscript
-            for i, (config, emb_op) in enumerate(
-                zip(self.grouped_configs, self._emb_modules)
+        features_by_group = sparse_features.split(
+            self._feature_splits,
+        )
+        # syntax for torchscript
+        for i, (config, emb_op) in enumerate(
+            zip(self.grouped_configs, self._emb_modules)
+        ):
+            features = features_by_group[i]
+            if (
+                config.has_feature_processor
+                and self._feature_processor is not None
+                and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
             ):
-                features = id_list_features_by_group[i]
-                if (
-                    config.has_feature_processor
-                    and self._feature_processor is not None
-                    and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
-                ):
-                    features = self._feature_processor(features)
-                embeddings.append(emb_op(features))
-        if len(self._score_emb_modules) > 0:
-            assert sparse_features.id_score_list_features is not None
-            id_score_list_features_by_group = (
-                sparse_features.id_score_list_features.split(
-                    self._id_score_list_feature_splits,
-                )
-            )
-            for emb_op, features in zip(
-                self._score_emb_modules, id_score_list_features_by_group
-            ):
-                embeddings.append(emb_op(features))
+                features = self._feature_processor(features)
+            embeddings.append(emb_op(features))
 
         if len(embeddings) == 0:
             # a hack for empty ranks
-            batch_size: int = (
-                sparse_features.id_list_features.stride()
-                if sparse_features.id_list_features is not None
-                # pyre-fixme[16]: `Optional` has no attribute `stride`.
-                else sparse_features.id_score_list_features.stride()
-            )
-            return self._dummy_embs_tensor.view(batch_size, 0)
+            return self._dummy_embs_tensor.view(sparse_features.stride(), 0)
         elif len(embeddings) == 1:
             return embeddings[0]
         else:
@@ -644,8 +561,6 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 
         for emb_module in self._emb_modules:
             emb_module.state_dict(destination, prefix, keep_vars)
-        for emb_module in self._score_emb_modules:
-            emb_module.state_dict(destination, prefix, keep_vars)
 
         return destination
 
@@ -656,9 +571,8 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         state_dict: "OrderedDict[str, Union[ShardedTensor, torch.Tensor]]",
         strict: bool = True,
     ) -> _IncompatibleKeys:
-        m1, u1 = _load_state_dict(self._emb_modules, state_dict)
-        m2, u2 = _load_state_dict(self._score_emb_modules, state_dict)
-        return _IncompatibleKeys(missing_keys=m1 + m2, unexpected_keys=u1 + u2)
+        m, u = _load_state_dict(self._emb_modules, state_dict)
+        return _IncompatibleKeys(missing_keys=m, unexpected_keys=u)
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -668,8 +582,6 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             "MetaInferGroupedPooledEmbeddingsLookup is not supported"
         )
         for emb_module in self._emb_modules:
-            yield from emb_module.named_parameters(prefix, recurse)
-        for emb_module in self._score_emb_modules:
             yield from emb_module.named_parameters(prefix, recurse)
 
     def named_buffers(
@@ -681,14 +593,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
-        for emb_module in self._score_emb_modules:
-            yield from emb_module.named_buffers(prefix, recurse)
 
 
 class InferGroupedLookupMixin(ABC):
     def forward(
         self,
-        sparse_features: SparseFeaturesList,
+        sparse_features: KJTList,
     ) -> List[torch.Tensor]:
         embeddings: List[torch.Tensor] = []
         # syntax for torchscript
@@ -697,10 +607,6 @@ class InferGroupedLookupMixin(ABC):
             self._embedding_lookups_per_rank,
         ):
             sparse_features_rank = sparse_features[i]
-            assert (
-                sparse_features_rank.id_list_features is not None
-                or sparse_features_rank.id_score_list_features is not None
-            )
             embeddings.append(embedding_lookup(sparse_features_rank))
         return embeddings
 
@@ -754,12 +660,11 @@ class InferGroupedLookupMixin(ABC):
 
 class InferGroupedPooledEmbeddingsLookup(
     InferGroupedLookupMixin,
-    BaseEmbeddingLookup[SparseFeaturesList, List[torch.Tensor]],
+    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
 ):
     def __init__(
         self,
         grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
-        grouped_score_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -772,7 +677,6 @@ class InferGroupedPooledEmbeddingsLookup(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    grouped_score_configs=grouped_score_configs_per_rank[rank],
                     # syntax for torchscript
                     device=torch.device(f"cuda:{rank}"),
                     fused_params=fused_params,
@@ -782,7 +686,7 @@ class InferGroupedPooledEmbeddingsLookup(
 
 class InferGroupedEmbeddingsLookup(
     InferGroupedLookupMixin,
-    BaseEmbeddingLookup[SparseFeaturesList, List[torch.Tensor]],
+    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
 ):
     def __init__(
         self,
