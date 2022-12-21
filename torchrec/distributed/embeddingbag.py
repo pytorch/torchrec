@@ -154,6 +154,7 @@ def create_sharding_infos_by_sharding(
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     prefix: str,
     fused_params: Optional[Dict[str, Any]],
+    suffix: Optional[str] = "weight",
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
 
     if fused_params is None:
@@ -178,7 +179,9 @@ def create_sharding_infos_by_sharding(
 
     for config in module.embedding_bag_configs():
         table_name = config.name
-        assert table_name in table_name_to_parameter_sharding
+        assert (
+            table_name in table_name_to_parameter_sharding
+        ), f"{table_name} not in table_name_to_parameter_sharding"
         parameter_sharding = table_name_to_parameter_sharding[table_name]
         if parameter_sharding.compute_kernel not in [
             kernel.value for kernel in EmbeddingComputeKernel
@@ -193,7 +196,10 @@ def create_sharding_infos_by_sharding(
             else:
                 embedding_names.append(feature_name)
 
-        param_name = prefix + table_name + ".weight"
+        param_name = prefix + table_name
+        if suffix is not None:
+            param_name = f"{param_name}.{suffix}"
+
         assert param_name in parameter_by_name or param_name in state_dict
         param = parameter_by_name.get(param_name, state_dict[param_name])
 
