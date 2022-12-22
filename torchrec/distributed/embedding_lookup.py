@@ -84,7 +84,7 @@ def _load_state_dict(
 
 class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]):
     """
-    Lookup modules for Pooled embeddings (i.e EmbeddingBags)
+    Lookup modules for Sequence embeddings (i.e Embeddings)
     """
 
     def __init__(
@@ -201,6 +201,21 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
+
+    def named_parameters_by_table(
+        self,
+    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
+        """
+        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
+        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
+        Used in composability.
+        """
+        for embedding_kernel in self._emb_modules:
+            for (
+                table_name,
+                tbe_slice,
+            ) in embedding_kernel.named_parameters_by_table():
+                yield (table_name, tbe_slice)
 
 
 class GroupedPooledEmbeddingsLookup(
