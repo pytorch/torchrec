@@ -31,9 +31,12 @@ if [[ ${GPU_ARCH_TYPE} = 'cpu' || ${GPU_ARCH_TYPE} = 'rocm' ]]; then
     fi
 fi
 
+# Run small import test
+python -c "import torch; import fbgemm_gpu; import torchrec"
+
 # Finally run smoke test
 if [[ ${GPU_ARCH_TYPE} = 'cuda' ]]; then
-    torchx run -s local_cwd dist.ddp -j 1x2 --gpu 2 --script test_installation.py
+    torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
 else
     torchx run -s local_cwd dist.ddp -j 1x2 --script test_installation.py -- --cpu_only
 fi
