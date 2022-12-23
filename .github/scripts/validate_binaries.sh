@@ -4,6 +4,8 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
+
+
 set -ex
 eval "$(conda shell.bash hook)"
 
@@ -19,11 +21,11 @@ if [[ ${GPU_ARCH_TYPE} = 'cuda' ]]; then
 fi
 
 if [[ ${CHANNEL} = 'nightly' ]]; then
-    # shellcheck disable=SC2086 PYTORCH_CUDA_PKG could be empty for cpu
+    # shellcheck disable=SC2086
     conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch-nightly -c nvidia
     pip install torchrec_nightly
 else
-    # shellcheck disable=SC2086 PYTORCH_CUDA_PKG could be empty for cpu
+    # shellcheck disable=SC2086
     conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch -c nvidia
     pip install torchrec
 fi
