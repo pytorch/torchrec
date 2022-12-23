@@ -1,0 +1,40 @@
+name: Validate binaries
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: "Channel to use (nightly, release)"
+        required: false
+        type: string
+        default: release
+      ref:
+        description: 'Reference to checkout, defaults to empty'
+        default: ""
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel to use (nightly, release)"
+        required: true
+        type: choice
+        options:
+          - release
+          - nightly
+      ref:
+        description: 'Reference to checkout, defaults to empty'
+        default: ""
+        required: false
+        type: string
+
+jobs:
+  validate-binaries:
+    uses: pytorch/builder/.github/workflows/validate-domain-library.yml@main
+    with:
+      package_type: "wheel"
+      os: "linux"
+      channel: ${{ inputs.channel }}
+      repository: "pytorch/torchrec"
+      smoke_test: "./.github/scripts/validate_binaries.sh"
+      with_cuda: enable
