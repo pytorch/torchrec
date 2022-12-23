@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
 set -ex
 eval "$(conda shell.bash hook)"
 
-conda create -y -n ${ENV_NAME} python=${DESIRED_PYTHON} numpy
-conda activate ${ENV_NAME}
+conda create -y -n "${ENV_NAME}" python="${DESIRED_PYTHON}" numpy
+conda activate "${ENV_NAME}"
 export PYTORCH_CUDA_PKG=""
 
 # Install pytorch, torchrec and fbgemm as per
@@ -14,10 +19,10 @@ if [[ ${GPU_ARCH_TYPE} = 'cuda' ]]; then
 fi
 
 if [[ ${CHANNEL} = 'nightly' ]]; then
-    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch-nightly -c nvidia
+    conda install -y pytorch "${PYTORCH_CUDA_PKG}" -c pytorch-nightly -c nvidia
     pip install torchrec_nightly
 else
-    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch -c nvidia
+    conda install -y pytorch "${PYTORCH_CUDA_PKG}" -c pytorch -c nvidia
     pip install torchrec
 fi
 

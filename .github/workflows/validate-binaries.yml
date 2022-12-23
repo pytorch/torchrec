@@ -26,18 +26,13 @@ on:
         options:
           - release
           - nightly
-          - test
-          - all
       os:
         description: "Operating system to generate for (linux, windows, macos)"
         required: true
         type: choice
         default: all
         options:
-          - windows
           - linux
-          - macos
-          - all
       ref:
         description: 'Reference to checkout, defaults to empty'
         default: ""
