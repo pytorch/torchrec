@@ -19,10 +19,12 @@ if [[ ${GPU_ARCH_TYPE} = 'cuda' ]]; then
 fi
 
 if [[ ${CHANNEL} = 'nightly' ]]; then
-    conda install -y pytorch "${PYTORCH_CUDA_PKG}" -c pytorch-nightly -c nvidia
+    # shellcheck disable=SC2086 PYTORCH_CUDA_PKG could be empty for cpu
+    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch-nightly -c nvidia
     pip install torchrec_nightly
 else
-    conda install -y pytorch "${PYTORCH_CUDA_PKG}" -c pytorch -c nvidia
+    # shellcheck disable=SC2086 PYTORCH_CUDA_PKG could be empty for cpu
+    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch -c nvidia
     pip install torchrec
 fi
 
