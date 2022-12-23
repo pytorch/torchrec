@@ -59,7 +59,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
 )
-from torchrec.optim.fused import FusedOptimizerModule
+from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
@@ -479,7 +479,9 @@ class ShardedEmbeddingBagCollection(
                     model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
-                    self.embedding_bags[table_name].weight._overlapped_optimizer = True
+                    self.embedding_bags[
+                        table_name
+                    ].weight._overlapped_optimizer = EmptyFusedOptimizer()
 
         def post_state_dict_hook(
             module: ShardedEmbeddingBagCollection,
