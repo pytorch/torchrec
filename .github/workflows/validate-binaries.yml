@@ -4,14 +4,10 @@ on:
   workflow_call:
     inputs:
       channel:
-        description: "Channel to use (nightly, test, release, all)"
+        description: "Channel to use (nightly, release)"
         required: false
         type: string
         default: release
-      os:
-        description: "Operating system to generate for (linux, windows, macos, macos-arm64)"
-        required: true
-        type: string
       ref:
         description: 'Reference to checkout, defaults to empty'
         default: ""
@@ -20,19 +16,12 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "Channel to use (nightly, test, release, all)"
+        description: "Channel to use (nightly, release)"
         required: true
         type: choice
         options:
           - release
           - nightly
-      os:
-        description: "Operating system to generate for (linux, windows, macos)"
-        required: true
-        type: choice
-        default: all
-        options:
-          - linux
       ref:
         description: 'Reference to checkout, defaults to empty'
         default: ""
