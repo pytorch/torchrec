@@ -31,6 +31,22 @@ class FusedOptimizer(KeyedOptimizer, abc.ABC):
         return optim.Optimizer.__repr__(self)
 
 
+class EmptyFusedOptimizer(FusedOptimizer):
+    """
+    Fused Optimizer class with no-op step and no parameters to optimize over
+    """
+
+    def __init__(self) -> None:
+        super().__init__({}, {}, {})
+
+    # pyre-ignore
+    def step(self, closure: Any = None) -> None:
+        pass
+
+    def zero_grad(self, set_to_none: bool = False) -> None:
+        pass
+
+
 class FusedOptimizerModule(abc.ABC):
     """
     Module, which does weight update during backward pass.
