@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 #pragma once
 #include <memory>
 #include <optional>
@@ -30,7 +38,7 @@ class CachelineIDTransformerIterator {
         continue;
       }
       TransformerRecord<LXURecord> result{};
-      result.global_id_ = -record.global_id_not_;
+      result.global_id_ = ~record.global_id_not_;
       result.cache_id_ = record.cache_id_;
       result.lxu_record_ = record.lxu_record_;
       return result;

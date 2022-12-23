@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 #pragma once
 #include <torch/torch.h>
 #include <algorithm>
@@ -64,38 +72,40 @@ inline bool CachelineIDTransformer<
     int64_t global_id_not = ~global_id;
     CacheValue* group_begin = &cache_values_[group_id * group_size_];
     int64_t k = 0;
+    int64_t empty_slot = -1;
+    int64_t cache_id = -1;
     for (; k < group_size_; k++, intra_id++) {
       intra_id %= group_size_;
       auto& cache_value = group_begin[intra_id];
       // tricky but fast :p
       int64_t xor_value = cache_value.global_id_not_ ^ global_id_not;
-      if (xor_value > 0) {
-        continue;
-      }
 
-      int64_t cache_id;
       if (xor_value == 0) { // found
         cache_id = cache_value.cache_id_;
         cache_value.lxu_record_ =
             update(cache_value.lxu_record_, global_id, cache_id);
-      } else { // empty slot
+        break;
+      } else if (xor_value < 0 && empty_slot < 0) { // empty slot
+        empty_slot = intra_id;
+      }
+    }
+    if (cache_id < 0) {
+      if (empty_slot >= 0) {
         // The transformer is full.
         if (C10_UNLIKELY(bitmap_.Full())) {
           return false;
         }
+        auto& cache_value = group_begin[empty_slot];
         cache_id = bitmap_.NextFreeBit();
         cache_value.global_id_not_ = global_id_not;
         cache_value.cache_id_ = cache_id;
         cache_value.lxu_record_ = update(std::nullopt, global_id, cache_id);
         fetch(global_id, cache_id);
+      } else {
+        return false;
       }
-      cache_ids[i] = cache_id;
-      break;
     }
-
-    if (k == group_size_) {
-      return false;
-    }
+    cache_ids[i] = cache_id;
   }
   return true;
 }
@@ -115,14 +125,14 @@ inline void CachelineIDTransformer<
   for (const int64_t global_id : global_ids) {
     auto [group_id, intra_id] = FindGroupIndex(global_id);
 
+    int64_t global_id_not = ~global_id;
     for (int64_t k = 0; k < group_size_; k++) {
       int64_t offset = group_id * group_size_ + (intra_id + k) % group_size_;
       auto& cache_value = cache_values_[offset];
       // tricky but fast :p
-      int64_t global_id_not = ~global_id;
       int64_t xor_value = global_id_not ^ cache_value.global_id_not_;
       if (xor_value < 0) { // not exist
-        break;
+        continue;
       } else if (xor_value == 0) { // found slot
         bitmap_.FreeBit(cache_value.cache_id_);
         cache_value.global_id_not_ = 0;
