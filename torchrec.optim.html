@@ -393,6 +393,50 @@ returns the loss. Optional for most optimizers.</p>
 <section id="module-torchrec.optim.fused">
 <span id="torchrec-optim-fused"></span><h2>torchrec.optim.fused<a class="headerlink" href="#module-torchrec.optim.fused" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.optim.fused.EmptyFusedOptimizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.fused.</span></span><span class="sig-name descname"><span class="pre">EmptyFusedOptimizer</span></span><a class="headerlink" href="#torchrec.optim.fused.EmptyFusedOptimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer" title="torchrec.optim.fused.FusedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FusedOptimizer</span></code></a></p>
+<p>Fused Optimizer class with no-op step and no parameters to optimize over</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.optim.fused.EmptyFusedOptimizer.step">
+<span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">closure</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.EmptyFusedOptimizer.step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a single optimization step (parameter update).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>closure</strong> (<em>Callable</em>) – A closure that reevaluates the model and
+returns the loss. Optional for most optimizers.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Unless otherwise specified, this function should not modify the
+<code class="docutils literal notranslate"><span class="pre">.grad</span></code> field of the parameters.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.optim.fused.EmptyFusedOptimizer.zero_grad">
+<span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.EmptyFusedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
+This will in general have lower memory footprint, and can modestly improve performance.
+However, it changes certain behaviors. For example:
+1. When the user tries to access a gradient and perform manual ops on it,
+a None attribute or a Tensor full of 0s will behave differently.
+2. If the user requests <code class="docutils literal notranslate"><span class="pre">zero_grad(set_to_none=True)</span></code> followed by a backward pass, <code class="docutils literal notranslate"><span class="pre">.grad</span></code>s
+are guaranteed to be None for params that did not receive a gradient.
+3. <code class="docutils literal notranslate"><span class="pre">torch.optim</span></code> optimizers have a different behavior if the gradient is 0 or None
+(in one case it does the step with a gradient of 0 and in the other it skips
+the step altogether).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.fused.FusedOptimizer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.fused.</span></span><span class="sig-name descname"><span class="pre">FusedOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ShardedTensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param_groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Collection</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer" title="torchrec.optim.keyed.KeyedOptimizer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
@@ -933,6 +977,11 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
 </ul>
 </li>
 <li><a class="reference internal" href="#module-torchrec.optim.fused">torchrec.optim.fused</a><ul>
+<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer.step()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer.zero_grad()</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.step()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.zero_grad()</span></code></a></li>
