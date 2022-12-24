@@ -1,127 +1,98 @@
-from dataclasses import dataclass
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import List, Optional
 
 import torch
 import torch.distributed as dist
 
-from torchrec import KeyedJaggedTensor
-
 __all__ = []
 
-_group = [None]
 
-
-@dataclass
-class GatherResult:
-    values_list: List[List[torch.Tensor]]
-    offset_per_key_list: List[List[torch.Tensor]]
-
-
-def default_group(group):
-    if group is not None:
-        return group
-
-    if _group[0] is None:
-        _group[0] = dist.new_group(backend="gloo")
-
-    return _group[0]
-
-
-def gather_tensor_list(
-    tensors: List[torch.Tensor], numel_lists: List[List[int]], dst=0, group=None
-) -> Optional[List[List[torch.Tensor]]]:
-    rank = dist.get_rank()
+def gather_global_ids(global_ids: List[torch.Tensor], group):
     world_size = dist.get_world_size()
-    if dst == rank:
-        if len(numel_lists) != world_size:
-            raise ValueError("dst rank should know size of tensors on all ranks")
-    else:
-        if len(numel_lists) != 1:
-            raise ValueError("non dst rank should pass its own tensor sizes")
-
-    group = default_group(group)
-    dtype = tensors[0].dtype
-    device = tensors[0].device
-
-    concated_tensor = torch.cat(tensors)
-
-    if rank == dst:
-        # gather can only accept same-size tensors.
-        max_numel = max(sum(numel_list) for numel_list in numel_lists)
-        concat_results = [
-            torch.empty(max_numel, dtype=dtype, device=device)
-            for _ in range(world_size)
-        ]
-        dist.gather(
-            concated_tensor,
-            gather_list=concat_results,
-            dst=dst,
-            group=group,
-            async_op=False,
-        )
-
-        results = []
-        for i in range(world_size):
-            splited_tensors = []
-            offset = 0
-            for numel in numel_lists[i]:
-                splited_tensors.append(concat_results[i][offset : offset + numel])
-                offset += numel
-            results.append(splited_tensors)
-
-        return results
-    else:
-        dist.gather(
-            concated_tensor, gather_list=None, dst=dst, group=group, async_op=False
-        )
-
-        return None
-
-
-def gather_kjts(kjts: List[KeyedJaggedTensor], dst=0, group=None) -> GatherResult:
-    world_size = dist.get_world_size()
-    if world_size == 1:
-        return GatherResult(
-            values_list=[[kjt.values()] for kjt in kjts],
-            offset_per_key_list=[[kjt.offset_per_key()] for kjt in kjts],
-        )
-
     rank = dist.get_rank()
-    group = default_group(group)
 
-    offset_per_key_list = [torch.tensor(kjt.offset_per_key()) for kjt in kjts]
-    values_list = [kjt.values() for kjt in kjts]
+    concat_global_ids = torch.cat(global_ids)
 
-    offset_numel_list = [tensor.numel() for tensor in offset_per_key_list]
-    values_numel_list = [tensor.numel() for tensor in values_list]
+    concat_numel = torch.tensor(concat_global_ids.numel(), dtype=torch.int64)
+    concat_numel_list = [torch.tensor(0, dtype=torch.int64) for _ in range(world_size)]
+    dist.all_gather(concat_numel_list, concat_numel, group=group, async_op=False)
 
-    if rank == dst:
-        global_offset_numel_list = [offset_numel_list] * world_size
-        offset_results = gather_tensor_list(
-            offset_per_key_list,
-            numel_lists=global_offset_numel_list,
-            dst=dst,
-            group=group,
-        )
+    max_numel = max(concat_numel_list)
+    concat_global_ids.resize_(max_numel)
 
-        global_values_numel_list = [
-            [offset[-1].item() for offset in offsets] for offsets in offset_results
+    if rank == 0:
+        concat_global_ids_list = [
+            torch.empty_like(concat_global_ids) for _ in range(world_size)
         ]
-
-        values_result = gather_tensor_list(
-            values_list, numel_lists=global_values_numel_list, dst=dst, group=group
-        )
-
-        return GatherResult(
-            values_list=values_result, offset_per_key_list=offset_results
-        )
+        dist.gather(concat_global_ids, concat_global_ids_list, 0, group, async_op=False)
+        return [
+            concat_global_ids_list[i][: concat_numel_list[i]] for i in range(world_size)
+        ], concat_numel_list
     else:
-        gather_tensor_list(
-            offset_per_key_list, numel_lists=[offset_numel_list], dst=dst, group=group
-        )
+        dist.gather(concat_global_ids, None, 0, group, async_op=False)
+        return None, concat_numel_list
 
-        gather_tensor_list(
-            values_list, numel_lists=[values_numel_list], dst=dst, group=group
-        )
 
-        return None
+def scatter_cache_ids(
+    cache_ids_list: Optional[List[torch.Tensor]], concat_numel_list: List[int], group
+):
+    world_size = dist.get_world_size()
+    rank = dist.get_rank()
+
+    max_numel = max(concat_numel_list)
+
+    concat_cache_ids = torch.empty(max_numel, dtype=torch.int64)
+    if rank == 0:
+        concat_cache_ids_list = [concat_cache_ids] + [
+            cache_ids.resize_(max_numel)
+            for cache_ids in cache_ids_list[-world_size + 1 :]
+        ]
+        assert len(concat_cache_ids_list) == world_size
+        dist.scatter(concat_cache_ids, concat_cache_ids_list, group=group)
+    else:
+        dist.scatter(concat_cache_ids, None, group=group)
+        offset = 0
+        for cache_ids in cache_ids_list:
+            cache_ids[:] = concat_cache_ids[offset : offset + cache_ids.numel()]
+            offset += cache_ids.numel()
+
+
+def broadcast_transform_result(
+    success: bool, ids_to_fetch: Optional[torch.Tensor], group
+):
+    if dist.get_rank() == 0:
+        success_and_numel = torch.tensor(
+            [1 if success else 0, ids_to_fetch.numel()], dtype=torch.int64
+        )
+        dist.broadcast(success_and_numel, src=0, group=group)
+    else:
+        success_and_numel = torch.tensor([0, 0], dtype=torch.int64)
+        dist.broadcast(success_and_numel, src=0, group=group)
+        success, numel = success_and_numel.tolist()
+        success = success != 0
+        ids_to_fetch = torch.empty((numel // 2, 2), dtype=torch.int64)
+
+    if ids_to_fetch.numel() > 0:
+        dist.broadcast(ids_to_fetch, src=0, group=group)
+    return success, ids_to_fetch
+
+
+def broadcast_ids_to_evict(ids, group):
+    if dist.get_rank() == 0:
+        numel = torch.tensor(ids.numel(), dtype=torch.int64)
+        dist.broadcast(numel, src=0, group=group)
+    else:
+        numel = torch.tensor(0, dtype=torch.int64)
+        dist.broadcast(numel, src=0, group=group)
+        numel = numel.item()
+        ids = torch.empty((numel // 2, 2), dtype=torch.int64)
+
+    if numel > 0:
+        dist.broadcast(ids, src=0, group=group)
+    return ids

@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import json
 import os
 
@@ -33,9 +40,10 @@ class IDTransformer:
         """
         Transform `global_ids` and store the results in `cache_ids`.
         """
-        return self._transformer.transform(
+        result = self._transformer.transform(
             global_ids.tensor_list, cache_ids.tensor_list, time
         )
+        return result.success, result.ids_to_fetch
 
     def evict(self, num_to_evict):
         """

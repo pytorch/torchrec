@@ -9,19 +9,7 @@
 import copy
 from collections import defaultdict, deque, OrderedDict
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    cast,
-    Dict,
-    Iterator,
-    List,
-    MutableMapping,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import Any, cast, Dict, List, MutableMapping, Optional, Type, Union
 
 import torch
 from torch import nn
@@ -78,7 +66,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingCollection,
     EmbeddingCollectionInterface,
 )
-from torchrec.optim.fused import FusedOptimizerModule
+from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
@@ -484,7 +472,9 @@ class ShardedEmbeddingCollection(
                     model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
-                    self.embeddings[table_name].weight._overlapped_optimizer = True
+                    self.embeddings[
+                        table_name
+                    ].weight._overlapped_optimizer = EmptyFusedOptimizer()
 
         def post_state_dict_hook(
             module: ShardedEmbeddingCollection,

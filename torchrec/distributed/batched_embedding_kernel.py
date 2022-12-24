@@ -43,7 +43,11 @@ from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     pooling_type_to_pooling_mode,
 )
-from torchrec.optim.fused import FusedOptimizer, FusedOptimizerModule
+from torchrec.optim.fused import (
+    EmptyFusedOptimizer,
+    FusedOptimizer,
+    FusedOptimizerModule,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -526,7 +530,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             # can delete after SEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
-            param._overlapped_optimizer = True
+            param._overlapped_optimizer = EmptyFusedOptimizer()
             yield name, param
 
     def flush(self) -> None:
@@ -816,7 +820,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             # can delete after PEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
-            param._overlapped_optimizer = True
+            param._overlapped_optimizer = EmptyFusedOptimizer()
             yield name, param
 
     def flush(self) -> None:
