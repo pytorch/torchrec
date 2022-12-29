@@ -47,5 +47,5 @@ python -c "import torch; import fbgemm_gpu; import torchrec"
 if [[ ${GPU_ARCH_TYPE} = 'cuda' ]]; then
     torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
 else
-    torchx run -s local_cwd dist.ddp -j 1x2 --script test_installation.py -- --cpu_only
+    torchx run -s local_cwd dist.ddp -j 1 --script test_installation.py -- --cpu_only
 fi
