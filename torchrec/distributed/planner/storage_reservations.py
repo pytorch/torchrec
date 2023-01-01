@@ -21,7 +21,7 @@ from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder
 
 
-def _get_module_size(module: nn.Module, multiplier: int) -> int:
+def _get_module_size(module: nn.Module, multiplier: float) -> int:
     parameters_size = sum(
         [
             multiplier * parameter.element_size() * parameter.nelement()
@@ -33,14 +33,14 @@ def _get_module_size(module: nn.Module, multiplier: int) -> int:
         [buffer.element_size() * buffer.nelement() for buffer in module.buffers()]
     )
 
-    return parameters_size + buffers_size
+    return round(parameters_size + buffers_size)
 
 
 def _reserve_dense_storage(
     topology: Topology,
     module: nn.Module,
     shardable_modules: Set[nn.Module],
-    multiplier: int,
+    multiplier: float,
 ) -> Storage:
 
     dense_tensor_size = _get_module_size(module, multiplier) - sum(
@@ -159,9 +159,13 @@ class HeuristicalStorageReservation(StorageReservation):
     def __init__(
         self,
         percentage: float,
+        # heuristic: 6 * dense parameter size
+        # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
+        parameter_multiplier: float = 6.0,
     ) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
+        self._parameter_multiplier = parameter_multiplier
 
         self._dense_storage: Optional[Storage] = None
         self._kjt_storage: Optional[Storage] = None
@@ -186,9 +190,7 @@ class HeuristicalStorageReservation(StorageReservation):
             topology=reserved_topology,
             module=module,
             shardable_modules=shardable_modules,
-            # heuristic: 6 * dense parameter size
-            # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
-            multiplier=6,
+            multiplier=self._parameter_multiplier,
         )
 
         self._kjt_storage = _reserve_kjt_storage(
