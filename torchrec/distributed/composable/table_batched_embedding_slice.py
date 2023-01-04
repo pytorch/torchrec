@@ -39,6 +39,7 @@ class TableBatchedEmbeddingSlice(nn.Parameter):
         self._end_offset: int = end_offset
         self._num_embeddings: int = num_embeddings
         self._embedding_dim: int = embedding_dim
+        self._init_grad: Optional[torch.Tensor] = None
         if original_tensor.requires_grad:
             self.retain_grad()
 
@@ -58,10 +59,14 @@ class TableBatchedEmbeddingSlice(nn.Parameter):
     @property
     def grad(self) -> Optional[torch.Tensor]:
         if self._original_tensor.grad is None:
-            return None
+            return self._init_grad
         return self._original_tensor.grad[self._start_offset : self._end_offset].view(
             self._num_embeddings, self._embedding_dim
         )
+
+    @grad.setter
+    def grad(self, set_grad: torch.Tensor) -> None:
+        self._init_grad = set_grad
 
     @property
     def grad_fn(self) -> None:
