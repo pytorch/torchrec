@@ -847,10 +847,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2All_Pooled_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">a2ai</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllPooledInfo" title="torchrec.distributed.comm_ops.All2AllPooledInfo"><span class="pre">All2AllPooledInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2All_Pooled_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -891,10 +918,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2All_Pooled_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2All_Pooled_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -935,10 +989,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2All_Seq_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">a2ai</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllSequenceInfo" title="torchrec.distributed.comm_ops.All2AllSequenceInfo"><span class="pre">All2AllSequenceInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharded_input_embeddings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2All_Seq_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -979,10 +1060,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2All_Seq_Req_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2All_Seq_Req_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1023,10 +1131,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2Allv_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">a2ai</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.All2AllVInfo" title="torchrec.distributed.comm_ops.All2AllVInfo"><span class="pre">All2AllVInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2Allv_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1067,10 +1202,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.All2Allv_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.All2Allv_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1140,10 +1302,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.AllGatherBase_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">agi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.AllGatherBaseInfo" title="torchrec.distributed.comm_ops.AllGatherBaseInfo"><span class="pre">AllGatherBaseInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.AllGatherBase_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1184,10 +1373,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.AllGatherBase_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.AllGatherBase_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1257,10 +1473,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rsi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterBaseInfo" title="torchrec.distributed.comm_ops.ReduceScatterBaseInfo"><span class="pre">ReduceScatterBaseInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1301,10 +1544,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_Tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterBase_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1444,10 +1714,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterV_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rsi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterVInfo" title="torchrec.distributed.comm_ops.ReduceScatterVInfo"><span class="pre">ReduceScatterVInfo</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterV_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1488,10 +1785,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatterV_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatterV_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1532,10 +1856,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatter_Req.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rsi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.ReduceScatterInfo" title="torchrec.distributed.comm_ops.ReduceScatterInfo"><span class="pre">ReduceScatterInfo</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatter_Req.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
@@ -1576,10 +1927,37 @@ output.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.ReduceScatter_Wait.forward">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">myreq</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.comm_ops.Request" title="torchrec.distributed.comm_ops.Request"><span class="pre">Request</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">dummy_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.ReduceScatter_Wait.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
+<dd><p>This function is to be overridden by all subclasses. There are two ways
+to define forward:</p>
+<p>Usage 1 (Combined forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>It must accept a context ctx as the first argument, followed by any
+number of arguments (tensors or other types).</p></li>
+<li><p>See <span class="xref std std-ref">combining-forward-context</span> for more details</p></li>
+</ul>
+<p>Usage 2 (Separate forward and ctx):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="nd">@staticmethod</span>
+<span class="k">def</span> <span class="nf">setup_context</span><span class="p">(</span><span class="n">ctx</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">output</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">pass</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The forward no longer accepts a ctx argument.</p></li>
+<li><p>Instead, you must also define a setup_context staticmethod to handle setting up the
+<code class="docutils literal notranslate"><span class="pre">ctx</span></code> object.
+<code class="docutils literal notranslate"><span class="pre">output</span></code> is the output of the forward, <code class="docutils literal notranslate"><span class="pre">inputs</span></code> are a Tuple of inputs
+to the forward.</p></li>
+<li><p>See <span class="xref std std-ref">extending-autograd</span> for more details</p></li>
+</ul>
 <p>The context can be used to store arbitrary data that can be then
 retrieved during the backward pass. Tensors should not be stored
 directly on <cite>ctx</cite> (though this is not currently enforced for
