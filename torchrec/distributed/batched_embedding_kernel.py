@@ -75,55 +75,101 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             local_metadata: List[ShardMetadata]
             embedding_weights: List[torch.Tensor]
 
-        def to_rowwise_sharded_metadata(
-            local_metadata: ShardMetadata,
-            global_metadata: ShardedTensorMetadata,
-            sharding_dim: int,
+        def get_optimizer_rowwise_shard_metadata_and_global_metadata(
+            table_global_metadata: ShardedTensorMetadata,
             optimizer_state: torch.Tensor,
-        ) -> Tuple[ShardMetadata, ShardedTensorMetadata]:
-            rw_shards: List[ShardMetadata] = []
-            rw_local_shard: ShardMetadata = local_metadata
-            shards_metadata = global_metadata.shards_metadata
+            sharding_dim: int,
+        ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
+
+            table_global_shards_metadata: List[
+                ShardMetadata
+            ] = table_global_metadata.shards_metadata
+
             # column-wise sharding
             # sort the metadata based on column offset and
             # we construct the momentum tensor in row-wise sharded way
             if sharding_dim == 1:
-                shards_metadata = sorted(
-                    shards_metadata, key=lambda shard: shard.shard_offsets[1]
+                table_global_shards_metadata = sorted(
+                    table_global_shards_metadata,
+                    key=lambda shard: shard.shard_offsets[1],
                 )
 
-            for idx, shard in enumerate(shards_metadata):
-                offset = shard.shard_offsets[0]
+            table_shard_metadata_to_optimizer_shard_metadata = {}
+
+            for idx, table_shard_metadata in enumerate(table_global_shards_metadata):
+                offset = table_shard_metadata.shard_offsets[0]
                 # for column-wise sharding, we still create row-wise sharded metadata for optimizer
                 # manually create a row-wise offset
 
                 if sharding_dim == 1:
-                    offset = idx * shard.shard_sizes[0]
-                rw_shard = ShardMetadata(
-                    shard_sizes=[shard.shard_sizes[0]],
+                    offset = idx * table_shard_metadata.shard_sizes[0]
+
+                table_shard_metadata_to_optimizer_shard_metadata[
+                    table_shard_metadata
+                ] = ShardMetadata(
+                    shard_sizes=[table_shard_metadata.shard_sizes[0]],
                     shard_offsets=[offset],
-                    placement=shard.placement,
+                    placement=table_shard_metadata.placement,
                 )
-
-                if local_metadata == shard:
-                    rw_local_shard = rw_shard
-
-                rw_shards.append(rw_shard)
 
             tensor_properties = TensorProperties(
                 dtype=optimizer_state.dtype,
-                layout=global_metadata.tensor_properties.layout,
+                layout=optimizer_state.layout,
                 requires_grad=False,
-                memory_format=global_metadata.tensor_properties.memory_format,
-                pin_memory=global_metadata.tensor_properties.pin_memory,
             )
-            len_rw_shards = len(shards_metadata) if sharding_dim == 1 else 1
-            rw_metadata = ShardedTensorMetadata(
-                shards_metadata=rw_shards,
-                size=torch.Size([global_metadata.size[0] * len_rw_shards]),
+            len_rw_shards = (
+                len(table_shard_metadata_to_optimizer_shard_metadata)
+                if sharding_dim == 1
+                else 1
+            )
+            rowwise_optimizer_st_metadata = ShardedTensorMetadata(
+                shards_metadata=list(
+                    table_shard_metadata_to_optimizer_shard_metadata.values()
+                ),
+                size=torch.Size([table_global_metadata.size[0] * len_rw_shards]),
                 tensor_properties=tensor_properties,
             )
-            return rw_local_shard, rw_metadata
+
+            return (
+                table_shard_metadata_to_optimizer_shard_metadata,
+                rowwise_optimizer_st_metadata,
+            )
+
+        def get_optimizer_pointwise_shard_metadata_and_global_metadata(
+            table_global_metadata: ShardedTensorMetadata,
+            optimizer_state: torch.Tensor,
+        ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
+            table_global_shards_metadata: List[
+                ShardMetadata
+            ] = table_global_metadata.shards_metadata
+
+            table_shard_metadata_to_optimizer_shard_metadata = {}
+
+            for table_shard_metadata in table_global_shards_metadata:
+                table_shard_metadata_to_optimizer_shard_metadata[
+                    table_shard_metadata
+                ] = ShardMetadata(
+                    shard_sizes=table_shard_metadata.shard_sizes,
+                    shard_offsets=table_shard_metadata.shard_offsets,
+                    placement=table_shard_metadata.placement,
+                )
+            tensor_properties = TensorProperties(
+                dtype=optimizer_state.dtype,
+                layout=optimizer_state.layout,
+                requires_grad=False,
+            )
+            pointwise_optimizer_st_metadata = ShardedTensorMetadata(
+                shards_metadata=list(
+                    table_shard_metadata_to_optimizer_shard_metadata.values()
+                ),
+                size=table_global_metadata.size,
+                tensor_properties=tensor_properties,
+            )
+
+            return (
+                table_shard_metadata_to_optimizer_shard_metadata,
+                pointwise_optimizer_st_metadata,
+            )
 
         # pyre-ignore [33]
         state: Dict[Any, Any] = {}
@@ -217,34 +263,51 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 def get_momentum(momentum_idx: int) -> ShardedTensor:
                     assert momentum_idx > 0
                     momentum_local_shards: List[Shard] = []
+                    optimizer_sharded_tensor_metadata: ShardedTensorMetadata
 
-                    sharded_tensor_metadata = table_config.global_metadata
-                    for (optimizer_state, shard_param_local_metadata) in zip(
-                        shard_params.optimizer_states, shard_params.local_metadata
-                    ):
+                    is_rowwise_optimizer_state: bool = (
+                        # pyre-ignore
+                        shard_params.optimizer_states[0][momentum_idx - 1].dim()
+                        == 1
+                    )
 
-                        local_metadata = table_config.local_metadata
-
-                        if optimizer_state[momentum_idx - 1].dim() == 1:
-                            (
-                                local_metadata,
-                                sharded_tensor_metadata,
-                            ) = to_rowwise_sharded_metadata(
-                                shard_param_local_metadata,
-                                table_config.global_metadata,
-                                sharding_dim,
-                                optimizer_state[momentum_idx - 1],
-                            )
-
-                        assert local_metadata is not None
-                        assert sharded_tensor_metadata is not None
-                        momentum_local_shards.append(
-                            Shard(optimizer_state[momentum_idx - 1], local_metadata)
+                    if is_rowwise_optimizer_state:
+                        (
+                            table_shard_metadata_to_optimizer_shard_metadata,
+                            optimizer_sharded_tensor_metadata,
+                        ) = get_optimizer_rowwise_shard_metadata_and_global_metadata(
+                            table_config.global_metadata,
+                            shard_params.optimizer_states[0][momentum_idx - 1],
+                            sharding_dim,
+                        )
+                    else:
+                        (
+                            table_shard_metadata_to_optimizer_shard_metadata,
+                            optimizer_sharded_tensor_metadata,
+                        ) = get_optimizer_pointwise_shard_metadata_and_global_metadata(
+                            table_config.global_metadata,
+                            shard_params.optimizer_states[0][momentum_idx - 1],
                         )
 
+                    for (optimizer_state, table_shard_local_metadata) in zip(
+                        shard_params.optimizer_states, shard_params.local_metadata
+                    ):
+                        local_optimizer_shard_metadata = (
+                            table_shard_metadata_to_optimizer_shard_metadata[
+                                table_shard_local_metadata
+                            ]
+                        )
+                        momentum_local_shards.append(
+                            Shard(
+                                optimizer_state[momentum_idx - 1],
+                                local_optimizer_shard_metadata,
+                            )
+                        )
+
+                    # TODO we should be creating this in SPMD fashion (e.g. init_from_local_shards), and let it derive global metadata.
                     return ShardedTensor._init_from_local_shards_and_global_metadata(
                         local_shards=momentum_local_shards,
-                        sharded_tensor_metadata=sharded_tensor_metadata,
+                        sharded_tensor_metadata=optimizer_sharded_tensor_metadata,
                         process_group=self._pg,
                     )
 
