@@ -73,7 +73,7 @@ class Topology:
         world_size: int,
         compute_device: str,
         hbm_cap: Optional[int] = None,
-        ddr_cap: int = DDR_CAP,
+        ddr_cap: Optional[int] = None,
         local_world_size: Optional[int] = None,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
@@ -93,6 +93,7 @@ class Topology:
         hbm_per_device = 0
         if self._compute_device == "cuda":
             hbm_per_device = hbm_cap if hbm_cap else HBM_CAP
+        ddr_cap = ddr_cap if ddr_cap else DDR_CAP
 
         self._devices: List[DeviceHardware] = []
         for rank in range(world_size):

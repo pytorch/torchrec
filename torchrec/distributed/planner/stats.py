@@ -90,7 +90,7 @@ class EmbeddingStats(Stats):
         used_sharding_types = set()
         compute_kernels_to_count = defaultdict(int)
 
-        reserved_percent = (
+        reserved_hbm_percent = (
             storage_reservation._percentage
             if isinstance(
                 storage_reservation,
@@ -185,15 +185,13 @@ class EmbeddingStats(Stats):
         for rank, device in enumerate(topology.devices):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
             used_hbm_ratio = (
-                used_hbm[rank] / ((1 - reserved_percent) * device.storage.hbm)
+                used_hbm[rank] / ((1 - reserved_hbm_percent) * device.storage.hbm)
                 if topology.compute_device == "cuda"
                 else 0
             )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
             used_ddr_ratio = (
-                used_ddr[rank] / ((1 - reserved_percent) * device.storage.ddr)
-                if device.storage.ddr > 0
-                else 0
+                used_ddr[rank] / device.storage.ddr if device.storage.ddr > 0 else 0
             )
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
@@ -318,7 +316,7 @@ class EmbeddingStats(Stats):
             self._log_storage_reservation_stats(
                 storage_reservation,
                 topology,
-                reserved_percent,
+                reserved_hbm_percent,
                 dense_storage,
                 kjt_storage,
             )
@@ -410,23 +408,23 @@ class EmbeddingStats(Stats):
         self,
         storage_reservation: StorageReservation,
         topology: Topology,
-        reserved_percent: float,
+        reserved_hbm_percent: float,
         dense_storage: Storage,
         kjt_storage: Storage,
     ) -> None:
         device_storage = topology.devices[0].storage
         usable_hbm = round(
-            bytes_to_gb(int((1 - reserved_percent) * device_storage.hbm)), 3
+            bytes_to_gb(int((1 - reserved_hbm_percent) * device_storage.hbm)), 3
         )
-        usable_ddr = round(
-            bytes_to_gb(int((1 - reserved_percent) * device_storage.ddr)), 3
-        )
+        usable_ddr = round(bytes_to_gb(int(device_storage.ddr)), 3)
         usable_memory = f"HBM: {usable_hbm} GB, DDR: {usable_ddr} GB"
-        usable_percentage = f"Percent of Total: {(1 - reserved_percent):.0%}"
+        usable_hbm_percentage = (
+            f"Percent of Total HBM: {(1 - reserved_hbm_percent):.0%}"
+        )
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {'Usable Memory:' : <{self._width-3}}#")
         self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
-        self._stats_table.append(f"#    {usable_percentage : <{self._width-6}}#")
+        self._stats_table.append(f"#    {usable_hbm_percentage : <{self._width-6}}#")
 
         if isinstance(storage_reservation, HeuristicalStorageReservation):
             dense_hbm = round(bytes_to_gb(dense_storage.hbm), 3)
