@@ -4,6 +4,7 @@ import sys
 import torch
 
 from skbuild import setup
+from setuptools import find_packages
 
 extra_cmake_args = []
 
@@ -40,7 +41,7 @@ if sys.platform == "linux":
 setup(
     name="torchrec_dynamic_embedding",
     package_dir={"": "src"},
-    packages=["torchrec_dynamic_embedding"],
+    packages=find_packages("src"),
     cmake_args=[
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DTDE_TORCH_BASE_DIR={os.path.dirname(torch.__file__)}",

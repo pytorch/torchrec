@@ -12,7 +12,13 @@ cd contrib/dynamic_embedding
 python setup.py install
 ```
 
-And the dynamic embedding will be installed as a separate package named torchrec_dynamic_embedding.
+And the dynamic embedding will be installed as a separate package named `torchrec_dynamic_embedding`.
+
+Notice that for C++20 supports we recommend gcc version higher or equal to 10. Conda users could install the lastest gcc utilities with:
+
+```bash
+conda install gxx_linux-64
+```
 
 We incorporate `gtest` for the C++ code and use unittest for the python APIs. The tests make sure that the implementation does not have any precision loss. Please turn on the `TDE_WITH_TESTING` in `setup.py` to run tests. Note that for the python test, one needs to set the environment variable `TDE_MEMORY_IO_PATH` to the path of the compiled `memory_io.so`.
 
