@@ -1,7 +1,16 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+
 import os
 import sys
 
 import torch
+from setuptools import find_packages
 
 from skbuild import setup
 
@@ -40,7 +49,7 @@ if sys.platform == "linux":
 setup(
     name="torchrec_dynamic_embedding",
     package_dir={"": "src"},
-    packages=["torchrec_dynamic_embedding"],
+    packages=find_packages("src"),
     cmake_args=[
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DTDE_TORCH_BASE_DIR={os.path.dirname(torch.__file__)}",
