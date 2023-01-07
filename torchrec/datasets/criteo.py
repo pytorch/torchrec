@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
 import os
 import shutil
 import time
@@ -726,8 +725,29 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
 
         if shuffle_training_set and stage == "train":
             self._shuffle_and_load_data_for_rank()
+            self.world_size = 1
+            self.rank = 0
         else:
-            self._load_data_for_rank()
+            m = "r" if mmap_mode else None
+            self.dense_arrs: List[np.ndarray] = [
+                np.load(f, mmap_mode=m) for f in self.dense_paths
+            ]
+            self.sparse_arrs: List[np.ndarray] = [
+                np.load(f, mmap_mode=m) for f in self.sparse_paths
+            ]
+            self.labels_arrs: List[np.ndarray] = [
+                np.load(f, mmap_mode=m) for f in self.labels_paths
+            ]
+        d0len = len(self.dense_arrs[0])
+        second_half_start_index = int(d0len // 2 + d0len % 2)
+        if stage == "val":
+            self.dense_arrs[0] = self.dense_arrs[0][:second_half_start_index, :]
+            self.sparse_arrs[0] = self.sparse_arrs[0][:second_half_start_index, :]
+            self.labels_arrs[0] = self.labels_arrs[0][:second_half_start_index, :]
+        elif stage == "test":
+            self.dense_arrs[0] = self.dense_arrs[0][second_half_start_index:, :]
+            self.sparse_arrs[0] = self.sparse_arrs[0][second_half_start_index:, :]
+            self.labels_arrs[0] = self.labels_arrs[0][second_half_start_index:, :]
         # When mmap_mode is enabled, sparse features are hashed when
         # samples are batched in def __iter__. Otherwise, the dataset has been
         # preloaded with sparse features hashed in the preload stage, here:
@@ -735,18 +755,18 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             for sparse_arr in self.sparse_arrs:
                 sparse_arr %= self.hashes
 
-        self.num_rows_per_file: List[int] = [a.shape[0] for a in self.dense_arrs]
-        dataset_div_world_size = sum(self.num_rows_per_file)
-        dataset_div_world_size -= self.rank < self.remainder
-        if drop_last:
-            self.num_batches: int = dataset_div_world_size // batch_size
-        else:
-            self.num_batches: int = math.ceil(dataset_div_world_size / batch_size)
+        self.num_rows_per_file: List[int] = list(map(len, self.dense_arrs))
+        total_rows = sum(self.num_rows_per_file)
+        global_batch_size = self.world_size * batch_size
+        self.local_rank_num_batches: int = total_rows // global_batch_size
+        if self.local_rank_num_batches == 0:
+            self.batch_size = batch_size = total_rows // self.world_size
+            self.local_rank_num_batches = 1
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
         # functions.
-        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size + 1)
+        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size * 2)
         self.keys: List[str] = DEFAULT_CAT_NAMES
         self.lengths: torch.Tensor = torch.ones(
             (self._num_ids_in_batch,), dtype=torch.int32
@@ -905,38 +925,42 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         file_idx = 0
         row_idx = 0
         batch_idx = 0
-        cur_batch_size = self.batch_size
-        while batch_idx < self.num_batches:
-            buffer_row_count = 0 if buffer is None else none_throws(buffer)[0].shape[0]
-            if buffer_row_count == cur_batch_size or file_idx == len(self.dense_arrs):
-                yield self._np_arrays_to_batch(*none_throws(buffer))
-                batch_idx += 1
-                buffer = None
-                if (
-                    batch_idx + 1 == self.num_batches
-                    and self.rank < self.remainder
-                    and not self.drop_last
+        buffer_row_count = 0
+        while batch_idx // self.world_size < self.local_rank_num_batches + int(
+            not self.drop_last
+        ):
+            if buffer_row_count == self.batch_size or file_idx == len(self.dense_arrs):
+                local_batch_idx = batch_idx // self.world_size
+                if batch_idx % self.world_size == self.rank and (
+                    not self.drop_last
+                    and local_batch_idx != self.local_rank_num_batches - 1
+                    or self.drop_last
                 ):
-                    cur_batch_size += 1
+                    yield self._np_arrays_to_batch(*none_throws(buffer))
+                    buffer = None
+                buffer_row_count = 0
+                batch_idx += 1
             else:
                 rows_to_get = min(
-                    cur_batch_size - buffer_row_count,
+                    self.batch_size - buffer_row_count,
                     self.num_rows_per_file[file_idx] - row_idx,
                 )
+                buffer_row_count += rows_to_get
                 slice_ = slice(row_idx, row_idx + rows_to_get)
 
-                dense_inputs = self.dense_arrs[file_idx][slice_, :]
-                sparse_inputs = self.sparse_arrs[file_idx][slice_, :]
-                target_labels = self.labels_arrs[file_idx][slice_, :]
+                if batch_idx % self.world_size == self.rank:
+                    dense_inputs = self.dense_arrs[file_idx][slice_, :]
+                    sparse_inputs = self.sparse_arrs[file_idx][slice_, :]
+                    target_labels = self.labels_arrs[file_idx][slice_, :]
 
-                if self.mmap_mode and self.hashes is not None:
-                    sparse_inputs = sparse_inputs % self.hashes
+                    if self.mmap_mode and self.hashes is not None:
+                        sparse_inputs = sparse_inputs % self.hashes
 
-                append_to_buffer(
-                    dense_inputs,
-                    sparse_inputs,
-                    target_labels,
-                )
+                    append_to_buffer(
+                        dense_inputs,
+                        sparse_inputs,
+                        target_labels,
+                    )
                 row_idx += rows_to_get
 
                 if row_idx >= self.num_rows_per_file[file_idx]:
@@ -944,4 +968,4 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                     row_idx = 0
 
     def __len__(self) -> int:
-        return self.num_batches
+        return self.local_rank_num_batches
