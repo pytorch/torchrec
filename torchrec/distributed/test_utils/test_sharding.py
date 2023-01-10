@@ -12,6 +12,9 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec.distributed.embedding_types import EmbeddingTableConfig
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -41,7 +44,6 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
 from typing_extensions import Protocol
