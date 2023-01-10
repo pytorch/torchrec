@@ -10,6 +10,9 @@ import unittest
 
 import torch
 from torch import distributed as dist
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec.distributed.shard import shard
 from torchrec.distributed.sharding_plan import (
     apply_to_all,
@@ -18,7 +21,6 @@ from torchrec.distributed.sharding_plan import (
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage
 from torchrec.test_utils import get_free_port

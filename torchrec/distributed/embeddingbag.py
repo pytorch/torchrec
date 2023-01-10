@@ -206,8 +206,16 @@ def create_sharding_infos_by_sharding(
         if parameter_sharding.sharding_type not in sharding_type_to_sharding_infos:
             sharding_type_to_sharding_infos[parameter_sharding.sharding_type] = []
 
-        optimizer_params = getattr(param, "_optimizer_kwargs", {})
-        optimizer_class = getattr(param, "_optimizer_class", None)
+        optimizer_params = getattr(param, "_optimizer_kwargs", [{}])
+        optimizer_classes = getattr(param, "_optimizer_classes", [None])
+
+        assert (
+            len(optimizer_classes) == 1 and len(optimizer_params) == 1
+        ), f"Only support 1 optimizer, given {len(optimizer_classes)} optimizer classes \
+        and {len(optimizer_params)} optimizer kwargs."
+
+        optimizer_class = optimizer_classes[0]
+        optimizer_params = optimizer_params[0]
         if optimizer_class:
             optimizer_params["optimizer"] = optimizer_type_to_emb_opt_type(
                 optimizer_class

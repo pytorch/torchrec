@@ -14,6 +14,9 @@ import torch
 import torch.nn as nn
 import torchrec.distributed as trec_dist
 from hypothesis import given, settings, Verbosity
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -37,7 +40,6 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.types import ModuleSharder, ParameterSharding, ShardingEnv
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
