@@ -38,7 +38,7 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingBagCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import skip_if_asan_class
+from torchrec.test_utils import skip_if_asan_class, skipIfRocm 
 
 
 def sharding_single_rank(
@@ -94,6 +94,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
+    @skipIfRocm()
     # pyre-fixme[56]
     @given(
         sharder_type=st.sampled_from(
@@ -117,7 +118,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharder_type: str,
         sharding_type: str,
     ) -> None:
-
         fused_ebc = FusedEmbeddingBagCollection(
             tables=[
                 EmbeddingBagConfig(
@@ -152,6 +152,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             backend="nccl",
         )
 
+    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -173,7 +174,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
-
         ebc = EmbeddingBagCollection(
             tables=[
                 EmbeddingBagConfig(
