@@ -122,7 +122,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharding_type: str,
     ) -> None:
         self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
-
         fused_ec = FusedEmbeddingCollection(
             tables=[
                 EmbeddingConfig(
@@ -180,7 +179,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharding_type: str,
     ) -> None:
         self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
-
         ec = EmbeddingCollection(
             tables=[
                 EmbeddingConfig(
