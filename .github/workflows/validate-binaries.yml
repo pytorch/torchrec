@@ -36,5 +36,5 @@ jobs:
       os: "linux"
       channel: ${{ inputs.channel }}
       repository: "pytorch/torchrec"
-      smoke_test: "./.github/scripts/validate_binaries.sh"
+      smoke_test: "source ./.github/scripts/validate_binaries.sh"
       with_cuda: enable
