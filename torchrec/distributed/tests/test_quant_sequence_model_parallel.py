@@ -15,7 +15,6 @@ from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.shard import shard_modules
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     InferenceModelParallelTestBase,
@@ -27,7 +26,7 @@ from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
 )
-from torchrec.test_utils import seed_and_log, skip_if_asan_class
+from torchrec.test_utils import seed_and_log, skip_if_asan_class, skipIfRocm
 
 
 def _quantize(module: nn.Module) -> nn.Module:
@@ -68,6 +67,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
+    @skipIfRocm()
     # pyre-fixme[56]
     @given(
         sharding_type=st.sampled_from(
@@ -130,6 +130,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
             quantize_callable=_quantize,
         )
 
+    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
@@ -145,6 +146,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
+        from torchrec.distributed.shard import shard_modules
         device = torch.device("cuda:0")
 
         # wrap in sequential because _quantize only applies to submodules...

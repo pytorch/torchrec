@@ -38,8 +38,7 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import skip_if_asan_class
-
+from torchrec.test_utils import skip_if_asan_class, skipIfRocm
 
 @skip_if_asan_class
 class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
@@ -100,6 +99,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
                     unsharded_jt.lengths().cpu(), sharded_jt.lengths().cpu()
                 )
 
+    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -157,6 +157,7 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             backend="nccl",
         )
 
+    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",

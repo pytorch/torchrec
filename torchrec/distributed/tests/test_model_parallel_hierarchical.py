@@ -24,7 +24,7 @@ from torchrec.distributed.test_utils.test_sharding import (
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.test_utils import skip_if_asan_class
-
+import pdb
 
 @skip_if_asan_class
 class ModelParallelHierarchicalTest(ModelParallelTestShared):
@@ -247,6 +247,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
+        pdb.set_trace()
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
             apply_optimizer_in_backward_config is None
