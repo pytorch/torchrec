@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from typing import Any, Dict, Iterable, Type
+from warnings import warn
 
 import torch
 
@@ -16,6 +17,8 @@ def apply_optimizer_in_backward(
     optimizer_kwargs: Dict[str, Any],
 ) -> None:
     """
+    NOTE: This API is deprecated. Please use Pytorch Distributed's _apply_optimizer_in_backward instead.
+
     Upon backwards(), parameters will fire the corresponding optimizer
     Each parameter will have the optimizer_class and optimizer_kwargs attached to
     _optimizer and _optimizer_kwargs.
@@ -40,6 +43,11 @@ def apply_optimizer_in_backward(
         print(param_1._optimizer, param_1._optimizer_kwargs)
         >> torch.optim.SGD, {"lr": .02}
     """
+
+    warn(
+        "This API is deprecated. Please use Pytorch Distributed's _apply_optimizer_in_backward API instead.",
+        DeprecationWarning,
+    )
 
     def _apply_optimizer_in_backward_to_param(param: torch.nn.Parameter) -> None:
         # acc_grad creates a new node in the auto_grad graph that comes after

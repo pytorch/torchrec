@@ -13,6 +13,9 @@ import hypothesis.strategies as st
 import torch
 import torch.nn as nn
 from hypothesis import assume, given, settings, Verbosity
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec import distributed as trec_dist
 from torchrec.distributed.embedding import (
     EmbeddingCollectionSharder,
@@ -39,7 +42,6 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class

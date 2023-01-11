@@ -16,6 +16,9 @@ import faiss  # @manual=//faiss/python:pyfaiss_gpu
 import faiss.contrib.torch_utils  # @manual=//faiss/contrib:faiss_contrib_gpu
 import torch
 from torch import distributed as dist
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec import inference as trec_infer
 from torchrec.datasets.movielens import DEFAULT_RATINGS_COLUMN_NAMES
 from torchrec.distributed import TrainPipelineSparseDist
@@ -26,7 +29,6 @@ from torchrec.inference.state_dict_transform import (
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
