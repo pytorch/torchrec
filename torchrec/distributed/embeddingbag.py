@@ -440,6 +440,7 @@ class ShardedEmbeddingBagCollection(
         for table_name in self._table_names:
             self.embedding_bags[table_name] = nn.Module()
         self._model_parallel_name_to_local_shards = OrderedDict()
+        self._model_parallel_name_to_sharded_tensor = OrderedDict()
         model_parallel_name_to_compute_kernel: Dict[str, str] = {}
         for (
             table_name,
@@ -477,7 +478,10 @@ class ShardedEmbeddingBagCollection(
                 tbe_slice,
             ) in lookup.named_parameters_by_table():
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
-        for table_name in self._model_parallel_name_to_local_shards.keys():
+        for (
+            table_name,
+            local_shards,
+        ) in self._model_parallel_name_to_local_shards.items():
             # for shards that don't exist on this rank, register with empty tensor
             if not hasattr(self.embedding_bags[table_name], "weight"):
                 self.embedding_bags[table_name].register_parameter(
@@ -490,6 +494,14 @@ class ShardedEmbeddingBagCollection(
                     self.embedding_bags[
                         table_name
                     ].weight._overlapped_optimizer = EmptyFusedOptimizer()
+            # created ShardedTensors once in init, use in post_state_dict_hook
+            self._model_parallel_name_to_sharded_tensor[
+                table_name
+            ] = ShardedTensor._init_from_local_shards(
+                local_shards,
+                self._name_to_table_size[table_name],
+                process_group=self._env.process_group,
+            )
 
         def post_state_dict_hook(
             module: ShardedEmbeddingBagCollection,
@@ -500,14 +512,10 @@ class ShardedEmbeddingBagCollection(
             # Adjust dense MP
             for (
                 table_name,
-                local_shards,
-            ) in module._model_parallel_name_to_local_shards.items():
+                sharded_t,
+            ) in module._model_parallel_name_to_sharded_tensor.items():
                 destination_key = f"{prefix}embedding_bags.{table_name}.weight"
-                destination[destination_key] = ShardedTensor._init_from_local_shards(
-                    local_shards,
-                    module._name_to_table_size[table_name],
-                    process_group=module._env.process_group,
-                )
+                destination[destination_key] = sharded_t
 
         self._register_state_dict_hook(post_state_dict_hook)
         self._register_load_state_dict_pre_hook(
