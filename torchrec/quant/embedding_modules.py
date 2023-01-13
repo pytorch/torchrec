@@ -316,7 +316,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 weights = torch.cat(weights)
 
             embeddings.append(
-                emb_op(
+                emb_op.forward(
                     indices=indices.int(),
                     offsets=offsets.int(),
                     per_sample_weights=weights if self._is_weighted else None,
