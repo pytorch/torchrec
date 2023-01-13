@@ -6,8 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-conda create -y -n "${ENV_NAME}" python="${MATRIX_PYTHON_VERSION}" numpy
-conda activate "${ENV_NAME}"
 export PYTORCH_CUDA_PKG=""
 
 # Install pytorch, torchrec and fbgemm as per
