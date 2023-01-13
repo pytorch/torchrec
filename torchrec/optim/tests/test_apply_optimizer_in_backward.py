@@ -72,15 +72,15 @@ class ApplyOverlappedOptimizerTest(unittest.TestCase):
         self.assertIsNone(t1_weight.grad)
         self.assertIsNone(t2_weight.grad)
 
-        self.assertTrue(hasattr(t1_weight, "_optimizer_class"))
-        self.assertEqual(t1_weight._optimizer_class, torch.optim.SGD)
+        self.assertTrue(hasattr(t1_weight, "_optimizer_classes"))
+        self.assertEqual(t1_weight._optimizer_classes, [torch.optim.SGD])
         self.assertTrue(hasattr(t1_weight, "_optimizer_kwargs"))
-        self.assertEqual(t1_weight._optimizer_kwargs, {"lr": 1.0})
+        self.assertEqual(t1_weight._optimizer_kwargs, [{"lr": 1.0}])
 
-        self.assertTrue(hasattr(t2_weight, "_optimizer_class"))
-        self.assertEqual(t2_weight._optimizer_class, torch.optim.SGD)
+        self.assertTrue(hasattr(t2_weight, "_optimizer_classes"))
+        self.assertEqual(t2_weight._optimizer_classes, [torch.optim.SGD])
         self.assertTrue(hasattr(t2_weight, "_optimizer_kwargs"))
-        self.assertEqual(t2_weight._optimizer_kwargs, {"lr": 2.0})
+        self.assertEqual(t2_weight._optimizer_kwargs, [{"lr": 2.0}])
 
         expected_state_dict = {
             "embedding_bags.t1.weight": torch.FloatTensor(
