@@ -101,7 +101,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._connected:
             self._connect(dataloader_iter)
-
         # Fetch next batch
         with record_function("## next_batch ##"):
             next_batch = next(dataloader_iter)
