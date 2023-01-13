@@ -738,8 +738,8 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             self.labels_arrs: List[np.ndarray] = [
                 np.load(f, mmap_mode=m) for f in self.labels_paths
             ]
-        d0len = len(self.dense_arrs[0])
-        second_half_start_index = int(d0len // 2 + d0len % 2)
+        len_d0 = len(self.dense_arrs[0])
+        second_half_start_index = int(len_d0 // 2 + len_d0 % 2)
         if stage == "val":
             self.dense_arrs[0] = self.dense_arrs[0][:second_half_start_index, :]
             self.sparse_arrs[0] = self.sparse_arrs[0][:second_half_start_index, :]
@@ -757,16 +757,25 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
 
         self.num_rows_per_file: List[int] = list(map(len, self.dense_arrs))
         total_rows = sum(self.num_rows_per_file)
-        global_batch_size = self.world_size * batch_size
-        self.local_rank_num_batches: int = total_rows // global_batch_size
-        if self.local_rank_num_batches == 0:
-            self.batch_size = batch_size = total_rows // self.world_size
-            self.local_rank_num_batches = 1
+        self.num_full_batches: int = (
+            total_rows // batch_size // self.world_size * self.world_size
+        )
+        self.last_batch_sizes: np.ndarray = np.array(
+            [0 for _ in range(self.world_size)]
+        )
+        remainder = total_rows % (self.world_size * batch_size)
+        if not self.drop_last and 0 < remainder:
+            if remainder < self.world_size:
+                self.num_full_batches -= self.world_size
+                self.last_batch_sizes += batch_size
+            else:
+                self.last_batch_sizes += remainder // self.world_size
+            self.last_batch_sizes[: remainder % self.world_size] += 1
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
         # functions.
-        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size * 2)
+        self._num_ids_in_batch: int = CAT_FEATURE_COUNT * (batch_size + 1)
         self.keys: List[str] = DEFAULT_CAT_NAMES
         self.lengths: torch.Tensor = torch.ones(
             (self._num_ids_in_batch,), dtype=torch.int32
@@ -926,23 +935,28 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         row_idx = 0
         batch_idx = 0
         buffer_row_count = 0
-        while batch_idx // self.world_size < self.local_rank_num_batches + int(
-            not self.drop_last
+        cur_batch_size = (
+            self.batch_size if self.num_full_batches > 0 else self.last_batch_sizes[0]
+        )
+        while (
+            batch_idx
+            < self.num_full_batches + (self.last_batch_sizes[0] > 0) * self.world_size
         ):
-            if buffer_row_count == self.batch_size or file_idx == len(self.dense_arrs):
-                local_batch_idx = batch_idx // self.world_size
-                if batch_idx % self.world_size == self.rank and (
-                    not self.drop_last
-                    and local_batch_idx != self.local_rank_num_batches - 1
-                    or self.drop_last
-                ):
+            if buffer_row_count == cur_batch_size or file_idx == len(self.dense_arrs):
+                if batch_idx % self.world_size == self.rank:
                     yield self._np_arrays_to_batch(*none_throws(buffer))
                     buffer = None
                 buffer_row_count = 0
                 batch_idx += 1
+                if 0 <= batch_idx - self.num_full_batches < self.world_size and (
+                    self.last_batch_sizes[0] > 0
+                ):
+                    cur_batch_size = self.last_batch_sizes[
+                        batch_idx - self.num_full_batches
+                    ]
             else:
                 rows_to_get = min(
-                    self.batch_size - buffer_row_count,
+                    cur_batch_size - buffer_row_count,
                     self.num_rows_per_file[file_idx] - row_idx,
                 )
                 buffer_row_count += rows_to_get
@@ -968,4 +982,4 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
                     row_idx = 0
 
     def __len__(self) -> int:
-        return self.local_rank_num_batches
+        return self.num_full_batches // self.world_size + (self.last_batch_sizes[0] > 0)
