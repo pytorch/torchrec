@@ -198,8 +198,9 @@ class MetricModuleTest(unittest.TestCase):
         value = 12345
         state_dict = metric_module.state_dict()
         keys = list(state_dict.keys())
-        for k in state_dict.keys():
-            state_dict[k] = torch.tensor(value, dtype=torch.long).detach()
+        state_dict[
+            "rec_metrics.rec_metrics.0._metrics_computations.0._fused_states"
+        ] = (torch.ones((4, 1), dtype=torch.long) * value).detach()
         logging.info(f"Metrics state keys = {keys}")
         metric_module.load_state_dict(state_dict)
         tc = unittest.TestCase()
@@ -217,21 +218,26 @@ class MetricModuleTest(unittest.TestCase):
             if k.startswith("rec_metrics."):
                 if k.endswith("has_valid_update"):
                     tc.assertEqual(v.item(), 1)
-                else:
-                    tc.assertEqual(v.item(), value * world_size)
+                elif k.endswith("_fused_states"):
+                    for val in v:
+                        tc.assertEqual(val.item(), value * world_size)
 
         # 2. Test unsync()
         metric_module.unsync()
         state_dict = metric_module.state_dict()
-        for v in state_dict.values():
-            tc.assertEqual(v.item(), value)
+        for k, v in state_dict.items():
+            if k.startswith("rec_metrics.") and k.endswith("_fused_states"):
+                for val in v:
+                    tc.assertEqual(val.item(), value)
 
         # 3. Test reset()
         metric_module.reset()
         state_dict = metric_module.state_dict()
         for k, v in state_dict.items():
-            if k.startswith("rec_metrics."):
-                tc.assertEqual(v.item(), 0)
+            if k.startswith("rec_metrics.") and k.endswith("_fused_states"):
+                for i in range(v.size(0)):
+                    for j in range(v.size(1)):
+                        tc.assertEqual(v[i][j].item(), 0)
 
     def test_rank0_checkpointing(self) -> None:
         # Call the tested methods to make code coverage visible to the testing system
@@ -294,7 +300,7 @@ class MetricModuleTest(unittest.TestCase):
             len(
                 metric_module.rec_metrics.rec_metrics[0]
                 ._metrics_computations[0]
-                .predictions
+                .get_state("predictions")
             ),
             1,  # The predictions state is a list containing 1 tensor value
         )
@@ -303,7 +309,7 @@ class MetricModuleTest(unittest.TestCase):
         tc.assertEqual(
             metric_module.rec_metrics.rec_metrics[0]
             ._metrics_computations[0]
-            .labels[0]
+            .get_state("labels")
             .size(),
             (1, 1),
             # The 1st 1 is the number of tasks; the 2nd 1 is the default value length
@@ -313,7 +319,7 @@ class MetricModuleTest(unittest.TestCase):
         tc.assertEqual(
             metric_module.rec_metrics.rec_metrics[0]
             ._metrics_computations[0]
-            .labels[0]
+            .get_state("labels")
             .size(),
             (1, 2),
         )
@@ -322,7 +328,7 @@ class MetricModuleTest(unittest.TestCase):
         tc.assertEqual(
             metric_module.rec_metrics.rec_metrics[0]
             ._metrics_computations[0]
-            .labels[0]
+            .get_state("labels")
             .size(),
             (1, 1),
         )
@@ -335,7 +341,7 @@ class MetricModuleTest(unittest.TestCase):
         tc.assertEqual(
             metric_module.rec_metrics.rec_metrics[0]
             ._metrics_computations[0]
-            .labels[0]
+            .get_state("labels")
             .size(),
             (1, 1),
         )
@@ -429,11 +435,12 @@ class MetricModuleTest(unittest.TestCase):
             state_metrics_mapping={StateMetricEnum.OPTIMIZERS: mock_optimizer},
             device=torch.device("cpu"),
         )
-        # 3 (tensors) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 24)
+        # 2 (tensors) * 3 (states/tensor) * 8 (double)
+        # 1 in _default, 1 in specific attributes
+        self.assertEqual(metric_module.get_memory_usage(), 48)
         metric_module.update(gen_test_batch(128))
-        # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 3096)
+        # 48 (initial states) + 1 (tensor) * 3 (states/tensor) * 128 (batch_size) * 8 (double)
+        self.assertEqual(metric_module.get_memory_usage(), 3120)
 
     def test_check_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()

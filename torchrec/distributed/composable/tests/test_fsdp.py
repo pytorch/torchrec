@@ -12,6 +12,8 @@ import tempfile
 import unittest
 import uuid
 
+import apex
+
 import torch
 from torch import distributed as dist, nn
 from torch.distributed._composable import fully_shard
@@ -23,12 +25,12 @@ from torch.distributed.checkpoint import (
     load_state_dict,
     save_state_dict,
 )
-from torch.distributed.fsdp.fully_sharded_data_parallel import (
-    FullyShardedDataParallel,
-    StateDictType,
-)
+from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.distributed.launcher.api import elastic_launch, LaunchConfig
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec.distributed.shard import (
     shard as trec_shard,
     shard_modules as trec_shard_modules,
@@ -41,6 +43,10 @@ from torchrec.distributed.sharding_plan import (
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.types import ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
+from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage
 from torchrec.test_utils import skip_if_asan
 
 
@@ -95,6 +101,11 @@ class FSDPTest(unittest.TestCase):
                 ),
             }
         )
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            m.sparse.parameters(),
+            {"lr": 0.01},
+        )
         trec_shard_modules(
             module=m,
             device=device,
@@ -104,7 +115,66 @@ class FSDPTest(unittest.TestCase):
             module=m,
             device_id=rank,
             ignored_modules=[m.sparse],
+            # TODO enable once works
+            # use_orig_params=True,
         )
+        dense_opt = KeyedOptimizerWrapper(
+            dict(in_backward_optimizer_filter(m.named_parameters(), include=False)),
+            lambda params: apex.optimizers.FusedLAMB(
+                params,
+                lr=0.01,
+                bias_correction=True,
+                betas=(0.9, 0.999),
+                eps=1e-5,
+                weight_decay=1e-05,
+                adam_w_mode=True,
+                grad_averaging=True,
+                set_grad_none=True,
+            ),
+        )
+        optims = []
+        sparse_grad_parameter_names = set()
+        for name, p in in_backward_optimizer_filter(m.named_parameters(), include=True):
+            # Add learning rate scheduler
+            optims.append(
+                WarmupOptimizer(
+                    # pyre-ignore
+                    p._overlapped_optimizer,
+                    [
+                        WarmupStage(
+                            policy=WarmupPolicy.LINEAR,
+                            value=0.1,
+                            lr_scale=1.0,
+                        )
+                    ],
+                    lr=0.01,  # initial learning rate
+                    param_name=f"__sparse_warmup_{name}",
+                )
+            )
+            sparse_grad_parameter_names.add(name)
+        fused_opt_scheduled = CombinedOptimizer(optims)
+        dense_opt_scheduled = WarmupOptimizer(
+            dense_opt,
+            [
+                WarmupStage(
+                    policy=WarmupPolicy.LINEAR,
+                    value=0.15,
+                    lr_scale=1.0,
+                )
+            ],
+            lr=0.01,
+            param_name="__dense_warmup",
+        )
+        opt: CombinedOptimizer = CombinedOptimizer(
+            [fused_opt_scheduled, (dense_opt_scheduled)]
+        )
+        # Runs a dummy optimizer step, which allows to initialize
+        #   optimizer state, which is typically lazy.
+        # This allows us to do in-place loading of optimizer state from a checkpoint.
+        # Remark that fused optimizer needs speical case as its states are ShardedTensors.
+        # This is the reason we need to pass the sparse_grad_parameter_names as parameters.
+        opt.init_state(sparse_grad_parameter_names)
+        opt.save_param_groups(True)
 
         ######## run one iteration ########
         _, local_batch = ModelInput.generate(
@@ -116,14 +186,19 @@ class FSDPTest(unittest.TestCase):
         )
         batch = local_batch[0].to(device)
         sharded_m(batch)[1].sum().backward()
+        opt.step()
+
+        # TODO uncomment after fixing
+        # buffer = io.BytesIO()
+        # # Use FSDP state_dict() API instead of default
+        # opt_state_dict = FullyShardedDataParallel._optim_state_dict(sharded_m, opt)
+        # torch.save(opt_state_dict, buffer)
+        # buffer.seek(0)
 
         writer = FileSystemWriter(path=path)
         reader = FileSystemReader(path=path)
-        with FullyShardedDataParallel.state_dict_type(
-            sharded_m, StateDictType.SHARDED_STATE_DICT
-        ):
-            state_dict = sharded_m.state_dict()
-
+        # TODO add StateDictType.SHARDED_STATE_DICT test
+        state_dict = sharded_m.state_dict()
         save_state_dict(state_dict, writer)
 
         p_sum = torch.zeros(1, device=device)
@@ -136,13 +211,21 @@ class FSDPTest(unittest.TestCase):
                 p_sum += p.sum()
                 p.zero_()
                 assert p.sum() == 0
+        o_sum = torch.zeros(1, device=device)
+        for p_v in opt.state_dict()["state"].values():
+            for t in p_v.values():
+                if isinstance(t, ShardedTensor):
+                    if not t.local_shards():
+                        continue
+                    t = t.local_tensor()
+                o_sum += t.sum()
+                t.zero_()
+                assert t.sum() == 0
 
-        with FullyShardedDataParallel.state_dict_type(
-            sharded_m, StateDictType.SHARDED_STATE_DICT
-        ):
-            state_dict = sharded_m.state_dict()
-            load_state_dict(state_dict, reader)
-            sharded_m.load_state_dict(state_dict)
+        state_dict = sharded_m.state_dict()
+        load_state_dict(state_dict, reader)
+        missing, unexpected = sharded_m.load_state_dict(state_dict)
+        assert len(missing) == 0 and len(unexpected) == 0
 
         p_sum_loaded = torch.zeros(1, device=device)
         for p in sharded_m.parameters():
@@ -153,6 +236,19 @@ class FSDPTest(unittest.TestCase):
                     p = p.local_tensor()
                 p_sum_loaded += p.sum()
         assert p_sum.allclose(p_sum_loaded)
+
+        # Use FSDP load_state_dict() API instead of default
+        # TODO uncomment after fixing
+        # FullyShardedDataParallel._load_optim_state_dict_pre_hook(sharded_m, opt, torch.load(buffer))
+        # o_sum_loaded = torch.zeros(1, device=device)
+        # for p_v in opt.state_dict()["state"].values():
+        #     for t in p_v.values():
+        #         if isinstance(t, ShardedTensor):
+        #             if not t.local_shards():
+        #                 continue
+        #             t = t.local_tensor()
+        #         o_sum_loaded += t.sum()
+        # assert o_sum.allclose(o_sum_loaded)
 
     @skip_if_asan
     # pyre-ignore[56]

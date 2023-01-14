@@ -30,7 +30,7 @@ on:
 
 jobs:
   validate-binaries:
-    uses: pytorch/builder/.github/workflows/validate-domain-library.yml@main
+    uses: pytorch/test-infra/.github/workflows/validate-domain-library.yml@main
     with:
       package_type: "wheel"
       os: "linux"
