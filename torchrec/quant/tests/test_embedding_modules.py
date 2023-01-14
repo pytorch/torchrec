@@ -374,9 +374,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         qebc = QuantEmbeddingBagCollection.from_float(ebc)
 
         from torchrec.fx import symbolic_trace
-        from torchrec.quant.utils import populate_fx_names
 
-        populate_fx_names(qebc)
         gm = symbolic_trace(qebc)
 
         features = KeyedJaggedTensor(
