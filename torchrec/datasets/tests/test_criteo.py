@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import math
 import os
 import random
 import tempfile
@@ -378,19 +379,16 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 dataset_len = num_rows // 2
 
             lens = []
-            num_batches = dataset_len // (world_size * batch_size)
-            if num_batches == 0:
-                batch_size = dataset_len // world_size
-                num_batches = 1
-            remainder = dataset_len % (world_size * batch_size) // batch_size
+            remainder = dataset_len % (world_size * batch_size)
             total_samples_count = 0
             for rank in range(world_size):
-                end_batch_size = batch_size
-                if rank < remainder:
-                    end_batch_size += batch_size
-                elif rank == remainder:
-                    end_batch_size += dataset_len % batch_size
-
+                end_batch_size = remainder // world_size
+                num_batches = math.ceil(dataset_len / (world_size * batch_size))
+                if 0 < remainder < world_size:
+                    num_batches -= 1
+                    end_batch_size = batch_size
+                if rank < (remainder % world_size):
+                    end_batch_size += 1
                 datapipe = InMemoryBinaryCriteoIterDataPipe(
                     stage=stage,
                     dense_paths=[f[0] for f in files],
@@ -411,7 +409,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                             batch.dense_features[0, 0].item(),
                             dataset_start,
                         )
-                    if len_ < num_batches - 1:
+                    if len_ < num_batches - 1 or end_batch_size == 0:
                         self._validate_batch(batch, batch_size=batch_size)
                     else:
                         self._validate_batch(batch, batch_size=end_batch_size)
@@ -461,20 +459,11 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
             rows_per_rank = np.array([rows_per_rank for _ in range(world_size)])
             rows_per_rank[:remainder] += 1
             lens = []
-            shuffle_world_size = 1
             total_samples_count = 0
             for rank in range(world_size):
                 shuffle_dataset_len = rows_per_rank[rank]
-                num_batches = shuffle_dataset_len // (shuffle_world_size * batch_size)
-                if num_batches == 0:
-                    batch_size = shuffle_dataset_len // shuffle_world_size
-                    num_batches = 1
-                remainder = (
-                    shuffle_dataset_len
-                    % (shuffle_world_size * batch_size)
-                    // batch_size
-                )
-                end_batch_size = batch_size + shuffle_dataset_len % batch_size
+                num_batches = math.ceil(shuffle_dataset_len / batch_size)
+                end_batch_size = shuffle_dataset_len % batch_size
 
                 datapipe = InMemoryBinaryCriteoIterDataPipe(
                     stage="train",
@@ -502,7 +491,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
                 np.testing.assert_array_equal(target_shuffled_arr, target_shuffled_arr_)
                 len_ = 0
                 for batch in datapipe:
-                    if len_ < num_batches - 1:
+                    if len_ < num_batches - 1 or end_batch_size == 0:
                         self._validate_batch(batch, batch_size=batch_size)
                     else:
                         self._validate_batch(batch, batch_size=end_batch_size)
