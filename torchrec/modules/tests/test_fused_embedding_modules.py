@@ -29,6 +29,7 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.test_utils import skipIfRocm
 
 devices: List[torch.device] = [torch.device("cpu")]
 if torch.cuda.device_count() > 1:
@@ -506,6 +507,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
 
     @settings(deadline=None)
     # pyre-ignore
+    @skipIfRocm() 
     @given(
         optimizer_type_and_kwargs=st.sampled_from(
             [
