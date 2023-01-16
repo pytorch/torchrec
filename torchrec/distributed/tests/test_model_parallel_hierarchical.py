@@ -23,8 +23,7 @@ from torchrec.distributed.test_utils.test_sharding import (
     SharderType,
 )
 from torchrec.distributed.types import ShardingType
-from torchrec.test_utils import skip_if_asan_class
-import pdb
+from torchrec.test_utils import skip_if_asan_class, skipIfRocm
 
 @skip_if_asan_class
 class ModelParallelHierarchicalTest(ModelParallelTestShared):
@@ -247,7 +246,6 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
     ) -> None:
-        pdb.set_trace()
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
             apply_optimizer_in_backward_config is None
@@ -272,6 +270,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
 
+    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs, this test requires at least four GPUs",
