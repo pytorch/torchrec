@@ -67,6 +67,12 @@ class TableBatchedEmbeddingSlice(nn.Parameter):
     @grad.setter
     def grad(self, set_grad: torch.Tensor) -> None:
         self._init_grad = set_grad
+        if set_grad is None:
+            self._original_tensor.grad = None
+        elif self._original_tensor.grad is not None:
+            self._original_tensor.grad[self._start_offset : self._end_offset].copy_(
+                set_grad.view(-1)
+            )
 
     @property
     def grad_fn(self) -> None:
