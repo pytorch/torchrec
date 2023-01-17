@@ -50,6 +50,12 @@ from torchrec.test_utils import (
 )
 
 
+def _optional_equals(t1: Optional[torch.Tensor], t2: Optional[torch.Tensor]) -> bool:
+    if t1 is None:
+        return t2 is None
+    return t2 is not None and torch.equal(t1, t2)
+
+
 def _test_sharding(  # noqa C901
     tables: List[EmbeddingBagConfig],
     initial_state_dict: Dict[str, Any],
@@ -133,9 +139,17 @@ def _test_sharding(  # noqa C901
             feature_keys.extend(table.feature_names)
 
         for _it in range(5):
+            unsharded_model_params = dict(unsharded_model.named_parameters())
+
             if not use_apply_optimizer_in_backward:
                 unsharded_model_optimizer.zero_grad()
                 sharded_model_optimizer.zero_grad()
+
+            if is_data_parallel:
+                for fqn, param in sharded_model.named_parameters():
+                    assert _optional_equals(
+                        param.grad, unsharded_model_params[fqn].grad
+                    )
 
             unsharded_model_pred_kt = []
             for unsharded_rank in range(ctx.world_size):
@@ -187,6 +201,13 @@ def _test_sharding(  # noqa C901
             if is_data_parallel:
                 _sum /= world_size
             _sum.backward()
+
+            if is_data_parallel:
+                for fqn, param in sharded_model.named_parameters():
+                    assert _optional_equals(
+                        param.grad, unsharded_model_params[fqn].grad
+                    )
+
             if not use_apply_optimizer_in_backward:
                 unsharded_model_optimizer.step()
                 sharded_model_optimizer.step()
@@ -197,9 +218,8 @@ def _test_sharding(  # noqa C901
         for fqn in unsharded_model.state_dict():
             unsharded_state = unsharded_model.state_dict()[fqn]
             sharded_state = sharded_model.state_dict()[fqn]
-
             if is_data_parallel:
-                continue
+                torch.testing.assert_close(unsharded_state, sharded_state)
             else:
                 out = (
                     torch.zeros(size=unsharded_state.shape, device=ctx.device)
