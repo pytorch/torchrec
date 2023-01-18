@@ -414,6 +414,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         missing_keys = []
         unexpected_keys = []
         module = get_module(module)
+        if isinstance(module, FullyShardedDataParallel):
+            return module.load_state_dict(state_dict, strict)
         if isinstance(module, DistributedDataParallel):
             torch.nn.modules.utils.consume_prefix_in_state_dict_if_present(
                 state_dict, prefix

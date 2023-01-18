@@ -7,10 +7,12 @@
 
 #!/usr/bin/env python3
 
+import io
 import os
 import tempfile
 import unittest
 import uuid
+from typing import List
 
 import torch
 from torch import distributed as dist, nn
@@ -29,6 +31,8 @@ from torch.distributed.launcher.api import elastic_launch, LaunchConfig
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
+from torchrec.distributed import DistributedModelParallel
+from torchrec.distributed.model_parallel import DataParallelWrapper
 from torchrec.distributed.shard import (
     shard as trec_shard,
     shard_modules as trec_shard_modules,
@@ -39,7 +43,7 @@ from torchrec.distributed.sharding_plan import (
     row_wise,
 )
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
-from torchrec.distributed.types import ShardingPlan
+from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
@@ -348,6 +352,147 @@ class FSDPTestComposable(unittest.TestCase):
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_composable_forward(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lc = LaunchConfig(
+                min_nodes=1,
+                max_nodes=1,
+                nproc_per_node=2,
+                run_id=str(uuid.uuid4()),
+                rdzv_backend="c10d",
+                rdzv_endpoint=os.path.join(tmpdir, "rdzv"),
+                rdzv_configs={"store_type": "file"},
+                start_method="spawn",
+                monitor_interval=1,
+                max_restarts=0,
+            )
+            elastic_launch(config=lc, entrypoint=self._run)()
+
+
+class FSDPDataParallelWrapper(DataParallelWrapper):
+    def _get_ignored_modules(self, module: torch.nn.Module) -> List[torch.nn.Module]:
+        ignored_modules = []
+        for _, m in module.named_modules():
+            if isinstance(m, ShardedModule):
+                ignored_modules.append(m)
+        return ignored_modules
+
+    def wrap(
+        self, dmp: DistributedModelParallel, env: ShardingEnv, device: torch.device
+    ) -> None:
+        dmp._dmp_wrapped_module = FullyShardedDataParallel(
+            dmp._dmp_wrapped_module.to(device),
+            device_id=device,
+            ignored_modules=self._get_ignored_modules(dmp._dmp_wrapped_module),
+        )
+
+
+class NonComposableDMP_FSDPTest(unittest.TestCase):
+    @classmethod
+    def _run(cls) -> None:
+        rank = int(os.environ["LOCAL_RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        device: torch.device = torch.device(f"cuda:{rank}")
+        backend = "nccl"
+        torch.cuda.set_device(device)
+        dist.init_process_group(backend=backend)
+        num_float_features = 32
+
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(3)
+        ]
+        weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4,
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(2)
+        ]
+        m = TestSparseNN(
+            tables=tables,
+            num_float_features=num_float_features,
+            weighted_tables=weighted_tables,
+            dense_device=device,
+        )
+        plan = ShardingPlan(
+            plan={
+                "sparse.ebc": construct_module_sharding_plan(
+                    m.sparse.ebc,
+                    apply_to_all(m.sparse.ebc, row_wise()),
+                ),
+                "sparse.weighted_ebc": construct_module_sharding_plan(
+                    m.sparse.weighted_ebc,
+                    apply_to_all(m.sparse.weighted_ebc, row_wise()),
+                ),
+            }
+        )
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            m.sparse.parameters(),
+            {"lr": 0.01},
+        )
+        sharded_m = DistributedModelParallel(
+            module=m,
+            device=device,
+            plan=plan,
+            data_parallel_wrapper=FSDPDataParallelWrapper(),
+        )
+
+        ######## run one iteration ########
+        _, local_batch = ModelInput.generate(
+            batch_size=8,
+            world_size=world_size,
+            num_float_features=num_float_features,
+            tables=tables,
+            weighted_tables=weighted_tables,
+        )
+        batch = local_batch[0].to(device)
+        sharded_m(batch)[1].sum().backward()
+
+        state_dict = sharded_m.state_dict()
+        buffer = io.BytesIO()
+        torch.save(state_dict, buffer)
+        buffer.seek(0)
+
+        p_sum = torch.zeros(1, device=device)
+        for p in sharded_m.parameters():
+            with torch.no_grad():
+                if isinstance(p, ShardedTensor):
+                    if not p.local_shards():
+                        continue
+                    p = p.local_tensor()
+                p_sum += p.sum()
+                p.zero_()
+                assert p.sum() == 0
+
+        state_dict = sharded_m.state_dict()
+        missing, unexpected = sharded_m.load_state_dict(torch.load(buffer))
+        assert len(missing) == 0 and len(unexpected) == 0
+
+        p_sum_loaded = torch.zeros(1, device=device)
+        for p in sharded_m.parameters():
+            with torch.no_grad():
+                if isinstance(p, ShardedTensor):
+                    if not p.local_shards():
+                        continue
+                    p = p.local_tensor()
+                p_sum_loaded += p.sum()
+        assert p_sum.allclose(p_sum_loaded)
+
+    @skip_if_asan
+    # pyre-ignore[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             lc = LaunchConfig(
                 min_nodes=1,
