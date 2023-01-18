@@ -12,8 +12,6 @@ import tempfile
 import unittest
 import uuid
 
-import apex
-
 import torch
 from torch import distributed as dist, nn
 from torch.distributed._composable import fully_shard
@@ -120,16 +118,12 @@ class FSDPTest(unittest.TestCase):
         )
         dense_opt = KeyedOptimizerWrapper(
             dict(in_backward_optimizer_filter(m.named_parameters(), include=False)),
-            lambda params: apex.optimizers.FusedLAMB(
+            lambda params: torch.optim.Adam(
                 params,
                 lr=0.01,
-                bias_correction=True,
                 betas=(0.9, 0.999),
                 eps=1e-5,
                 weight_decay=1e-05,
-                adam_w_mode=True,
-                grad_averaging=True,
-                set_grad_none=True,
             ),
         )
         optims = []
