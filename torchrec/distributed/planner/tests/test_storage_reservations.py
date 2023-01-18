@@ -144,3 +144,36 @@ class TestHeuristicalStorageReservation(unittest.TestCase):
             # pyre-ignore
             heuristical_storage_reservation._dense_storage.hbm,
         )
+
+    def test_storage_reservations_with_dense_estimation(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="table_0",
+                feature_names=["feature_0"],
+            )
+        ]
+
+        ebc = EmbeddingBagCollection(tables)
+        model = TestModel(shardable_sparse=ebc)
+
+        dense_tensor_estimate = 1000000
+        heuristical_storage_reservation = HeuristicalStorageReservation(
+            percentage=0.0, dense_tensor_estimate=dense_tensor_estimate
+        )
+
+        heuristical_storage_reservation.reserve(
+            topology=Topology(world_size=2, compute_device="cuda"),
+            batch_size=10,
+            module=model,
+            sharders=cast(
+                List[ModuleSharder[nn.Module]], [EmbeddingBagCollectionSharder()]
+            ),
+        )
+
+        self.assertEqual(
+            dense_tensor_estimate,
+            # pyre-ignore
+            heuristical_storage_reservation._dense_storage.hbm,
+        )

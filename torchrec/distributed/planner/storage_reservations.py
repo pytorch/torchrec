@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import logging
 import math
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -19,6 +20,9 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.types import ModuleSharder
+
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _get_module_size(module: nn.Module, multiplier: float) -> int:
@@ -36,19 +40,35 @@ def _get_module_size(module: nn.Module, multiplier: float) -> int:
     return round(parameters_size + buffers_size)
 
 
-def _reserve_dense_storage(
-    topology: Topology,
+def _get_dense_tensor_size(
     module: nn.Module,
     shardable_modules: Set[nn.Module],
-    multiplier: float,
-) -> Storage:
-
+    multiplier: float = 6.0,
+) -> int:
     dense_tensor_size = _get_module_size(module, multiplier) - sum(
         [
             _get_module_size(shardable_module, multiplier)
             for shardable_module in shardable_modules
         ]
     )
+    return dense_tensor_size
+
+
+def _reserve_dense_storage(
+    topology: Topology,
+    module: nn.Module,
+    shardable_modules: Set[nn.Module],
+    multiplier: float,
+    dense_tensor_estimate: Optional[int] = None,
+) -> Storage:
+
+    dense_tensor_size = _get_dense_tensor_size(module, shardable_modules, multiplier)
+    if dense_tensor_estimate:
+        logger.info(
+            f"We override default dense tensor estimate ({dense_tensor_size} bytes) "
+            f"with user-provided dense tensor estimate ({dense_tensor_estimate} bytes)."
+        )
+        dense_tensor_size = dense_tensor_estimate
 
     dense_tensor_storage = Storage(
         hbm=dense_tensor_size if topology.compute_device == "cuda" else 0,
@@ -162,10 +182,12 @@ class HeuristicalStorageReservation(StorageReservation):
         # heuristic: 6 * dense parameter size
         # parameter + optimizer (~2x parameter) + ddp (~3x parameter)
         parameter_multiplier: float = 6.0,
+        dense_tensor_estimate: Optional[int] = None,
     ) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
         self._parameter_multiplier = parameter_multiplier
+        self._dense_tensor_estimate = dense_tensor_estimate
 
         self._dense_storage: Optional[Storage] = None
         self._kjt_storage: Optional[Storage] = None
@@ -191,6 +213,7 @@ class HeuristicalStorageReservation(StorageReservation):
             module=module,
             shardable_modules=shardable_modules,
             multiplier=self._parameter_multiplier,
+            dense_tensor_estimate=self._dense_tensor_estimate,
         )
 
         self._kjt_storage = _reserve_kjt_storage(
