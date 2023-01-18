@@ -252,7 +252,6 @@ def quantize_dense(
         ):
             if dtype == torch.half:
                 new_mod = mod.half()
-                # pyre-ignore [6]
                 new_mod.register_forward_pre_hook(quantize_feature)
                 reassign[name] = new_mod
             else:
