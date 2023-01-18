@@ -856,6 +856,9 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
         keys = ["index_0", "index_1", "index_2"]
         lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0, 0, 1, 0])
+        # f0  []  [1 2] []  [3]
+        # f1  [4] [5]   []  [6 7 8]
+        # f2  []  []    [9] []
 
         kjt_expected = KeyedJaggedTensor.from_lengths_sync(
             values=values,
@@ -865,12 +868,12 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         kjt_actual = KeyedJaggedTensor.concat(
             [
                 KeyedJaggedTensor.from_lengths_sync(
-                    values=values[:4],
+                    values=values[:3],
                     keys=keys[:1],
                     lengths=lengths[:4],
                 ),
                 KeyedJaggedTensor.from_lengths_sync(
-                    values=values[4:],
+                    values=values[3:],
                     keys=keys[1:],
                     lengths=lengths[4:],
                 ),
