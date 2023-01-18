@@ -237,6 +237,7 @@ class ShardedQuantEmbeddingCollection(
         self.register_buffer(
             "_features_order_tensor",
             torch.tensor(self._features_order, device=device, dtype=torch.int32),
+            persistent=False,
         )
 
     def _create_lookups(self, fused_params: Optional[Dict[str, Any]]) -> None:
