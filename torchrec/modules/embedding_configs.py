@@ -70,11 +70,11 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
 
 
 def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
-    if pooling_type == PoolingType.SUM:
+    if pooling_type.value == PoolingType.SUM.value:
         return PoolingMode.SUM
-    elif pooling_type == PoolingType.MEAN:
+    elif pooling_type.value == PoolingType.MEAN.value:
         return PoolingMode.MEAN
-    elif pooling_type == PoolingType.NONE:
+    elif pooling_type.value == PoolingType.NONE.value:
         return PoolingMode.NONE
     else:
         raise Exception(f"Invalid pooling type {pooling_type}")
