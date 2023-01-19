@@ -82,47 +82,13 @@ def shard(
     return sharder_map[type(module)].shard(module, plan, env, device)
 
 
-# pyre-ignore
-@contract()
-def shard_modules(
+def _shard_modules_impl(
     module: nn.Module,
     env: Optional[ShardingEnv] = None,
     device: Optional[torch.device] = None,
     plan: Optional[ShardingPlan] = None,
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
 ) -> nn.Module:
-    """
-    Replaces all sub_modules that are embedding modules with their sharded variants. This embedding_module -> sharded_embedding_module mapping
-    is derived from the passed in sharders.
-
-    This will leave the other parts of the model unaffected.
-
-    It returns the original module
-
-    Args:
-        module (nn.Module): module to wrap.
-        env (Optional[ShardingEnv]): sharding environment that has the process group.
-        device (Optional[torch.device]): compute device, defaults to cpu.
-        plan (Optional[ShardingPlan]): plan to use when sharding, defaults to
-            `EmbeddingShardingPlanner.collective_plan()`.
-        sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
-            to shard with, defaults to `get_default_sharders()`.
-
-    Example::
-
-        @torch.no_grad()
-        def init_weights(m):
-            if isinstance(m, nn.Linear):
-                m.weight.fill_(1.0)
-            elif isinstance(m, EmbeddingBagCollection):
-                for param in m.parameters():
-                    init.kaiming_normal_(param)
-
-        m = MyModel(device='meta')
-        m = shard(m)
-        assert isinstance(m.embedding_bag_collection, ShardedEmbeddingBagCollection)
-    """
-
     if sharders is None:
         sharders = get_default_sharders()
 
@@ -180,3 +146,57 @@ def shard_modules(
     _replace(module)
 
     return module
+
+
+# pyre-ignore
+@contract()
+def shard_modules(
+    module: nn.Module,
+    env: Optional[ShardingEnv] = None,
+    device: Optional[torch.device] = None,
+    plan: Optional[ShardingPlan] = None,
+    sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+) -> nn.Module:
+    """
+    Replaces all sub_modules that are embedding modules with their sharded variants. This embedding_module -> sharded_embedding_module mapping
+    is derived from the passed in sharders.
+
+    This will leave the other parts of the model unaffected.
+
+    It returns the original module
+
+    Args:
+        module (nn.Module): module to wrap.
+        env (Optional[ShardingEnv]): sharding environment that has the process group.
+        device (Optional[torch.device]): compute device, defaults to cpu.
+        plan (Optional[ShardingPlan]): plan to use when sharding, defaults to
+            `EmbeddingShardingPlanner.collective_plan()`.
+        sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
+            to shard with, defaults to `get_default_sharders()`.
+
+    Example::
+
+        @torch.no_grad()
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                m.weight.fill_(1.0)
+            elif isinstance(m, EmbeddingBagCollection):
+                for param in m.parameters():
+                    init.kaiming_normal_(param)
+
+        m = MyModel(device='meta')
+        m = shard(m)
+        assert isinstance(m.embedding_bag_collection, ShardedEmbeddingBagCollection)
+    """
+    return _shard_modules_impl(module, env, device, plan, sharders)
+
+
+# TODO Can remove this on 6/10/22. (verify with @seanmao first)
+def shard_modules_inference(
+    module: nn.Module,
+    env: Optional[ShardingEnv] = None,
+    device: Optional[torch.device] = None,
+    plan: Optional[ShardingPlan] = None,
+    sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+) -> nn.Module:
+    return _shard_modules_impl(module, env, device, plan, sharders)
