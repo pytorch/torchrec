@@ -76,9 +76,9 @@ class TestFusedOptim(unittest.TestCase):
         for name, param in ebc.named_parameters():
             table_name = name[len("embedding_bags.") : -len("weight") - 1]
             self.assertEqual(
-                param._overlapped_optimizer.state_dict()["state"][
-                    f"{table_name}.weight"
-                ][f"{table_name}.momentum1"]
+                param._overlapped_optimizer.state_dict()["state"][""][
+                    f"{table_name}.momentum1"
+                ]
                 .local_tensor()
                 .data_ptr(),
                 ebc._optim.state_dict()["state"][f"embedding_bags.{table_name}.weight"][

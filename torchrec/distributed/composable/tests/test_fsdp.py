@@ -130,21 +130,20 @@ class FSDPTest(unittest.TestCase):
         sparse_grad_parameter_names = set()
         for name, p in in_backward_optimizer_filter(m.named_parameters(), include=True):
             # Add learning rate scheduler
-            optims.append(
-                WarmupOptimizer(
-                    # pyre-ignore
-                    p._overlapped_optimizer,
-                    [
-                        WarmupStage(
-                            policy=WarmupPolicy.LINEAR,
-                            value=0.1,
-                            lr_scale=1.0,
-                        )
-                    ],
-                    lr=0.01,  # initial learning rate
-                    param_name=f"__sparse_warmup_{name}",
-                )
+            warmup = WarmupOptimizer(
+                # pyre-ignore
+                p._overlapped_optimizer,
+                [
+                    WarmupStage(
+                        policy=WarmupPolicy.LINEAR,
+                        value=0.1,
+                        lr_scale=1.0,
+                    )
+                ],
+                lr=0.01,  # initial learning rate
+                param_name="__sparse_warmup",
             )
+            optims.append((name, warmup))
             sparse_grad_parameter_names.add(name)
         fused_opt_scheduled = CombinedOptimizer(optims)
         dense_opt_scheduled = WarmupOptimizer(
