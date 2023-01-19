@@ -542,6 +542,7 @@ class ShardedEmbeddingBagCollection(
                 torch.tensor(
                     self._features_order, device=self._device, dtype=torch.int32
                 ),
+                persistent=False,
             )
 
     def _create_lookups(

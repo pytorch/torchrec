@@ -585,6 +585,7 @@ class ShardedEmbeddingCollection(
         self.register_buffer(
             "_features_order_tensor",
             torch.tensor(self._features_order, device=self._device, dtype=torch.int32),
+            persistent=False,
         )
 
     def _create_lookups(self) -> None:

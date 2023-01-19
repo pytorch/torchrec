@@ -197,6 +197,7 @@ class ShardedEmbeddingTower(
                 torch.tensor(
                     self._kjt_features_order, device=self._device, dtype=torch.int32
                 ),
+                persistent=False,
             )
 
         if self._wkjt_feature_names != wkjt_feature_names:
@@ -208,6 +209,7 @@ class ShardedEmbeddingTower(
                 torch.tensor(
                     self._wkjt_features_order, device=self._device, dtype=torch.int32
                 ),
+                persistent=False,
             )
 
         node_count = dist.get_world_size(self._cross_pg)
