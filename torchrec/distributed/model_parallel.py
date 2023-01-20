@@ -62,6 +62,12 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
     Default data parallel wrapper, which applies data parallel to all unsharded modules.
     """
 
+    def __init__(
+        self,
+        bucket_cap_mb: int = 25,
+    ) -> None:
+        self._bucket_cap_mb: int = bucket_cap_mb
+
     def wrap(
         self,
         dmp: "DistributedModelParallel",
@@ -95,6 +101,7 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
                 static_graph=True,
+                bucket_cap_mb=self._bucket_cap_mb,
             ),
         )
 
