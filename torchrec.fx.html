@@ -370,12 +370,27 @@ be used as arguments to nodes in the <code class="docutils literal notranslate">
 <dd><p>Override FX definition to include quantized embedding bags</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.module_stack">
+<span class="sig-name descname"><span class="pre">module_stack</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">OrderedDict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.module_stack" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.node_name_to_scope">
+<span class="sig-name descname"><span class="pre">node_name_to_scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.node_name_to_scope" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.path_of_module">
 <span class="sig-name descname"><span class="pre">path_of_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mod</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.path_of_module" title="Permalink to this definition">¶</a></dt>
 <dd><p>Allows trace-ability of non registered modules. This is typically used for Table Batched Embeddings
 made to look like nn.EmbeddingBags</p>
 </dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.scope">
+<span class="sig-name descname"><span class="pre">scope</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Scope</span></em><a class="headerlink" href="#torchrec.fx.tracer.Tracer.scope" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.trace">
@@ -475,7 +490,10 @@ into a Graph representation.</p></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.create_arg"><code class="docutils literal notranslate"><span class="pre">Tracer.create_arg()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.graph"><code class="docutils literal notranslate"><span class="pre">Tracer.graph</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.is_leaf_module"><code class="docutils literal notranslate"><span class="pre">Tracer.is_leaf_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.module_stack"><code class="docutils literal notranslate"><span class="pre">Tracer.module_stack</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.node_name_to_scope"><code class="docutils literal notranslate"><span class="pre">Tracer.node_name_to_scope</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.path_of_module"><code class="docutils literal notranslate"><span class="pre">Tracer.path_of_module()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.scope"><code class="docutils literal notranslate"><span class="pre">Tracer.scope</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.fx.tracer.Tracer.trace"><code class="docutils literal notranslate"><span class="pre">Tracer.trace()</span></code></a></li>
 </ul>
 </li>
