@@ -13,6 +13,7 @@ from typing import (
     cast,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -36,7 +37,7 @@ In = TypeVar("In", bound=Pipelineable)
 Out = TypeVar("Out")
 
 
-class TrainPipeline(abc.ABC, Generic[In, Out]):
+class TrainPipeline(Iterator[Out], abc.ABC, Generic[In, Out]):
     @abc.abstractmethod
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         pass
@@ -68,7 +69,7 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     batch.record_stream(cur_stream)
 
 
-class TrainPipelineBase(TrainPipeline[In, Out]):
+class TrainPipelineBase(TrainPipeline[In, Out], Iterable[Out]):
     """
     This class runs training iterations using a pipeline of two stages, each as a CUDA
     stream, namely, the current (default) stream and `self._memcpy_stream`. For each
@@ -81,15 +82,25 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        dataloader_iter: Optional[Iterator[In]] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
+        self._dataloader_iter = dataloader_iter
         self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
             torch.cuda.Stream() if device.type == "cuda" else None
         )
         self._cur_batch: Optional[In] = None
         self._connected = False
+
+    def __iter__(self) -> "TrainPipelineBase[In, Out]":
+        return self
+
+    def __next__(self) -> Out:
+        dataloader_iter = self._dataloader_iter
+        assert dataloader_iter is not None
+        return self.progress(dataloader_iter)
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
@@ -468,10 +479,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        dataloader_iter: Optional[Iterator[In]] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
+        self._dataloader_iter = dataloader_iter
         # use two data streams to support two concurrent batches
         if device.type == "cuda":
             self._memcpy_stream: Optional[
@@ -489,6 +502,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._connected = False
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+
+    def __iter__(self) -> "TrainPipelineSparseDist[In, Out]":
+        return self
+
+    def __next__(self) -> Out:
+        dataloader_iter = self._dataloader_iter
+        assert dataloader_iter is not None
+        return self.progress(dataloader_iter)
 
     def _replace_fp_forward(self, model: torch.nn.Module) -> None:
         for _, m in model.named_modules():

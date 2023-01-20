@@ -12,6 +12,7 @@ from typing import cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
+from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
@@ -119,12 +120,14 @@ class TrainPipelineBaseTest(unittest.TestCase):
         torch.backends.cudnn.allow_tf32 = False
         torch.backends.cuda.matmul.allow_tf32 = False
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPUs",
     )
-    def test_equal_to_non_pipelined(self) -> None:
+    # pyre-fixme[56]
+    @given(iter_api=st.sampled_from([True, False]))
+    @settings(verbosity=Verbosity.verbose, deadline=None)
+    def test_equal_to_non_pipelined(self, iter_api: bool) -> None:
         model_cpu = TestModule()
         model_gpu = TestModule().to(self.device)
         model_gpu.load_state_dict(model_cpu.state_dict())
@@ -138,7 +141,12 @@ class TrainPipelineBaseTest(unittest.TestCase):
             for b in range(5)
         ]
         dataloader = iter(data)
-        pipeline = TrainPipelineBase(model_gpu, optimizer_gpu, self.device)
+        if iter_api:
+            pipeline = iter(
+                TrainPipelineBase(model_gpu, optimizer_gpu, self.device, dataloader)
+            )
+        else:
+            pipeline = TrainPipelineBase(model_gpu, optimizer_gpu, self.device)
 
         for example in data[:-1]:
             optimizer_cpu.zero_grad()
@@ -146,7 +154,10 @@ class TrainPipelineBaseTest(unittest.TestCase):
             loss.backward()
             optimizer_cpu.step()
 
-            pred_gpu = pipeline.progress(dataloader)
+            if iter_api:
+                pred_gpu = next(pipeline)
+            else:
+                pred_gpu = pipeline.progress(dataloader)
 
             self.assertEqual(pred_gpu.device, self.device)
             self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
@@ -191,15 +202,13 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         unsharded_model: TestSparseNN,
         distributed_model: DistributedModelParallel,
         fp_tables: List[EmbeddingBagConfig],
+        iter_api: bool,
     ) -> None:
         copy_state_dict(unsharded_model.state_dict(), distributed_model.state_dict())
         optimizer_cpu = optim.SGD(unsharded_model.parameters(), lr=0.1)
         optimizer_distributed = KeyedOptimizerWrapper(
             dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
-        )
-        pipeline = TrainPipelineSparseDist(
-            distributed_model, optimizer_distributed, self.device
         )
 
         data = [
@@ -214,6 +223,17 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         ]
         dataloader = iter(data)
 
+        if iter_api:
+            pipeline = iter(
+                TrainPipelineSparseDist(
+                    distributed_model, optimizer_distributed, self.device, dataloader
+                )
+            )
+        else:
+            pipeline = TrainPipelineSparseDist(
+                distributed_model, optimizer_distributed, self.device
+            )
+
         for example in data[:-2]:
             optimizer_cpu.zero_grad()
             loss, pred = unsharded_model(example)
@@ -221,19 +241,25 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             example.idscore_features._jt_dict = None
             loss.backward()
             optimizer_cpu.step()
-            pred_gpu = pipeline.progress(dataloader)
+
+            if iter_api:
+                pred_gpu = next(pipeline)
+            else:
+                pred_gpu = pipeline.progress(dataloader)
 
             self.assertEqual(pred_gpu.device, self.device)
             self.assertEqual(pred_gpu.cpu().size(), pred.size())
             torch.testing.assert_close(pred_gpu.cpu(), pred)
             self.assertEqual(len(pipeline._pipelined_modules), 3)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPUs",
     )
-    def test_position_weighted_feature_processor(self) -> None:
+    # pyre-fixme[56]
+    @given(iter_api=st.sampled_from([True, False]))
+    @settings(verbosity=Verbosity.verbose, deadline=None)
+    def test_position_weighted_feature_processor(self, iter_api: bool) -> None:
         max_feature_length = 100
         table_num = 2
         fp_tables = [
@@ -276,7 +302,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             max_feature_lengths_list=max_feature_lengths_list,
         )
         self._test_feature_processor_helper(
-            test_unsharded_model, distributed_model, fp_tables
+            test_unsharded_model, distributed_model, fp_tables, iter_api
         )
 
     def _test_move_cpu_gpu_helper(
@@ -289,9 +315,6 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         optimizer_distributed = KeyedOptimizerWrapper(
             dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
-        )
-        pipeline = TrainPipelineSparseDist(
-            distributed_model, optimizer_distributed, self.device
         )
 
         data = [
@@ -306,13 +329,19 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         ]
         dataloader = iter(data)
 
+        pipeline = iter(
+            TrainPipelineSparseDist(
+                distributed_model, optimizer_distributed, self.device, dataloader
+            )
+        )
+
         for example in data[:-2]:
             optimizer_cpu.zero_grad()
             loss, pred = model_cpu(example)
             loss.backward()
             optimizer_cpu.step()
 
-            pred_gpu = pipeline.progress(dataloader)
+            pred_gpu = next(pipeline)
 
             self.assertEqual(pred_gpu.device, self.device)
             self.assertEqual(pred_gpu.cpu().size(), pred.size())
