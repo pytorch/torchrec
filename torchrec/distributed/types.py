@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
 
+from tabulate import tabulate
+
 from torch.autograd.profiler import record_function
 from torchrec.types import ModuleNoCopyMixin
 
@@ -238,7 +240,6 @@ class NoWait(Awaitable[W]):
         return self._obj
 
 
-# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class _LazyAwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     """
     The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
@@ -447,7 +448,41 @@ class ShardingPlan:
         return self.plan.get(module_path, None)
 
     def __str__(self) -> str:
-        return str(self.plan)
+        out = ""
+        for i, (module_path, module_plan) in enumerate(self.plan.items()):
+            if i > 0:
+                out += "\n\n"
+            out += "module: " + module_path
+            param_table = []
+            shard_table = []
+            for param_name, param_sharding in module_plan.items():
+                param_table.append(
+                    [
+                        param_name,
+                        param_sharding.sharding_type,
+                        param_sharding.compute_kernel,
+                        param_sharding.ranks,
+                    ]
+                )
+                if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
+                    shards = param_sharding.sharding_spec.shards
+                    if shards is not None:
+                        for shard in shards:
+                            shard_table.append(
+                                [
+                                    param_name,
+                                    shard.shard_offsets,
+                                    shard.shard_sizes,
+                                    shard.placement,
+                                ]
+                            )
+            out += "\n\n" + tabulate(
+                param_table, ["param", "sharding type", "compute kernel", "ranks"]
+            )
+            out += "\n\n" + tabulate(
+                shard_table, ["param", "shard offsets", "shard sizes", "placement"]
+            )
+        return out
 
 
 ShardedModuleContext = Multistreamable
