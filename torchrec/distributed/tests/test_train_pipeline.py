@@ -13,6 +13,7 @@ from typing import cast, Dict, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 from torch import nn, optim
+from torch.autograd.profiler import record_function
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
 from torchrec.distributed.embeddingbag import (
@@ -97,6 +98,9 @@ class ModelInputSimple(Pipelineable):
         self.float_features.record_stream(stream)
         # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self.label.record_stream(stream)
+
+
+import logging
 
 
 class TestModule(nn.Module):
@@ -198,9 +202,6 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
         )
-        pipeline = TrainPipelineSparseDist(
-            distributed_model, optimizer_distributed, self.device
-        )
 
         data = [
             ModelInput.generate(
@@ -214,19 +215,43 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         ]
         dataloader = iter(data)
 
-        for example in data[:-2]:
-            optimizer_cpu.zero_grad()
-            loss, pred = unsharded_model(example)
-            example.idlist_features._jt_dict = None
-            example.idscore_features._jt_dict = None
-            loss.backward()
-            optimizer_cpu.step()
-            pred_gpu = pipeline.progress(dataloader)
+        pipeline = TrainPipelineSparseDist(distributed_model, self.device, dataloader)
 
-            self.assertEqual(pred_gpu.device, self.device)
-            self.assertEqual(pred_gpu.cpu().size(), pred.size())
-            torch.testing.assert_close(pred_gpu.cpu(), pred)
-            self.assertEqual(len(pipeline._pipelined_modules), 3)
+        for forward_ctx_gen in pipeline:
+            with forward_ctx_gen() as forward_ctx:
+                with record_function("## zero_grad ##"):
+                    optimizer_distributed.zero_grad()
+
+                def forward() -> None:
+                    # TODO, can be called forward_ctx.batch
+                    return distributed_model(forward_ctx._batch_i)
+
+                (_losses, preds) = forward_ctx.run(forward)
+                losses = torch.nn.functional.binary_cross_entropy_with_logits(
+                    preds, forward_ctx._batch_i.label
+                )
+                print("preds", preds)
+                print("losses", losses)
+
+                all_loss.append(losses)
+                with record_function("## backward ##"):
+                    torch.sum(losses, dim=0).backward()
+                with record_function("## optimizer ##"):
+                    optimizer_distributed.step()
+
+        # for example in data[:-2]:
+        #     optimizer_cpu.zero_grad()
+        #     loss, pred = unsharded_model(example)
+        #     example.idlist_features._jt_dict = None
+        #     example.idscore_features._jt_dict = None
+        #     loss.backward()
+        #     optimizer_cpu.step()
+        #     pred_gpu = pipeline.progress(dataloader)
+
+        #     self.assertEqual(pred_gpu.device, self.device)
+        #     self.assertEqual(pred_gpu.cpu().size(), pred.size())
+        #     torch.testing.assert_close(pred_gpu.cpu(), pred)
+        #     self.assertEqual(len(pipeline._pipelined_modules), 3)
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(

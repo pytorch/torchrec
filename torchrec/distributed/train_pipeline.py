@@ -10,9 +10,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import (
     Any,
+    Callable,
     cast,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -68,7 +70,7 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     batch.record_stream(cur_stream)
 
 
-class TrainPipelineBase(TrainPipeline[In, Out]):
+class TrainPipelineBase(TrainPipeline[In, Out], Iterable[Out]):
     """
     This class runs training iterations using a pipeline of two stages, each as a CUDA
     stream, namely, the current (default) stream and `self._memcpy_stream`. For each
@@ -81,10 +83,12 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        dataloader_iter: Iterator[In] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
+        self._dataloader_iter = dataloader_iter
         self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
             torch.cuda.Stream() if device.type == "cuda" else None
         )
@@ -99,12 +103,19 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._connected = True
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        self._dataloader_iter = dataloader_iter
+        return self.__next__()
+
+    def __iter__(self) -> Iterator[Out]:
+        return self
+
+    def __next__(self) -> Out:
         if not self._connected:
-            self._connect(dataloader_iter)
+            self._connect(self._dataloader_iter)
 
         # Fetch next batch
         with record_function("## next_batch ##"):
-            next_batch = next(dataloader_iter)
+            next_batch = next(self._dataloader_iter)
         cur_batch = self._cur_batch
         assert cur_batch is not None
 
@@ -397,10 +408,6 @@ def _rewrite_model(  # noqa C901
     dist_stream: Optional[torch.cuda.streams.Stream],
 ) -> List[ShardedModule]:
 
-    # Get underlying nn.Module
-    if isinstance(model, DistributedModelParallel):
-        model = model.module
-
     # Collect a list of sharded modules.
     sharded_modules = {}
     fp_modules = {}
@@ -443,6 +450,73 @@ def _rewrite_model(  # noqa C901
     return ret
 
 
+class TrainPipelineForwardContext:
+    # pyre-ignore
+    def __init__(self, pipeline) -> None:
+        # pyre-ignore
+        self._pipeline = pipeline
+        self._batch_i = None
+        self._batch_ip1 = None
+        self._batch_ip2 = None
+
+    def __enter__(self) -> None:
+        if not self._pipeline._connected:
+            self._pipeline._connect(self._pipeline._dataloader_iter)
+        elif self._pipeline.__class__.synced_pipeline_id.get(
+            id(self._pipeline._model), None
+        ) != id(self._pipeline):
+            self._pipeline._sync_pipeline()
+            self._pipeline.__class__.synced_pipeline_id[id(self._pipeline._model)] = id(
+                self._pipeline
+            )
+        return self
+
+    def run(self, callable: Callable) -> None:
+        with record_function("## copy_batch_to_gpu ##"):
+            with torch.cuda.stream(self._pipeline._memcpy_stream):
+                try:
+                    batch_ip2 = next(self._pipeline._dataloader_iter)
+                    self._batch_ip2 = _to_device(
+                        batch_ip2, self._pipeline._device, non_blocking=True
+                    )
+                except StopIteration:
+                    self._pipeline._stop = True
+
+        self._batch_i = self._pipeline._batch_i
+        self._batch_ip1 = self._pipeline._batch_ip1
+
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(self._batch_i, self._pipeline._data_dist_stream)
+
+        # Forward
+        with record_function("## forward ##"):
+            # if using multiple streams (ie. CUDA), create an event in default stream
+            # before starting forward pass
+            if self._pipeline._data_dist_stream:
+                event = torch.cuda.current_stream().record_event()
+            callable_output = tuple(callable())
+
+        # Data Distribution
+        with record_function("## sparse_data_dist ##"):
+            with torch.cuda.stream(self._pipeline._data_dist_stream):
+                _wait_for_batch(self._batch_ip1, self._pipeline._memcpy_stream)
+                # Ensure event in default stream has been called before
+                # starting data dist
+                if self._pipeline._data_dist_stream:
+                    # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
+                    self._pipeline._data_dist_stream.wait_event(event)
+                _start_data_dist(
+                    self._pipeline._pipelined_modules,
+                    self._batch_ip1,
+                    self._pipeline._context,
+                )
+        return callable_output
+
+    def __exit__(self, *args, **kwargs) -> None:
+        self._pipeline._batch_i = self._batch_ip1
+        self._pipeline._batch_ip1 = self._batch_ip2
+
+
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     """
     This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
@@ -466,12 +540,16 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     def __init__(
         self,
         model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
         device: torch.device,
+        dataloader_iter: Iterator[In],
     ) -> None:
+        # Get underlying nn.Module
+        if isinstance(model, DistributedModelParallel):
+            model = model.module
+
         self._model = model
-        self._optimizer = optimizer
         self._device = device
+        self._dataloader_iter = dataloader_iter
         # use two data streams to support two concurrent batches
         if device.type == "cuda":
             self._memcpy_stream: Optional[
@@ -489,6 +567,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._connected = False
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+        self._stop = False
 
     def _replace_fp_forward(self, model: torch.nn.Module) -> None:
         for _, m in model.named_modules():
@@ -498,7 +577,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 m.forward = lambda x: x
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
-        self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
+        self._replace_fp_forward(self._model)
         # batch 1
         with torch.cuda.stream(self._memcpy_stream):
             batch_i = next(dataloader_iter)
@@ -523,61 +602,16 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._connected = True
         self.__class__.synced_pipeline_id[id(self._model)] = id(self)
 
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        if not self._connected:
-            self._connect(dataloader_iter)
-        elif self.__class__.synced_pipeline_id.get(id(self._model), None) != id(self):
-            self._sync_pipeline()
-            self.__class__.synced_pipeline_id[id(self._model)] = id(self)
+    def __iter__(self) -> Iterator[Out]:
+        return self
 
-        if self._model.training:
-            with record_function("## zero_grad ##"):
-                self._optimizer.zero_grad()
+    def __next__(self):
+        if self._stop:
+            raise StopIteration
 
-        with record_function("## copy_batch_to_gpu ##"):
-            with torch.cuda.stream(self._memcpy_stream):
-                batch_ip2 = next(dataloader_iter)
-                self._batch_ip2 = batch_ip2 = _to_device(
-                    batch_ip2, self._device, non_blocking=True
-                )
-        batch_i = cast(In, self._batch_i)
-        batch_ip1 = cast(In, self._batch_ip1)
-
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(batch_i, self._data_dist_stream)
-
-        # Forward
-        with record_function("## forward ##"):
-            # if using multiple streams (ie. CUDA), create an event in default stream
-            # before starting forward pass
-            if self._data_dist_stream:
-                event = torch.cuda.current_stream().record_event()
-            (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
-
-        # Data Distribution
-        with record_function("## sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_dist_stream):
-                _wait_for_batch(batch_ip1, self._memcpy_stream)
-                # Ensure event in default stream has been called before
-                # starting data dist
-                if self._data_dist_stream:
-                    # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
-                    self._data_dist_stream.wait_event(event)
-                _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
-
-        if self._model.training:
-            # Backward
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
-            # Update
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
-
-        self._batch_i = batch_ip1
-        self._batch_ip1 = batch_ip2
-
-        return output
+        # if self._batch_ip1 is None:
+            # raise StopIteration
+        return lambda: TrainPipelineForwardContext(self)
 
     def _sync_pipeline(self) -> None:
         """
@@ -588,3 +622,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         for module in self._pipelined_modules:
             module.forward._context = self._context
             module.forward._dist_stream = self._data_dist_stream
+
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        return
