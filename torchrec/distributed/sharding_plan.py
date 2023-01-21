@@ -140,14 +140,14 @@ def _calculate_rw_shard_sizes_and_offsets(
 
 
 def _calculate_cw_shard_sizes_and_offsets(
-    hash_size: int,
+    columns: int,
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     block_size: int = min(
-        col_wise_shard_dim if col_wise_shard_dim else MIN_CW_DIM, hash_size
+        col_wise_shard_dim if col_wise_shard_dim else MIN_CW_DIM, columns
     )
-    num_col_wise_shards, residual = divmod(hash_size, block_size)
+    num_col_wise_shards, residual = divmod(columns, block_size)
 
     shard_sizes: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
     shard_sizes.append([rows, block_size + residual])

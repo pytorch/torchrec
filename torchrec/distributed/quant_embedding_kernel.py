@@ -126,26 +126,25 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 )
             else:
                 managed.append(EmbeddingLocation.HOST)
-        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
-            IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
-                    (
-                        "",
-                        local_rows,
-                        table.embedding_dim,
-                        data_type_to_sparse_type(config.data_type),
-                        location,
-                    )
-                    for local_rows, table, location in zip(
-                        self._local_rows, config.embedding_tables, managed
-                    )
-                ],
-                device=device,
-                pooling_mode=self._pooling,
-                feature_table_map=self._feature_table_map,
-                row_alignment=16,
-                **(fused_params or {}),
-            )
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_specs=[
+                (
+                    "",
+                    local_rows,
+                    table.embedding_dim,
+                    data_type_to_sparse_type(config.data_type),
+                    location,
+                )
+                for local_rows, table, location in zip(
+                    self._local_rows, config.embedding_tables, managed
+                )
+            ],
+            device=device,
+            pooling_mode=self._pooling,
+            feature_table_map=self._feature_table_map,
+            row_alignment=16,
+            uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            **(fused_params or {}),
         )
         if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
@@ -232,26 +231,25 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
                 )
             else:
                 managed.append(EmbeddingLocation.HOST)
-        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
-            IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
-                    (
-                        "",
-                        local_rows,
-                        table.embedding_dim,
-                        data_type_to_sparse_type(config.data_type),
-                        location,
-                    )
-                    for local_rows, table, location in zip(
-                        self._local_rows, config.embedding_tables, managed
-                    )
-                ],
-                device=device,
-                pooling_mode=PoolingMode.NONE,
-                feature_table_map=self._feature_table_map,
-                row_alignment=16,
-                **(fused_params or {}),
-            )
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_specs=[
+                (
+                    "",
+                    local_rows,
+                    table.embedding_dim,
+                    data_type_to_sparse_type(config.data_type),
+                    location,
+                )
+                for local_rows, table, location in zip(
+                    self._local_rows, config.embedding_tables, managed
+                )
+            ],
+            device=device,
+            pooling_mode=PoolingMode.NONE,
+            feature_table_map=self._feature_table_map,
+            row_alignment=16,
+            uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            **(fused_params or {}),
         )
         if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
