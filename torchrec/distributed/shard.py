@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, List, Optional, Type
+from typing import Callable, Dict, List, Optional, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -14,6 +14,10 @@ from torch.distributed._composable.contract import contract
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.model_parallel import get_default_sharders
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.sharding_plan import (
+    get_module_to_default_sharders,
+    ParameterShardingGenerator,
+)
 from torchrec.distributed.types import (
     ModuleSharder,
     ModuleShardingPlan,
@@ -30,10 +34,14 @@ def _join_module_path(path: str, name: str) -> str:
 @contract()
 def shard(
     module: nn.Module,
-    plan: ModuleShardingPlan,
+    plan: Union[
+        ModuleShardingPlan,
+        Dict[str, ParameterShardingGenerator],
+        ParameterShardingGenerator,
+    ],
     env: Optional[ShardingEnv] = None,
     device: Optional[torch.device] = None,
-    sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+    sharder: Optional[ModuleSharder[nn.Module]] = None,
 ) -> nn.Module:
     """
     Replaces this module with its sharded variant
@@ -46,20 +54,23 @@ def shard(
         module (nn.Module): module to wrap.
         env (Optional[ShardingEnv]): sharding environment that has the process group.
         device (Optional[torch.device]): compute device, defaults to cpu.
-        plan (Optional[ShardingPlan]): plan to use when sharding, defaults to
-            `EmbeddingShardingPlanner.collective_plan()`.
-        sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
-            to shard with, defaults to `get_default_sharders()`.
+        plan (Union[ModuleShardingPlan, Dict[str, ParameterShardingGenerator], ParameterShardingGenerator]):
+            dict of ParameterSharding (materized plan) or ParameterShardingGenerator (which will be run to produce ParameterSharding).
+            If single ParameterShardingGenerator is supplied, it will be applied to all module parameters.
+        sharder (Optional[List[ModuleSharder[nn.Module]]]): sharder to use, default is picked from `get_default_sharders()`.
 
-    Example::
+    Example:
 
         ebc = EmbeddingBagCollection()
-        sharded_ebc = shard(ebc)
+        sharded_ebc = shard(ebc, table_row_wise(host_index=0))
         assert isinstance(sharded_ebc, ShardedEmbeddingBagCollection)
     """
 
-    if sharders is None:
-        sharders = get_default_sharders()
+    if sharder is None:
+        sharder = get_module_to_default_sharders().get(type(module), None)
+    assert (
+        sharder is not None
+    ), f"Could not find a valid sharder type for {type(module)}"
 
     if env is None:
         pg = dist.GroupMember.WORLD
@@ -72,14 +83,32 @@ def shard(
         else:
             device = torch.device("cpu")
 
-    sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
-        sharder.module_type: sharder for sharder in sharders
-    }
-    assert (
-        type(module) in sharder_map
-    ), f"module is of type {type(module)} which is not in sharder_map {sharder_map}"
+    # Run sharding generators.
+    shardable_parameters = sharder.shardable_parameters(module)
+    if isinstance(plan, Callable):
+        gen = plan
+        plan = {}
+        for table_name, param in shardable_parameters.items():
+            plan[table_name] = gen(
+                param,
+                get_local_size(env.world_size),
+                env.world_size,
+                device.type,
+                sharder,
+            )
+    else:
+        for table_name, sharding in plan.items():
+            if isinstance(sharding, Callable):
+                param = shardable_parameters[table_name]
+                plan[table_name] = sharding(
+                    param,
+                    get_local_size(env.world_size),
+                    env.world_size,
+                    device.type,
+                    sharder,
+                )
 
-    return sharder_map[type(module)].shard(module, plan, env, device)
+    return sharder.shard(module, plan, env, device)
 
 
 # pyre-ignore
