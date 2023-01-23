@@ -82,6 +82,7 @@ def apply_optimizer_in_backward(
             param._overlapped_optimizer.step()
             param.grad = None
 
+        # pyre-fixme[16]: Optional type has no attribute `register_hook`.
         param._acc_grad.register_hook(optimizer_hook)
 
     for param in params:
