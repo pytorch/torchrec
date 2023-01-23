@@ -62,27 +62,27 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 device=ctx.device,
             )
 
-            ebc.embedding_bags["table_0"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_0.weight"]["table_0.momentum1"].gather(
+            ebc.embedding_bags["table_0"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_0.weight"]["table_0.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # sharded column, each shard will have rowwise state
                 else torch.empty((4 * tables[0].num_embeddings,), device=ctx.device),
             )
 
-            ebc.embedding_bags["table_1"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_1.weight"]["table_1.momentum1"].gather(
+            ebc.embedding_bags["table_1"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_1.weight"]["table_1.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # sharded rowwise
                 else torch.empty((tables[1].num_embeddings,), device=ctx.device),
             )
 
-            ebc.embedding_bags["table_2"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_2.weight"]["table_2.momentum1"].gather(
+            ebc.embedding_bags["table_2"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_2.weight"]["table_2.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
@@ -92,18 +92,18 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 ),
             )
 
-            ebc.embedding_bags["table_2"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_2.weight"]["table_2.momentum2"].gather(
+            ebc.embedding_bags["table_2"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_2.weight"]["table_2.momentum2"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
                 else torch.empty((4 * tables[2].num_embeddings,), device=ctx.device),
             )
 
-            ebc.embedding_bags["table_3"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_3.weight"]["table_3.momentum1"].gather(
+            ebc.embedding_bags["table_3"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_3.weight"]["table_3.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Row wise - with partial rowwise adam, first state is point wise
@@ -113,9 +113,9 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 ),
             )
 
-            ebc.embedding_bags["table_3"].weight._overlapped_optimizer.state_dict()[
-                "state"
-            ]["table_3.weight"]["table_3.momentum2"].gather(
+            ebc.embedding_bags["table_3"].weight._in_backward_optimizers[
+                0
+            ].state_dict()["state"]["table_3.weight"]["table_3.momentum2"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
