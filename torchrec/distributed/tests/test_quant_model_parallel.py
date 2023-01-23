@@ -333,8 +333,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             env=ShardingEnv.from_local(world_size=2, rank=0),
         )
 
-        sharded_model = sharded_model.to(device)
-
         sharded_model_copy = copy_to_device(
             module=sharded_model, current_device=device, to_device=device_1
         )
