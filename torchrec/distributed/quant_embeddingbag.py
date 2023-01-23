@@ -192,7 +192,7 @@ class ShardedQuantEmbeddingBagCollection(
                 )
             features_by_shards = features.split(self._feature_splits)
             awaitables = [
-                self._input_dists[i](features_by_shards[i])
+                self._input_dists[i].forward(features_by_shards[i])
                 for i in range(len(self._input_dists))
             ]
             return ListOfKJTListSplitsAwaitable(awaitables)
@@ -203,7 +203,7 @@ class ShardedQuantEmbeddingBagCollection(
         dist_input: ListOfKJTList,
     ) -> List[List[torch.Tensor]]:
         # syntax for torchscript
-        return [lookup(dist_input[i]) for i, lookup in enumerate(self._lookups)]
+        return [lookup.forward(dist_input[i]) for i, lookup in enumerate(self._lookups)]
 
     def output_dist(
         self,
@@ -212,7 +212,9 @@ class ShardedQuantEmbeddingBagCollection(
     ) -> LazyAwaitable[KeyedTensor]:
         return EmbeddingBagCollectionAwaitable(
             # syntax for torchscript
-            awaitables=[dist(output[i]) for i, dist in enumerate(self._output_dists)],
+            awaitables=[
+                dist.forward(output[i]) for i, dist in enumerate(self._output_dists)
+            ],
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
         )

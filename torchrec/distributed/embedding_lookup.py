@@ -552,7 +552,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
             ):
                 features = self._feature_processor(features)
-            embeddings.append(emb_op(features))
+            embeddings.append(emb_op.forward(features))
 
         if len(embeddings) == 0:
             # a hack for empty ranks
@@ -622,7 +622,7 @@ class InferGroupedLookupMixin(ABC):
             self._embedding_lookups_per_rank,
         ):
             sparse_features_rank = sparse_features[i]
-            embeddings.append(embedding_lookup(sparse_features_rank))
+            embeddings.append(embedding_lookup.forward(sparse_features_rank))
         return embeddings
 
     def state_dict(
