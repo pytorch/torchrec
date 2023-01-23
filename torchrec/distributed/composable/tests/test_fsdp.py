@@ -304,18 +304,12 @@ class FSDPTestComposable(unittest.TestCase):
         m.sparse.ebc = trec_shard(
             module=m.sparse.ebc,
             device=device,
-            plan=construct_module_sharding_plan(
-                m.sparse.ebc,
-                apply_to_all(m.sparse.ebc, row_wise()),
-            ),
+            plan=row_wise(),
         )
         m.sparse.weighted_ebc = trec_shard(
             module=m.sparse.weighted_ebc,
             device=device,
-            plan=construct_module_sharding_plan(
-                m.sparse.weighted_ebc,
-                apply_to_all(m.sparse.weighted_ebc, row_wise()),
-            ),
+            plan=row_wise(),
         )
         m.dense = fully_shard(
             m.dense,
