@@ -7,8 +7,9 @@
 
 import abc
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Type, TypeVar, Union
+from typing import Any, BinaryIO, Dict, List, Type, TypeVar, Union
 
+import torch
 from torch.package import PackageExporter
 from torchrec.inference.modules import PredictFactory
 
@@ -62,8 +63,11 @@ class PredictFactoryPackager:
         output: Union[str, Path, BinaryIO],
         extra_files: Dict[str, Union[str, bytes]],
         loader_code: str = LOADER_CODE,
+        package_importer: Union[
+            torch.package.Importer, List[torch.package.Importer]
+        ] = torch.package.sys_importer,
     ) -> None:
-        with PackageExporter(output) as pe:
+        with PackageExporter(output, importer=package_importer) as pe:
             # pyre-fixme[29]: `BoundMethod[abc.abstractclassmethod[None],
             #  Type[PredictFactoryPackager]]` is not a function.
             cls.set_extern_modules(pe)
@@ -90,8 +94,15 @@ class PredictFactoryPackager:
         configs: Dict[str, Any],
         loader_code: str = LOADER_CODE,
     ) -> None:
+        # If predict_factory is coming from a torch package,
+        # __module__ would have <torch_package_x> prefix.
+        # To save such predict factory, we need to remove
+        # the prefix.
+        package_name = predict_factory.__module__
+        if package_name.startswith("<torch_package_"):
+            package_name = ".".join(package_name.split(".")[1:])
         # Save loader entry point.
-        code = loader_code.replace("%PACKAGE%", predict_factory.__module__).replace(
+        code = loader_code.replace("%PACKAGE%", package_name).replace(
             "%CLASS%", predict_factory.__name__
         )
         pe.save_source_string(module_name=LOADER_MODULE, src=code)
