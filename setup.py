@@ -46,6 +46,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default="torchrec",
         help="the name of this output wheel",
     )
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="override version",
+    )
     return parser.parse_known_args(argv)
 
 
@@ -66,7 +72,9 @@ def main(argv: List[str]) -> None:
         reqs = f.read()
         install_requires = reqs.strip().split("\n")
 
-    version = get_nightly_version() if channel == "nightly" else get_version()
+    version = args.version
+    if version is None:
+        version = get_nightly_version() if channel == "nightly" else get_version()
 
     if channel != "nightly":
         if "fbgemm-gpu-nightly" in install_requires:
