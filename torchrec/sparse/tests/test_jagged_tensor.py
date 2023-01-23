@@ -433,6 +433,36 @@ JaggedTensor({
 """,
         )
 
+    def test_from_jt_dict(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        keys = ["index_0", "index_1"]
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+
+        jag_tensor = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+        jag_tensor_dict = jag_tensor.to_dict()
+        kjt = KeyedJaggedTensor.from_jt_dict(jag_tensor_dict)
+        j0 = kjt["index_0"]
+        j1 = kjt["index_1"]
+
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.IntTensor([2, 0, 1])))
+        self.assertTrue(torch.equal(j0.weights(), torch.Tensor([1.0, 0.5, 1.5])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([1.0, 2.0, 3.0])))
+        self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([1, 1, 3])))
+        self.assertTrue(
+            torch.equal(j1.weights(), torch.Tensor([1.0, 0.5, 1.0, 1.0, 1.5]))
+        )
+        self.assertTrue(
+            torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
+        )
+
 
 class TestJaggedTensorTracing(unittest.TestCase):
     def test_jagged_tensor(self) -> None:
