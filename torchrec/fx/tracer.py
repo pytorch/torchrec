@@ -127,12 +127,8 @@ class Tracer(torch.fx.Tracer):
         if hasattr(mod, "_fx_path"):
             # pyre-ignore
             return mod._fx_path
-        try:
+        else:
             return super().path_of_module(mod)
-        except NameError as e:
-            print(f"NameError {e}")
-            # TODO(T140754678): Remove this workaround to _fx_path
-            return f"_torchrec_fake_module_path_{mod.__class__}_{id(mod)}"
 
 
 def symbolic_trace(
