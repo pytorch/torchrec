@@ -46,6 +46,8 @@ from torchrec.quant.embedding_modules import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
+torch.fx.wrap("len")
+
 
 def create_infer_embedding_bag_sharding(
     sharding_type: str,
@@ -190,10 +192,8 @@ class ShardedQuantEmbeddingBagCollection(
                 )
             features_by_shards = features.split(self._feature_splits)
             awaitables = [
-                input_dist(features_by_shard)
-                for input_dist, features_by_shard in zip(
-                    self._input_dists, features_by_shards
-                )
+                self._input_dists[i](features_by_shards[i])
+                for i in range(len(self._input_dists))
             ]
             return ListOfKJTListSplitsAwaitable(awaitables)
 

@@ -359,7 +359,7 @@ class TestOverArch(nn.Module):
 @torch.fx.wrap
 def _post_sparsenn_forward(
     ebc: KeyedTensor,
-    fp_ebc: KeyedTensor,
+    fp_ebc: Optional[KeyedTensor],
     w_ebc: KeyedTensor,
     batch_size: Optional[int] = None,
 ) -> KeyedTensor:
@@ -404,8 +404,11 @@ def _post_sparsenn_forward(
             length_per_key=ebc.length_per_key()
             + fp_ebc.length_per_key()
             + w_ebc.length_per_key(),
-            # pyre-ignore[6]
-            values=torch.cat([ebc_values, fp_ebc_values, w_ebc_values], dim=1),
+            # Comment to torch.jit._unwrap_optional fp_ebc_values is inferred as Optional[Tensor] as it can be None when fp_ebc is None. But at this point we now that it has a value and doing jit._unwrap_optional will tell jit to treat it as Tensor type.
+            values=torch.cat(
+                [ebc_values, torch.jit._unwrap_optional(fp_ebc_values), w_ebc_values],
+                dim=1,
+            ),
         )
     )
     return result
@@ -493,7 +496,9 @@ class TestSparseArch(nn.Module):
             for fp in self.fps:
                 fp_features = fp(fp_features)
         ebc = self.ebc(features)
-        fp_ebc = self.fp_ebc(fp_features) if self.fp_ebc is not None else None
+        fp_ebc: Optional[KeyedTensor] = (
+            self.fp_ebc(fp_features) if self.fp_ebc is not None else None
+        )
         w_ebc = self.weighted_ebc(weighted_features)
         result = _post_sparsenn_forward(ebc, fp_ebc, w_ebc, batch_size)
         return result

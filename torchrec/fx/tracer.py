@@ -11,7 +11,8 @@ import torch
 from torch.fx._compatibility import compatibility
 from torch.fx.graph import Graph
 from torch.fx.node import Argument
-from torchrec.distributed.types import NoWait
+from torchrec.distributed.types import LazyAwaitable, NoWait
+from torchrec.fx.utils import dmp_fx_trace_forward
 
 _is_fx_tracing_flag = False
 
@@ -53,11 +54,31 @@ class Tracer(torch.fx.Tracer):
         global _is_fx_tracing_flag
         old_is_fx_tracing_flag = _is_fx_tracing_flag
         _is_fx_tracing_flag = True
+        if isinstance(root, torch.nn.Module):
+            for prefix, module in root.named_modules():
+                # TODO(T140754678): Remove this workaround to _fx_path
+                module._fx_path = prefix
+
         try:
-            graph = super().trace(
-                root,
-                concrete_args,
-            )
+            # TODO(ivankobzarev): support DMP not only on the root level
+            # Not importing DistributedModelParallel here to avoid circular dependencies as DMP depends on torchrec.fx.tracer
+            clz = root.__class__
+            if (
+                f"{clz.__module__}.{clz.__name__}"
+                == "torchrec.distributed.model_parallel.DistributedModelParallel"
+            ):
+                dmp = root
+                graph = super().trace(
+                    dmp_fx_trace_forward(dmp, self),
+                    concrete_args,
+                )
+                # pyre-ignore
+                self.root._dmp_wrapped_module = root._dmp_wrapped_module
+            else:
+                graph = super().trace(
+                    root,
+                    concrete_args,
+                )
         finally:
             _is_fx_tracing_flag = old_is_fx_tracing_flag
         return graph
@@ -84,6 +105,17 @@ class Tracer(torch.fx.Tracer):
                 kwargs={},
                 type_expr=NoWait,
             )
+        # jit script has explicit convertions to torch.device from str
+        if isinstance(a, torch.device):
+            return super().create_arg(f"{a.type}:{a.index}")
+
+        # Not equivalent to when LazyAwaitable.wait() is called in eager. Here can be called earlier, as attr was not requested and this is not guranteed to be torch function
+        # TODO(ivankobzarev): support equivalent timing of LazyAwaitable
+        if isinstance(a, LazyAwaitable):
+            if a._result is None:
+                a._result = a.wait()
+            return super().create_arg(a._result)
+
         return super().create_arg(a)
 
     def path_of_module(self, mod: torch.nn.Module) -> str:
@@ -95,7 +127,12 @@ class Tracer(torch.fx.Tracer):
         if hasattr(mod, "_fx_path"):
             # pyre-ignore
             return mod._fx_path
-        return super().path_of_module(mod)
+        try:
+            return super().path_of_module(mod)
+        except NameError as e:
+            print(f"NameError {e}")
+            # TODO(T140754678): Remove this workaround to _fx_path
+            return f"_torchrec_fake_module_path_{mod.__class__}_{id(mod)}"
 
 
 def symbolic_trace(
