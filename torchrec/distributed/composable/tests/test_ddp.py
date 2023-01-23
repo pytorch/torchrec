@@ -123,6 +123,8 @@ class DDPTest(unittest.TestCase):
         # assert p_sum.allclose(p_sum_loaded)
 
     @skip_if_asan
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    #  `torch.cuda.device_count() <= 1` to decorator factory `unittest.skipIf`.
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
