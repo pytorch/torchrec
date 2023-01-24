@@ -67,7 +67,7 @@ def main(argv: List[str]) -> None:
     ) as f:
         readme = f.read()
     with open(
-        os.path.join(os.path.dirname(__file__), "requirements.txt"), encoding="utf8"
+        os.path.join(os.path.dirname(__file__), "install-requirements.txt"), encoding="utf8"
     ) as f:
         reqs = f.read()
         install_requires = reqs.strip().split("\n")
