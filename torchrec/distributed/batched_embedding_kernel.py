@@ -369,7 +369,7 @@ def _named_parameters_by_table_fused(
         )
         # hack before we support optimizer on sharded parameter level
         # pyre-ignore
-        weight._overlapped_optimizer = optim_per_table[table_name]
+        weight._in_backward_optimizers = [optim_per_table[table_name]]
         yield (table_name, weight)
 
 
@@ -593,7 +593,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             # can delete after SEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
-            param._overlapped_optimizer = EmptyFusedOptimizer()
+            param._in_backward_optimizers = [EmptyFusedOptimizer()]
             yield name, param
 
     def flush(self) -> None:
@@ -883,7 +883,7 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             # can delete after PEA deprecation
             param = nn.Parameter(tensor)
             # pyre-ignore
-            param._overlapped_optimizer = EmptyFusedOptimizer()
+            param._in_backward_optimizers = [EmptyFusedOptimizer()]
             yield name, param
 
     def flush(self) -> None:

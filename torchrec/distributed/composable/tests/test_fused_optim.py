@@ -76,9 +76,10 @@ class TestFusedOptim(unittest.TestCase):
         for name, param in ebc.named_parameters():
             table_name = name[len("embedding_bags.") : -len("weight") - 1]
             self.assertEqual(
-                param._overlapped_optimizer.state_dict()["state"][
-                    f"{table_name}.weight"
-                ][f"{table_name}.momentum1"]
+                param._in_backward_optimizers[0]
+                .state_dict()["state"][f"{table_name}.weight"][
+                    f"{table_name}.momentum1"
+                ]
                 .local_tensor()
                 .data_ptr(),
                 ebc._optim.state_dict()["state"][f"embedding_bags.{table_name}.weight"][
@@ -116,23 +117,27 @@ class TestFusedOptim(unittest.TestCase):
             device=self.curr_device,
         )
         for param in ebc.parameters():
-            param._overlapped_optimizer = WarmupOptimizer(
-                param._overlapped_optimizer,
-                [
-                    WarmupStage(
-                        policy=WarmupPolicy.LINEAR,
-                        max_iters=10000,
-                        value=0.5,
-                        lr_scale=1.0,
-                    )
-                ],
-                param_name="__warmup_state",
-            )
-            param._overlapped_optimizer.step()
-            param._overlapped_optimizer.step()
-            warmup_state = param._overlapped_optimizer.state_dict()["state"][
+            param._in_backward_optimizers = [
+                WarmupOptimizer(
+                    param._in_backward_optimizers[0],
+                    [
+                        WarmupStage(
+                            policy=WarmupPolicy.LINEAR,
+                            max_iters=10000,
+                            value=0.5,
+                            lr_scale=1.0,
+                        )
+                    ],
+                    param_name="__warmup_state",
+                )
+            ]
+            param._in_backward_optimizers[0].step()
+            param._in_backward_optimizers[0].step()
+            warmup_state = param._in_backward_optimizers[0].state_dict()["state"][
                 "__warmup_state"
             ]
             _iter, _ = warmup_state["warmup"]
             self.assertEqual(_iter, 2)
-            self.assertEqual(param._overlapped_optimizer.param_groups[0]["lr"], 0.05001)
+            self.assertEqual(
+                param._in_backward_optimizers[0].param_groups[0]["lr"], 0.05001
+            )
