@@ -483,9 +483,9 @@ class ShardedEmbeddingCollection(
                     model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
-                    self.embeddings[
-                        table_name
-                    ].weight._overlapped_optimizer = EmptyFusedOptimizer()
+                    self.embeddings[table_name].weight._in_backward_optimizers = [
+                        EmptyFusedOptimizer()
+                    ]
             # created ShardedTensors once in init, use in post_state_dict_hook
             self._model_parallel_name_to_sharded_tensor[
                 table_name

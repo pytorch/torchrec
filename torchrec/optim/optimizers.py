@@ -21,15 +21,15 @@ def in_backward_optimizer_filter(
     """
     Filters named_parameters for whether they are or or not params that use
     the in_backward_optimizer.
-
+    Note: This only supports the in_backward_optimizer from PT-D's API.
+        The torchrec's equivalent API is deprecated and is not supported.
     Args:
     named_parameters(Iterator[Tuple[str, nn.Parameter]]): named_parameters
     include(bool): If true, only yields params with in_backward_optimizer. If false, returns the outside set
         Defaults to include params that are not in_backward (False)
     """
     for fqn, param in named_parameters:
-        # TODO: change to _in_backward_optimizer
-        if hasattr(param, "_overlapped_optimizer") == include:
+        if hasattr(param, "_in_backward_optimizers") == include:
             yield fqn, param
 
 

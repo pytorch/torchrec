@@ -34,6 +34,7 @@ from torchrec.distributed.types import (
     ModuleShardingPlan,
     ParameterSharding,
     ShardingEnv,
+    ShardingPlan,
     ShardingType,
     ShardMetadata,
 )
@@ -619,3 +620,61 @@ class ConstructParameterShardingTest(unittest.TestCase):
             ),
         }
         self.assertDictEqual(expected, module_sharding_plan)
+
+
+class ShardingPlanTest(unittest.TestCase):
+    def test_str(self) -> None:
+        plan = ShardingPlan(
+            {
+                "ebc": {
+                    "user_id": ParameterSharding(
+                        sharding_type="table_wise",
+                        compute_kernel="fused",
+                        ranks=[0],
+                        sharding_spec=EnumerableShardingSpec(
+                            [
+                                ShardMetadata(
+                                    shard_offsets=[0, 0],
+                                    shard_sizes=[4096, 32],
+                                    placement="rank:0/cuda:0",
+                                ),
+                            ]
+                        ),
+                    ),
+                    "movie_id": ParameterSharding(
+                        sharding_type="row_wise",
+                        compute_kernel="dense",
+                        ranks=[0, 1],
+                        sharding_spec=EnumerableShardingSpec(
+                            [
+                                ShardMetadata(
+                                    shard_offsets=[0, 0],
+                                    shard_sizes=[2048, 32],
+                                    placement="rank:0/cuda:0",
+                                ),
+                                ShardMetadata(
+                                    shard_offsets=[2048, 0],
+                                    shard_sizes=[2048, 32],
+                                    placement="rank:0/cuda:1",
+                                ),
+                            ]
+                        ),
+                    ),
+                }
+            }
+        )
+        expected = """
+module: ebc
+
+param     sharding type    compute kernel    ranks
+--------  ---------------  ----------------  -------
+user_id   table_wise       fused             [0]
+movie_id  row_wise         dense             [0, 1]
+
+param     shard offsets    shard sizes    placement
+--------  ---------------  -------------  -------------
+user_id   [0, 0]           [4096, 32]     rank:0/cuda:0
+movie_id  [0, 0]           [2048, 32]     rank:0/cuda:0
+movie_id  [2048, 0]        [2048, 32]     rank:0/cuda:1
+"""
+        self.assertEqual(expected.strip(), str(plan))

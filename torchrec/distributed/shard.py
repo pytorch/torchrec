@@ -100,6 +100,9 @@ def shard(
         for table_name, sharding in plan.items():
             if isinstance(sharding, Callable):
                 param = shardable_parameters[table_name]
+                # pyre-fixme[6]: For 2nd argument expected `(Parameter, int, int,
+                #  str, ModuleSharder[Module]) -> ParameterSharding` but got
+                #  `ParameterSharding`.
                 plan[table_name] = sharding(
                     param,
                     get_local_size(env.world_size),

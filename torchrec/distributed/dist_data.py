@@ -508,8 +508,8 @@ class KJTOneToAll(nn.Module):
 
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
-            split_kjt.to(torch.device("cuda", rank), non_blocking=True)
-            for rank, split_kjt in enumerate(kjts)
+            kjts[rank].to(torch.device("cuda", rank), non_blocking=True)
+            for rank in range(self._world_size)
         ]
         return NoWait(KJTList(dist_kjts))
 
@@ -680,7 +680,6 @@ class EmbeddingsAllToOne(nn.Module):
         Returns:
             Awaitable[torch.Tensor]: awaitable of the merged embeddings.
         """
-
         assert len(tensors) == self._world_size
         non_cat_size = tensors[0].size(1 - self._cat_dim)
         return NoWait(

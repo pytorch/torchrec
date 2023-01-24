@@ -159,7 +159,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         return self._emb_module
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module(
+        return self.emb_module.forward(
             indices=features.values().int(),
             offsets=features.offsets().int(),
             per_sample_weights=features.weights_or_none(),
