@@ -74,6 +74,7 @@ class PredictFactoryPackager:
             # pyre-fixme[29]: `BoundMethod[abc.abstractclassmethod[None],
             #  Type[PredictFactoryPackager]]` is not a function.
             cls.set_mocked_modules(pe)
+            pe.extern(["sys"])
             pe.intern("**")
             for k, v in extra_files.items():
                 if isinstance(v, str):
