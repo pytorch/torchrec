@@ -42,8 +42,8 @@ def compute_auc(
     return torch.cat(aucs)
 
 
-def _state_reduction(state: torch.Tensor) -> torch.Tensor:
-    return torch.cat(list(state), dim=-1)
+def _state_reduction(state: List[torch.Tensor]) -> List[torch.Tensor]:
+    return [torch.cat(state, dim=1)]
 
 
 class AUCMetricComputation(RecMetricComputation):
@@ -56,38 +56,50 @@ class AUCMetricComputation(RecMetricComputation):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.state_names: List[str] = [
-            PREDICTIONS,
-            LABELS,
-            WEIGHTS,
-        ]
         self._add_state(
-            self.state_names,
-            torch.zeros(
-                (len(self.state_names), self._n_tasks, 1),
-                dtype=torch.double,
-                device=self.device,
-            ),
+            PREDICTIONS,
+            [],
             add_window_state=False,
             dist_reduce_fx=_state_reduction,
             persistent=False,
         )
-
-    def _init_states(self) -> None:
-        state = getattr(self, self._fused_name)
-        state = torch.zeros(
-            (len(self.state_names), self._n_tasks, 1),
-            dtype=torch.double,
-            device=self.device,
+        self._add_state(
+            LABELS,
+            [],
+            add_window_state=False,
+            dist_reduce_fx=_state_reduction,
+            persistent=False,
         )
-        setattr(self, self._fused_name, state)
+        self._add_state(
+            WEIGHTS,
+            [],
+            add_window_state=False,
+            dist_reduce_fx=_state_reduction,
+            persistent=False,
+        )
+        self._init_states()
 
-        for name, _ in self._fused_map.items():
-            setattr(
-                self,
-                name,
-                torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device),
-            )
+    # The states values are set to empty lists in __init__() and reset(), and then we
+    # add a size (self._n_tasks, 1) tensor to each of the list as the initial values
+    # This is to bypass the limitation of state aggregation in TorchMetrics sync() when
+    # we try to checkpoint the states before update()
+    # The reason for using lists here is to avoid automatically stacking the tensors from
+    # all the trainers into one tensor in sync()
+    # The reason for using non-empty tensors as the first elements is to avoid the
+    # floating point exception thrown in sync() for aggregating empty tensors
+    def _init_states(self) -> None:
+        if len(getattr(self, PREDICTIONS)) > 0:
+            return
+
+        getattr(self, PREDICTIONS).append(
+            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+        )
+        getattr(self, LABELS).append(
+            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+        )
+        getattr(self, WEIGHTS).append(
+            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+        )
 
     def update(
         self,
@@ -104,14 +116,25 @@ class AUCMetricComputation(RecMetricComputation):
         predictions = predictions.double()
         labels = labels.double()
         weights = weights.double()
-        state = getattr(self, self._fused_name)
-        num_samples = state.size(-1)
+        num_samples = getattr(self, PREDICTIONS)[0].size(-1)
         batch_size = predictions.size(-1)
         start_index = max(num_samples + batch_size - self._window_size, 0)
-
-        states = torch.stack([predictions, labels, weights])
-        state = torch.cat([state[:, :, start_index:], states], dim=-1)
-        setattr(self, self._fused_name, state)
+        # Using `self.predictions =` will cause Pyre errors.
+        getattr(self, PREDICTIONS)[0] = torch.cat(
+            [
+                cast(torch.Tensor, getattr(self, PREDICTIONS)[0])[:, start_index:],
+                predictions,
+            ],
+            dim=-1,
+        )
+        getattr(self, LABELS)[0] = torch.cat(
+            [cast(torch.Tensor, getattr(self, LABELS)[0])[:, start_index:], labels],
+            dim=-1,
+        )
+        getattr(self, WEIGHTS)[0] = torch.cat(
+            [cast(torch.Tensor, getattr(self, WEIGHTS)[0])[:, start_index:], weights],
+            dim=-1,
+        )
 
     def _compute(self) -> List[MetricComputationReport]:
         return [
@@ -120,9 +143,9 @@ class AUCMetricComputation(RecMetricComputation):
                 metric_prefix=MetricPrefix.WINDOW,
                 value=compute_auc(
                     self._n_tasks,
-                    self.get_state(PREDICTIONS),
-                    self.get_state(LABELS),
-                    self.get_state(WEIGHTS),
+                    cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
+                    cast(torch.Tensor, getattr(self, LABELS)[0]),
+                    cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
                 ),
             )
         ]

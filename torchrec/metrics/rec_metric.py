@@ -11,7 +11,6 @@ import abc
 import itertools
 import math
 from collections import defaultdict, deque
-from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -35,7 +34,6 @@ from typing import (
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from torch import Tensor
 from torchmetrics import Metric
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import (
@@ -142,9 +140,6 @@ class RecMetricComputation(Metric, abc.ABC):
         self._window_size = window_size
         self._compute_on_all_ranks = compute_on_all_ranks
         self._should_validate_update = should_validate_update
-        self._fused_map: Dict[str, int] = {}
-        self._window_fused_map: Dict[str, int] = {}
-        self._fused_name = "_fused_states"
         if self._window_size > 0:
             self._batch_window_buffers = {}
         else:
@@ -157,42 +152,16 @@ class RecMetricComputation(Metric, abc.ABC):
                 dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
                 persistent=True,
             )
-        self._register_load_state_dict_pre_hook(
-            self._pre_load_state_dict_hook, with_module=True
-        )
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
         return f"window_{state_name}"
 
-    def get_fused_state_name(self) -> str:
-        return self._fused_name
-
-    def get_fused_window_state_name(self) -> str:
-        return self.get_window_state_name(self.get_fused_state_name())
-
     def get_window_state(self, state_name: str) -> torch.Tensor:
-        if state_name in self._fused_map:
-            fused_window_states = getattr(
-                self, self.get_window_state_name(self._fused_name)
-            )
-            return fused_window_states[self._fused_map[state_name]]
-        else:
-            return getattr(self, self.get_window_state_name(state_name))
-
-    def get_state(self, state_name: str) -> torch.Tensor:
-        if state_name in self._fused_map:
-            fused_states = getattr(self, self._fused_name)
-            return fused_states[self._fused_map[state_name]]
-        else:
-            return getattr(self, state_name)
+        return getattr(self, self.get_window_state_name(state_name))
 
     def _add_state(
-        self,
-        name: Union[str, List[str]],
-        default: Tensor,
-        add_window_state: bool,
-        **kwargs: Any,
+        self, name: str, default: DefaultValueT, add_window_state: bool, **kwargs: Any
     ) -> None:
         """
         name (str): the name of this state. The state will be accessible
@@ -211,35 +180,24 @@ class RecMetricComputation(Metric, abc.ABC):
         persistent (bool): set this to True if you want to save/checkpoint the
             metric and this state is required to compute the checkpointed metric.
         """
-        if isinstance(name, List):
-            super().add_state(self._fused_name, default, **kwargs)
-        else:
-            super().add_state(name, default, **kwargs)
-
+        # pyre-fixme[6]: Expected `Union[List[typing.Any], torch.Tensor]` for 2nd
+        #  param but got `DefaultValueT`.
+        super().add_state(name, default, **kwargs)
         if add_window_state:
             if self._batch_window_buffers is None:
                 raise RuntimeError(
                     "Users is adding a window state while window metric is disabled."
                 )
             kwargs["persistent"] = False
-            # add fused window state
-            if isinstance(name, List):
-                window_state_name = self.get_window_state_name(self._fused_name)
-            else:
-                window_state_name = self.get_window_state_name(name)
-
+            window_state_name = self.get_window_state_name(name)
+            # Avoid pyre error
             assert isinstance(default, torch.Tensor)
             super().add_state(window_state_name, default.detach().clone(), **kwargs)
 
-            # pyre-fixme[16]: `Optional` has no attribute `__setitem__`.
             self._batch_window_buffers[window_state_name] = WindowBuffer(
                 max_size=self._window_size,
                 max_buffer_count=MAX_BUFFER_COUNT,
             )
-
-        if isinstance(name, List):
-            for i, _name in enumerate(name):
-                self._fused_map[_name] = i
 
     def _aggregate_window_state(
         self, state_name: str, state: torch.Tensor, num_samples: int
@@ -287,42 +245,6 @@ class RecMetricComputation(Metric, abc.ABC):
 
     def local_compute(self) -> List[MetricComputationReport]:
         return self._compute()
-
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Optional[Dict[str, Any]]:
-        state_dict = {}
-        if destination is not None:
-            state_dict = super().state_dict(
-                destination=destination, prefix=prefix, keep_vars=keep_vars
-            )
-            # To make the state fused version be compatible with the checkpoint from the
-            # non-fused version, unflatten the fused state
-            if state_dict is not None:
-                key = prefix + self._fused_name
-                if key in state_dict:
-                    del state_dict[key]
-                    for state_name in self._fused_map:
-                        current_val = self.get_state(state_name)
-                        if not keep_vars:
-                            current_val = current_val.detach()
-                        state_dict[prefix + state_name] = deepcopy(current_val)
-        return state_dict
-
-    @staticmethod
-    def _pre_load_state_dict_hook(
-        self: torch.nn.Module,
-        state_dict: Dict[str, Any],
-        prefix: str,
-        *args: Any,
-    ) -> None:
-        for state_name in cast(RecMetricComputation, self)._fused_map:
-            name = prefix + state_name
-            if name in state_dict:
-                setattr(self, state_name, state_dict.pop(name))
 
 
 class RecMetric(nn.Module, abc.ABC):

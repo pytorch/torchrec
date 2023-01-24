@@ -37,17 +37,6 @@ def get_calibration_states(
     }
 
 
-def get_calibration_states_fused(
-    labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
-) -> torch.Tensor:
-    return torch.stack(
-        [
-            torch.sum(predictions * weights, dim=-1),
-            torch.sum(labels * weights, dim=-1),
-        ]
-    )
-
-
 class CalibrationMetricComputation(RecMetricComputation):
     r"""
     This class implements the RecMetricComputation for Calibration, which is the
@@ -59,13 +48,16 @@ class CalibrationMetricComputation(RecMetricComputation):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        state_names = [
-            CALIBRATION_NUM,
-            CALIBRATION_DENOM,
-        ]
         self._add_state(
-            state_names,
-            torch.zeros((len(state_names), self._n_tasks), dtype=torch.double),
+            CALIBRATION_NUM,
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            CALIBRATION_DENOM,
+            torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
             persistent=True,
@@ -84,11 +76,12 @@ class CalibrationMetricComputation(RecMetricComputation):
                 "Inputs 'predictions' and 'weights' should not be None for CalibrationMetricComputation update"
             )
         num_samples = predictions.shape[-1]
-
-        states = get_calibration_states_fused(labels, predictions, weights)
-        state = getattr(self, self._fused_name)
-        state += states
-        self._aggregate_window_state(self._fused_name, states, num_samples)
+        for state_name, state_value in get_calibration_states(
+            labels, predictions, weights
+        ).items():
+            state = getattr(self, state_name)
+            state += state_value
+            self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
         return [
@@ -96,8 +89,8 @@ class CalibrationMetricComputation(RecMetricComputation):
                 name=MetricName.CALIBRATION,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_calibration(
-                    self.get_state(CALIBRATION_NUM),
-                    self.get_state(CALIBRATION_DENOM),
+                    cast(torch.Tensor, self.calibration_num),
+                    cast(torch.Tensor, self.calibration_denom),
                 ),
             ),
             MetricComputationReport(
