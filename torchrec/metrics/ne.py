@@ -73,25 +73,6 @@ def get_ne_states(
     }
 
 
-def get_ne_states_fused(
-    labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor, eta: float
-) -> torch.Tensor:
-    cross_entropy = compute_cross_entropy(
-        labels,
-        predictions,
-        weights,
-        eta,
-    )
-    return torch.stack(
-        [
-            torch.sum(cross_entropy, dim=-1),
-            torch.sum(weights, dim=-1),
-            torch.sum(weights * labels, dim=-1),
-            torch.sum(weights * (1.0 - labels), dim=-1),
-        ]
-    )
-
-
 class NEMetricComputation(RecMetricComputation):
     r"""
     This class implements the RecMetricComputation for NE, i.e. Normalized Entropy.
@@ -102,15 +83,30 @@ class NEMetricComputation(RecMetricComputation):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        state_names = [
-            "cross_entropy_sum",
-            "weighted_num_samples",
-            "pos_labels",
-            "neg_labels",
-        ]
         self._add_state(
-            state_names,
-            torch.zeros((len(state_names), self._n_tasks), dtype=torch.double),
+            "cross_entropy_sum",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "weighted_num_samples",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "pos_labels",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "neg_labels",
+            torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
             persistent=True,
@@ -129,12 +125,13 @@ class NEMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Inputs 'predictions' and 'weights' should not be None for NEMetricComputation update"
             )
+        states = get_ne_states(labels, predictions, weights, self.eta)
         num_samples = predictions.shape[-1]
 
-        states = get_ne_states_fused(labels, predictions, weights, self.eta)
-        state = getattr(self, self._fused_name)
-        state += states
-        self._aggregate_window_state(self._fused_name, states, num_samples)
+        for state_name, state_value in states.items():
+            state = getattr(self, state_name)
+            state += state_value
+            self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
         return [
@@ -142,10 +139,10 @@ class NEMetricComputation(RecMetricComputation):
                 name=MetricName.NE,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_ne(
-                    self.get_state("cross_entropy_sum"),
-                    self.get_state("weighted_num_samples"),
-                    self.get_state("pos_labels"),
-                    self.get_state("neg_labels"),
+                    cast(torch.Tensor, self.cross_entropy_sum),
+                    cast(torch.Tensor, self.weighted_num_samples),
+                    cast(torch.Tensor, self.pos_labels),
+                    cast(torch.Tensor, self.neg_labels),
                     self.eta,
                 ),
             ),

@@ -92,11 +92,11 @@ class TestGPU(unittest.TestCase):
         ne_computation = ne._metrics_computations[0]
         # test RecMetricComputation._add_window_state
         torch.allclose(
-            ne_computation.get_window_state("cross_entropy_sum"),
+            ne_computation.window_cross_entropy_sum,
             torch.tensor([0.0], dtype=torch.double, device=device),
         )
         torch.allclose(
-            ne_computation.get_window_state("weighted_num_samples"),
+            ne_computation.window_weighted_num_samples,
             torch.tensor([[0.0]], dtype=torch.double, device=device),
         )
 
@@ -124,11 +124,13 @@ class TestGPU(unittest.TestCase):
                 )
             else:
                 self.assertEqual(
-                    ne_computation.get_window_state("cross_entropy_sum").size(),
-                    torch.Size([1]),
+                    ne_computation.window_cross_entropy_sum.size(), torch.Size([1])
                 )
-                fused_state_name = ne_computation.get_fused_window_state_name()
                 self.assertEqual(
-                    len(ne_computation._batch_window_buffers[fused_state_name].buffers),
+                    len(
+                        ne_computation._batch_window_buffers[
+                            "window_cross_entropy_sum"
+                        ].buffers
+                    ),
                     3,
                 )
