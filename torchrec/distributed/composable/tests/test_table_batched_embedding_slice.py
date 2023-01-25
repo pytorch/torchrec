@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import unittest
 
 import torch
@@ -25,3 +26,12 @@ class TestTableBatchedEmbeddingSlice(unittest.TestCase):
         )
         first_table = TableBatchedEmbeddingSlice(emb.weights, 0, 8, 2, 4)
         self.assertEqual(first_table.data_ptr(), emb.weights.data_ptr())
+
+    def test_copy(self) -> None:
+        device = "cpu" if not torch.cuda.is_available() else "cuda"
+        emb = DenseTableBatchedEmbeddingBagsCodegen(
+            [(2, 4), (2, 4)], use_cpu=device == "cpu"
+        )
+        first_table = TableBatchedEmbeddingSlice(emb.weights, 0, 8, 2, 4)
+        copied = copy.deepcopy(first_table)
+        self.assertNotEqual(first_table.data_ptr(), copied.data_ptr())

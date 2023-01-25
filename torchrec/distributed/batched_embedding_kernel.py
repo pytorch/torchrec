@@ -361,7 +361,7 @@ def _named_parameters_by_table_fused(
             # pyre-ignore
             weights = emb_module.weights_uvm
         weight = TableBatchedEmbeddingSlice(
-            original_tensor=weights,
+            data=weights,
             start_offset=offset,
             end_offset=offset + table_count * rows * dim,
             num_embeddings=-1,
@@ -386,7 +386,7 @@ def _named_parameters_by_table_dense(
         table_count = table_name_to_count.pop(table_name)
         offset = emb_module.weights_physical_offsets[t_idx]
         weight = TableBatchedEmbeddingSlice(
-            original_tensor=emb_module.weights,
+            data=emb_module.weights,
             start_offset=offset,
             end_offset=offset + table_count * rows * dim,
             num_embeddings=-1,
