@@ -58,6 +58,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         emb_module: SplitTableBatchedEmbeddingBagsCodegen,
         pg: Optional[dist.ProcessGroup] = None,
         create_for_table: Optional[str] = None,
+        param_weight_for_table: Optional[nn.Parameter] = None,
     ) -> None:
         """
         Implementation of a FusedOptimizer. Designed as a base class Embedding kernels
@@ -228,27 +229,34 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             shard_params: ShardParams = table_to_shard_params[table_config.name]
 
             assert table_config_global_metadata is not None
-            local_weight_shards = []
-            for local_weight, local_metadata in zip(
-                shard_params.embedding_weights, shard_params.local_metadata
-            ):
-                local_weight_shards.append(Shard(local_weight, local_metadata))
-                table_config_global_metadata.tensor_properties.dtype = (
-                    local_weight.dtype
+            if create_for_table is None:
+                local_weight_shards = []
+                for local_weight, local_metadata in zip(
+                    shard_params.embedding_weights, shard_params.local_metadata
+                ):
+                    local_weight_shards.append(Shard(local_weight, local_metadata))
+                    table_config_global_metadata.tensor_properties.dtype = (
+                        local_weight.dtype
+                    )
+                    table_config_global_metadata.tensor_properties.requires_grad = (
+                        local_weight.requires_grad
+                    )
+                # TODO share this logic to create the same TableBatchedEmbeddingSlice in FusedModules below
+                weight = ShardedTensor._init_from_local_shards_and_global_metadata(
+                    local_shards=local_weight_shards,
+                    sharded_tensor_metadata=table_config_global_metadata,
+                    process_group=self._pg,
                 )
-                table_config_global_metadata.tensor_properties.requires_grad = (
-                    local_weight.requires_grad
-                )
-            # TODO share this logic to create the same TableBatchedEmbeddingSlice in FusedModules below
-            weight = ShardedTensor._init_from_local_shards_and_global_metadata(
-                local_shards=local_weight_shards,
-                sharded_tensor_metadata=table_config_global_metadata,
-                process_group=self._pg,
-            )
+                param_key = table_config.name + ".weight"
+            else:
+                assert (
+                    param_weight_for_table is not None
+                ), "param_weight_for_table cannot be None when using create_for_table"
+                weight = param_weight_for_table
+                param_key = ""
 
             state[weight] = {}
             param_group["params"].append(weight)
-            param_key = table_config.name + ".weight"
             params[param_key] = weight
 
             # Setting optimizer states
@@ -334,11 +342,10 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
-def _named_parameters_by_table_fused(
+def _gen_named_parameters_by_table_fused(
     emb_module: SplitTableBatchedEmbeddingBagsCodegen,
     table_name_to_count: Dict[str, int],
     config: GroupedEmbeddingConfig,
-    optim_per_table: Dict[str, EmbeddingFusedOptimizer],
 ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
     # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
     for t_idx, (rows, dim, location, _) in enumerate(emb_module.embedding_specs):
@@ -367,13 +374,20 @@ def _named_parameters_by_table_fused(
             num_embeddings=-1,
             embedding_dim=dim,
         )
-        # hack before we support optimizer on sharded parameter level
+        # this reuses logic in EmbeddingFusedOptimizer but is per table
         # pyre-ignore
-        weight._in_backward_optimizers = [optim_per_table[table_name]]
+        weight._in_backward_optimizers = [
+            EmbeddingFusedOptimizer(
+                config,
+                emb_module,
+                create_for_table=table_name,
+                param_weight_for_table=weight,
+            )
+        ]
         yield (table_name, weight)
 
 
-def _named_parameters_by_table_dense(
+def _gen_named_parameters_by_table_dense(
     emb_module: DenseTableBatchedEmbeddingBagsCodegen,
     table_name_to_count: Dict[str, int],
     config: GroupedEmbeddingConfig,
@@ -414,6 +428,7 @@ class BaseBatchedEmbedding(BaseEmbedding):
         self._local_cols: List[int] = []
         self._feature_table_map: List[int] = []
         self.table_name_to_count: Dict[str, int] = {}
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
@@ -506,9 +521,8 @@ class BaseBatchedEmbedding(BaseEmbedding):
         For a single table with multiple shards (i.e CW) these are combined into one table/weight.
         Used in composability.
         """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
+        for name, param in self._param_per_table.items():
+            yield name, param
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
@@ -555,12 +569,13 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
-        # this reuses logic in EmbeddingFusedOptimizer but is per table
-        self._optim_per_table: Dict[str, EmbeddingFusedOptimizer] = {}
-        for table in config.embedding_tables:
-            self._optim_per_table[table.name] = EmbeddingFusedOptimizer(
-                config, self._emb_module, pg, table.name
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+            _gen_named_parameters_by_table_fused(
+                self._emb_module,
+                self.table_name_to_count.copy(),
+                self._config,
             )
+        )
         self.init_parameters()
 
     @property
@@ -599,21 +614,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def flush(self) -> None:
         self._emb_module.flush()
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        return _named_parameters_by_table_fused(
-            self._emb_module,
-            self.table_name_to_count.copy(),
-            self._config,
-            self._optim_per_table,
-        )
-
 
 class BatchedDenseEmbedding(BaseBatchedEmbedding):
     def __init__(
@@ -636,7 +636,11 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
                 weights_precision=weights_precision,
             )
         )
-
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+            _gen_named_parameters_by_table_dense(
+                self._emb_module, self.table_name_to_count.copy(), self._config
+            )
+        )
         self.init_parameters()
 
     @property
@@ -658,18 +662,6 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding):
         )
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
             nn.Parameter, self._emb_module.weights
-        )
-
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        return _named_parameters_by_table_dense(
-            self._emb_module, self.table_name_to_count.copy(), self._config
         )
 
 
@@ -696,6 +688,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         self._emb_names: List[str] = []
         self._lengths_per_emb: List[int] = []
         self.table_name_to_count: Dict[str, int] = {}
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
         for idx, config in enumerate(self._config.embedding_tables):
             self._local_rows.append(config.local_rows)
@@ -792,9 +785,8 @@ class BaseBatchedEmbeddingBag(BaseEmbedding):
         For a single table with multiple shards (i.e CW) these are combined into one table/weight.
         Used in composability.
         """
-        raise NotImplementedError(
-            f"Implement composability in class {self.__class__.__name__}"
-        )
+        for name, param in self._param_per_table.items():
+            yield name, param
 
 
 class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
@@ -844,13 +836,13 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
             self._emb_module,
             pg,
         )
-        # this reuses logic in EmbeddingFusedOptimizer but is per table
-        self._optim_per_table: Dict[str, EmbeddingFusedOptimizer] = {}
-        for table in config.embedding_tables:
-            self._optim_per_table[table.name] = EmbeddingFusedOptimizer(
-                config, self._emb_module, pg, table.name
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+            _gen_named_parameters_by_table_fused(
+                self._emb_module,
+                self.table_name_to_count.copy(),
+                self._config,
             )
-
+        )
         self.init_parameters()
 
     @property
@@ -889,21 +881,6 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def flush(self) -> None:
         self._emb_module.flush()
 
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        return _named_parameters_by_table_fused(
-            self._emb_module,
-            self.table_name_to_count.copy(),
-            self._config,
-            self._optim_per_table,
-        )
-
 
 class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
@@ -926,7 +903,11 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
                 weights_precision=weights_precision,
             )
         )
-
+        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+            _gen_named_parameters_by_table_dense(
+                self._emb_module, self.table_name_to_count.copy(), self._config
+            )
+        )
         self.init_parameters()
 
     @property
@@ -948,16 +929,4 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
         )
         yield append_prefix(prefix, f"{combined_key}.weight"), cast(
             nn.Parameter, self._emb_module.weights
-        )
-
-    def named_parameters_by_table(
-        self,
-    ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
-        """
-        Like named_parameters(), but yields table_name and embedding_weights which are wrapped in TableBatchedEmbeddingSlice.
-        For a single table with multiple shards (i.e CW) these are combined into one table/weight.
-        Used in composability.
-        """
-        return _named_parameters_by_table_dense(
-            self._emb_module, self.table_name_to_count.copy(), self._config
         )
