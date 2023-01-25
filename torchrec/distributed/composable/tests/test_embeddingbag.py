@@ -117,7 +117,7 @@ def _test_sharding(  # noqa C901
             module=model,
             env=ShardingEnv.from_process_group(ctx.pg),
             plan=plan.get_plan_for_module(""),
-            sharders=sharder,
+            sharder=sharder,
             device=ctx.device,
         )
 
