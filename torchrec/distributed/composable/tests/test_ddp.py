@@ -24,7 +24,11 @@ from torch.distributed.checkpoint import (
 )
 from torch.distributed.launcher.api import elastic_launch, LaunchConfig
 from torchrec.distributed.shard import shard as trec_shard
-from torchrec.distributed.sharding_plan import column_wise
+from torchrec.distributed.sharding_plan import (
+    apply_to_all,
+    column_wise,
+    construct_module_sharding_plan,
+)
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.test_utils import skip_if_asan
@@ -72,12 +76,22 @@ class DDPTest(unittest.TestCase):
         m.sparse.ebc = trec_shard(
             module=m.sparse.ebc,
             device=device,
-            plan=column_wise(ranks=list(range(world_size))),
+            plan=construct_module_sharding_plan(
+                m.sparse.ebc,
+                apply_to_all(m.sparse.ebc, column_wise(ranks=list(range(world_size)))),
+                device_type=device.type,
+            ),
         )
         m.sparse.weighted_ebc = trec_shard(
             module=m.sparse.weighted_ebc,
             device=device,
-            plan=column_wise(ranks=list(range(world_size))),
+            plan=construct_module_sharding_plan(
+                m.sparse.weighted_ebc,
+                apply_to_all(
+                    m.sparse.weighted_ebc, column_wise(ranks=list(range(world_size)))
+                ),
+                device_type=device.type,
+            ),
         )
         m.over = replicate(m.over)
         m.dense = replicate(m.dense)
@@ -123,12 +137,6 @@ class DDPTest(unittest.TestCase):
         # assert p_sum.allclose(p_sum_loaded)
 
     @skip_if_asan
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    #  `torch.cuda.device_count() <= 1` to decorator factory `unittest.skipIf`.
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
     def test_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as path:
             lc = LaunchConfig(
