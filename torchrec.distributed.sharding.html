@@ -853,10 +853,11 @@ happens within.</p></li>
 <li><p><strong>lengths</strong> (<em>torch.Tensor</em>) – lengths of sparse features after AlltoAll.</p></li>
 <li><p><strong>input_splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – input splits of AlltoAll.</p></li>
 <li><p><strong>output_splits</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – output splits of AlltoAll.</p></li>
-<li><p><strong>unbucketize_permute_tensor</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – stores the permute order
-of the KJT bucketize (for row-wise sharding only).</p></li>
-<li><p><strong>batch_size_per_rank</strong> – (Optional[List[int]]): batch size per rank</p></li>
-<li><p><strong>sparse_features_recat</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – recat tensor used for sparse feature input dist</p></li>
+<li><p><strong>unbucketize_permute_tensor</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – stores the permute
+order of the KJT bucketize (for row-wise sharding only).</p></li>
+<li><p><strong>batch_size_per_rank</strong> – (Optional[List[int]]): batch size per rank.</p></li>
+<li><p><strong>sparse_features_recat</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – recat tensor used for sparse
+feature input dist.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
