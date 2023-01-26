@@ -258,6 +258,31 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             variable_batch_size=variable_batch_size,
         )
 
+    # pyre-fixme[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_sharding_empty_rank(self) -> None:
+        table = self.tables[0]
+        embedding_groups = {"group_0": table.feature_names}
+        self._run_multi_process_test(
+            callable=sharding_single_rank_test,
+            world_size=2,
+            model_class=TestSequenceSparseNN,
+            tables=[table],
+            embedding_groups=embedding_groups,
+            sharders=[
+                TestEmbeddingCollectionSharder(
+                    sharding_type=ShardingType.TABLE_WISE.value,
+                    kernel_type=EmbeddingComputeKernel.FUSED.value,
+                )
+            ],
+            optim=EmbOptimType.EXACT_SGD,
+            backend="nccl",
+            variable_batch_size=True,
+        )
+
     @seed_and_log
     def setUp(self) -> None:
         super().setUp()
