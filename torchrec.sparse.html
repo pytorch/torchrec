@@ -686,6 +686,50 @@ offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final off
 <dd></dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_jt_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">jt_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs a KeyedJaggedTensor from a Dict[str, JaggedTensor],
+but this function will ONLY work if the JaggedTensors all
+have the same “implicit” batch_size dimension.</p>
+<p>Basically, we can visualize JaggedTensors as 2-D tensors
+of the format of [batch_size x variable_feature_dim].
+In case, we have some batch without a feature value,
+the input JaggedTensor could just not include any values.</p>
+<p>But KeyedJaggedTensor (by default) typically pad “None”
+so that all the JaggedTensors stored in the KeyedJaggedTensor
+have the same batch_size dimension. That is, in the case,
+the JaggedTensor input didn’t automatically pad
+for the empty batches, this function would error / not work.</p>
+<p>Consider the visualization of the following KeyedJaggedTensor:
+#              0       1        2  &lt;– dim_1
+# “Feature0”   [V0,V1] None    [V2]
+# “Feature1”   [V3]    [V4]    [V5,V6,V7]
+#   ^
+#  dim_0</p>
+<dl class="simple">
+<dt>Notice that the inputs for this KeyedJaggedTensor would have looked like:</dt><dd><p>values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7]  # V == any tensor datatype
+weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
+lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
+offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
+keys: List[str] = [“Feature0”, “Feature1”]  # correspond to each value of dim_0
+index_per_key: Dict[str, int] = {“Feature0”: 0, “Feature1”: 1}  # index for each key
+offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset</p>
+</dd>
+<dt>Now if the input jt_dict = {</dt><dd><p># “Feature0”   [V0,V1] [V2]
+# “Feature1”   [V3]    [V4]    [V5,V6,V7]</p>
+</dd>
+</dl>
+<p>} and the “None” is left out from each JaggedTensor,
+then this function would fail as we would not correctly
+be able to pad “None” as it does not technically know
+the correct batch / place to pad within the JaggedTensor.</p>
+<p>Essentially, the lengths Tensor inferred by this function
+would be [2, 1, 1, 1, 3] indicating variable batch_size
+dim_1 violates the existing assumption / precondition
+that KeyedJaggedTensor’s should have fixed batch_size dimension.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_lengths_sync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -1010,6 +1054,7 @@ example and further information.</p>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_tensors"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.dist_tensors()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty_like"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty_like()</span></code></a></li>
+<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_jt_dict()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_lengths_sync()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_offsets_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_offsets_sync()</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.keys()</span></code></a></li>
