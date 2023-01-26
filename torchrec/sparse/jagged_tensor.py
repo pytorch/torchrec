@@ -41,6 +41,7 @@ def _to_lengths(offsets: torch.Tensor) -> torch.Tensor:
     return offsets[1:] - offsets[:-1]
 
 
+@torch.jit.script_if_tracing
 def _batched_lengths_to_offsets(lengths: torch.Tensor) -> torch.Tensor:
     (f, b) = lengths.shape
     offsets_0 = lengths.new_zeros((f, 1))
@@ -1218,7 +1219,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         keys: List[str],
         tensors: List[torch.Tensor],
         batch_size_per_rank: List[int],
-        recat: torch.Tensor,
+        recat: Optional[torch.Tensor],
     ) -> "KeyedJaggedTensor":
         assert len(tensors) in [2, 3]
         lengths = tensors[0]
@@ -1226,7 +1227,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights = tensors[2] if len(tensors) == 3 else None
 
         with record_function("## all2all_data:recat_values ##"):
-            if recat.numel() > 0:
+            if recat is not None and recat.numel() > 0:
                 if all(bs == batch_size_per_rank[0] for bs in batch_size_per_rank):
                     lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
                         recat,

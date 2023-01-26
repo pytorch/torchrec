@@ -49,13 +49,13 @@ def _get_recat(
     stagger: int = 1,
     device: Optional[torch.device] = None,
     batch_size_per_rank: Optional[List[int]] = None,
-) -> torch.Tensor:
+) -> Optional[torch.Tensor]:
     """
     Calculates relevant recat indices required to reorder AlltoAll collective.
 
     Args:
-        local_split (int): how many features in local split.
-        num_splits (int): how many splits (typically WORLD_SIZE).
+        local_split (int): number of features in local split.
+        num_splits (int): number of splits (typically WORLD_SIZE).
         stagger (int): secondary reordering, (typically 1, but
             `WORLD_SIZE/LOCAL_WORLD_SIZE` for TWRW).
         device (Optional[torch.device]): device on which buffer will be allocated.
@@ -63,7 +63,7 @@ def _get_recat(
             variable batch size.
 
     Returns:
-        torch.Tensor: recat tensor.
+        Optional[torch.Tensor]: recat tensor, None if local rank is empty.
 
     Example::
 
@@ -71,12 +71,14 @@ def _get_recat(
             # [0, 2, 4, 6, 1, 3, 5, 7]
         _recat(2, 4, 2)
             # [0, 4, 2, 6, 1, 5, 3, 7]
+        _recat(0, 4, 2)
+            # None
     """
     with record_function("## all2all_data:recat_permute_gen ##"):
-        recat: List[int] = []
-
         if local_split == 0:
-            return torch.tensor(recat, device=device, dtype=torch.int32)
+            return None
+
+        recat: List[int] = []
 
         feature_order: List[int] = [
             x + num_splits // stagger * y
@@ -215,7 +217,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
         self._batch_size_per_rank = batch_size_per_rank
         self._keys = keys
         self._stagger = stagger
-        self._recat: torch.Tensor = _get_recat(
+        self._recat: Optional[torch.Tensor] = _get_recat(
             local_split=splits[pg.rank()],
             num_splits=len(splits),
             stagger=stagger,
@@ -968,10 +970,11 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             lengths (torch.Tensor): lengths of sparse features after AlltoAll.
             input_splits (List[int]): input splits of AlltoAll.
             output_splits (List[int]): output splits of AlltoAll.
-            unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute order
-                of the KJT bucketize (for row-wise sharding only).
-            batch_size_per_rank: (Optional[List[int]]): batch size per rank
-            sparse_features_recat (Optional[torch.Tensor]): recat tensor used for sparse feature input dist
+            unbucketize_permute_tensor (Optional[torch.Tensor]): stores the permute
+                order of the KJT bucketize (for row-wise sharding only).
+            batch_size_per_rank: (Optional[List[int]]): batch size per rank.
+            sparse_features_recat (Optional[torch.Tensor]): recat tensor used for sparse
+                feature input dist.
 
         Returns:
             SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
@@ -980,15 +983,6 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         variable_batch_size = (
             batch_size_per_rank is not None and len(set(batch_size_per_rank)) > 1
         )
-        if variable_batch_size:
-            if sparse_features_recat is None:
-                sparse_features_recat = _get_recat(
-                    local_split=self._local_split,
-                    num_splits=self._num_splits,
-                    device=local_embs.device,
-                    stagger=1,
-                    batch_size_per_rank=batch_size_per_rank,
-                )
 
         if sparse_features_recat is not None:
             forward_recat_tensor = torch.ops.fbgemm.invert_permute(
