@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        pyver: [ cp37, cp38, cp39, cp310 ]
+        pyver: [ cp38, cp39, cp310 ]
         cuver: [ "11.6", "11.3"]
 
     steps:
@@ -29,7 +29,7 @@ jobs:
           submodules: recursive
 
       - uses: pypa/cibuildwheel@v2.8.0
-        with: 
+        with:
           package-dir: contrib/dynamic_embedding
         env:
           CIBW_BEFORE_BUILD: "env CUDA_VERSION=${{ matrix.cuver }} contrib/dynamic_embedding/tools/before_linux_build.sh"
