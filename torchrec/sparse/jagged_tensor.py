@@ -877,6 +877,80 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             stride=kjt.stride(),
         )
 
+    @staticmethod
+    def from_jt_dict(jt_dict: Dict[str, JaggedTensor]) -> "KeyedJaggedTensor":
+        """
+        Constructs a KeyedJaggedTensor from a Dict[str, JaggedTensor],
+        but this function will ONLY work if the JaggedTensors all
+        have the same "implicit" batch_size dimension.
+
+        Basically, we can visualize JaggedTensors as 2-D tensors
+        of the format of [batch_size x variable_feature_dim].
+        In case, we have some batch without a feature value,
+        the input JaggedTensor could just not include any values.
+
+        But KeyedJaggedTensor (by default) typically pad "None"
+        so that all the JaggedTensors stored in the KeyedJaggedTensor
+        have the same batch_size dimension. That is, in the case,
+        the JaggedTensor input didn't automatically pad
+        for the empty batches, this function would error / not work.
+
+        Consider the visualization of the following KeyedJaggedTensor:
+        #              0       1        2  <-- dim_1
+        # "Feature0"   [V0,V1] None    [V2]
+        # "Feature1"   [V3]    [V4]    [V5,V6,V7]
+        #   ^
+        #  dim_0
+
+        Notice that the inputs for this KeyedJaggedTensor would have looked like:
+            values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7]  # V == any tensor datatype
+            weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
+            lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
+            offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
+            keys: List[str] = ["Feature0", "Feature1"]  # correspond to each value of dim_0
+            index_per_key: Dict[str, int] = {"Feature0": 0, "Feature1": 1}  # index for each key
+            offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
+
+        Now if the input jt_dict = {
+            # "Feature0"   [V0,V1] [V2]
+            # "Feature1"   [V3]    [V4]    [V5,V6,V7]
+        } and the "None" is left out from each JaggedTensor,
+        then this function would fail as we would not correctly
+        be able to pad "None" as it does not technically know
+        the correct batch / place to pad within the JaggedTensor.
+
+        Essentially, the lengths Tensor inferred by this function
+        would be [2, 1, 1, 1, 3] indicating variable batch_size
+        dim_1 violates the existing assumption / precondition
+        that KeyedJaggedTensor's should have fixed batch_size dimension.
+
+        """
+        kjt_keys = list(jt_dict.keys())
+        kjt_vals = torch.concat(tuple(jt.values() for jt in jt_dict.values()))
+        kjt_lens = torch.concat(tuple(jt.lengths() for jt in jt_dict.values()))
+        kjt_weights = tuple(
+            jt.weights_or_none()
+            for jt in jt_dict.values()
+            if jt.weights_or_none() is not None
+        )
+        kjt_length_per_key = [
+            int(torch.sum(jt.lengths()).item()) for jt in jt_dict.values()
+        ]
+        # pyre-ignore[6]: Incompatible parameter type [6]:
+        # In call `torch._C._VariableFunctions.concat`,
+        # for 1st positional only parameter
+        # expected `Union[List[Tensor], typing.Tuple[Tensor, ...]]`
+        # but got `typing.Tuple[Optional[Tensor], ...]`
+        kjt_weights = torch.concat(kjt_weights) if kjt_weights else None
+        kjt = KeyedJaggedTensor(
+            keys=kjt_keys,
+            values=kjt_vals,
+            weights=kjt_weights,
+            lengths=kjt_lens,
+            length_per_key=kjt_length_per_key,
+        )
+        return kjt
+
     def sync(self) -> "KeyedJaggedTensor":
         self.length_per_key()
         self.offset_per_key()
