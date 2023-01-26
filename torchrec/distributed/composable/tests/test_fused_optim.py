@@ -77,9 +77,7 @@ class TestFusedOptim(unittest.TestCase):
             table_name = name[len("embedding_bags.") : -len("weight") - 1]
             self.assertEqual(
                 param._in_backward_optimizers[0]
-                .state_dict()["state"][f"{table_name}.weight"][
-                    f"{table_name}.momentum1"
-                ]
+                .state_dict()["state"][""][f"{table_name}.momentum1"]
                 .local_tensor()
                 .data_ptr(),
                 ebc._optim.state_dict()["state"][f"embedding_bags.{table_name}.weight"][

@@ -64,7 +64,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_0"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_0.weight"]["table_0.momentum1"].gather(
+            ].state_dict()["state"][""]["table_0.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # sharded column, each shard will have rowwise state
@@ -73,7 +73,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_1"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_1.weight"]["table_1.momentum1"].gather(
+            ].state_dict()["state"][""]["table_1.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # sharded rowwise
@@ -82,7 +82,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_2"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_2.weight"]["table_2.momentum1"].gather(
+            ].state_dict()["state"][""]["table_2.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
@@ -94,7 +94,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_2"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_2.weight"]["table_2.momentum2"].gather(
+            ].state_dict()["state"][""]["table_2.momentum2"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
@@ -103,7 +103,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_3"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_3.weight"]["table_3.momentum1"].gather(
+            ].state_dict()["state"][""]["table_3.momentum1"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Row wise - with partial rowwise adam, first state is point wise
@@ -115,7 +115,7 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
 
             ebc.embedding_bags["table_3"].weight._in_backward_optimizers[
                 0
-            ].state_dict()["state"]["table_3.weight"]["table_3.momentum2"].gather(
+            ].state_dict()["state"][""]["table_3.momentum2"].gather(
                 dst=0,
                 out=None if ctx.rank != 0
                 # Column wise - with partial rowwise adam, first state is point wise
