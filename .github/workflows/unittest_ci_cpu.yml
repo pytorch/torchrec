@@ -23,9 +23,6 @@ jobs:
         matrix:
           include:
             - os: linux.2xlarge
-              python-version: 3.7
-              python-tag: "py37"
-            - os: linux.2xlarge
               python-version: 3.8
               python-tag: "py38"
             - os: linux.2xlarge

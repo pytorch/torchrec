@@ -23,10 +23,6 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.7
-           python-tag: "py37"
-           cuda-tag: "cu11"
-         - os: linux.2xlarge
            python-version: 3.8
            python-tag: "py38"
            cuda-tag: "cu11"
@@ -107,7 +103,7 @@ jobs:
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.7, 3.8, 3.9, "3.10"]
+        python-version: [3.8, 3.9, "3.10"]
         cuda-tag: ["cu11"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
