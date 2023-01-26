@@ -396,10 +396,16 @@ def _rewrite_model(  # noqa C901
     context: TrainPipelineContext,
     dist_stream: Optional[torch.cuda.streams.Stream],
 ) -> List[ShardedModule]:
-
     # Get underlying nn.Module
     if isinstance(model, DistributedModelParallel):
         model = model.module
+
+    # Collect feature processors.
+    for _, m in model.named_modules():
+        if isinstance(m, BaseGroupedFeatureProcessor):
+            context.feature_processor_forwards.append(m.forward)
+            # pyre-ignore[8]: Incompatible attribute type
+            m.forward = lambda x: x
 
     # Collect a list of sharded modules.
     sharded_modules = {}
@@ -490,15 +496,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
 
-    def _replace_fp_forward(self, model: torch.nn.Module) -> None:
-        for _, m in model.named_modules():
-            if isinstance(m, BaseGroupedFeatureProcessor):
-                self._context.feature_processor_forwards.append(m.forward)
-                # pyre-ignore[8]: Incompatible attribute type
-                m.forward = lambda x: x
-
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
-        self._replace_fp_forward(cast(torch.nn.Module, self._model.module))
         # batch 1
         with torch.cuda.stream(self._memcpy_stream):
             batch_i = next(dataloader_iter)
