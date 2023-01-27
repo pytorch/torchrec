@@ -678,6 +678,8 @@ class ShardedEmbeddingTowerCollection(
                 if kjt_param and wkjt_param:
                     assert len(dist_input) == 2
                     embeddings.append(embedding(dist_input[0], dist_input[1]))
+                elif wkjt_param and len(dist_input) == 2:
+                    embeddings.append(embedding(dist_input[1]))
                 else:
                     embeddings.append(embedding(dist_input[0]))
             output = torch.cat(
