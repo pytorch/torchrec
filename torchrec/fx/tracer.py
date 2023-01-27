@@ -61,18 +61,11 @@ class Tracer(torch.fx.Tracer):
 
         try:
             # TODO(ivankobzarev): support DMP not only on the root level
-            # Not importing DistributedModelParallel here to avoid circular dependencies as DMP depends on torchrec.fx.tracer
-            clz = root.__class__
-            if (
-                f"{clz.__module__}.{clz.__name__}"
-                == "torchrec.distributed.model_parallel.DistributedModelParallel"
-            ):
+            from torchrec.distributed.model_parallel import DistributedModelParallel
+
+            if isinstance(root, DistributedModelParallel):
                 dmp = root
-                graph = super().trace(
-                    dmp_fx_trace_forward(dmp, self),
-                    concrete_args,
-                )
-                # pyre-ignore
+                graph = super().trace(dmp_fx_trace_forward(dmp, self), concrete_args)
                 self.root._dmp_wrapped_module = root._dmp_wrapped_module
             else:
                 graph = super().trace(

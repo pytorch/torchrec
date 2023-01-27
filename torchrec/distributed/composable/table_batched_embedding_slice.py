@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
 
@@ -16,6 +16,15 @@ class TableBatchedEmbeddingSlice(nn.Parameter):
     """
     Parameter to represent a slice of a table batched embedding. The slice will be
     a view of the TBE of shape (num_embeddings, embedding_dim) and contain consistent .grad
+
+    unlike nn.Parameter, requires_grad is not present and follows requires_grad of TBE.data
+
+    Args:
+        data (torch.Tensor): original Data (of a TBE) to make a slice of
+        start_offset (int):
+        end_offset (int):
+        num_embeddings (int):
+        embedding_dim (int):
     """
 
     __slots__ = [
@@ -28,33 +37,48 @@ class TableBatchedEmbeddingSlice(nn.Parameter):
 
     def __init__(
         self,
-        original_tensor: torch.Tensor,
+        data: torch.Tensor,
         start_offset: int,
         end_offset: int,
         num_embeddings: int,
         embedding_dim: int,
     ) -> None:
-        self._original_tensor: torch.Tensor = original_tensor
+        super().__init__()
+        self._original_tensor: torch.Tensor = data
         self._start_offset: int = start_offset
         self._end_offset: int = end_offset
         self._num_embeddings: int = num_embeddings
         self._embedding_dim: int = embedding_dim
         self._init_grad: Optional[torch.Tensor] = None
-        if original_tensor.requires_grad:
+        if self._original_tensor.requires_grad:
             self.retain_grad()
 
     def __new__(
         cls,
-        original_tensor: torch.Tensor,
+        data: torch.Tensor,
         start_offset: int,
         end_offset: int,
         num_embeddings: int,
         embedding_dim: int,
     ) -> "TableBatchedEmbeddingSlice":
-        _slice = original_tensor[start_offset:end_offset].view(
-            num_embeddings, embedding_dim
-        )
+        _slice = data[start_offset:end_offset].view(num_embeddings, embedding_dim)
         return _slice.as_subclass(cls)
+
+    def __deepcopy__(
+        self, memo: Dict[int, "TableBatchedEmbeddingSlice"]
+    ) -> "TableBatchedEmbeddingSlice":
+        if id(self) in memo:
+            return memo[id(self)]
+        else:
+            result = TableBatchedEmbeddingSlice(
+                self._original_tensor.clone(memory_format=torch.preserve_format),
+                self._start_offset,
+                self._end_offset,
+                self._num_embeddings,
+                self._embedding_dim,
+            )
+            memo[id(self)] = result
+            return result
 
     @property
     def grad(self) -> Optional[torch.Tensor]:

@@ -62,6 +62,7 @@ def quantize_sharded_embeddings(
 
 
 class QuantizeKernelTest(unittest.TestCase):
+    # TODO @shababayub can delete as is deprecated
     def setUp(self) -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
