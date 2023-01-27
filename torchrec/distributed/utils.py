@@ -64,7 +64,7 @@ def filter_state_dict(
 
     filtered_state_dict = OrderedDict()
     for key, value in state_dict.items():
-        if key.startswith(name):
+        if key.startswith(name + "."):
             # + 1 to length is to remove the '.' after the key
             filtered_state_dict[key[len(name) + 1 :]] = value
     return filtered_state_dict
