@@ -8,7 +8,6 @@ pandas
 pyre-extensions==0.0.27
 scikit-build
 tabulate
-torcharrow
 torchmetrics
 torchx
 tqdm
