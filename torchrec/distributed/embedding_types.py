@@ -261,7 +261,7 @@ class ModuleShardingMixIn:
 
 
 Out = TypeVar("Out")
-CompIn = TypeVar("CompIn", bound=Multistreamable)
+CompIn = TypeVar("CompIn")
 DistOut = TypeVar("DistOut")
 ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
 
