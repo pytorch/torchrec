@@ -166,7 +166,6 @@ def _arange(*args, **kwargs) -> torch.Tensor:
     return torch.arange(*args, **kwargs)
 
 
-# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
     pass
 
@@ -281,17 +280,12 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
         """
         lengths = torch.IntTensor([value.size(0) for value in values])
-        # pyre-ignore [9]: values is declared to have type `List[Tensor]` but is used as type `Tensor`.
-        values = torch.cat(values, dim=0)
-        # pyre-ignore [9]: weights is declared to have type `Optional[List[Tensor]]` but is used as type `Optional[Tensor]`.
-        weights = torch.cat(weights, dim=0) if weights is not None else None
+        values_tensor = torch.cat(values, dim=0)
+        weights_tensor = torch.cat(weights, dim=0) if weights is not None else None
 
         return JaggedTensor(
-            # pyre-fixme[6]: For 1st param expected `Tensor` but got `List[Tensor]`.
-            values=values,
-            # pyre-fixme[6]: For 2nd param expected `Optional[Tensor]` but got
-            #  `Optional[List[Tensor]]`.
-            weights=weights,
+            values=values_tensor,
+            weights=weights_tensor,
             lengths=lengths,
         )
 

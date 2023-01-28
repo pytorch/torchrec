@@ -191,10 +191,10 @@ class KJTAllToAllTest(MultiProcessTestBase):
             expected_output.values().cpu(),
         )
         assert_array_equal(
-            actual_output.weights().cpu()
+            actual_output.weights().cpu().numpy()
             if actual_output.weights_or_none() is not None
             else [],
-            expected_output.weights().cpu()
+            expected_output.weights().cpu().numpy()
             if expected_output.weights_or_none() is not None
             else [],
         )
@@ -202,10 +202,7 @@ class KJTAllToAllTest(MultiProcessTestBase):
             actual_output.lengths().cpu(),
             expected_output.lengths().cpu(),
         )
-        assert_array_equal(
-            actual_output.keys(),
-            expected_output.keys(),
-        )
+        assert actual_output.keys() == expected_output.keys()
 
     @classmethod
     def _run_test_dist(

@@ -1,0 +1,9 @@
+{
+  "site_package_search_strategy": "all",
+  "source_directories": [
+    {"import_root": ".", "source": "torchrec"}
+  ],
+  "exclude": [".*\/torchrec\/datasets\/.*", ".*\/torchrec\/models\/.*", ".*\/torchrec\/inference\/.*"],
+  "strict": true,
+  "version": "0.0.101675080701"
+}
