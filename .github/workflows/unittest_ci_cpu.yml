@@ -20,6 +20,7 @@ on:
 jobs:
   build_test:
     strategy:
+        fail-fast: false
         matrix:
           include:
             - os: linux.2xlarge
@@ -46,33 +47,28 @@ jobs:
           -c pytorch-nightly \
           "pytorch-nightly"::pytorch[build="*cpu*"]
         conda run -n build_binary \
+          python -c "import torch.distributed"
+        sed -i 's/fbgemm-gpu-nightly/fbgemm-gpu-nightly-cpu/g' requirements.txt
+        conda run -n build_binary \
           pip install -r requirements.txt
         conda run -n build_binary \
-          pip uninstall fbgemm_gpu-nightly -y
+          python setup.py bdist_wheel \
+          --package_name torchrec-test-cpu \
+          --cpu-only True \
+          --python-tag=${{ matrix.python-tag }}
         conda run -n build_binary \
-          pip install fbgemm-gpu-nightly-cpu
-        conda run -n build_binary \
-          python -c "import torch.distributed"
+          python -c "import torchrec"
         echo "torch.distributed succeeded"
-        conda run -n build_binary \
-          python -c "import skbuild"
-        echo "skbuild succeeded"
         conda run -n build_binary \
           python -c "import numpy"
         echo "numpy succeeded"
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"
-
-        conda run -n build_binary \
-          python setup.py bdist_wheel \
-          --package_name torchrec-test-cpu \
-          --python-tag=${{ matrix.python-tag }}
-        conda run -n build_binary \
-          python -c "import torchrec"
         conda install -n build_binary -y pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw' --ignore-glob=**/test_utils/
+
         echo "Starting C++ Tests"
         conda install -n build_binary -y gxx_linux-64
         conda run -n build_binary \

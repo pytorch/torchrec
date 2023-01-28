@@ -1,5 +1,5 @@
 # Scheduled validation of the nightly binaries
-name: cron
+name: validate-nightly-binaries
 
 on:
   schedule:

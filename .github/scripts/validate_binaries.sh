@@ -39,6 +39,7 @@ fi
 python -c "import torch; import fbgemm_gpu; import torchrec"
 
 # Finally run smoke test
+pip install torchx
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
     torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
 else
