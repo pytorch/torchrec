@@ -13,6 +13,7 @@ import unittest
 from typing import cast, List, Optional, Tuple
 
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.distributed as dist
 from hypothesis import given, settings, strategies as st, Verbosity
@@ -71,7 +72,7 @@ class UtilsTest(unittest.TestCase):
             ],
         )
 
-        np.testing.assert_array_equal(
+        self.assertListEqual(
             sorted(get_unsharded_module_names(dmp)),
             sorted(["_dmp_wrapped_module.over", "_dmp_wrapped_module.dense"]),
         )
@@ -120,7 +121,7 @@ def _compute_translated_indices_with_weights(
 ) -> List[Tuple[int, int]]:
     translated_indices_with_weights = [(0, 0)] * len(row_indices)
 
-    translated_indices_offsets = np.cumsum([0] + translated_lengths)
+    translated_indices_offsets = np.cumsum(npt.ArrayLike([0] + translated_lengths))
     batch_size = int(lengths_size / len(block_sizes))
     iteration = feature_offset = batch_iteration = 0
     for start_offset, end_offset in zip(indices_offsets, indices_offsets[1:]):
@@ -187,7 +188,9 @@ def block_bucketize_ref(
     elements in indices_list[4:6] belongs to feature 1 batch 0
     elements in indices_list[6:6] belongs to feature 1 batch 1
     """
-    indices_offsets = np.cumsum([0] + lengths_list)
+    indices_offsets = cast(
+        List[int], np.cumsum(cast(npt.ArrayLike, [0] + lengths_list))
+    )
 
     translated_lengths = _compute_translated_lengths(
         row_indices=indices_list,

@@ -238,7 +238,6 @@ class NoWait(Awaitable[W]):
         return self._obj
 
 
-# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
 class _LazyAwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     """
     The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta

@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
 
 import numpy
+import numpy.typing as npt
 
 import torch
 
@@ -166,8 +167,8 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
         self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
-        self._cpu_count: Optional[int] = (
-            custom_cpu_count if custom_cpu_count else os.cpu_count()
+        self._cpu_count: int = (
+            custom_cpu_count if custom_cpu_count else (os.cpu_count() or 1)
         )
 
     def collective_plan(
@@ -258,7 +259,10 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
 
             return (best_plan, best_perf_rating, lowest_storage, group_plans_num)
 
-        grouped_proposals = numpy.array_split(proposals_list, self._cpu_count)
+        grouped_proposals = cast(
+            List[List[List[ShardingOption]]],
+            numpy.array_split(cast(npt.ArrayLike, proposals_list), self._cpu_count),
+        )
 
         pool = Pool(self._cpu_count)
         group_best_plans = pool.map(get_best_plan, grouped_proposals)

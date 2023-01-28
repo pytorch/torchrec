@@ -15,7 +15,6 @@ import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
-from torchrec.distributed.utils import copy_to_device
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollectionInterface,
     EmbeddingCollectionInterface,
@@ -65,18 +64,6 @@ def quantize_embeddings(
         mapping=mapping,
         inplace=inplace,
     )
-
-
-class CopyableMixin(nn.Module):
-    def copy(
-        self,
-        device: torch.device,
-    ) -> nn.Module:
-        return copy_to_device(
-            self,
-            current_device=torch.device("cpu"),
-            to_device=device,
-        )
 
 
 @dataclass

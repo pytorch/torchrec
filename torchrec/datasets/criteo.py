@@ -8,9 +8,23 @@
 import os
 import shutil
 import time
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    IO,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import numpy as np
+
+import numpy.typing as npt
 import torch
 import torch.utils.data.datapipes as dp
 from iopath.common.file_io import PathManager, PathManagerFactory
@@ -242,7 +256,7 @@ class BinaryCriteoUtils:
             (out_labels_file, labels_np),
         ]:
             with path_manager.open(fname, "wb") as fout:
-                np.save(fout, arr)
+                np.save(cast(IO[bytes], fout), arr)
 
     @staticmethod
     def get_shape_from_npy(
@@ -308,7 +322,7 @@ class BinaryCriteoUtils:
         remainder = total_length % world_size
         rows_per_rank = np.array([rows_per_rank for _ in range(world_size)])
         rows_per_rank[:remainder] += 1
-        rank_rows_bins_csr = np.cumsum([0] + list(rows_per_rank))
+        rank_rows_bins_csr = np.cumsum(cast(npt.ArrayLike, [0] + list(rows_per_rank)))
         rank_left_g = rank_rows_bins_csr[rank] + start_row
         rank_right_g = rank_rows_bins_csr[rank + 1] - 1 + start_row
 
@@ -341,7 +355,7 @@ class BinaryCriteoUtils:
         num_rows: int,
         path_manager_key: str = PATH_MANAGER_KEY,
         mmap_mode: bool = False,
-    ) -> np.ndarray:
+    ) -> npt.NDArray:
         """
         Load part of an npy file.
 
@@ -442,7 +456,7 @@ class BinaryCriteoUtils:
         # Load each .npy file of sparse features. Transformations are made along the columns.
         # Thereby, transpose the input to ease operations.
         # E.g. file_to_features = {"day_0_sparse": [array([[3,6,7],[7,9,3]]}
-        file_to_features: Dict[str, np.ndarray] = {}
+        file_to_features: Dict[str, npt.NDArray] = {}
         for f in in_files:
             name = os.path.basename(f).split(".")[0]
             file_to_features[name] = np.load(f).transpose()
@@ -494,7 +508,7 @@ class BinaryCriteoUtils:
             with path_manager.open(output_file, "wb") as fout:
                 print(f"Writing file: {output_file}")
                 # Transpose back the features when saving, as they were transposed when loading.
-                np.save(fout, features.transpose())
+                np.save(cast(IO[bytes], fout), features.transpose())
 
     @staticmethod
     def shuffle(
@@ -586,7 +600,7 @@ class BinaryCriteoUtils:
             full_output_file = os.path.join(output_dir_full_set, "full.npy")
             with path_manager.open(full_output_file, "wb") as fout:
                 print(f"Writing full set file: {full_output_file}")
-                np.save(fout, full_dataset)
+                np.save(cast(IO[bytes], fout), full_dataset)
 
         print(f"Shuffling dataset with random_seed={random_seed}")
         np.random.seed(random_seed)
@@ -606,7 +620,10 @@ class BinaryCriteoUtils:
                 print(
                     f"Writing rows {curr_first_row}-{curr_last_row-1} dense file: {shuffled_dense_file}"
                 )
-                np.save(fout, full_dataset[curr_first_row:curr_last_row, 0:int_columns])
+                np.save(
+                    cast(IO[bytes], fout),
+                    full_dataset[curr_first_row:curr_last_row, 0:int_columns],
+                )
 
             # write sparse columns
             shuffled_sparse_file = os.path.join(
@@ -617,7 +634,7 @@ class BinaryCriteoUtils:
                     f"Writing rows {curr_first_row}-{curr_last_row-1} sparse file: {shuffled_sparse_file}"
                 )
                 np.save(
-                    fout,
+                    cast(IO[bytes], fout),
                     full_dataset[
                         curr_first_row:curr_last_row, int_columns : columns - 1
                     ].astype(np.int32),
@@ -632,7 +649,7 @@ class BinaryCriteoUtils:
                     f"Writing rows {curr_first_row}-{curr_last_row-1} labels file: {shuffled_labels_file}"
                 )
                 np.save(
-                    fout,
+                    cast(IO[bytes], fout),
                     full_dataset[curr_first_row:curr_last_row, columns - 1 :].astype(
                         np.int32
                     ),
@@ -719,7 +736,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.shuffle_training_set = shuffle_training_set
         np.random.seed(shuffle_training_set_random_seed)
         self.mmap_mode = mmap_mode
-        self.hashes: np.ndarray = np.array(hashes).reshape((1, CAT_FEATURE_COUNT))
+        self.hashes: npt.NDArray = np.array(hashes).reshape((1, CAT_FEATURE_COUNT))
         self.path_manager_key = path_manager_key
         self.path_manager: PathManager = PathManagerFactory().get(path_manager_key)
 
@@ -729,13 +746,13 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
             self.rank = 0
         else:
             m = "r" if mmap_mode else None
-            self.dense_arrs: List[np.ndarray] = [
+            self.dense_arrs: List[npt.NDArray] = [
                 np.load(f, mmap_mode=m) for f in self.dense_paths
             ]
-            self.sparse_arrs: List[np.ndarray] = [
+            self.sparse_arrs: List[npt.NDArray] = [
                 np.load(f, mmap_mode=m) for f in self.sparse_paths
             ]
-            self.labels_arrs: List[np.ndarray] = [
+            self.labels_arrs: List[npt.NDArray] = [
                 np.load(f, mmap_mode=m) for f in self.labels_paths
             ]
         len_d0 = len(self.dense_arrs[0])
@@ -760,17 +777,16 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.num_full_batches: int = (
             total_rows // batch_size // self.world_size * self.world_size
         )
-        self.last_batch_sizes: np.ndarray = np.array(
-            [0 for _ in range(self.world_size)]
-        )
+        last_batch_sizes = np.array([0 for _ in range(self.world_size)])
         remainder = total_rows % (self.world_size * batch_size)
         if not self.drop_last and 0 < remainder:
             if remainder < self.world_size:
                 self.num_full_batches -= self.world_size
-                self.last_batch_sizes += batch_size
+                last_batch_sizes += batch_size
             else:
-                self.last_batch_sizes += remainder // self.world_size
-            self.last_batch_sizes[: remainder % self.world_size] += 1
+                last_batch_sizes += remainder // self.world_size
+            last_batch_sizes[: remainder % self.world_size] += 1
+        self.last_batch_sizes: npt.NDArray[np.int64] = last_batch_sizes
 
         # These values are the same for the KeyedJaggedTensors in all batches, so they
         # are computed once here. This avoids extra work from the KeyedJaggedTensor sync
@@ -849,7 +865,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         rows_per_rank = np.array([rows_per_rank for _ in range(world_size)])
         rows_per_rank[: self.remainder] += 1
         rank_rows_bins = np.cumsum(rows_per_rank)
-        rank_rows_bins_csr = np.cumsum([0] + list(rows_per_rank))
+        rank_rows_bins_csr = np.cumsum(cast(npt.ArrayLike, [0] + list(rows_per_rank)))
 
         rows = rows_per_rank[rank]
         d_sample, s_sample, l_sample = (
@@ -879,7 +895,7 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
         self.labels_arrs = [shuffled_labels_arr]
 
     def _np_arrays_to_batch(
-        self, dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
+        self, dense: npt.NDArray, sparse: npt.NDArray, labels: npt.NDArray
     ) -> Batch:
         if self.shuffle_batches:
             # Shuffle all 3 in unison
@@ -916,16 +932,17 @@ class InMemoryBinaryCriteoIterDataPipe(IterableDataset):
 
     def __iter__(self) -> Iterator[Batch]:
         # Invariant: buffer never contains more than batch_size rows.
-        buffer: Optional[List[np.ndarray]] = None
+        buffer: Optional[List[npt.NDArray]] = None
 
         def append_to_buffer(
-            dense: np.ndarray, sparse: np.ndarray, labels: np.ndarray
+            dense: npt.NDArray, sparse: npt.NDArray, labels: npt.NDArray
         ) -> None:
             nonlocal buffer
             if buffer is None:
                 buffer = [dense, sparse, labels]
             else:
                 for idx, arr in enumerate([dense, sparse, labels]):
+                    # pyre-ignore [6]
                     buffer[idx] = np.concatenate((buffer[idx], arr))
 
         # Maintain a buffer that can contain up to batch_size rows. Fill buffer as

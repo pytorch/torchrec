@@ -5,9 +5,11 @@ hypothesis
 iopath
 numpy
 pandas
-pyre-extensions==0.0.27
+pyre-extensions
+pytest
 scikit-build
 tabulate
 torchmetrics
 torchx
 tqdm
+usort
