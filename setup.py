@@ -52,6 +52,12 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=None,
         help="override version",
     )
+    parser.add_argument(
+        "--cpu-only",
+        type=bool,
+        default=False,
+        help="True will install CPU only version of fbgemm-gpu",
+    )
     return parser.parse_known_args(argv)
 
 
@@ -82,7 +88,16 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu")
 
-    print(f"-- {name} building version: {version}")
+    cpu_only = args.cpu_only
+    if cpu_only:
+        if "fbgemm-gpu-nightly" in install_requires:
+            install_requires.remove("fbgemm-gpu-nightly")
+            install_requires.append("fbgemm-gpu-nightly-cpu")
+        if "fbgemm-gpu" in install_requires:
+            install_requires.remove("fbgemm-gpu")
+            install_requires.append("fbgemm-gpu-cpu")
+
+    print(f"-- {name} building version: {version} CPU only: {cpu_only}")
 
     packages = find_packages(
         exclude=(
