@@ -123,8 +123,10 @@ class KeyedOptimizer(optim.Optimizer):
     def post_load_state_dict(self) -> None:
         pass
 
-    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        """
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], strict: bool = True
+    ) -> None:
+        r"""
         This implementation is much stricter than the one in torch.Optimizer:
         it requires implementations to fully initialize their state during first optimization iteration,
         and it prohibits loading an empty state into already initialized KeyedOptimizer and vise versa.
@@ -136,14 +138,20 @@ class KeyedOptimizer(optim.Optimizer):
               sd = optimizer.state_dict()
               load_checkpoint(sd)  # copy state directly into tensors, re-shard if needed
               optimizer.load_state_dict(sd)  # replace param_groups
+
+        Args:
+            state_dict (dict): a dict containing parameters and
+                persistent buffers.
+            strict (bool, optional): whether to strictly enforce that the keys
+                in :attr:`state_dict` match the keys returned by this module's
+                :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
         """
 
         new_state = state_dict["state"]
         state = self.state
         params = self.params
 
-        # Load state
-        if len(state) != len(new_state):
+        if strict and len(state) != len(new_state):
             raise ValueError(
                 f"Different parameter count: {len(state)} vs {len(new_state)}"
             )
@@ -151,7 +159,11 @@ class KeyedOptimizer(optim.Optimizer):
             if param not in state:
                 continue
             if param_key not in new_state:
-                raise ValueError(f"Parameter {param_key} not found")
+                if not strict:
+                    continue
+                raise ValueError(
+                    f"Parameter {param_key} not found in {set(new_state.keys())}"
+                )
             if len(state[param]) != len(new_state[param_key]):
                 raise ValueError(
                     f"Different state size: {len(state[param])} vs {len(new_state[param_key])}"
@@ -409,8 +421,10 @@ class OptimizerWrapper(KeyedOptimizer):
     def post_load_state_dict(self) -> None:
         self._optimizer.post_load_state_dict()
 
-    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        self._optimizer.load_state_dict(state_dict)
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], strict: bool = True
+    ) -> None:
+        self._optimizer.load_state_dict(state_dict, strict=strict)
         # Reassign references because self._optimizer receives new state and param_group
         # references after load_state_dict.
         self.state = self._optimizer.state
