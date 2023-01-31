@@ -1497,6 +1497,28 @@ KeyedTensor({
 """,
         )
 
+    def test_to_dict_traceable(self) -> None:
+        class Test(torch.nn.Module):
+            def forward(
+                self, values: torch.Tensor, lengths: torch.Tensor
+            ) -> Tuple[torch.Tensor, torch.Tensor]:
+                kjt = KeyedJaggedTensor(keys=["a"], values=values, lengths=lengths)
+                jt_dict = kjt.to_dict()
+                jt = jt_dict["a"]
+                return jt.values(), jt.lengths()
+
+        m = Test()
+        values = torch.randn(3)
+        lengths = torch.ones(3).int().reshape(1, 3)
+        ts = torch.jit.trace(m, (values, lengths), strict=False)
+        print(ts.code)
+        values = torch.randn(5)
+        lengths = torch.ones(5).int().reshape(1, 5)
+        results = ts(values, lengths)
+        expected_results = m(values, lengths)
+        for r, er in zip(results, expected_results):
+            torch.testing.assert_allclose(r, er)
+
 
 class TestComputeKJTToJTDict(unittest.TestCase):
     def test_key_lookup(self) -> None:

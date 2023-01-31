@@ -531,6 +531,21 @@ def _maybe_compute_length_per_key(
     return length_per_key
 
 
+@torch.jit.script_if_tracing
+def _maybe_compute_length_per_key_scripted(
+    keys: List[str],
+    stride_tensor: torch.Tensor,
+    length_per_key: Optional[List[int]],
+    lengths: Optional[torch.Tensor],
+    offsets: Optional[torch.Tensor],
+) -> torch.Tensor:
+    stride_list: List[int] = stride_tensor.tolist()
+    stride: int = stride_list[0]
+    return torch.tensor(
+        _maybe_compute_length_per_key(keys, stride, length_per_key, lengths, offsets)
+    )
+
+
 def _maybe_compute_offset_per_key(
     keys: List[str],
     stride: int,
@@ -614,6 +629,46 @@ class ComputeKJTToJTDict(torch.nn.Module):
         )
 
 
+def _compute_kjt_to_jt_dict_common(
+    stride: int,
+    keys: List[str],
+    values_list: List[torch.Tensor],
+    lengths: torch.Tensor,
+    weights_list: Optional[List[torch.Tensor]],
+) -> Dict[str, JaggedTensor]:
+    _jt_dict: Dict[str, JaggedTensor] = {}
+    lengths_tuple = torch.unbind(
+        lengths.view(-1, stride) if lengths.numel() != 0 else lengths, dim=0
+    )
+    offsets_tuple = torch.unbind(
+        _batched_lengths_to_offsets(lengths.view(-1, stride))
+        if lengths.numel() != 0
+        else lengths,
+        dim=0,
+    )
+
+    if weights_list is not None:
+        for idx, key in enumerate(keys):
+            length = lengths_tuple[idx]
+            offset = offsets_tuple[idx]
+            _jt_dict[key] = JaggedTensor(
+                lengths=length,
+                offsets=offset,
+                values=values_list[idx],
+                weights=weights_list[idx],
+            )
+    else:
+        for idx, key in enumerate(keys):
+            length = lengths_tuple[idx]
+            offset = offsets_tuple[idx]
+            _jt_dict[key] = JaggedTensor(
+                lengths=length,
+                offsets=offset,
+                values=values_list[idx],
+            )
+    return _jt_dict
+
+
 def _maybe_compute_kjt_to_jt_dict(
     stride: int,
     keys: List[str],
@@ -627,39 +682,50 @@ def _maybe_compute_kjt_to_jt_dict(
         return {}
 
     if jt_dict is None:
-        _jt_dict: Dict[str, JaggedTensor] = {}
         values_list = torch.split(values, length_per_key)
-        lengths_tuple = torch.unbind(
-            lengths.view(-1, stride) if lengths.numel() != 0 else lengths, dim=0
-        )
-        offsets_tuple = torch.unbind(
-            _batched_lengths_to_offsets(lengths.view(-1, stride))
-            if lengths.numel() != 0
-            else lengths,
-            dim=0,
-        )
 
         if weights is not None:
             weights_list = torch.split(weights, length_per_key)
-            for idx, key in enumerate(keys):
-                length = lengths_tuple[idx]
-                offset = offsets_tuple[idx]
-                _jt_dict[key] = JaggedTensor(
-                    lengths=length,
-                    offsets=offset,
-                    values=values_list[idx],
-                    weights=weights_list[idx],
-                )
+            return _compute_kjt_to_jt_dict_common(
+                stride, keys, values_list, lengths, weights_list
+            )
         else:
-            for idx, key in enumerate(keys):
-                length = lengths_tuple[idx]
-                offset = offsets_tuple[idx]
-                _jt_dict[key] = JaggedTensor(
-                    lengths=length,
-                    offsets=offset,
-                    values=values_list[idx],
-                )
-        jt_dict = _jt_dict
+            return _compute_kjt_to_jt_dict_common(
+                stride, keys, values_list, lengths, weights_list=None
+            )
+    return jt_dict
+
+
+@torch.jit.script_if_tracing
+def _split(input: torch.Tensor, sizes: torch.Tensor) -> List[torch.Tensor]:
+    size_list: List[int] = sizes.tolist()
+    return torch.split(input, size_list)
+
+
+def _maybe_compute_kjt_to_jt_dict_scripted(
+    stride: int,
+    keys: List[str],
+    length_per_key_tensor: torch.Tensor,
+    values: torch.Tensor,
+    lengths: torch.Tensor,
+    weights: Optional[torch.Tensor],
+    jt_dict: Optional[Dict[str, JaggedTensor]],
+) -> Dict[str, JaggedTensor]:
+    if length_per_key_tensor.numel() == 0:
+        return {}
+
+    if jt_dict is None:
+        values_list = _split(values, length_per_key_tensor)
+
+        if weights is not None:
+            weights_list = _split(weights, length_per_key_tensor)
+            return _compute_kjt_to_jt_dict_common(
+                stride, keys, values_list, lengths, weights_list
+            )
+        else:
+            return _compute_kjt_to_jt_dict_common(
+                stride, keys, values_list, lengths, weights_list=None
+            )
     return jt_dict
 
 
@@ -755,13 +821,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
         if torch.jit.is_tracing():
-            stride = _maybe_compute_stride_kjt_scripted(keys, stride, lengths, offsets)[
-                0
-            ]
+            stride_tensor = _maybe_compute_stride_kjt_scripted(
+                keys, stride, lengths, offsets
+            )
+            stride = stride_tensor[0]
         else:
             stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
+            stride_tensor = None
 
         self._stride: int = stride
+        self._stride_tensor: Optional[torch.Tensor] = stride_tensor
 
         # lazy fields
         self._length_per_key: Optional[List[int]] = length_per_key
@@ -990,6 +1059,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def stride(self) -> int:
         return self._stride
 
+    def stride_tensor(self) -> torch.Tensor:
+        assert self._stride_tensor is not None
+        return self._stride_tensor
+
     def _key_indices(self) -> Dict[str, int]:
         _index_per_key: Dict[str, int] = _maybe_compute_index_per_key(
             self._keys,
@@ -997,6 +1070,17 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
         self._index_per_key = _index_per_key
         return _index_per_key
+
+    def length_per_key_scripted(self) -> torch.Tensor:
+        _length_per_key = _maybe_compute_length_per_key_scripted(
+            self._keys,
+            self.stride_tensor(),
+            self._length_per_key,
+            self._lengths,
+            self._offsets,
+        )
+        self._length_per_key: Optional[List[int]] = _length_per_key.tolist()
+        return _length_per_key
 
     def length_per_key(self) -> List[int]:
         _length_per_key = _maybe_compute_length_per_key(
@@ -1164,15 +1248,26 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
     def to_dict(self) -> Dict[str, JaggedTensor]:
-        _jt_dict = _maybe_compute_kjt_to_jt_dict(
-            self.stride(),
-            self.keys(),
-            self.length_per_key(),
-            self.values(),
-            self.lengths(),
-            self.weights_or_none(),
-            self._jt_dict,
-        )
+        if torch.jit.is_tracing():
+            _jt_dict = _maybe_compute_kjt_to_jt_dict_scripted(
+                self.stride(),
+                self.keys(),
+                self.length_per_key_scripted(),
+                self.values(),
+                self.lengths(),
+                self.weights_or_none(),
+                self._jt_dict,
+            )
+        else:
+            _jt_dict = _maybe_compute_kjt_to_jt_dict(
+                self.stride(),
+                self.keys(),
+                self.length_per_key(),
+                self.values(),
+                self.lengths(),
+                self.weights_or_none(),
+                self._jt_dict,
+            )
         self._jt_dict = _jt_dict
         return _jt_dict
 
