@@ -7,6 +7,7 @@
 
 #!/usr/bin/env python3
 
+import io
 import os
 import tempfile
 import unittest
@@ -53,13 +54,9 @@ class FSDPTest(unittest.TestCase):
     def _run(cls, path: str) -> None:
         rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
-        if torch.cuda.is_available():
-            device: torch.device = torch.device(f"cuda:{rank}")
-            backend = "nccl"
-            torch.cuda.set_device(device)
-        else:
-            device: torch.device = torch.device("cpu")
-            backend = "gloo"
+        device: torch.device = torch.device(f"cuda:{rank}")
+        backend = "nccl"
+        torch.cuda.set_device(device)
         dist.init_process_group(backend=backend)
         num_float_features = 32
 
@@ -109,12 +106,12 @@ class FSDPTest(unittest.TestCase):
             device=device,
             plan=plan,
         )
+
         sharded_m = FullyShardedDataParallel(
             module=m,
             device_id=rank,
             ignored_modules=[m.sparse],
-            # TODO enable once works
-            # use_orig_params=True,
+            use_orig_params=True,
         )
         dense_opt = KeyedOptimizerWrapper(
             dict(in_backward_optimizer_filter(m.named_parameters(), include=False)),
@@ -136,6 +133,7 @@ class FSDPTest(unittest.TestCase):
                 [
                     WarmupStage(
                         policy=WarmupPolicy.LINEAR,
+                        max_iters=1000,
                         value=0.1,
                         lr_scale=1.0,
                     )
@@ -145,12 +143,14 @@ class FSDPTest(unittest.TestCase):
             )
             optims.append((name, warmup))
             sparse_grad_parameter_names.add(name)
+        assert len(sparse_grad_parameter_names) == 5
         fused_opt_scheduled = CombinedOptimizer(optims)
         dense_opt_scheduled = WarmupOptimizer(
             dense_opt,
             [
                 WarmupStage(
                     policy=WarmupPolicy.LINEAR,
+                    max_iters=1000,
                     value=0.15,
                     lr_scale=1.0,
                 )
@@ -164,10 +164,13 @@ class FSDPTest(unittest.TestCase):
         # Runs a dummy optimizer step, which allows to initialize
         #   optimizer state, which is typically lazy.
         # This allows us to do in-place loading of optimizer state from a checkpoint.
-        # Remark that fused optimizer needs speical case as its states are ShardedTensors.
+        # Remark that fused optimizer needs special case as its states are ShardedTensors.
         # This is the reason we need to pass the sparse_grad_parameter_names as parameters.
         opt.init_state(sparse_grad_parameter_names)
         opt.save_param_groups(True)
+        model_param_names = set(dict(sharded_m.named_parameters()).keys())
+        opt_param_keys = set(opt.params.keys())
+        assert model_param_names.issubset(opt_param_keys)
 
         ######## run one iteration ########
         _, local_batch = ModelInput.generate(
@@ -181,12 +184,11 @@ class FSDPTest(unittest.TestCase):
         sharded_m(batch)[1].sum().backward()
         opt.step()
 
-        # TODO uncomment after fixing
-        # buffer = io.BytesIO()
-        # # Use FSDP state_dict() API instead of default
-        # opt_state_dict = FullyShardedDataParallel._optim_state_dict(sharded_m, opt)
-        # torch.save(opt_state_dict, buffer)
-        # buffer.seek(0)
+        buffer = io.BytesIO()
+        # Use FSDP state_dict() API instead of default
+        opt_state_dict = FullyShardedDataParallel._optim_state_dict(sharded_m, opt)
+        torch.save(opt_state_dict, buffer)
+        buffer.seek(0)
 
         writer = FileSystemWriter(path=path)
         reader = FileSystemReader(path=path)
@@ -206,7 +208,9 @@ class FSDPTest(unittest.TestCase):
                 assert p.sum() == 0
         o_sum = torch.zeros(1, device=device)
         for p_v in opt.state_dict()["state"].values():
-            for t in p_v.values():
+            for name, t in p_v.items():
+                if name == "step":
+                    continue
                 if isinstance(t, ShardedTensor):
                     if not t.local_shards():
                         continue
@@ -231,17 +235,22 @@ class FSDPTest(unittest.TestCase):
         assert p_sum.allclose(p_sum_loaded)
 
         # Use FSDP load_state_dict() API instead of default
-        # TODO uncomment after fixing
-        # FullyShardedDataParallel._load_optim_state_dict_pre_hook(sharded_m, opt, torch.load(buffer))
-        # o_sum_loaded = torch.zeros(1, device=device)
-        # for p_v in opt.state_dict()["state"].values():
-        #     for t in p_v.values():
-        #         if isinstance(t, ShardedTensor):
-        #             if not t.local_shards():
-        #                 continue
-        #             t = t.local_tensor()
-        #         o_sum_loaded += t.sum()
-        # assert o_sum.allclose(o_sum_loaded)
+        new_opt_state_dict = FullyShardedDataParallel._load_optim_state_dict_pre_hook(
+            sharded_m, opt, torch.load(buffer)
+        )
+        # FSDP doesn't guarantee all params on all ranks -> strict should be False
+        opt.load_state_dict(new_opt_state_dict, strict=False)
+        o_sum_loaded = torch.zeros(1, device=device)
+        for p_v in opt.state_dict()["state"].values():
+            for name, t in p_v.items():
+                if name == "step":
+                    continue
+                if isinstance(t, ShardedTensor):
+                    if not t.local_shards():
+                        continue
+                    t = t.local_tensor()
+                o_sum_loaded += t.sum()
+        assert o_sum.allclose(o_sum_loaded)
 
     @skip_if_asan
     # pyre-ignore[56]
