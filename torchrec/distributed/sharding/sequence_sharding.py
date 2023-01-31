@@ -11,6 +11,7 @@ from typing import List, Optional
 import torch
 import torch.distributed as dist  # noqa
 from torchrec.distributed.embedding_sharding import EmbeddingShardingContext
+from torchrec.distributed.embedding_types import KJTList
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -63,7 +64,7 @@ class InferSequenceShardingContext(Multistreamable):
             shards of KJT after input dist.
     """
 
-    features: Optional[List[KeyedJaggedTensor]] = None
+    features: Optional[KJTList] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         if self.features is not None:

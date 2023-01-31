@@ -43,6 +43,11 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+@torch.fx.wrap
+def fx_wrap_tensor_view2d(x: torch.Tensor, dim0: int, dim1: int) -> torch.Tensor:
+    return x.view(dim0, dim1)
+
+
 def _load_state_dict(
     emb_modules: "nn.ModuleList",
     state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor]]",
@@ -80,6 +85,21 @@ def _load_state_dict(
             else:
                 missing_keys.append(cast(str, key))
     return missing_keys, unexpected_keys
+
+
+@torch.fx.wrap
+def embeddings_cat_empty_rank_handle(
+    embeddings: List[torch.Tensor],
+    dummy_embs_tensor: torch.Tensor,
+    dim: int = 0,
+) -> torch.Tensor:
+    if len(embeddings) == 0:
+        # a hack for empty ranks
+        return dummy_embs_tensor
+    elif len(embeddings) == 1:
+        return embeddings[0]
+    else:
+        return torch.cat(embeddings, dim=dim)
 
 
 class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]):
@@ -147,13 +167,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         for emb_op, features in zip(self._emb_modules, features_by_group):
             embeddings.append(emb_op(features).view(-1))
 
-        if len(embeddings) == 0:
-            # a hack for empty ranks
-            return self._dummy_embs_tensor
-        elif len(embeddings) == 1:
-            return embeddings[0]
-        else:
-            return torch.cat(embeddings)
+        return embeddings_cat_empty_rank_handle(embeddings, self._dummy_embs_tensor)
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
@@ -297,13 +311,11 @@ class GroupedPooledEmbeddingsLookup(
                 ):
                     features = self._feature_processor(features)
                 embeddings.append(emb_op(features))
-        if len(embeddings) == 0:
-            # a hack for empty ranks
-            return self._dummy_embs_tensor.view(sparse_features.stride(), 0)
-        elif len(embeddings) == 1:
-            return embeddings[0]
-        else:
-            return torch.cat(embeddings, dim=1)
+        return embeddings_cat_empty_rank_handle(
+            embeddings,
+            fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
+            dim=1,
+        )
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
@@ -424,16 +436,10 @@ class MetaInferGroupedEmbeddingsLookup(
         features_by_group = sparse_features.split(
             self._feature_splits,
         )
-        for emb_op, features in zip(self._emb_modules, features_by_group):
-            embeddings.append(emb_op(features).view(-1))
+        for i in range(len(self._emb_modules)):
+            embeddings.append(self._emb_modules[i](features_by_group[i]).view(-1))
 
-        if len(embeddings) == 0:
-            # a hack for empty ranks
-            return self._dummy_embs_tensor
-        elif len(embeddings) == 1:
-            return embeddings[0]
-        else:
-            return torch.cat(embeddings)
+        return embeddings_cat_empty_rank_handle(embeddings, self._dummy_embs_tensor)
 
     # pyre-ignore [14]
     def state_dict(
@@ -554,13 +560,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 features = self._feature_processor(features)
             embeddings.append(emb_op.forward(features))
 
-        if len(embeddings) == 0:
-            # a hack for empty ranks
-            return self._dummy_embs_tensor.view(sparse_features.stride(), 0)
-        elif len(embeddings) == 1:
-            return embeddings[0]
-        else:
-            return torch.cat(embeddings, dim=1)
+        return embeddings_cat_empty_rank_handle(
+            embeddings,
+            fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
+            dim=1,
+        )
 
     # pyre-ignore [14]
     def state_dict(
