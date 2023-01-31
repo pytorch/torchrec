@@ -1,0 +1,11 @@
+{
+  "exclude": [
+    ".*/pyre-check/stubs/.*"
+  ],
+  "site_package_search_strategy": "all",
+  "source_directories": [
+    "torchrec"
+  ],
+  "strict": true,
+  "version": "0.0.101674562297"
+}
