@@ -3,7 +3,7 @@
   "source_directories": [
     {"import_root": ".", "source": "torchrec"}
   ],
-  "exclude": [".*\/torchrec\/datasets\/.*", ".*\/torchrec\/models\/.*", ".*\/torchrec\/inference\/.*"],
+  "exclude": [".*\/torchrec\/datasets\/scripts\/.*", ".*\/torchrec\/inference\/client.py"],
   "strict": true,
   "version": "0.0.101675080701"
 }

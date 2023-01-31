@@ -14,6 +14,8 @@ import unittest
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
+
+import numpy.typing as npt
 from pyre_extensions import none_throws
 from torchrec.datasets.criteo import CAT_FEATURE_COUNT, INT_FEATURE_COUNT
 
@@ -96,9 +98,9 @@ class CriteoTest(unittest.TestCase):
         generate_dense: bool = True,
         generate_sparse: bool = True,
         generate_labels: bool = True,
-        dense: Optional[np.ndarray] = None,
-        sparse: Optional[np.ndarray] = None,
-        labels: Optional[np.ndarray] = None,
+        dense: Optional[npt.NDArray] = None,
+        sparse: Optional[npt.NDArray] = None,
+        labels: Optional[npt.NDArray] = None,
     ) -> Generator[Tuple[str, ...], None, None]:
         with tempfile.TemporaryDirectory() as tmpdir:
 

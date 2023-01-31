@@ -10,9 +10,11 @@ import math
 import os
 import random
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, cast, Dict, List, Optional
 
 import numpy as np
+
+import numpy.typing as npt
 from torch.utils.data import DataLoader
 from torchrec.datasets.criteo import (
     BinaryCriteoUtils,
@@ -221,8 +223,8 @@ class TestBinaryCriteoUtils(CriteoTest):
 
     def _validate_sparse_to_contiguous_preproc(
         self,
-        unprocessed_data: List[np.ndarray],
-        expected_data: List[np.ndarray],
+        unprocessed_data: List[npt.NDArray],
+        expected_data: List[npt.NDArray],
         freq_threshold: int,
         columns: int,
     ) -> None:
@@ -277,7 +279,7 @@ class TestBinaryCriteoUtils(CriteoTest):
             ]
             labels_data = [np.array([[i], [i + 3], [i + 6]]) for i in range(3)]
 
-            def save_data_list(data: List[np.ndarray], data_type: str) -> None:
+            def save_data_list(data: List[npt.NDArray], data_type: str) -> None:
                 for day, data_ in enumerate(data):
                     file = os.path.join(temp_input_dir, f"day_{day}_{data_type}.npy")
                     np.save(file, data_)
@@ -433,7 +435,7 @@ class TestInMemoryBinaryCriteoIterDataPipe(CriteoTest):
         random_seed: int = 0,
     ) -> None:
         with contextlib.ExitStack() as stack:
-            num_rows_csr = np.cumsum([0] + rows_per_file)
+            num_rows_csr = np.cumsum(cast(npt.ArrayLike, [0] + rows_per_file))
             dense, sparse, labels = [], [], []
             for i, _ in enumerate(rows_per_file):
                 start = num_rows_csr[i]
