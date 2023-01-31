@@ -5,7 +5,6 @@ hypothesis
 iopath
 numpy
 pandas
-pyre-check-nightly==0.0.101675080701
 pyre-extensions
 scikit-build
 tabulate

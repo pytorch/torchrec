@@ -259,12 +259,12 @@ class ParallelizedEmbeddingShardingPlanner(ShardingPlanner):
 
             return (best_plan, best_perf_rating, lowest_storage, group_plans_num)
 
-        grouped_proposals = numpy.array_split(
-            cast(npt.ArrayLike, proposals_list), self._cpu_count
+        grouped_proposals = cast(
+            List[List[List[ShardingOption]]],
+            numpy.array_split(cast(npt.ArrayLike, proposals_list), self._cpu_count),
         )
 
         pool = Pool(self._cpu_count)
-        # pyre-ignore [6]
         group_best_plans = pool.map(get_best_plan, grouped_proposals)
         pool.close()
         pool.join()

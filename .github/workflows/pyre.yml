@@ -1,0 +1,28 @@
+name: Pyre Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pyre-check:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: 3.9
+      - name: Checkout Torchrec
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: >
+          conda install --yes -c pytorch-nightly "pytorch-nightly"::pytorch[build="*cpu*"] &&
+          pip install -r requirements.txt &&
+          pip uninstall fbgemm_gpu-nightly -y &&
+          pip install fbgemm-gpu-nightly-cpu &&
+          pip install pyre-check-nightly==$(cat .pyre_configuration | grep version | awk '{print $2}' | sed 's/\"//g')
+      - name: Pyre check
+        run: pyre check
