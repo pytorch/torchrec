@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.fx
 from torch.autograd.profiler import record_function
-from torchrec.streamable import Pipelineable
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -171,7 +170,7 @@ class JaggedTensorMeta(abc.ABCMeta, torch.fx.ProxyableClassMeta):
     pass
 
 
-class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
+class JaggedTensor(metaclass=JaggedTensorMeta):
     """
     Represents an (optionally weighted) jagged tensor.
 
@@ -684,7 +683,7 @@ def _sum_by_splits(input_list: List[int], splits: List[int]) -> List[int]:
     ]
 
 
-class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
+class KeyedJaggedTensor(metaclass=JaggedTensorMeta):
     """Represents an (optionally weighted) keyed jagged tensor.
 
     A `KeyedJaggedTensor` is a tensor with a *jagged dimension* which is dimension whose
@@ -1347,7 +1346,7 @@ def _keyed_values_string(values: torch.Tensor) -> str:
     )
 
 
-class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
+class KeyedTensor(metaclass=JaggedTensorMeta):
     """
     KeyedTensor holds a concatenated list of dense tensors, each of which can be
     accessed by a key.

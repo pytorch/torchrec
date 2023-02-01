@@ -5,27 +5,29 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import abc
+from typing import Protocol, runtime_checkable
 
 import torch
 
 
-class Multistreamable(abc.ABC):
+@runtime_checkable
+class Multistreamable(Protocol):
     """
     Objects implementing this interface are allowed to be transferred
     from one CUDA stream to another.
     torch.Tensor and (Keyed)JaggedTensor implement this interface.
     """
 
-    @abc.abstractmethod
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        pass
         """
         See https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html
         """
         ...
 
 
-class Pipelineable(Multistreamable):
+@runtime_checkable
+class Pipelineable(Multistreamable, Protocol):
     """
     This interface contains two methods, one for moving an input across devices,
     the other one for marking streams that operate the input.
@@ -36,8 +38,8 @@ class Pipelineable(Multistreamable):
     Some models take compound inputs, which should implement this interface.
     """
 
-    @abc.abstractmethod
     def to(self, device: torch.device, non_blocking: bool) -> "Pipelineable":
+        pass
         """
         Please be aware that according to https://pytorch.org/docs/stable/generated/torch.Tensor.to.html,
         `to` might return self or a copy of self.  So please remember to use `to` with the assignment operator,
