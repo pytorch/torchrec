@@ -8,10 +8,13 @@
 #!/usr/bin/env python3
 
 import unittest
+from enum import Enum
+
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import quantization as quant
+from torchrec import EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
@@ -25,17 +28,27 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollection,
     QuantEmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
-from torchrec.distributed.types import ShardingEnv
+from torchrec.distributed.types import Awaitable, ShardingEnv
 from torchrec.fx.tracer import Tracer as TorchrecFxTracer
 from torchrec.inference.modules import CopyableMixin
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.quant.embedding_modules import (
+    EmbeddingCollection as QuantEmbeddingCollection,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+
+class FxJitTestType(Enum):
+    CREATE_ONLY = 0
+    FX = 1
+    FX_JIT = 2
 
 
 # Wrapper for module that accepts ModelInput to avoid jit scripting of ModelInput (dataclass) and be fully torch types bound.
@@ -80,9 +93,57 @@ class TorchTypesModelInputWrapper(CopyableMixin):
         return self._module(mi)
 
 
-class ModelTraceScriptTest(unittest.TestCase):
+def _quantize(module: torch.nn.Module) -> torch.nn.Module:
+    qconfig = quant.QConfig(
+        activation=quant.PlaceholderObserver,
+        weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
+    )
+    return quant.quantize_dynamic(
+        module,
+        qconfig_spec={
+            EmbeddingCollection: qconfig,
+            EmbeddingBagCollection: qconfig,
+        },
+        mapping={
+            EmbeddingCollection: QuantEmbeddingCollection,
+            EmbeddingBagCollection: QuantEmbeddingBagCollection,
+        },
+        inplace=True,
+    )
+
+
+class KJTInputWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        module_kjt_input: torch.nn.Module,
+    ) -> None:
+        super().__init__()
+        self._module_kjt_input = module_kjt_input
+        self.add_module("_module_kjt_input", self._module_kjt_input)
+
     # pyre-ignore
-    def DMP_QEBC(self, world_size: int) -> Tuple[torch.nn.Module, List[Tuple]]:
+    def forward(
+        self,
+        keys: List[str],
+        values: torch.Tensor,
+        lengths: Optional[torch.Tensor] = None,
+        offsets: Optional[torch.Tensor] = None,
+    ):
+        kjt = KeyedJaggedTensor(
+            keys=keys,
+            values=values,
+            lengths=lengths,
+            offsets=offsets,
+        )
+        return self._module_kjt_input(kjt)
+
+
+class ModelTraceScriptTest(unittest.TestCase):
+    def DMP_QEBC(
+        self,
+        world_size: int
+        # pyre-ignore
+    ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
         device = torch.device("cuda:0")
         num_features = 2
         num_float_features = 10
@@ -117,28 +178,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         )
 
         model.training = False
-
-        def _quantize(
-            module: torch.nn.Module,
-            inplace: bool,
-            output_type: torch.dtype = torch.float,
-        ) -> torch.nn.Module:
-            qconfig = quant.QConfig(
-                activation=quant.PlaceholderObserver.with_args(dtype=output_type),
-                weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
-            )
-            return quant.quantize_dynamic(
-                module,
-                qconfig_spec={
-                    EmbeddingBagCollection: qconfig,
-                },
-                mapping={
-                    EmbeddingBagCollection: QuantEmbeddingBagCollection,
-                },
-                inplace=inplace,
-            )
-
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(model)
 
         class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
             def __init__(
@@ -241,16 +281,127 @@ class ModelTraceScriptTest(unittest.TestCase):
                 idscore_kjt._offsets,
             )
 
-        return (dmp, [model_input_to_forward_args(*inp) for inp in inputs])
+        return (quant_model, dmp, [model_input_to_forward_args(*inp) for inp in inputs])
+
+    def DMP_QEC(
+        self,
+        world_size: int
+        # pyre-ignore
+    ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
+        device = torch.device("cuda:0")
+        num_features = 4
+        num_float_features = 10
+
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 11,
+                embedding_dim=16,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(num_features)
+        ]
+
+        model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(tables=tables, device=device)
+            )
+        )
+
+        quant_model = _quantize(model)
+
+        class TestQuantECSharder(QuantEmbeddingCollectionSharder):
+            def __init__(self, sharding_type: str, kernel_type: str) -> None:
+                super().__init__()
+                self._sharding_type = sharding_type
+                self._kernel_type = kernel_type
+
+            def sharding_types(self, compute_device_type: str) -> List[str]:
+                return [self._sharding_type]
+
+            def compute_kernels(
+                self, sharding_type: str, compute_device_type: str
+            ) -> List[str]:
+                return [self._kernel_type]
+
+        sharders = [
+            cast(
+                ModuleSharder[torch.nn.Module],
+                TestQuantECSharder(
+                    sharding_type=ShardingType.TABLE_WISE.value,
+                    kernel_type=EmbeddingComputeKernel.QUANT.value,
+                ),
+            )
+        ]
+        topology = Topology(world_size=world_size, compute_device="cuda")
+        plan = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=10,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=1,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        ).plan(quant_model, sharders)
+        dmp = DistributedModelParallel(
+            quant_model,
+            plan=plan,
+            device=device,
+            env=ShardingEnv.from_local(world_size=world_size, rank=0),
+            init_data_parallel=False,
+        )
+
+        inputs = []
+        for _ in range(5):
+            inputs.append(
+                (
+                    ModelInput.generate(
+                        batch_size=16,
+                        world_size=world_size,
+                        num_float_features=num_float_features,
+                        tables=tables,
+                        weighted_tables=[],
+                    )[1][0].to(device),
+                )
+            )
+
+        def model_input_to_forward_args(
+            mi: ModelInput,
+        ) -> Tuple[
+            List[str], torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]
+        ]:
+            kjt = mi.idlist_features
+            return (
+                kjt._keys,
+                kjt._values,
+                kjt._lengths,
+                kjt._offsets,
+            )
+
+        return (
+            quant_model,
+            dmp,
+            [model_input_to_forward_args(*inp) for inp in inputs],
+        )
 
     def _models_with_inputs(
         self,
         # pyre-ignore
         *args,
         # pyre-ignore
-        **kwargs
-    ) -> List[Tuple[torch.nn.Module, List[Tuple]]]:  # pyre-ignore
-        return [fn(*args, **kwargs) for fn in [self.DMP_QEBC]]
+        **kwargs,
+        # pyre-ignore
+    ) -> List[Tuple[torch.nn.Module, torch.nn.Module, List[Tuple], FxJitTestType]]:
+        return [
+            (*fn(*args, **kwargs), test_type)
+            for fn, test_type in [
+                (self.DMP_QEBC, FxJitTestType.FX_JIT),
+                (self.DMP_QEC, FxJitTestType.CREATE_ONLY),
+            ]
+        ]
 
     # pyre-ignore
     @unittest.skipIf(
@@ -258,23 +409,51 @@ class ModelTraceScriptTest(unittest.TestCase):
         "Not enough GPUs available",
     )
     def test_fxtrace_jitscript(self) -> None:
-        for model, inputs in self._models_with_inputs(world_size=2):
+
+        for non_sharded_model, model, inputs, test_type in self._models_with_inputs(
+            world_size=2
+        ):
+            if test_type == FxJitTestType.CREATE_ONLY:
+                continue
+
             # We need more than one input to verify correctness of tracing and scripting using input different from what was used for tracing
             assert len(inputs) > 1
 
             # Run model first time to go through lazy initialized blocks before tracing
             # Targeting only inference for this time
+            non_sharded_model.train(False)
             model.train(False)
 
+            non_sharded_model(*inputs[0])
             eager_output = model(*inputs[0])
 
             tracer = TorchrecFxTracer()
-            g = tracer.trace(model)
+            graph = tracer.trace(model)
             # pyre-ignore
-            gm = torch.fx.GraphModule(tracer.root, g)
-            gm_script = torch.jit.script(gm)
-            gm_script_output = gm_script(*inputs[0])
-            torch.testing.assert_close(gm_script_output, eager_output)
+            gm = torch.fx.GraphModule(tracer.root, graph)
 
-            for inp in inputs[1:]:
-                torch.testing.assert_close(gm_script(*inp), model(*inp))
+            if test_type == FxJitTestType.FX_JIT:
+                gm_script = torch.jit.script(gm)
+                gm_script_output = gm_script(*inputs[0])
+
+                # pyre-ignore
+                # TODO: Add JaggedTensor check to assert_close
+                def assert_close(expected, got) -> None:
+                    if isinstance(expected, dict):
+                        for feature, jt_e in expected.items():
+                            jt_got = got[feature]
+                            torch.testing.assert_close(jt_e.lengths(), jt_got.lengths())
+                            torch.testing.assert_close(jt_e.values(), jt_got.values())
+                            torch.testing.assert_close(jt_e.offsets(), jt_got.offsets())
+                    else:
+                        torch.testing.assert_close(expected, got)
+
+                if isinstance(eager_output, Awaitable):
+                    eager_output = eager_output.wait()
+
+                assert_close(eager_output, gm_script_output)
+
+                for inp in inputs[1:]:
+                    eager_output = model(*inp)
+                    script_output = gm_script(*inp)
+                    assert_close(eager_output, script_output)

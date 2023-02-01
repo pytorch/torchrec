@@ -93,5 +93,25 @@ We are currently iterating on the setup experience. For now, we provide manual i
 
 5. If you want to run a more complex example, please take a look at the torchrec [DLRM example](https://github.com/facebookresearch/dlrm/blob/main/torchrec_dlrm/dlrm_main.py).
 
+## Contributing
+
+### Pyre and linting
+
+Before landing, please make sure that pyre and linting look okay. To run our linters, you will need to
+```
+pip install pre-commit
+```
+
+, and run it.
+
+For Pyre, you will need to
+```
+cat .pyre_configuration
+pip install pyre-check-nightly==<VERSION FROM CONFIG>
+pyre check
+```
+
+We will also check for these issues in our GitHub actions.
+
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.
