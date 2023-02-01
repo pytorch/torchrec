@@ -38,6 +38,8 @@ DP_ELEMENTWISE_KERNELS_PERF_FACTOR: float = 9.22  # empirical studies
 def kernel_bw_lookup(
     compute_device: str,
     compute_kernel: str,
+    bw_hbm_mem: float,
+    bw_ddr_mem: float,
     caching_ratio: Optional[float] = None,
 ) -> Optional[float]:
     """
@@ -56,21 +58,21 @@ def kernel_bw_lookup(
     caching_ratio = caching_ratio if caching_ratio else UVM_CACHING_RATIO
     lookup = {
         # CPU
-        ("cpu", EmbeddingComputeKernel.DENSE.value): 0.5 * DDR_MEM_BW,
-        ("cpu", EmbeddingComputeKernel.FUSED.value): 1 * DDR_MEM_BW,
-        ("cpu", EmbeddingComputeKernel.QUANT.value): 1 * DDR_MEM_BW,
+        ("cpu", EmbeddingComputeKernel.DENSE.value): 0.5 * bw_ddr_mem,
+        ("cpu", EmbeddingComputeKernel.FUSED.value): 1 * bw_ddr_mem,
+        ("cpu", EmbeddingComputeKernel.QUANT.value): 1 * bw_ddr_mem,
         # CUDA
-        ("cuda", EmbeddingComputeKernel.DENSE.value): 0.5 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.FUSED.value): 1 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.FUSED_UVM.value): DDR_MEM_BW / 10,
+        ("cuda", EmbeddingComputeKernel.DENSE.value): 0.5 * bw_hbm_mem,
+        ("cuda", EmbeddingComputeKernel.FUSED.value): 1 * bw_hbm_mem,
+        ("cuda", EmbeddingComputeKernel.FUSED_UVM.value): bw_ddr_mem / 10,
         ("cuda", EmbeddingComputeKernel.FUSED_UVM_CACHING.value): (
-            caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
+            caching_ratio * bw_hbm_mem + (1 - caching_ratio) * bw_ddr_mem
         )
         / 10,
-        ("cuda", EmbeddingComputeKernel.QUANT.value): 1 * HBM_MEM_BW,
-        ("cuda", EmbeddingComputeKernel.QUANT_UVM.value): DDR_MEM_BW / 10,
+        ("cuda", EmbeddingComputeKernel.QUANT.value): 1 * bw_hbm_mem,
+        ("cuda", EmbeddingComputeKernel.QUANT_UVM.value): bw_ddr_mem / 10,
         ("cuda", EmbeddingComputeKernel.QUANT_UVM_CACHING.value): (
-            caching_ratio * HBM_MEM_BW + (1 - caching_ratio) * DDR_MEM_BW
+            caching_ratio * bw_hbm_mem + (1 - caching_ratio) * bw_ddr_mem
         )
         / 10,
     }
