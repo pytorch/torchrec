@@ -238,6 +238,33 @@ def copy_to_device(
     return copy_module
 
 
+class CopyableMixin(nn.Module):
+    """
+    Allows copying of module to a target device.
+
+    Example::
+
+        class MyModule(CopyableMixin):
+            ...
+
+    Args:
+        device : torch.device to copy to
+
+    Returns
+        nn.Module on new device
+    """
+
+    def copy(
+        self,
+        device: torch.device,
+    ) -> nn.Module:
+        return copy_to_device(
+            self,
+            current_device=torch.device("cpu"),
+            to_device=device,
+        )
+
+
 def optimizer_type_to_emb_opt_type(
     optimizer_class: Type[torch.optim.Optimizer],
 ) -> Optional[EmbOptimType]:

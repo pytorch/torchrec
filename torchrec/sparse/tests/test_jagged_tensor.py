@@ -1009,11 +1009,8 @@ class TestKeyedJaggedTensor(unittest.TestCase):
 
     def test_string_none(self) -> None:
         jag_tensor = KeyedJaggedTensor(
-            # pyre-fixme[6]: For 1st param expected `List[str]` but got `Tensor`.
-            torch.Tensor(),
-            # pyre-fixme[6]: For 2nd param expected `Tensor` but got
-            #  `List[Variable[_T]]`.
             [],
+            torch.Tensor(),
         )
 
         self.assertEqual(
