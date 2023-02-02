@@ -22,7 +22,7 @@ from torchrec.distributed.embeddingbag import (
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
-from torchrec.inference.modules import CopyableMixin
+from torchrec.distributed.utils import CopyableMixin
 from torchrec.modules.embedding_configs import (
     BaseEmbeddingConfig,
     EmbeddingBagConfig,
@@ -39,7 +39,7 @@ from torchrec.streamable import Pipelineable
 class ModelInput(Pipelineable):
     float_features: torch.Tensor
     idlist_features: KeyedJaggedTensor
-    idscore_features: KeyedJaggedTensor
+    idscore_features: Optional[KeyedJaggedTensor]
     label: torch.Tensor
 
     @staticmethod
@@ -208,8 +208,6 @@ class ModelInput(Pipelineable):
             local_input = ModelInput(
                 float_features=global_float[r * batch_size : (r + 1) * batch_size],
                 idlist_features=local_idlist_kjt,
-                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
-                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=local_idscore_kjt,
                 label=global_label[r * batch_size : (r + 1) * batch_size],
             )
@@ -219,8 +217,6 @@ class ModelInput(Pipelineable):
             ModelInput(
                 float_features=global_float,
                 idlist_features=global_idlist_kjt,
-                # pyre-fixme[6]: For 3rd param expected `KeyedJaggedTensor` but got
-                #  `Optional[KeyedJaggedTensor]`.
                 idscore_features=global_idscore_kjt,
                 label=global_label,
             ),
@@ -235,7 +231,6 @@ class ModelInput(Pipelineable):
             idlist_features=self.idlist_features.to(
                 device=device, non_blocking=non_blocking
             ),
-            # pyre-ignore [6]
             idscore_features=self.idscore_features.to(
                 device=device, non_blocking=non_blocking
             )

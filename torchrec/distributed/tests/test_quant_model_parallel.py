@@ -28,7 +28,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
 )
 from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
-from torchrec.inference.modules import copy_to_device
+from torchrec.distributed.utils import copy_to_device
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (

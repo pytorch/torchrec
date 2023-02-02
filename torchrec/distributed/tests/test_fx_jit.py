@@ -35,8 +35,8 @@ from torchrec.distributed.quant_embeddingbag import (
 )
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.types import Awaitable, ShardingEnv
+from torchrec.distributed.utils import CopyableMixin
 from torchrec.fx.tracer import Tracer as TorchrecFxTracer
-from torchrec.inference.modules import CopyableMixin
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
@@ -267,6 +267,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         ]:
             idlist_kjt = mi.idlist_features
             idscore_kjt = mi.idscore_features
+            assert idscore_kjt is not None
             return (
                 mi.float_features,
                 idlist_kjt._keys,
