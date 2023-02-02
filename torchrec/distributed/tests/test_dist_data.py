@@ -11,13 +11,10 @@ import unittest
 from typing import Dict, Generator, List, Optional, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
-import numpy as np
 import torch
 import torch.distributed as dist
 from hypothesis import given, settings
 
-# @manual=//python/wheel/numpy:numpy
-from numpy.testing import assert_array_equal
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTAllToAllSplitsAwaitable,
@@ -186,11 +183,11 @@ class KJTAllToAllTest(MultiProcessTestBase):
             if isinstance(expected_output_awaitable, KeyedJaggedTensor)
             else expected_output_awaitable.wait().wait()
         )
-        assert_array_equal(
+        torch.testing.assert_close(
             actual_output.values().cpu(),
             expected_output.values().cpu(),
         )
-        assert_array_equal(
+        torch.testing.assert_close(
             actual_output.weights().cpu()
             if actual_output.weights_or_none() is not None
             else [],
@@ -198,14 +195,11 @@ class KJTAllToAllTest(MultiProcessTestBase):
             if expected_output.weights_or_none() is not None
             else [],
         )
-        assert_array_equal(
+        torch.testing.assert_close(
             actual_output.lengths().cpu(),
             expected_output.lengths().cpu(),
         )
-        assert_array_equal(
-            actual_output.keys(),
-            expected_output.keys(),
-        )
+        assert actual_output.keys() == expected_output.keys()
 
     @classmethod
     def _run_test_dist(
@@ -481,7 +475,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
             atol=atol,
         )
         if qcomms_config is None:
-            assert_array_equal(
+            torch.testing.assert_close(
                 # pyre-ignore
                 input.grad.cpu().detach(),
                 torch.ones(input.size()).div_(world_size),
@@ -603,7 +597,7 @@ class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
             atol=atol,
         )
         if qcomms_config is None:
-            assert_array_equal(
+            torch.testing.assert_close(
                 # pyre-ignore
                 input.grad.cpu().detach(),
                 torch.ones(input.size()).div_(world_size),
@@ -698,8 +692,10 @@ class PooledEmbeddingsAllGatherTest(MultiProcessTestBase):
         input: torch.Tensor,
         world_size: int,
     ) -> None:
-        assert_array_equal(actual_output.cpu().detach(), expected_output.cpu().detach())
-        assert_array_equal(
+        torch.testing.assert_close(
+            actual_output.cpu().detach(), expected_output.cpu().detach()
+        )
+        torch.testing.assert_close(
             # pyre-fixme[16]: Optional type has no attribute `cpu`.
             input.grad.cpu().detach(),
             torch.ones(input.size()),
@@ -778,8 +774,8 @@ def _generate_sequence_embedding_batch(
                 offset : offset + current_rank_batch_size
             ]
             offset += current_rank_batch_size
-            emb_by_rank_feature[f"{feature}_{str(rank)}"] = np.random.rand(
-                sum(current_stride_lengths), dim
+            emb_by_rank_feature[f"{feature}_{str(rank)}"] = torch.rand(
+                (sum(current_stride_lengths), dim)
             ).tolist()
             tensor_by_feature[f"{feature}"] = []
             tensor_by_rank[f"{str(rank)}"] = []
@@ -799,7 +795,7 @@ def _generate_sequence_embedding_batch(
         out_tensor.append(torch.Tensor(v))
 
     input_offsets = [0] + list(itertools.accumulate(splits))
-    output_offsets = np.arange(0, world_size + 1, dtype=int).tolist()
+    output_offsets = torch.arange(0, world_size + 1, dtype=torch.int).tolist()
 
     regroup_in_tensor: List[torch.Tensor] = []
     regroup_out_tensor: List[torch.Tensor] = []
@@ -867,7 +863,7 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
         res.backward(res)
         grad = _input.grad
         # pyre-fixme[16]: Optional type has no attribute `cpu`.
-        assert_array_equal(_input.cpu().detach(), grad.cpu().detach())
+        torch.testing.assert_close(_input.cpu().detach(), grad.cpu().detach())
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,

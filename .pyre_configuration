@@ -1,10 +1,13 @@
 {
   "exclude": [
-    ".*/pyre-check/stubs/.*"
+    ".*/pyre-check/stubs/.*",
+    ".*\/torchrec\/datasets*",
+    ".*\/torchrec\/models*",
+    ".*\/torchrec\/inference\/client.py"
   ],
   "site_package_search_strategy": "all",
   "source_directories": [
-    "torchrec"
+    {"import_root": ".", "source": "torchrec"}
   ],
   "strict": true,
   "version": "0.0.101674562297"

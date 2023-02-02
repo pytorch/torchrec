@@ -11,7 +11,6 @@ import os
 import unittest
 from typing import Callable
 
-import numpy
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
@@ -119,35 +118,37 @@ class TestAllToAll(unittest.TestCase):
         ranks = 2
         tables_mp = [[0], [1, 2]]
         lengths_dp = [
-            numpy.array([[1, 2], [1, 1], [2, 1]]),
-            numpy.array([[1, 2], [2, 1], [3, 1]]),
+            torch.tensor([[1, 2], [1, 1], [2, 1]], dtype=torch.int),
+            torch.tensor([[1, 2], [2, 1], [3, 1]], dtype=torch.int),
         ]  # W, T_g, B_l
         lengths_a2a = [
-            numpy.array([[[1, 2]], [[1, 2]]]),  # Rank 0
-            numpy.array(
+            torch.tensor([[[1, 2]], [[1, 2]]], dtype=torch.int),  # Rank 0
+            torch.tensor(
                 [
                     [[1, 1], [2, 1]],  # from Rank 0
                     [[2, 1], [3, 1]],  # from rank 1
-                ]
+                ],
+                dtype=torch.int,
             ),  # Rank 1
         ]  # W, W, T_l, B_l
         lengths_mp = [
-            numpy.array(
+            torch.tensor(
                 [
                     [1, 2, 1, 2],
-                ]
+                ],
+                dtype=torch.int,
             ),
-            numpy.array([[1, 1, 2, 1], [2, 1, 3, 1]]),
+            torch.tensor([[1, 1, 2, 1], [2, 1, 3, 1]], dtype=torch.int),
         ]  # w, t_l, b_g
         input_seg = list(itertools.accumulate([0] + [len(i) for i in tables_mp]))
         input_splits = [
             [
-                lengths_dp[i][input_seg[j] : input_seg[j + 1], :].sum()
+                int(lengths_dp[i][input_seg[j] : input_seg[j + 1], :].sum())
                 for j in range(ranks)
             ]
             for i in range(ranks)
         ]
-        output_splits = [lengths_a2a[i].sum(axis=(1, 2)).tolist() for i in range(ranks)]
+        output_splits = [lengths_a2a[i].sum(dim=(1, 2)).tolist() for i in range(ranks)]
         table_dim = 3
         num_features_per_rank = [len(features) for features in tables_mp]
         seq_all2all_forward_recat = []
@@ -162,7 +163,7 @@ class TestAllToAll(unittest.TestCase):
 
         seq_all2all_backward_recat_tensor = torch.IntTensor(seq_all2all_backward_recat)
         input_embeddings = torch.rand(
-            lengths_mp[rank].sum(),
+            int(lengths_mp[rank].sum()),
             table_dim,
             device=device,
             requires_grad=True,

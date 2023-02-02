@@ -268,6 +268,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()
                 # register as a buffer so it's exposed in state_dict.
+                # TODO: register as param instead of buffer
                 # however, since this is only needed for inference, we do not need to expose it as part of parameters.
                 # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
                 self.embedding_bags[embedding_config.name].register_buffer(
@@ -441,7 +442,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         ] = None,
     ) -> None:
         super().__init__()
-        self.embeddings: nn.ModuleList = nn.ModuleList()
+        self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
+        self.embeddings: nn.ModuleDict = nn.ModuleDict()
+
         self._embedding_configs = tables
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
@@ -487,7 +490,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             if device != torch.device("meta") and weight_lists is None:
                 emb_module.initialize_weights()
 
-            self.embeddings.append(emb_module)
+            self._emb_modules.append(emb_module)
+            self.embeddings[config.name] = torch.nn.Module()
+            # register as a buffer so it's exposed in state_dict.
+            # TODO: register as param instead of buffer
+            # however, since this is only needed for inference, we do not need to expose it as part of parameters.
+            # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
+            weights_list = emb_module.split_embedding_weights(split_scale_shifts=False)
+            self.embeddings[config.name].register_buffer("weight", weights_list[0][0])
 
             if not config.feature_names:
                 config.feature_names = [config.name]
@@ -513,7 +523,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         for config, embedding_names, emb_module in zip(
             self._embedding_configs,
             self._embedding_names_by_table,
-            self.embeddings,
+            self._emb_modules,
         ):
             for feature_name, embedding_name in zip(
                 config.feature_names, embedding_names
@@ -531,27 +541,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                     weights=f.values() if self.need_indices else None,
                 )
         return feature_embeddings
-
-    # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
-    def state_dict(
-        self,
-        destination: Optional[Dict[str, Any]] = None,
-        prefix: str = "",
-        keep_vars: bool = False,
-    ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
-            # pyre-ignore [16]
-            destination._metadata = OrderedDict()
-        for emb_config, emb_module in zip(
-            self._embedding_configs,
-            self.embeddings,
-        ):
-            (weight, _) = emb_module.split_embedding_weights(split_scale_shifts=False)[
-                0
-            ]
-            destination[prefix + f"embeddings.{emb_config.name}.weight"] = weight
-        return destination
 
     @classmethod
     def from_float(cls, module: OriginalEmbeddingCollection) -> "EmbeddingCollection":

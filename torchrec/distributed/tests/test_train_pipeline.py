@@ -218,7 +218,8 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             optimizer_cpu.zero_grad()
             loss, pred = unsharded_model(example)
             example.idlist_features._jt_dict = None
-            example.idscore_features._jt_dict = None
+            if example.idscore_features is not None:
+                example.idscore_features._jt_dict = None
             loss.backward()
             optimizer_cpu.step()
             pred_gpu = pipeline.progress(dataloader)
