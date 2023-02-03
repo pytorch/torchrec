@@ -121,6 +121,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 input_data_type_size=BIGINT_DTYPE,
                 output_data_type_size=sharding_option.tensor.element_size(),
                 num_poolings=num_poolings,
+                hbm_mem_bw=self._topology.hbm_mem_bw,
+                ddr_mem_bw=self._topology.ddr_mem_bw,
                 bw_intra_host=self._topology.intra_host_bw,
                 bw_inter_host=self._topology.inter_host_bw,
                 is_pooled=sharding_option.is_pooled,
@@ -146,6 +148,8 @@ def perf_func_emb_wall_time(
     input_data_type_size: float,
     output_data_type_size: float,
     num_poolings: List[float],
+    hbm_mem_bw: float,
+    ddr_mem_bw: float,
     bw_intra_host: float,
     bw_inter_host: float,
     is_pooled: bool,
@@ -173,6 +177,8 @@ def perf_func_emb_wall_time(
         output_data_type_size (float): the data type size of the distributed
             data_parallel output.
         num_poolings (List[float]): number of poolings per sample, typically 1.0.
+        hbm_mem_bw (float): the bandwidth of the device HBM.
+        ddr_mem_bw (float): the bandwidth of the system DDR memory.
         bw_intra_host (float): the bandwidth within a single host like multiple threads.
         bw_inter_host (float): the bandwidth between two hosts like multiple machines.
         is_pooled (bool): True if embedding output is pooled (ie. EmbeddingBag), False
@@ -189,7 +195,9 @@ def perf_func_emb_wall_time(
     """
 
     shard_perfs = []
-    device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
+    device_bw = kernel_bw_lookup(
+        compute_device, compute_kernel, hbm_mem_bw, ddr_mem_bw, caching_ratio
+    )
     if device_bw is None:
         raise PlannerError(
             f"No kernel bandwidth exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
