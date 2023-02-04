@@ -17,7 +17,9 @@ from torchrec.distributed.planner.constants import (
     BATCH_SIZE,
     CROSS_NODE_BANDWIDTH,
     DDR_CAP,
+    DDR_MEM_BW,
     HBM_CAP,
+    HBM_MEM_BW,
     INTRA_NODE_BANDWIDTH,
     POOLING_FACTOR,
 )
@@ -75,6 +77,8 @@ class Topology:
         hbm_cap: Optional[int] = None,
         ddr_cap: Optional[int] = None,
         local_world_size: Optional[int] = None,
+        hbm_mem_bw: float = HBM_MEM_BW,
+        ddr_mem_bw: float = DDR_MEM_BW,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
     ) -> None:
@@ -107,6 +111,8 @@ class Topology:
         self._local_world_size: int = (
             local_world_size if local_world_size else world_size
         )
+        self._hbm_mem_bw = hbm_mem_bw
+        self._ddr_mem_bw = ddr_mem_bw
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
 
@@ -125,6 +131,14 @@ class Topology:
     @property
     def local_world_size(self) -> int:
         return self._local_world_size
+
+    @property
+    def hbm_mem_bw(self) -> float:
+        return self._hbm_mem_bw
+
+    @property
+    def ddr_mem_bw(self) -> float:
+        return self._ddr_mem_bw
 
     @property
     def intra_host_bw(self) -> float:
