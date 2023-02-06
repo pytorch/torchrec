@@ -144,7 +144,8 @@ class KJTInputWrapper(torch.nn.Module):
 class ModelTraceScriptTest(unittest.TestCase):
     def DMP_QEBC(
         self,
-        world_size: int
+        world_size: int,
+        unwrap_dmp: bool
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
         device = torch.device("cuda:0")
@@ -285,11 +286,12 @@ class ModelTraceScriptTest(unittest.TestCase):
                 idscore_kjt._offsets,
             )
 
-        return (quant_model, dmp, [model_input_to_forward_args(*inp) for inp in inputs])
+        m = dmp.module if unwrap_dmp else dmp
+        return (quant_model, m, [model_input_to_forward_args(*inp) for inp in inputs])
 
     def DMP_QEC(
         self,
-        world_size: int
+        world_size: int,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
         device = torch.device("cuda:0")
@@ -402,7 +404,19 @@ class ModelTraceScriptTest(unittest.TestCase):
         return [
             (*fn(*args, **kwargs), test_type)
             for fn, test_type in [
-                (self.DMP_QEBC, FxJitTestType.FX_JIT),
+                (
+                    lambda world_size: self.DMP_QEBC(
+                        world_size=world_size,
+                        unwrap_dmp=True,  # preferred usage is to provide fx trace with unwrapped dmp
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.DMP_QEBC(
+                        world_size=world_size, unwrap_dmp=False
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
                 (self.DMP_QEC, FxJitTestType.CREATE_ONLY),
             ]
         ]
@@ -413,7 +427,6 @@ class ModelTraceScriptTest(unittest.TestCase):
         "Not enough GPUs available",
     )
     def test_fxtrace_jitscript(self) -> None:
-
         for non_sharded_model, model, inputs, test_type in self._models_with_inputs(
             world_size=2
         ):
@@ -430,9 +443,10 @@ class ModelTraceScriptTest(unittest.TestCase):
 
             non_sharded_model(*inputs[0])
             eager_output = model(*inputs[0])
-
             tracer = TorchrecFxTracer()
             graph = tracer.trace(model)
+            print(f"This is model type: {type(model)}")
+
             # pyre-ignore
             gm = torch.fx.GraphModule(tracer.root, graph)
 

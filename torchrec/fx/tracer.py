@@ -54,23 +54,36 @@ class Tracer(torch.fx.Tracer):
         global _is_fx_tracing_flag
         old_is_fx_tracing_flag = _is_fx_tracing_flag
         _is_fx_tracing_flag = True
-        if isinstance(root, torch.nn.Module):
-            for prefix, module in root.named_modules():
-                # TODO(T140754678): Remove this workaround to _fx_path
-                module._fx_path = prefix
 
         try:
             # TODO(ivankobzarev): support DMP not only on the root level
             from torchrec.distributed.model_parallel import DistributedModelParallel
 
             if isinstance(root, DistributedModelParallel):
+                # In the case where the module is wrapped in DMP, you need to replace DMP's forward
+                # call with a new signature, one with explicit args, because fx can't handle variable args.
+                # Furthermore, we need to provide the `fn_root` argument because when tracing a function,
+                # fx uses an empty module as the root (unless one is explicitly provided), which leads to
+                # issues with path_of_module and named_buffers.
+
+                # TODO(shababayub): This can be removed if we either stop supporting dmp wrapping
+                # for fx trace or strip dmp name in named_modules path (much like named_buffers).
+                if isinstance(root, torch.nn.Module):
+                    for prefix, module in root.named_modules():
+                        # TODO(T140754678): Remove this workaround to _fx_path
+                        module._fx_path = prefix
+
                 dmp = root
-                graph = super().trace(dmp_fx_trace_forward(dmp, self), concrete_args)
-                self.root._dmp_wrapped_module = root._dmp_wrapped_module
-            else:
                 graph = super().trace(
-                    root,
-                    concrete_args,
+                    root=dmp_fx_trace_forward(dmp, self),
+                    concrete_args=concrete_args,
+                )
+                self.root._dmp_wrapped_module = dmp._dmp_wrapped_module
+            else:
+                # Unwrapped dmp modules and composibility api will enter here.
+                graph = super().trace(
+                    root=root,
+                    concrete_args=concrete_args,
                 )
         finally:
             _is_fx_tracing_flag = old_is_fx_tracing_flag
