@@ -51,10 +51,9 @@ jobs:
         sed -i 's/fbgemm-gpu-nightly/fbgemm-gpu-nightly-cpu/g' requirements.txt
         conda run -n build_binary \
           pip install -r requirements.txt
+        export CPU_ONLY=1
         conda run -n build_binary \
           python setup.py bdist_wheel \
-          --package_name torchrec-test-cpu \
-          --cpu-only True \
           --python-tag=${{ matrix.python-tag }}
         conda run -n build_binary \
           python -c "import torchrec"
