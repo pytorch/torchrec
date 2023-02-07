@@ -479,6 +479,9 @@ class FusedEmbeddingBagCollection(
             if self._is_weighted:
                 weights = torch.cat(weights)
 
+            #code to transfer unsharded model to current_device where table is
+            emb_op.to( torch.cuda.current_device() )
+
             embeddings.append(
                 emb_op(
                     indicies.int(),
