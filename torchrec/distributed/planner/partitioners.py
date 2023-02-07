@@ -170,7 +170,9 @@ class GreedyPerfPartitioner(Partitioner):
                     len(sharding_option_group.sharding_options) == 1
                 ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
                 GreedyPerfPartitioner._device_partition(
-                    sharding_option_group.sharding_options[0], _topology.devices
+                    sharding_option_group.sharding_options[0],
+                    _topology.devices,
+                    _topology.local_world_size,
                 )
             else:
                 raise RuntimeError(
@@ -182,10 +184,20 @@ class GreedyPerfPartitioner(Partitioner):
 
     @staticmethod
     def _device_partition(
-        sharding_option: ShardingOption, devices: List[DeviceHardware]
+        sharding_option: ShardingOption,
+        devices: List[DeviceHardware],
+        local_world_size: int = 1,
     ) -> None:
         for shard in sharding_option.shards:
-            sorted_devices = sorted(devices, key=lambda device: device.perf)
+            sorted_devices = sorted(
+                devices,
+                # We use the "local_rank" as the secondary key for sorting. This
+                # is to even out the pressure on different hosts. For example, in UVM
+                # case, we will allocate UVM table with the global rank order, and host0
+                # will use a lot more CPU memory than the others. With local rank as the
+                # secondary key, we could even out CPU memory pressure on different host
+                key=lambda device: (device.perf, device.rank % local_world_size),
+            )
             success = False
             for device in sorted_devices:
                 if cast(Storage, shard.storage).fits_in(device.storage):
@@ -229,7 +241,7 @@ class GreedyPerfPartitioner(Partitioner):
                         == ShardingType.TABLE_COLUMN_WISE.value
                     ):
                         GreedyPerfPartitioner._device_partition(
-                            sharding_option, host_devices
+                            sharding_option, host_devices, len(host_devices)
                         )
                     else:
                         raise RuntimeError(
