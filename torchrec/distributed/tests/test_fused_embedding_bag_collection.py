@@ -94,7 +94,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @skipIfRocm()
     # pyre-fixme[56]
     @given(
         sharder_type=st.sampled_from(
@@ -118,7 +117,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharder_type: str,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
         fused_ebc = FusedEmbeddingBagCollection(
             tables=[
                 EmbeddingBagConfig(
@@ -153,7 +151,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             backend="nccl",
         )
 
-    @skipIfRocm()
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -175,7 +172,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
         ebc = EmbeddingBagCollection(
             tables=[
                 EmbeddingBagConfig(
