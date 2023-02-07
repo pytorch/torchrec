@@ -56,7 +56,7 @@ def main(argv: List[str]) -> None:
     channel = get_channel()
     if channel == "nightly":
         name = "torchrec-nightly"
-    else
+    else:
         name = "torchrec"
 
     with open(
