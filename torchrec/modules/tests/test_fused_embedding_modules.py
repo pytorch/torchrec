@@ -506,7 +506,8 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         )
 
     @settings(deadline=None)
-    @skipIfRocm() 
+    @skipIfRocm()
+    # pyre-ignore
     @given(
         optimizer_type_and_kwargs=st.sampled_from(
             [
