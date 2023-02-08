@@ -121,8 +121,10 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 input_data_type_size=BIGINT_DTYPE,
                 output_data_type_size=sharding_option.tensor.element_size(),
                 num_poolings=num_poolings,
-                bw_intra_host=self._topology.intra_host_bw,
-                bw_inter_host=self._topology.inter_host_bw,
+                hbm_mem_bw=self._topology.hbm_mem_bw,
+                ddr_mem_bw=self._topology.ddr_mem_bw,
+                intra_host_bw=self._topology.intra_host_bw,
+                inter_host_bw=self._topology.inter_host_bw,
                 is_pooled=sharding_option.is_pooled,
                 is_weighted=is_weighted,
                 is_inference=self._is_inference,
@@ -146,8 +148,10 @@ def perf_func_emb_wall_time(
     input_data_type_size: float,
     output_data_type_size: float,
     num_poolings: List[float],
-    bw_intra_host: float,
-    bw_inter_host: float,
+    hbm_mem_bw: float,
+    ddr_mem_bw: float,
+    intra_host_bw: float,
+    inter_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
@@ -173,10 +177,12 @@ def perf_func_emb_wall_time(
         output_data_type_size (float): the data type size of the distributed
             data_parallel output.
         num_poolings (List[float]): number of poolings per sample, typically 1.0.
-        bw_intra_host (float): the bandwidth within a single host like multiple threads.
-        bw_inter_host (float): the bandwidth between two hosts like multiple machines.
-        is_pooled (bool): True if embedding output is pooled (ie. EmbeddingBag), False
-            if unpooled/sequential (ie. Embedding).
+        hbm_mem_bw (float): the bandwidth of the device HBM.
+        ddr_mem_bw (float): the bandwidth of the system DDR memory.
+        intra_host_bw (float): the bandwidth within a single host like multiple threads.
+        inter_host_bw (float): the bandwidth between two hosts like multiple machines.
+        is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
+            if unpooled/sequential (ie. `Embedding`).
         is_weighted (bool = False): if the module is an EBC and is weighted, typically
             signifying an id score list feature.
         is_inference (bool = False): if planning for inference.
@@ -189,7 +195,9 @@ def perf_func_emb_wall_time(
     """
 
     shard_perfs = []
-    device_bw = kernel_bw_lookup(compute_device, compute_kernel, caching_ratio)
+    device_bw = kernel_bw_lookup(
+        compute_device, compute_kernel, hbm_mem_bw, ddr_mem_bw, caching_ratio
+    )
     if device_bw is None:
         raise PlannerError(
             f"No kernel bandwidth exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
@@ -211,8 +219,8 @@ def perf_func_emb_wall_time(
                 output_data_type_size=output_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-                bw_intra_host=bw_intra_host,
+                inter_host_bw=inter_host_bw,
+                intra_host_bw=intra_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 is_inference=is_inference,
@@ -229,8 +237,8 @@ def perf_func_emb_wall_time(
                 output_data_type_size=output_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-                bw_intra_host=bw_intra_host,
+                inter_host_bw=inter_host_bw,
+                intra_host_bw=intra_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 has_feature_processor=has_feature_processor,
@@ -246,8 +254,8 @@ def perf_func_emb_wall_time(
                 output_data_type_size=output_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
-                bw_intra_host=bw_intra_host,
+                inter_host_bw=inter_host_bw,
+                intra_host_bw=intra_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 has_feature_processor=has_feature_processor,
@@ -264,7 +272,7 @@ def perf_func_emb_wall_time(
                 output_data_type_size=output_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
-                bw_inter_host=bw_inter_host,
+                inter_host_bw=inter_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 has_feature_processor=has_feature_processor,
@@ -288,8 +296,8 @@ def _get_tw_sharding_perf(
     output_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
-    bw_inter_host: float,
-    bw_intra_host: float,
+    inter_host_bw: float,
+    intra_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
     is_inference: bool = False,
@@ -323,7 +331,7 @@ def _get_tw_sharding_perf(
         else:  # emb_dim >= 32
             block_usage_penalty = QUARTER_BLOCK_PENALTY
 
-    comms_bw = bw_inter_host if world_size > local_world_size else bw_intra_host
+    comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
     fwd_comms = output_write_size / comms_bw
 
     fwd_compute = (
@@ -367,8 +375,8 @@ def _get_rw_sharding_perf(
     output_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
-    bw_inter_host: float,
-    bw_intra_host: float,
+    inter_host_bw: float,
+    intra_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
@@ -391,7 +399,7 @@ def _get_rw_sharding_perf(
 
     output_write_size = batch_outputs * world_size * emb_dim * output_data_type_size
 
-    comms_bw = bw_inter_host if world_size > local_world_size else bw_intra_host
+    comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
     fwd_comms = output_write_size / comms_bw
 
     fwd_compute = (
@@ -430,8 +438,8 @@ def _get_twrw_sharding_perf(
     output_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
-    bw_inter_host: float,
-    bw_intra_host: float,
+    inter_host_bw: float,
+    intra_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
@@ -454,10 +462,10 @@ def _get_twrw_sharding_perf(
 
     output_write_size = batch_outputs * world_size * emb_dim * output_data_type_size
 
-    fwd_comms = output_write_size / bw_intra_host
+    fwd_comms = output_write_size / intra_host_bw
 
     if world_size > local_world_size:
-        fwd_comms += output_write_size * (local_world_size / world_size) / bw_inter_host
+        fwd_comms += output_write_size * (local_world_size / world_size) / inter_host_bw
 
     fwd_compute = (
         input_read_size + embedding_lookup_size + output_write_size
@@ -496,7 +504,7 @@ def _get_dp_sharding_perf(
     output_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
-    bw_inter_host: float,
+    inter_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
@@ -530,7 +538,7 @@ def _get_dp_sharding_perf(
         table_size
         * (2 * num_nodes - 1)
         / num_nodes
-        / (bw_inter_host * local_world_size)  # 1 NIC per GPU
+        / (inter_host_bw * local_world_size)  # 1 NIC per GPU
     )
     # inter host communication constraint
     if world_size > 2 * local_world_size:
@@ -656,8 +664,8 @@ def calculate_shard_storages(
         num_poolings (List[float]): average number of poolings per sample
             (typically 1.0).
         caching_ratio (float): ratio of HBM to DDR memory for UVM caching.
-        is_pooled (bool): True if embedding output is pooled (ie. EmbeddingBag), False
-            if unpooled/sequential (ie. Embedding).
+        is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
+            if unpooled/sequential (ie. `Embedding`).
 
     Returns:
         List[Storage]: storage object for each device in topology.
