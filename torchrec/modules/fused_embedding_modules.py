@@ -480,7 +480,8 @@ class FusedEmbeddingBagCollection(
                 weights = torch.cat(weights)
 
             #code to transfer unsharded model to current_device where table is
-            emb_op.to( torch.cuda.current_device() )
+            if emb_op._emb_module.weights_dev.is_cuda:
+                emb_op.to( torch.cuda.current_device() )
 
             embeddings.append(
                 emb_op(
