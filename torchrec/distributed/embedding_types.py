@@ -92,16 +92,13 @@ class KJTList(Multistreamable):
     def __getitem__(self, key: int) -> KeyedJaggedTensor:
         return self.features[key]
 
-    @torch.jit._drop
     def __iter__(self) -> Iterator[KeyedJaggedTensor]:
         return iter(self.features)
 
-    @torch.jit._drop
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features:
             feature.record_stream(stream)
 
-    @torch.jit._drop
     def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
         return tracer.create_node(
             "call_function",
@@ -124,16 +121,13 @@ class ListOfKJTList(Multistreamable):
     def __getitem__(self, key: int) -> KJTList:
         return self.features_list[key]
 
-    @torch.jit._drop
     def __iter__(self) -> Iterator[KJTList]:
         return iter(self.features_list)
 
-    @torch.jit._drop
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features_list:
             feature.record_stream(stream)
 
-    @torch.jit._drop
     def __fx_create_arg__(self, tracer: torch.fx.Tracer) -> fx.node.Argument:
         return tracer.create_node(
             "call_function",

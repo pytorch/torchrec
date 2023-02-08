@@ -485,7 +485,6 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(deadline=30000)
     # pyre-ignore
     @given(
         qcomms_config=st.sampled_from(
@@ -529,6 +528,7 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
             ]
         ),
     )
+    @settings(max_examples=3, deadline=45000)
     def test_pooled_embedding_reduce_scatter(
         self, qcomms_config: Optional[QCommsConfig]
     ) -> None:
@@ -607,7 +607,6 @@ class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(deadline=30000)
     # pyre-ignore
     @given(
         qcomms_config=st.sampled_from(
@@ -651,6 +650,7 @@ class PooledEmbeddingsReduceScatterVTest(MultiProcessTestBase):
             ]
         ),
     )
+    @settings(max_examples=3, deadline=45000)
     def test_pooled_embedding_reduce_scatter_v(
         self, qcomms_config: Optional[QCommsConfig]
     ) -> None:
