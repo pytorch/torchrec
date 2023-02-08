@@ -33,8 +33,9 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
 )
-from torchrec.types import CopyMixIn
 from torchrec.test_utils import skipIfRocm
+from torchrec.types import CopyMixIn
+
 
 class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
     def __init__(
@@ -309,6 +310,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
         from torchrec.distributed.shard import shard_modules
+
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(

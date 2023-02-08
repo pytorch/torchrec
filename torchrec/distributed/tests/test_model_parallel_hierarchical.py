@@ -25,6 +25,7 @@ from torchrec.distributed.test_utils.test_sharding import (
 from torchrec.distributed.types import ShardingType
 from torchrec.test_utils import skip_if_asan_class, skipIfRocm
 
+
 @skip_if_asan_class
 class ModelParallelHierarchicalTest(ModelParallelTestShared):
     """

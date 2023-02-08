@@ -147,6 +147,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
         from torchrec.distributed.shard import shard_modules
+
         device = torch.device("cuda:0")
 
         # wrap in sequential because _quantize only applies to submodules...

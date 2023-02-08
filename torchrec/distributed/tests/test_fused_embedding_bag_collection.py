@@ -38,7 +38,7 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingBagCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import skip_if_asan_class, skipIfRocm 
+from torchrec.test_utils import skip_if_asan_class, skipIfRocm
 
 
 def sharding_single_rank(

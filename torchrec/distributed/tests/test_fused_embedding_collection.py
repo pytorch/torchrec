@@ -40,6 +40,7 @@ from torchrec.modules.fused_embedding_modules import (
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class, skipIfRocm
 
+
 @skip_if_asan_class
 class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @classmethod

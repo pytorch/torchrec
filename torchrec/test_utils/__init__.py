@@ -10,10 +10,10 @@ import os
 import random
 import socket
 import time
+import unittest
 from contextlib import closing
 from functools import wraps
 from typing import Any, Callable, Dict, Optional, TypeVar
-import unittest
 
 import numpy as np
 import torch
@@ -24,6 +24,7 @@ from torch import nn
 TParams = ParameterSpecification("TParams")
 TReturn = TypeVar("TReturn")
 TEST_WITH_ROCM: bool = os.getenv("TORCHREC_TEST_WITH_ROCM", "0") == "1"
+
 
 def get_free_port() -> int:
     # INTERNAL
@@ -102,6 +103,7 @@ def skip_if_asan_class(cls: TReturn) -> Optional[TReturn]:
         return
     return cls
 
+
 # pyre-fixme[3]: Return annotation cannot be `Any`.
 def skipIfRocm(reason: str = "test doesn't currently work on the ROCm stack") -> Any:
     # pyre-fixme[3]: Return annotation cannot be `Any`.
@@ -118,6 +120,7 @@ def skipIfRocm(reason: str = "test doesn't currently work on the ROCm stack") ->
         return wrapper
 
     return skipIfRocmDecorator
+
 
 def init_distributed_single_host(
     rank: int, world_size: int, backend: str, local_size: Optional[int] = None
