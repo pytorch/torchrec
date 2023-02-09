@@ -18,6 +18,8 @@ from torchrec import EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
+    KJTList,
+    ListOfKJTList,
     ModuleSharder,
     ShardingType,
 )
@@ -38,18 +40,44 @@ from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.types import Awaitable, ShardingEnv
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.fx.tracer import Tracer as TorchrecFxTracer
+from torchrec.fx.utils import fake_range
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 class FxJitTestType(Enum):
     CREATE_ONLY = 0
     FX = 1
     FX_JIT = 2
+
+
+# pyre-ignore
+def _assert_close(expected, got) -> None:
+    # pyre-ignore
+    # TODO: Add JaggedTensor check to assert_close
+    def assert_close_extended(e, g) -> None:
+        if isinstance(e, dict):
+            for feature, jt_e in e.items():
+                jt_g = g[feature]
+                torch.testing.assert_close(jt_e.lengths(), jt_g.lengths())
+                torch.testing.assert_close(jt_e.values(), jt_g.values())
+                torch.testing.assert_close(jt_e.offsets(), jt_g.offsets())
+        else:
+            torch.testing.assert_close(e, g)
+
+    # pyre-ignore
+    def wait_if_await(aw):
+        if isinstance(aw, torch._awaits._Await):
+            return torch.jit._awaitable_wait(aw)
+        if isinstance(aw, Awaitable):
+            return aw.wait()
+        return aw
+
+    assert_close_extended(wait_if_await(expected), wait_if_await(got))
 
 
 # Wrapper for module that accepts ModelInput to avoid jit scripting of ModelInput (dataclass) and be fully torch types bound.
@@ -485,26 +513,25 @@ class ModelTraceScriptTest(unittest.TestCase):
 
             if test_type == FxJitTestType.FX_JIT:
                 gm_script = torch.jit.script(gm)
+
                 gm_script_output = gm_script(*inputs[0])
-
-                # pyre-ignore
-                # TODO: Add JaggedTensor check to assert_close
-                def assert_close(expected, got) -> None:
-                    if isinstance(expected, dict):
-                        for feature, jt_e in expected.items():
-                            jt_got = got[feature]
-                            torch.testing.assert_close(jt_e.lengths(), jt_got.lengths())
-                            torch.testing.assert_close(jt_e.values(), jt_got.values())
-                            torch.testing.assert_close(jt_e.offsets(), jt_got.offsets())
-                    else:
-                        torch.testing.assert_close(expected, got)
-
-                if isinstance(eager_output, Awaitable):
-                    eager_output = eager_output.wait()
-
-                assert_close(eager_output, gm_script_output)
+                _assert_close(eager_output, gm_script_output)
 
                 for inp in inputs[1:]:
-                    eager_output = model(*inp)
-                    script_output = gm_script(*inp)
-                    assert_close(eager_output, script_output)
+                    _assert_close(model(*inp), gm_script(*inp))
+
+    def test_jitscript(self) -> None:
+        # Check main types to be torch jit scriptable
+        for clz in [
+            JaggedTensor,
+            KeyedJaggedTensor,
+            KeyedTensor,
+            KJTList,
+            ListOfKJTList,
+        ]:
+            # Using torch.jit._script._recursive_compile_class instead of torch.jit.script
+            # As classes later is more restrictive, checking no inheritance
+            # (e.g. Multistreamable which we so far do not need in jit script) etc.
+            # We need those classes not as it is, but as composable blocks in model.
+            # _recursive_compile_class for that is enough
+            torch.jit._script._recursive_compile_class(clz, fake_range())

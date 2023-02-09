@@ -17,7 +17,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    KJTListSplitsAwaitable,
+    KJTListSplitsAwait,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -41,8 +41,8 @@ from torchrec.distributed.sharding.tw_sequence_sharding import (
     TwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.types import (
-    Awaitable,
-    LazyAwaitable,
+    Await,
+    awaitable,
     ModuleShardingPlan,
     Multistreamable,
     ParameterSharding,
@@ -52,8 +52,6 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import (
-    append_prefix,
-    filter_state_dict,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
 )
@@ -247,39 +245,29 @@ class EmbeddingCollectionContext(Multistreamable):
             ctx.record_stream(stream)
 
 
-class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
-    def __init__(
-        self,
-        awaitables_per_sharding: List[Awaitable[torch.Tensor]],
-        features_per_sharding: List[KeyedJaggedTensor],
-        embedding_names_per_sharding: List[List[str]],
-        need_indices: bool = False,
-        features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
-    ) -> None:
-        super().__init__()
-        self._awaitables_per_sharding = awaitables_per_sharding
-        self._features_per_sharding = features_per_sharding
-        self._need_indices = need_indices
-        self._features_to_permute_indices = features_to_permute_indices
-        self._embedding_names_per_sharding = embedding_names_per_sharding
-
-    def _wait_impl(self) -> Dict[str, JaggedTensor]:
-        jt_dict: Dict[str, JaggedTensor] = {}
-        for w, f, e in zip(
-            self._awaitables_per_sharding,
-            self._features_per_sharding,
-            self._embedding_names_per_sharding,
-        ):
-            jt_dict.update(
-                _construct_jagged_tensors(
-                    embeddings=w.wait(),
-                    features=f,
-                    embedding_names=e,
-                    need_indices=self._need_indices,
-                    features_to_permute_indices=self._features_to_permute_indices,
-                )
+def EmbeddingCollectionAwait(
+    awaitables_per_sharding: List[Await[torch.Tensor]],
+    features_per_sharding: List[KeyedJaggedTensor],
+    embedding_names_per_sharding: List[List[str]],
+    need_indices: bool = False,
+    features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
+) -> Dict[str, JaggedTensor]:
+    jt_dict: Dict[str, JaggedTensor] = {}
+    for w, f, e in zip(
+        awaitables_per_sharding,
+        features_per_sharding,
+        embedding_names_per_sharding,
+    ):
+        jt_dict.update(
+            _construct_jagged_tensors(
+                embeddings=w.wait(),
+                features=f,
+                embedding_names=e,
+                need_indices=need_indices,
+                features_to_permute_indices=features_to_permute_indices,
             )
-        return jt_dict
+        )
+    return jt_dict
 
 
 class ShardedEmbeddingCollection(
@@ -603,7 +591,7 @@ class ShardedEmbeddingCollection(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KJTList]]:
+    ) -> Await[Await[KJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
@@ -628,7 +616,7 @@ class ShardedEmbeddingCollection(
                         else None,
                     )
                 )
-        return KJTListSplitsAwaitable(awaitables, ctx)
+        return awaitable(KJTListSplitsAwait, awaitables, ctx)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: KJTList
@@ -649,8 +637,8 @@ class ShardedEmbeddingCollection(
 
     def output_dist(
         self, ctx: EmbeddingCollectionContext, output: List[torch.Tensor]
-    ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
-        awaitables_per_sharding: List[Awaitable[torch.Tensor]] = []
+    ) -> Await[Dict[str, JaggedTensor]]:
+        awaitables_per_sharding: List[Await[torch.Tensor]] = []
         features_before_all2all_per_sharding: List[KeyedJaggedTensor] = []
         for odist, embeddings, sharding_ctx in zip(
             self._output_dists,
@@ -661,18 +649,19 @@ class ShardedEmbeddingCollection(
             features_before_all2all_per_sharding.append(
                 sharding_ctx.features_before_input_dist
             )
-        return EmbeddingCollectionAwaitable(
-            awaitables_per_sharding=awaitables_per_sharding,
-            features_per_sharding=features_before_all2all_per_sharding,
-            embedding_names_per_sharding=self._embedding_names_per_sharding,
-            need_indices=self._need_indices,
-            features_to_permute_indices=self._features_to_permute_indices,
+        return awaitable(
+            EmbeddingCollectionAwait,
+            awaitables_per_sharding,
+            features_before_all2all_per_sharding,
+            self._embedding_names_per_sharding,
+            self._need_indices,
+            self._features_to_permute_indices,
         )
 
     def compute_and_output_dist(
         self, ctx: EmbeddingCollectionContext, input: KJTList
-    ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
-        awaitables_per_sharding: List[Awaitable[torch.Tensor]] = []
+    ) -> Await[Dict[str, JaggedTensor]]:
+        awaitables_per_sharding: List[Await[torch.Tensor]] = []
         features_before_all2all_per_sharding: List[KeyedJaggedTensor] = []
         for lookup, odist, features, sharding_ctx, sharding_type in zip(
             self._lookups,
@@ -691,12 +680,13 @@ class ShardedEmbeddingCollection(
             features_before_all2all_per_sharding.append(
                 sharding_ctx.features_before_input_dist
             )
-        return EmbeddingCollectionAwaitable(
-            awaitables_per_sharding=awaitables_per_sharding,
-            features_per_sharding=features_before_all2all_per_sharding,
-            embedding_names_per_sharding=self._embedding_names_per_sharding,
-            need_indices=self._need_indices,
-            features_to_permute_indices=self._features_to_permute_indices,
+        return awaitable(
+            EmbeddingCollectionAwait,
+            awaitables_per_sharding,
+            features_before_all2all_per_sharding,
+            self._embedding_names_per_sharding,
+            self._need_indices,
+            self._features_to_permute_indices,
         )
 
     def _embedding_dim_for_sharding_type(self, sharding_type: str) -> int:

@@ -20,7 +20,7 @@ from torchrec.distributed.sharding.dp_sharding import (
     DpSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
-from torchrec.distributed.types import Awaitable, NoWait
+from torchrec.distributed.types import Await, nowait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -38,7 +38,7 @@ class DpSequenceEmbeddingDist(
         self,
         local_embs: torch.Tensor,
         sharding_ctx: Optional[SequenceShardingContext] = None,
-    ) -> Awaitable[torch.Tensor]:
+    ) -> Await[torch.Tensor]:
         """
         No-op as sequence embeddings are already distributed in data-parallel fashion.
 
@@ -49,7 +49,7 @@ class DpSequenceEmbeddingDist(
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
         """
 
-        return NoWait(local_embs)
+        return nowait(local_embs)
 
 
 class DpSequenceEmbeddingSharding(

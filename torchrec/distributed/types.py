@@ -36,6 +36,7 @@ import torch
 import torch.distributed as dist
 import torch.fx
 from torch import nn
+from torch._awaits import _Await as Await
 
 # @manual
 from torch.distributed._shard.sharded_tensor import (  # noqa
@@ -238,10 +239,94 @@ class NoWait(Awaitable[W]):
         return self._obj
 
 
-class _LazyAwaitableMeta(
-    GenericMeta, abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta
-):
+awaitable = torch.jit._awaitable
+nowait = torch.jit._awaitable_nowait
+wait = torch.jit._awaitable_wait
 
+
+await_reflectable_magic_methods = {
+    "getitem": "{}[{}]",
+}
+
+await_magic_methods = dict({**await_reflectable_magic_methods})
+
+
+# pyre-ignore
+def is_await(x):
+    return isinstance(x, torch._C._Await)
+
+
+# pyre-ignore
+def wait_if_await(x):
+    if isinstance(x, torch._C._Await):
+        return wait(x)
+    return x
+
+
+# pyre-ignore
+def install_await_magic_methods(clz) -> None:
+    for orig_method_name in await_magic_methods:
+        as_magic = f"__{orig_method_name}__"
+
+        def scope(method):
+            def impl(*args, **kwargs):
+                lhs = args[0]
+                op_fn = getattr(operator, method)
+                if len(args) == 1:
+                    return op_fn(wait_if_await(lhs))
+                elif len(args) == 2:
+                    rhs = args[1]
+                    return op_fn(wait_if_await(lhs), wait_if_await(rhs))
+                else:
+                    raise RuntimeError(f"magic method {as_magic} not supported!")
+
+            impl.__name__ = as_magic
+            setattr(clz, as_magic, impl)
+
+        # pyre-ignore [16]
+        scope(orig_method_name)
+
+
+# pyre-ignore
+def install_await_reflective_magic_methods(clz) -> None:
+    for orig_method_name in await_reflectable_magic_methods:
+        as_magic = f"__r{orig_method_name}__"
+
+        def scope(method):
+            def impl(self, rhs):
+                op_fn = getattr(operator, method)
+                return op_fn(wait_if_await(rhs), wait_if_await(self))
+
+            impl.__name__ = as_magic
+            impl.__qualname__ = as_magic
+            setattr(clz, as_magic, impl)
+
+        # pyre-ignore [16]
+        scope(orig_method_name)
+
+
+def install_await_torch_function(clz) -> None:
+    tf_fn_name = "__torch_function__"
+
+    # pyre-ignore
+    def fn(self, func, types, args=(), kwargs=None):
+        kwargs = kwargs or {}
+        new_args = torch.fx.node.map_aggregate(args, wait_if_await)
+        new_kwargs = torch.fx.node.map_aggregate(kwargs, wait_if_await)
+        return func(*new_args, **new_kwargs)
+
+    fn.__name__ = tf_fn_name
+    fn.__qualname__ = tf_fn_name
+    setattr(clz, tf_fn_name, fn)
+
+
+install_await_magic_methods(torch._C._Await)
+install_await_reflective_magic_methods(torch._C._Await)
+install_await_torch_function(torch._C._Await)
+
+
+# pyre-fixme[11]: Annotation `ProxyableClassMeta` is not defined as a type.
+class _LazyAwaitableMeta(GenericMeta, abc.ABCMeta, torch.fx.ProxyableClassMeta):
     """
     The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
     This is because ABCMeta/ProxyableClassMeta are both non-trival metaclasses
@@ -594,7 +679,7 @@ class ShardedModule(
         *input,
         # pyre-ignore[2]
         **kwargs,
-    ) -> Awaitable[Awaitable[CompIn]]:
+    ) -> Await[Await[CompIn]]:
         pass
 
     @abc.abstractmethod
@@ -602,12 +687,10 @@ class ShardedModule(
         pass
 
     @abc.abstractmethod
-    def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
+    def output_dist(self, ctx: ShrdCtx, output: DistOut) -> Await[Out]:
         pass
 
-    def compute_and_output_dist(
-        self, ctx: ShrdCtx, input: CompIn
-    ) -> LazyAwaitable[Out]:
+    def compute_and_output_dist(self, ctx: ShrdCtx, input: CompIn) -> Await[Out]:
         """
         In case of multiple output distributions it makes sense to override this method
         and initiate the output distibution as soon as the corresponding compute
@@ -617,7 +700,7 @@ class ShardedModule(
         return self.output_dist(ctx, output)
 
     # pyre-ignore[2]
-    def forward(self, *input, **kwargs) -> LazyAwaitable[Out]:
+    def forward(self, *input, **kwargs) -> Await[Out]:
         """
         Executes the input dist, compute, and output dist steps.
 
@@ -629,7 +712,7 @@ class ShardedModule(
             LazyAwaitable[Out]: awaitable of output from output dist.
         """
         ctx = self.create_context()
-        dist_input = self.input_dist(ctx, *input, **kwargs).wait().wait()
+        dist_input = wait(wait(self.input_dist(ctx, *input, **kwargs)))
         return self.compute_and_output_dist(ctx, dist_input)
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:

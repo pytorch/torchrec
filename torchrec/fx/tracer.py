@@ -5,13 +5,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch.fx._compatibility import compatibility
 from torch.fx.graph import Graph
 from torch.fx.node import Argument
-from torchrec.distributed.types import LazyAwaitable, NoWait
 from torchrec.fx.utils import dmp_fx_trace_forward
 
 _is_fx_tracing_flag = False
@@ -103,24 +102,39 @@ class Tracer(torch.fx.Tracer):
         Returns:
             Argument: The value ``a`` converted into the appropriate ``Argument``
         """
-        if isinstance(a, NoWait):
-            return self.create_node(
-                "call_function",
-                target=NoWait,
-                args=self.create_arg((a._obj,)),
-                kwargs={},
-                type_expr=NoWait,
-            )
         # jit script has explicit convertions to torch.device from str
         if isinstance(a, torch.device):
             return super().create_arg(f"{a.type}:{a.index}")
 
-        # Not equivalent to when LazyAwaitable.wait() is called in eager. Here can be called earlier, as attr was not requested and this is not guranteed to be torch function
-        # TODO(ivankobzarev): support equivalent timing of LazyAwaitable
-        if isinstance(a, LazyAwaitable):
-            if a._result is None:
-                a._result = a.wait()
-            return super().create_arg(a._result)
+        if isinstance(a, torch._C._Await):
+            is_nowait = a.is_nowait()  # type: ignore[attr-defined]
+            await_args: Tuple[Any, ...] = a.args()  # type: ignore[attr-defined]
+            if is_nowait:
+                return super().create_arg(
+                    self.create_proxy(
+                        "call_function",
+                        torch.jit._awaitable_nowait,
+                        await_args,
+                        {},
+                    )
+                )
+            else:
+                i = 0
+                while True:
+                    qualname = f"torch_await_fn_{i}"
+                    if not hasattr(self.root, qualname):
+                        break
+                    i += 1
+                setattr(self.root, qualname, a.fn())  # type: ignore[attr-defined]
+                fn_attr = self.create_proxy("get_attr", qualname, (), {})
+                return super().create_arg(
+                    self.create_proxy(
+                        "call_function",
+                        torch.jit._awaitable,
+                        (fn_attr, *await_args),
+                        {},
+                    )
+                )
 
         return super().create_arg(a)
 

@@ -21,7 +21,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
-from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.distributed.types import Await, QuantizedCommCodecs, wait
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.modules.embedding_configs import (
     BaseEmbeddingConfig,
@@ -351,13 +351,44 @@ class TestOverArch(nn.Module):
         return self.linear(torch.cat(ret_list, dim=1))
 
 
-@torch.fx.wrap
-def _post_sparsenn_forward(
+# Simplified original methhod to be FX-traceable
+# For this case Await will be unrolled during fx tracing
+def _post_sparsenn_forward_fxable(
     ebc: KeyedTensor,
     fp_ebc: Optional[KeyedTensor],
     w_ebc: KeyedTensor,
     batch_size: Optional[int] = None,
 ) -> KeyedTensor:
+    ebc_values = ebc.values()
+    w_ebc_values = w_ebc.values()
+    return KeyedTensor(
+        keys=ebc.keys() + w_ebc.keys(),
+        length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
+        values=torch.cat([ebc_values, w_ebc_values], dim=1),
+    )
+
+
+# If function can not be fx traced, e.g. branch logic and must be torch.fx.wrap
+# Clients need to add explicit call to torchrec.distributed.types.wait(aw)
+# Example:
+# ebc: torch.jit.Await[KeyedTensor],
+#     if torch.jit.is_scripting():
+#        if isinstance(ebc, Await):
+#            ebc = torch.jit.awaitable_wait(ebc)
+#
+# TODO: Change of arg types as it is used for non-sharded too. Can it be avoided?
+@torch.fx.wrap
+def _post_sparsenn_forward(
+    ebc: Await[KeyedTensor],
+    fp_ebc: Optional[KeyedTensor],
+    w_ebc: KeyedTensor,
+    batch_size: Optional[int] = None,
+) -> KeyedTensor:
+    # For JIT we need explicit call torch.jit.awaitable_wait
+    if torch.jit.is_scripting():
+        if isinstance(ebc, Await):
+            ebc = wait(ebc)
+
     if batch_size is None or ebc.values().size(0) == batch_size:
         ebc_values = ebc.values()
         fp_ebc_values = fp_ebc.values() if fp_ebc is not None else None

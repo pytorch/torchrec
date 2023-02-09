@@ -12,7 +12,7 @@ from torch import nn
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    ListOfKJTListSplitsAwaitable,
+    ListOfKJTListSplitsAwait,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
@@ -23,12 +23,12 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
-    EmbeddingBagCollectionAwaitable,
+    EmbeddingBagCollectionAwait,
 )
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
-    Awaitable,
-    LazyAwaitable,
+    Await,
+    awaitable,
     NullShardedModuleContext,
     NullShardingContext,
     ParameterSharding,
@@ -176,7 +176,7 @@ class ShardedQuantEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[Awaitable[ListOfKJTList]]:
+    ) -> Await[Await[ListOfKJTList]]:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
@@ -195,7 +195,7 @@ class ShardedQuantEmbeddingBagCollection(
                 self._input_dists[i].forward(features_by_shards[i])
                 for i in range(len(self._input_dists))
             ]
-            return ListOfKJTListSplitsAwaitable(awaitables)
+            return awaitable(ListOfKJTListSplitsAwait, awaitables)
 
     def compute(
         self,
@@ -205,23 +205,23 @@ class ShardedQuantEmbeddingBagCollection(
         # syntax for torchscript
         return [lookup.forward(dist_input[i]) for i, lookup in enumerate(self._lookups)]
 
+    # pyre-ignore
     def output_dist(
         self,
         ctx: NullShardedModuleContext,
         output: List[List[torch.Tensor]],
-    ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            # syntax for torchscript
-            awaitables=[
-                dist.forward(output[i]) for i, dist in enumerate(self._output_dists)
-            ],
-            embedding_dims=self._embedding_dims,
-            embedding_names=self._embedding_names,
+    ) -> Await[KeyedTensor]:
+        return awaitable(
+            EmbeddingBagCollectionAwait,
+            [dist.forward(output[i]) for i, dist in enumerate(self._output_dists)],
+            self._embedding_dims,
+            self._embedding_names,
         )
 
+    # pyre-ignore
     def compute_and_output_dist(
         self, ctx: NullShardedModuleContext, input: ListOfKJTList
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> Await[KeyedTensor]:
         return self.output_dist(ctx, self.compute(ctx, input))
 
     def copy(self, device: torch.device) -> nn.Module:

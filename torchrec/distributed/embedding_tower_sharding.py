@@ -14,13 +14,9 @@ import torch.distributed as dist
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import intra_and_cross_node_pg
-from torchrec.distributed.dist_data import (
-    KJTAllToAll,
-    PooledEmbeddingsAllToAll,
-    PooledEmbeddingsAwaitable,
-)
+from torchrec.distributed.dist_data import KJTAllToAll, PooledEmbeddingsAllToAll
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embedding_sharding import KJTListSplitsAwaitable
+from torchrec.distributed.embedding_sharding import KJTListSplitsAwait
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
     KJTList,
@@ -28,9 +24,9 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
-    Awaitable,
+    Await,
+    awaitable,
     CommOp,
-    LazyAwaitable,
     Multistreamable,
     NullShardedModuleContext,
     ParameterSharding,
@@ -71,18 +67,6 @@ def _replace_sharding_with_intra_node(
             # pyre-ignore [6, 16]
             for (shard, rank) in zip(value.sharding_spec.shards, value.ranks):
                 shard.placement._rank = rank
-
-
-class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
-    def __init__(
-        self,
-        awaitable: PooledEmbeddingsAwaitable,
-    ) -> None:
-        super().__init__()
-        self._awaitable = awaitable
-
-    def _wait_impl(self) -> torch.Tensor:
-        return self._awaitable.wait()
 
 
 @dataclass
@@ -242,7 +226,7 @@ class ShardedEmbeddingTower(
         ctx: NullShardedModuleContext,
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[Awaitable[KJTList]]:
+    ) -> Await[Await[KJTList]]:
 
         # optional_features are populated only if both kjt and weighted kjt present in tower
         if self._wkjt_feature_names and self._kjt_feature_names:
@@ -284,7 +268,7 @@ class ShardedEmbeddingTower(
             if wkjt_features is not None:
                 awaitables.append(self._weighted_cross_dist(wkjt_features))
 
-            return KJTListSplitsAwaitable(awaitables, ctx)
+            return awaitable(KJTListSplitsAwait, awaitables, ctx)
 
     def compute(
         self, ctx: NullShardedModuleContext, dist_input: KJTList
@@ -351,12 +335,12 @@ class ShardedEmbeddingTower(
 
     def output_dist(
         self, ctx: NullShardedModuleContext, output: torch.Tensor
-    ) -> LazyAwaitable[torch.Tensor]:
+    ) -> Await[torch.Tensor]:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(ctx, output)
             self._has_uninitialized_output_dist = False
         # pyre-ignore [29]
-        return TowerLazyAwaitable(self._output_dist(output))
+        return self._output_dist(output)
 
     # pyre-ignore [14]
     def state_dict(
@@ -638,7 +622,7 @@ class ShardedEmbeddingTowerCollection(
         ctx: EmbeddingTowerCollectionContext,
         kjt_features: Optional[KeyedJaggedTensor] = None,
         wkjt_features: Optional[KeyedJaggedTensor] = None,
-    ) -> Awaitable[Awaitable[KJTList]]:
+    ) -> Await[Await[KJTList]]:
         if self._has_uninitialized_input_dist:
             # pyre-ignore [16]
             stride = kjt_features.stride() if kjt_features else wkjt_features.stride()
@@ -664,7 +648,7 @@ class ShardedEmbeddingTowerCollection(
                 awaitables.append(self._cross_dist(kjt_features))
             if wkjt_features is not None:
                 awaitables.append(self._weighted_cross_dist(wkjt_features))
-        return KJTListSplitsAwaitable(awaitables, ctx)
+        return awaitable(KJTListSplitsAwait, awaitables, ctx)
 
     def compute(
         self, ctx: EmbeddingTowerCollectionContext, dist_input: KJTList
@@ -741,12 +725,12 @@ class ShardedEmbeddingTowerCollection(
 
     def output_dist(
         self, ctx: EmbeddingTowerCollectionContext, output: torch.Tensor
-    ) -> LazyAwaitable[torch.Tensor]:
+    ) -> Await[torch.Tensor]:
         if self._has_uninitialized_output_dist:
             self._create_output_dist(output)
             self._has_uninitialized_output_dist = False
         # pyre-ignore [29]
-        return TowerLazyAwaitable(self._output_dist(output))
+        return self._output_dist(output)
 
     def create_context(self) -> EmbeddingTowerCollectionContext:
         return EmbeddingTowerCollectionContext(embedding_contexts=[])

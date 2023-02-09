@@ -41,6 +41,7 @@ from torchrec.distributed.types import ShardedTensor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
+torch.fx.wrap("len")
 
 
 @torch.fx.wrap

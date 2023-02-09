@@ -25,7 +25,7 @@ import torch
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Await, wait, is_await
 from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -156,7 +156,7 @@ class Tracer(torch.fx.Tracer):
 @dataclass
 class TrainPipelineContext:
     # pyre-ignore [4]
-    input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    input_dist_requests: Dict[str, Await[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
     # pyre-ignore [4]
     feature_processor_forwards: List[Any] = field(default_factory=list)
@@ -190,15 +190,15 @@ class PipelinedForward:
         self._dist_stream = dist_stream
 
     # pyre-ignore [2, 24]
-    def __call__(self, *input, **kwargs) -> Awaitable:
+    def __call__(self, *input, **kwargs) -> Await:
         assert self._name in self._context.input_dist_requests
         request = self._context.input_dist_requests[self._name]
-        assert isinstance(request, Awaitable)
+        assert is_await(request)
         with record_function("## wait_sparse_data_dist ##"):
             # Finish waiting on the dist_stream,
             # in case some delayed stream scheduling happens during the wait() call.
             with torch.cuda.stream(self._dist_stream):
-                data = request.wait()
+                data = wait(request)
 
         # Make sure that both result of input_dist and context
         # are properly transferred to the current stream.
@@ -275,7 +275,7 @@ def _start_data_dist(
 
     # Call wait on the first awaitable in the input dist for the tensor splits
     for key, awaitable in context.input_dist_requests.items():
-        context.input_dist_requests[key] = awaitable.wait()
+        context.input_dist_requests[key] = wait(awaitable)
 
 
 def _get_node_args_helper(

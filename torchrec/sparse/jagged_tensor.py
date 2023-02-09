@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+torch.fx.wrap("len")
+
 
 def _cumsum(o: List[int]) -> List[int]:
     ret = [0] * (len(o) + 1)
@@ -449,6 +451,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
 
+@torch.fx.wrap
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: torch.Tensor, tensor_name: str
 ) -> None:
@@ -470,6 +473,7 @@ def _maybe_compute_index_per_key(
     return index_per_key
 
 
+@torch.fx.wrap
 def _maybe_compute_stride_kjt(
     keys: List[str],
     stride: Optional[int],
@@ -502,6 +506,7 @@ def _maybe_compute_stride_kjt_scripted(
     return torch.tensor([_maybe_compute_stride_kjt(keys, stride, lengths, offsets)])
 
 
+@torch.fx.wrap
 def _maybe_compute_length_per_key(
     keys: List[str],
     stride: int,

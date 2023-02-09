@@ -17,7 +17,6 @@ from hypothesis import given, settings
 
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
-    KJTAllToAllSplitsAwaitable,
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
@@ -30,6 +29,7 @@ from torchrec.distributed.fbgemm_qcomm_codec import (
 )
 
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
+from torchrec.distributed.types import Await
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -170,8 +170,8 @@ class KJTAllToAllTest(MultiProcessTestBase):
     @classmethod
     def _validate(
         cls,
-        actual_output_awaitable: Union[KJTAllToAllSplitsAwaitable, KeyedJaggedTensor],
-        expected_output_awaitable: Union[KJTAllToAllSplitsAwaitable, KeyedJaggedTensor],
+        actual_output_awaitable: Union[Await[KeyedJaggedTensor], KeyedJaggedTensor],
+        expected_output_awaitable: Union[Await[KeyedJaggedTensor], KeyedJaggedTensor],
     ) -> None:
         actual_output = (
             actual_output_awaitable

@@ -14,7 +14,7 @@ import torch.distributed as dist
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.profiler import record_function
-from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
+from torchrec.distributed.types import Await, awaitable, nowait, QuantizedCommCodecs
 from torchrec.distributed.utils import none_throws
 
 try:
@@ -50,7 +50,18 @@ Some commonly used notations for comm ops:
 """
 
 
-class Request(Awaitable[W]):
+def ReqAwait(
+    pg: dist.ProcessGroup, req: "Request", dummy_tensor: torch.Tensor
+) -> torch.Tensor:
+    req.wait_function
+    ret = req.wait_function.apply(pg, req, dummy_tensor)
+    req.req = None
+    req.tensor = None
+    return ret
+
+
+# Request._await is always Await[Tensor], W = Tensor
+class Request(object):
     """
     Defines a collective operation request for a process group on a tensor.
 
@@ -62,7 +73,7 @@ class Request(Awaitable[W]):
         super().__init__()
         self.pg: dist.ProcessGroup = pg
         self.req: Optional[dist.Work] = None
-        self.tensor: Optional[W] = None
+        self.tensor: Optional[Tensor] = None
         self.a2ai = None  # type: ignore
         self.qcomm_ctx = None  # type: ignore
         self.rsi = None  # type: ignore
@@ -77,16 +88,12 @@ class Request(Awaitable[W]):
             requires_grad=True,
             device=device,
         )
-
-    def _wait_impl(self) -> W:
-        """
-        Calls the wait function for this request.
-        """
-
-        ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
-        self.req = None
-        self.tensor = None
-        return ret
+        # TODO(ivankobzarev): Check that req will be held by reference in await,
+        # that changes in attributes will take effect
+        # TODO(ivankobzarev): Add test to Await to guard this
+        self._await: Await[Tensor] = awaitable(
+            ReqAwait, self.pg, self, self.dummy_tensor
+        )
 
 
 @dataclass
@@ -274,7 +281,7 @@ def alltoall_pooled(
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     Performs AlltoAll operation for a single pooled embedding tensor. Each process
     splits the input pooled embeddings tensor based on the world size, and then scatters
@@ -310,7 +317,7 @@ def alltoall_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_pooled_embs_tensor)
+        return nowait(a2a_pooled_embs_tensor)
 
     myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     a2ai = All2AllPooledInfo(
@@ -321,7 +328,7 @@ def alltoall_pooled(
         codecs=codecs,
     )
     All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
-    return myreq
+    return myreq._await
 
 
 def alltoall_sequence(
@@ -335,7 +342,7 @@ def alltoall_sequence(
     variable_batch_size: bool = False,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     Performs AlltoAll operation for sequence embeddings. Each process splits the input
     tensor based on the world size, and then scatters the split list to all processes in
@@ -370,7 +377,7 @@ def alltoall_sequence(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_sequence_embs_tensor)
+        return nowait(a2a_sequence_embs_tensor)
 
     myreq = Request(group, device=a2a_sequence_embs_tensor.device)
     a2ai = All2AllSequenceInfo(
@@ -386,7 +393,7 @@ def alltoall_sequence(
     # sequence of embeddings, bags are definitely non-uniform
 
     All2All_Seq_Req.apply(group, myreq, a2ai, a2a_sequence_embs_tensor)
-    return myreq
+    return myreq._await
 
 
 def alltoallv(
@@ -395,7 +402,7 @@ def alltoallv(
     per_rank_split_lengths: Optional[List[int]] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[List[Tensor]]:
+) -> Await[List[Tensor]]:
     """
     Performs `alltoallv` operation for a list of input embeddings. Each process scatters
     the list to all processes in the group.
@@ -448,14 +455,14 @@ def alltoallv(
 
     All2Allv_Req.apply(group, myreq, a2ai, inputs)
 
-    return myreq
+    return myreq._await
 
 
 def reduce_scatter_pooled(
     inputs: List[Tensor],
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     Performs reduce-scatter operation for a pooled embeddings tensor split into world
     size number of chunks. The result of the reduce operation gets scattered to all
@@ -477,21 +484,21 @@ def reduce_scatter_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(inputs[dist.get_rank(group)])
+        return nowait(inputs[dist.get_rank(group)])
 
     myreq = Request(group, device=inputs[0].device)
     rsi = ReduceScatterInfo(
         input_sizes=[tensor.size() for tensor in inputs], codecs=codecs
     )
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)
-    return myreq
+    return myreq._await
 
 
 def reduce_scatter_base_pooled(
     inputs: Tensor,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     Reduces then scatters a flattened pooled embeddings tensor to all processes in a group.
     Input tensor is of size output tensor size times world size.
@@ -512,19 +519,19 @@ def reduce_scatter_base_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(inputs)
+        return nowait(inputs)
 
     myreq = Request(group, device=inputs.device)
     rsi = ReduceScatterBaseInfo(input_sizes=inputs.size(), codecs=codecs)
     ReduceScatterBase_Req.apply(group, myreq, rsi, inputs)
-    return myreq
+    return myreq._await
 
 
 def all_gather_base_pooled(
     input: Tensor,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     All-gathers tensors from all processes in a group to form a flattened pooled embeddings tensor.
     Input tensor is of size output tensor size divided by world size.
@@ -545,12 +552,12 @@ def all_gather_base_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(input)
+        return nowait(input)
 
     myreq = Request(group, device=input.device)
     agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
     AllGatherBase_Req.apply(group, myreq, agi, input)
-    return myreq
+    return myreq._await
 
 
 def reduce_scatter_v_pooled(
@@ -558,7 +565,7 @@ def reduce_scatter_v_pooled(
     input_splits: List[int],
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Await[Tensor]:
     """
     Performs reduce-scatter-v operation for a pooled embeddings tensor split unevenly into world
     size number of chunks. The result of the reduce operation gets scattered to all
@@ -581,7 +588,7 @@ def reduce_scatter_v_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(input)
+        return nowait(input)
 
     myreq = Request(group, device=input.device)
     input_size = list(input.size())
@@ -601,7 +608,7 @@ def reduce_scatter_v_pooled(
         codecs=codecs,
     )
     ReduceScatterV_Req.apply(group, myreq, rsvi, input)
-    return myreq
+    return myreq._await
 
 
 # TODO: improve performance of _recat_pooled_embedding_grad_out, see T87591139
@@ -656,7 +663,7 @@ class All2All_Pooled_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         a2ai: All2AllPooledInfo,
         input_embeddings: Tensor,
     ) -> Tensor:
@@ -759,7 +766,7 @@ class All2All_Pooled_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: Tensor,
     ) -> Tensor:
         my_rank = dist.get_rank(pg)
@@ -869,7 +876,7 @@ class All2All_Seq_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         a2ai: All2AllSequenceInfo,
         sharded_input_embeddings: Tensor,
     ) -> Tensor:
@@ -1016,7 +1023,7 @@ class All2All_Seq_Req_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: torch.Tensor,
     ) -> Tensor:
         a2ai = myreq.a2ai
@@ -1091,7 +1098,7 @@ class All2Allv_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         a2ai: All2AllVInfo,
         inputs: List[Tensor],
     ) -> Tensor:
@@ -1152,7 +1159,7 @@ class All2Allv_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: torch.Tensor,
     ) -> Tuple[Tensor]:
         a2ai = myreq.a2ai
@@ -1209,7 +1216,7 @@ class ReduceScatter_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         rsi: ReduceScatterInfo,
         *inputs: Any,
     ) -> Tensor:
@@ -1264,7 +1271,7 @@ class ReduceScatter_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: Tensor,
     ) -> Tensor:
         assert myreq.req is not None
@@ -1317,7 +1324,7 @@ class ReduceScatterBase_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         rsi: ReduceScatterBaseInfo,
         inputs: Tensor,
     ) -> Tensor:
@@ -1363,7 +1370,7 @@ class ReduceScatterBase_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_Tensor: Tensor,
     ) -> Tensor:
         assert myreq.req is not None
@@ -1408,7 +1415,7 @@ class AllGatherBase_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         agi: AllGatherBaseInfo,
         input: Tensor,
     ) -> Tensor:
@@ -1455,7 +1462,7 @@ class AllGatherBase_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: Tensor,
     ) -> Tensor:
         assert myreq.req is not None
@@ -1501,7 +1508,7 @@ class ReduceScatterV_Req(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         rsi: ReduceScatterVInfo,
         input: Tensor,
     ) -> Tensor:
@@ -1561,7 +1568,7 @@ class ReduceScatterV_Wait(Function):
         # pyre-fixme[2]: Parameter must be annotated.
         ctx,
         pg: dist.ProcessGroup,
-        myreq: Request[Tensor],
+        myreq: Request,
         *dummy_tensor: Tensor,
     ) -> Tensor:
         assert myreq.req is not None

@@ -11,7 +11,7 @@ from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 import torch
 from torch import nn
-from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
+from torchrec.distributed.dist_data import KJTAllToAllTensorsAwait
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
@@ -23,10 +23,12 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import (
-    Awaitable,
+    Await,
+    awaitable,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
+    wait,
 )
 from torchrec.modules.embedding_configs import (
     DataType,
@@ -205,7 +207,9 @@ def group_tables(
     return grouped_embedding_configs_by_rank
 
 
-class KJTListAwaitable(Awaitable[KJTList]):
+def KJTListAwait(
+    awaitables: List[Await[KeyedJaggedTensor]],
+) -> KJTList:
     """
     Awaitable of KJTList.
 
@@ -213,29 +217,17 @@ class KJTListAwaitable(Awaitable[KJTList]):
         awaitables (List[Awaitable[KeyedJaggedTensor]]): list of `Awaitable` of sparse
             features.
     """
-
-    def __init__(
-        self,
-        awaitables: List[Awaitable[KeyedJaggedTensor]],
-    ) -> None:
-        super().__init__()
-        self.awaitables = awaitables
-
-    def _wait_impl(self) -> KJTList:
-        """
-        Syncs KJTs in `KJTList`.
-
-        Returns:
-            KJTList: synced `KJTList`.
-        """
-
-        return KJTList([w.wait() for w in self.awaitables])
+    return KJTList([wait(w) for w in awaitables])
 
 
 C = TypeVar("C", bound=Multistreamable)
 
 
-class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
+def KJTListSplitsAwait(
+    awaitables: List[Await[Await[KeyedJaggedTensor]]],
+    # TODO: Need static type to be torch scripted.
+    ctx: C,
+) -> Await[KJTList]:
     """
     Awaitable of Awaitable of KJTList.
 
@@ -244,99 +236,71 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
             forward on `KJTAllToAll` with sparse features to redistribute.
         ctx (C): sharding context to save the metadata from the input dist to for the
             embedding AlltoAll.
+
+    Calls first wait on the awaitable of awaitable of sparse features and updates
+    the context with metadata from the tensors awaitable.
+
+    The first wait gets the result of splits AlltoAll and returns the tensors
+    awaitable.
+
+    Returns:
+        KJTListAwaitable: awaitables for tensors of the sparse features.
     """
+    tensors_awaitables = [wait(w) for w in awaitables]
 
-    def __init__(
-        self,
-        awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
-        ctx: C,
-    ) -> None:
-        super().__init__()
-        self.awaitables = awaitables
-        self.ctx = ctx
+    for _awaitable, sharding_context in zip(
+        tensors_awaitables,
+        getattr(ctx, "sharding_contexts", []),
+    ):
+        # TODO: Await fn, args are only workarounds for eager, they are not torchscriptable
+        if not _awaitable.is_nowait() and _awaitable.fn() == KJTAllToAllTensorsAwait:
+            _aw_args = _awaitable.args()
+            if hasattr(sharding_context, "batch_size_per_rank"):
+                sharding_context.batch_size_per_rank = _aw_args[5]
+            if hasattr(sharding_context, "sparse_features_recat"):
+                sharding_context.sparse_features_recat = _aw_args[6]
+            if hasattr(sharding_context, "input_splits"):
+                sharding_context.input_splits = _aw_args[7]["values"]
+            if hasattr(sharding_context, "output_splits"):
+                sharding_context.output_splits = _aw_args[8]["values"]
 
-    def _wait_impl(self) -> KJTListAwaitable:
-        """
-        Calls first wait on the awaitable of awaitable of sparse features and updates
-        the context with metadata from the tensors awaitable.
-
-        The first wait gets the result of splits AlltoAll and returns the tensors
-        awaitable.
-
-        Returns:
-            KJTListAwaitable: awaitables for tensors of the sparse features.
-        """
-        tensors_awaitables = [w.wait() for w in self.awaitables]
-        for awaitable, sharding_context in zip(
-            tensors_awaitables,
-            getattr(self.ctx, "sharding_contexts", []),
-        ):
-            if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
-                if hasattr(sharding_context, "batch_size_per_rank"):
-                    sharding_context.batch_size_per_rank = (
-                        awaitable._batch_size_per_rank
-                    )
-                if hasattr(sharding_context, "input_splits"):
-                    sharding_context.input_splits = awaitable._input_splits["values"]
-                if hasattr(sharding_context, "output_splits"):
-                    sharding_context.output_splits = awaitable._output_splits["values"]
-                if hasattr(sharding_context, "sparse_features_recat"):
-                    sharding_context.sparse_features_recat = awaitable._recat
-        return KJTListAwaitable(tensors_awaitables)
+    return awaitable(KJTListAwait, tensors_awaitables)
 
 
-class ListOfKJTListAwaitable(Awaitable[ListOfKJTList]):
+def ListOfKJTListAwait(awaitables: List[Await[KJTList]]) -> ListOfKJTList:
     """
     This module handles the tables-wise sharding input features distribution for
     inference.
 
     Args:
         awaitables (List[Awaitable[KJTList]]): list of `Awaitable` of `KJTList`.
+
+    Syncs sparse features in list of KJTList.
+
+    Returns:
+        ListOfKJTList: synced `ListOfKJTList`.
+
     """
-
-    def __init__(
-        self,
-        awaitables: List[Awaitable[KJTList]],
-    ) -> None:
-        super().__init__()
-        self.awaitables = awaitables
-
-    def _wait_impl(self) -> ListOfKJTList:
-        """
-        Syncs sparse features in list of KJTList.
-
-        Returns:
-            ListOfKJTList: synced `ListOfKJTList`.
-
-        """
-        return ListOfKJTList([w.wait() for w in self.awaitables])
+    return ListOfKJTList([wait(w) for w in awaitables])
 
 
-class ListOfKJTListSplitsAwaitable(Awaitable[Awaitable[ListOfKJTList]]):
+def ListOfKJTListSplitsAwait(
+    awaitables: List[Await[Await[KJTList]]],
+) -> Await[ListOfKJTList]:
     """
     Awaitable of Awaitable of ListOfKJTList.
 
     Args:
         awaitables (List[Awaitable[Awaitable[KJTList]]]): list of `Awaitable`
             of `Awaitable` of sparse features list.
+
+    Calls first wait on the awaitable of awaitable of ListOfKJTList.
+
+    Returns:
+        Awaitable[ListOfKJTList]: awaitable of `ListOfKJTList`.
+
     """
-
-    def __init__(
-        self,
-        awaitables: List[Awaitable[Awaitable[KJTList]]],
-    ) -> None:
-        super().__init__()
-        self.awaitables = awaitables
-
-    def _wait_impl(self) -> Awaitable[ListOfKJTList]:
-        """
-        Calls first wait on the awaitable of awaitable of ListOfKJTList.
-
-        Returns:
-            Awaitable[ListOfKJTList]: awaitable of `ListOfKJTList`.
-
-        """
-        return ListOfKJTListAwaitable([w.wait() for w in self.awaitables])
+    return awaitable(ListOfKJTListAwait, [wait(w) for w in awaitables])
 
 
 F = TypeVar("F", bound=Multistreamable)
@@ -361,7 +325,7 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[F]]:
+    ) -> Await[Await[F]]:
         pass
 
 
@@ -375,7 +339,7 @@ class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[C, T, W]):
         self,
         local_embs: T,
         sharding_ctx: Optional[C] = None,
-    ) -> Awaitable[W]:
+    ) -> Await[W]:
         pass
 
 

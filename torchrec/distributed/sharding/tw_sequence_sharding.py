@@ -32,7 +32,7 @@ from torchrec.distributed.sharding.tw_sharding import (
     InferTwSparseFeaturesDist,
     TwSparseFeaturesDist,
 )
-from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
+from torchrec.distributed.types import Await, Awaitable, CommOp, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -171,7 +171,7 @@ class InferTwSequenceEmbeddingDist(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[InferSequenceShardingContext] = None,
-    ) -> Awaitable[List[torch.Tensor]]:
+    ) -> Await[List[torch.Tensor]]:
         """
         Performs AlltoOne operation on sequence embeddings tensor.
 

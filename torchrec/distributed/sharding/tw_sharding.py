@@ -36,9 +36,10 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import (
+    Await,
     Awaitable,
     CommOp,
-    NoWait,
+    nowait,
     NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
@@ -369,10 +370,11 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             world_size,
         )
 
+    # pyre-ignore
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KJTList]]:
+    ) -> Await[Await[KJTList]]:
         """
         Performs OnetoAll operation on sparse features.
 
@@ -382,7 +384,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         Returns:
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
-        return NoWait(self._dist.forward(sparse_features))
+        return nowait(self._dist.forward(sparse_features))
 
 
 class InferTwPooledEmbeddingDist(

@@ -24,7 +24,7 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
 )
-from torchrec.distributed.types import Awaitable, NoWait, ShardingEnv, ShardMetadata
+from torchrec.distributed.types import Await, nowait, ShardingEnv, ShardMetadata
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -134,7 +134,7 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KeyedJaggedTensor]]:
+    ) -> Await[Await[KeyedJaggedTensor]]:
         """
         No-op as sparse features are already distributed in data-parallel fashion.
 
@@ -145,7 +145,7 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
-        return NoWait(cast(Awaitable[KeyedJaggedTensor], NoWait(sparse_features)))
+        return nowait(nowait(sparse_features))
 
 
 class DpPooledEmbeddingDist(
@@ -162,7 +162,7 @@ class DpPooledEmbeddingDist(
         self,
         local_embs: torch.Tensor,
         sharding_ctx: Optional[EmbeddingShardingContext] = None,
-    ) -> Awaitable[torch.Tensor]:
+    ) -> Await[torch.Tensor]:
         """
         No-op as pooled embeddings are already distributed in data-parallel fashion.
 
@@ -173,7 +173,7 @@ class DpPooledEmbeddingDist(
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
         """
 
-        return NoWait(local_embs)
+        return nowait(local_embs)
 
 
 class DpPooledEmbeddingSharding(
