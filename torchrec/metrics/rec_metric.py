@@ -696,7 +696,7 @@ class RecMetricList(nn.Module):
     """
 
     rec_metrics: nn.ModuleList
-    required_inputs: List[str]
+    required_inputs: Optional[List[str]]
 
     def __init__(self, rec_metrics: List[RecMetric]) -> None:
         # TODO(stellaya): consider to inherit from TorchMetrics.MetricCollection.
@@ -705,10 +705,13 @@ class RecMetricList(nn.Module):
 
         super().__init__()
         self.rec_metrics = nn.ModuleList(rec_metrics)
-        self.required_inputs = list(
-            set().union(
-                *[rec_metric.get_required_inputs() for rec_metric in rec_metrics]
+        self.required_inputs = (
+            list(
+                set().union(
+                    *[rec_metric.get_required_inputs() for rec_metric in rec_metrics]
+                )
             )
+            or None
         )
 
     def __len__(self) -> int:
@@ -717,7 +720,7 @@ class RecMetricList(nn.Module):
     def __getitem__(self, idx: int) -> nn.Module:
         return self.rec_metrics[idx]
 
-    def get_required_inputs(self) -> List[str]:
+    def get_required_inputs(self) -> Optional[List[str]]:
         return self.required_inputs
 
     def update(
@@ -729,7 +732,9 @@ class RecMetricList(nn.Module):
         **kwargs: Dict[str, Any],
     ) -> None:
         for metric in self.rec_metrics:
-            metric.update(predictions=predictions, labels=labels, weights=weights)
+            metric.update(
+                predictions=predictions, labels=labels, weights=weights, **kwargs
+            )
 
     def compute(self) -> Dict[str, torch.Tensor]:
         ret = {}

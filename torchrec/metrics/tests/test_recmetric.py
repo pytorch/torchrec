@@ -20,7 +20,7 @@ class RecMetricTest(unittest.TestCase):
     def setUp(self) -> None:
         # Create testing labels, predictions and weights
         model_output = gen_test_batch(128)
-        self.labels, self.predictions, self.weights = parse_task_model_outputs(
+        self.labels, self.predictions, self.weights, _ = parse_task_model_outputs(
             [DefaultTaskInfo], model_output
         )
 
@@ -126,7 +126,7 @@ class RecMetricTest(unittest.TestCase):
             for task in tasks
         ]
         model_output = {k: v for d in _model_output for k, v in d.items()}
-        labels, predictions, weights = parse_task_model_outputs(tasks, model_output)
+        labels, predictions, weights, _ = parse_task_model_outputs(tasks, model_output)
         partial_zero_weights = {
             "t1": torch.zeros_like(weights["t1"]),
             "t2": weights["t2"],

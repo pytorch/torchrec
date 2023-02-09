@@ -193,7 +193,7 @@ ne = NEMetric(
     window_size=512,
     fused_update_limit=0,
 )
-labels, predictions, weights = parse_task_model_outputs(tasks, model_output)
+labels, predictions, weights, _ = parse_task_model_outputs(tasks, model_output)
 ne.update(
     predictions=predictions,
     labels=labels,
