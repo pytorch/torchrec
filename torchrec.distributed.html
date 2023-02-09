@@ -5278,21 +5278,57 @@ completes.</p>
 <span id="torchrec-distributed-train-pipeline"></span><h2>torchrec.distributed.train_pipeline<a class="headerlink" href="#module-torchrec.distributed.train_pipeline" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.ArgInfo">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">ArgInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_attrs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_getitems</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">NoneType</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">ArgInfo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_attrs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_getitems</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Representation of args from a node.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.ArgInfo.input_attrs">
-<span class="sig-name descname"><span class="pre">input_attrs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.input_attrs" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">input_attrs</span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.input_attrs" title="Permalink to this definition">¶</a></dt>
+<dd><p>attributes of input batch,
+e.g. <cite>batch.attr1.attr2</cite> will produce [“attr1”, “attr2”].</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[str]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.ArgInfo.is_getitems">
-<span class="sig-name descname"><span class="pre">is_getitems</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.is_getitems" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">is_getitems</span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.is_getitems" title="Permalink to this definition">¶</a></dt>
+<dd><p><cite>batch[attr1].attr2</cite> will produce [True, False].</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[bool]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.ArgInfo.name">
-<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.name" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.ArgInfo.name" title="Permalink to this definition">¶</a></dt>
+<dd><p>name for kwarg of pipelined forward() call or None for a
+positional arg.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id24">
+<span class="sig-name descname"><span class="pre">input_attrs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id24" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id25">
+<span class="sig-name descname"><span class="pre">is_getitems</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id25" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id26">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id26" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -5317,6 +5353,10 @@ completes.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">Tracer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaf_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Tracer</span></code></p>
+<p>Disables proxying buffers during tracing. Ideally, proxying buffers would be
+disabled, but some models are currently mutating buffer values, which causes errors
+during tracing. If those models can be rewritten to not do that, we can likely
+remove this line.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.Tracer.graph">
 <span class="sig-name descname"><span class="pre">graph</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Graph</span></em><a class="headerlink" href="#torchrec.distributed.train_pipeline.Tracer.graph" title="Permalink to this definition">¶</a></dt>
@@ -5964,8 +6004,8 @@ dict of parameter sharding specs keyed by parameter name.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="id24">
-<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id24" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id27">
+<span class="sig-name descname"><span class="pre">plan</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.ParameterSharding" title="torchrec.distributed.types.ParameterSharding"><span class="pre">ParameterSharding</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id27" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -6849,6 +6889,9 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.ArgInfo.input_attrs"><code class="docutils literal notranslate"><span class="pre">ArgInfo.input_attrs</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.ArgInfo.is_getitems"><code class="docutils literal notranslate"><span class="pre">ArgInfo.is_getitems</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.ArgInfo.name"><code class="docutils literal notranslate"><span class="pre">ArgInfo.name</span></code></a></li>
+<li><a class="reference internal" href="#id24"><code class="docutils literal notranslate"><span class="pre">ArgInfo.input_attrs</span></code></a></li>
+<li><a class="reference internal" href="#id25"><code class="docutils literal notranslate"><span class="pre">ArgInfo.is_getitems</span></code></a></li>
+<li><a class="reference internal" href="#id26"><code class="docutils literal notranslate"><span class="pre">ArgInfo.name</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.train_pipeline.PipelinedForward"><code class="docutils literal notranslate"><span class="pre">PipelinedForward</span></code></a><ul>
@@ -6983,7 +7026,7 @@ value is <cite>None</cite></p>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan"><code class="docutils literal notranslate"><span class="pre">ShardingPlan</span></code></a><ul>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan.plan"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan.get_plan_for_module"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.get_plan_for_module()</span></code></a></li>
-<li><a class="reference internal" href="#id24"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
+<li><a class="reference internal" href="#id27"><code class="docutils literal notranslate"><span class="pre">ShardingPlan.plan</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#torchrec.distributed.types.ShardingPlanner"><code class="docutils literal notranslate"><span class="pre">ShardingPlanner</span></code></a><ul>
