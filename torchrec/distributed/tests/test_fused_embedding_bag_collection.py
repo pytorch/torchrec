@@ -38,7 +38,7 @@ from torchrec.modules.fused_embedding_modules import (
     FusedEmbeddingBagCollection,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.test_utils import skip_if_asan_class, skipIfRocm
+from torchrec.test_utils import skip_if_asan_class
 
 
 def sharding_single_rank(
@@ -51,7 +51,6 @@ def sharding_single_rank(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     local_size: Optional[int] = None,
 ) -> None:
-
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input = kjt_input.to(ctx.device)
         unsharded_model = unsharded_model.to(ctx.device)
