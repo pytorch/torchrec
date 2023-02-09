@@ -53,14 +53,19 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     if stream is None:
         return
     torch.cuda.current_stream().wait_stream(stream)
-    # As mentioned in https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html,
-    # PyTorch uses the "caching allocator" for memory allocation for tensors. When a tensor is
-    # freed, its memory is likely to be reused by newly constructed tenosrs.  By default,
-    # this allocator traces whether a tensor is still in use by only the CUDA stream where it
-    # was created.   When a tensor is used by additional CUDA streams, we need to call record_stream
-    # to tell the allocator about all these streams.  Otherwise, the allocator might free the
-    # underlying memory of the tensor once it is no longer used by the creator stream.  This is
-    # a notable programming trick when we write programs using multi CUDA streams.
+    """
+    As mentioned in
+    https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html, PyTorch
+    uses the "caching allocator" for memory allocation for tensors. When a tensor is
+    freed, its memory is likely to be reused by newly constructed tenosrs. By default,
+    this allocator traces whether a tensor is still in use by only the CUDA stream where
+    it was created. When a tensor is used by additional CUDA streams, we need to call
+    `record_stream` to tell the allocator about these streams. Otherwise, the allocator
+    might free the underlying memory of the tensor once it is no longer used by the
+    creator stream. This is a notable programming trick when we write programs using
+    multiple CUDA streams.
+    """
+
     cur_stream = torch.cuda.current_stream()
     assert isinstance(
         batch, (torch.Tensor, Multistreamable)
@@ -137,10 +142,13 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
 
 class Tracer(torch.fx.Tracer):
-    # Disable proxying buffers during tracing. Ideally, proxying buffers would
-    # be disabled, but some models are currently mutating buffer values, which
-    # causes errors during tracing. If those models can be rewritten to not do
-    # that, we can likely remove this line
+    """
+    Disables proxying buffers during tracing. Ideally, proxying buffers would be
+    disabled, but some models are currently mutating buffer values, which causes errors
+    during tracing. If those models can be rewritten to not do that, we can likely
+    remove this line.
+    """
+
     proxy_buffer_attributes = False
 
     def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
@@ -164,13 +172,19 @@ class TrainPipelineContext:
 
 @dataclass
 class ArgInfo:
-    # attributes of input batch, e.g. batch.attr1.attr2 call
-    # will produce ["attr1", "attr2"]
+    """
+    Representation of args from a node.
+
+    Attributes:
+        input_attrs (List[str]): attributes of input batch,
+            e.g. `batch.attr1.attr2` will produce ["attr1", "attr2"].
+        is_getitems (List[bool]): `batch[attr1].attr2` will produce [True, False].
+        name (Optional[str]): name for kwarg of pipelined forward() call or None for a
+            positional arg.
+    """
+
     input_attrs: List[str]
-    # batch[attr1].attr2 will produce [True, False]
     is_getitems: List[bool]
-    # name for kwarg of pipelined forward() call or None
-    # for a positional arg
     name: Optional[str]
 
 
