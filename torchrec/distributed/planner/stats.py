@@ -12,7 +12,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Union
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
 from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
-    FixedPercentageReservation,
+    FixedPercentageStorageReservation,
     HeuristicalStorageReservation,
     InferenceStorageReservation,
 )
@@ -95,7 +95,7 @@ class EmbeddingStats(Stats):
             if isinstance(
                 storage_reservation,
                 (
-                    FixedPercentageReservation,
+                    FixedPercentageStorageReservation,
                     HeuristicalStorageReservation,
                     InferenceStorageReservation,
                 ),

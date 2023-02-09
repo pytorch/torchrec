@@ -147,7 +147,7 @@ def _get_input_lengths_and_shardable_parameters(
     return input_lengths, shardable_modules
 
 
-class FixedPercentageReservation(StorageReservation):
+class FixedPercentageStorageReservation(StorageReservation):
     def __init__(self, percentage: float) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
@@ -168,12 +168,15 @@ class FixedPercentageReservation(StorageReservation):
 class HeuristicalStorageReservation(StorageReservation):
     """
     Reserves storage for model to be sharded with heuristical calculation. The storage
-    reservation is comprised of nonsharded tensor storage, KJT storage, and an extra
-    percentage.
+    reservation is comprised of dense tensor storage, KJT storage, and an extra
+    percentage of total storage.
 
     Args:
-        percentage (float): extra storage percentage to reserve that acts as a margin of
+        percentage (float): extra storage percent to reserve that acts as a margin of
             error beyond heuristic calculation of storage.
+        parameter_multiplier (float): heuristic multiplier for total parameter storage.
+        dense_tensor_estimate (Optional[int]): storage estimate for dense tensors, uses
+            default heuristic estimate if not provided.
     """
 
     def __init__(
@@ -230,9 +233,9 @@ class HeuristicalStorageReservation(StorageReservation):
 
 class InferenceStorageReservation(StorageReservation):
     """
-    Reserves storage for model to be sharded for inference. The storage
-    reservation is comprised of nonsharded tensor storage, KJT storage, and an extra
-    percentage.
+    Reserves storage for model to be sharded for inference. The storage reservation
+    is comprised of dense tensor storage, KJT storage, and an extra percentage of total
+    storage.
 
     Args:
         percentage (float): extra storage percentage to reserve that acts as a margin of
