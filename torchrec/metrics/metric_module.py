@@ -214,11 +214,17 @@ class RecMetricModule(nn.Module):
         the model output format.
         """
         if self.rec_metrics and self.rec_tasks:
-            labels, predictions, weights = parse_task_model_outputs(
-                self.rec_tasks, model_out
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                self.rec_tasks, model_out, self.get_required_inputs()
+            )
+            kwargs: Dict[str, Any] = (
+                {"required_inputs": required_inputs} if required_inputs else {}
             )
             self.rec_metrics.update(
-                predictions=predictions, labels=labels, weights=weights
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                **kwargs,
             )
 
     def update(self, model_out: Dict[str, torch.Tensor]) -> None:
@@ -327,7 +333,7 @@ class RecMetricModule(nn.Module):
     def reset(self) -> None:
         self.rec_metrics.reset()
 
-    def get_required_inputs(self) -> List[str]:
+    def get_required_inputs(self) -> Optional[List[str]]:
         return self.rec_metrics.get_required_inputs()
 
 

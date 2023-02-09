@@ -62,12 +62,30 @@ def parse_model_outputs(
     return labels, predictions, weights
 
 
+def parse_required_inputs(
+    model_out: Dict[str, torch.Tensor], required_inputs_list: List[str]
+) -> Dict[str, torch.Tensor]:
+    required_inputs: Dict[str, torch.Tensor] = {}
+    for feature in required_inputs_list:
+        required_inputs[feature] = model_out[feature].squeeze()
+        assert isinstance(required_inputs[feature], torch.Tensor)
+    return required_inputs
+
+
 def parse_task_model_outputs(
-    tasks: List[RecTaskInfo], model_out: Dict[str, torch.Tensor]
-) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+    tasks: List[RecTaskInfo],
+    model_out: Dict[str, torch.Tensor],
+    required_inputs_list: Optional[List[str]] = None,
+) -> Tuple[
+    Dict[str, torch.Tensor],
+    Dict[str, torch.Tensor],
+    Dict[str, torch.Tensor],
+    Dict[str, torch.Tensor],
+]:
     all_labels: Dict[str, torch.Tensor] = {}
     all_predictions: Dict[str, torch.Tensor] = {}
     all_weights: Dict[str, torch.Tensor] = {}
+    all_required_inputs: Dict[str, torch.Tensor] = {}
     for task in tasks:
         labels, predictions, weights = parse_model_outputs(
             task.label_name, task.prediction_name, task.weight_name, model_out
@@ -81,4 +99,7 @@ def parse_task_model_outputs(
             if torch.numel(labels) > 0:
                 all_labels[task.name] = labels
 
-    return all_labels, all_predictions, all_weights
+    if required_inputs_list is not None:
+        all_required_inputs = parse_required_inputs(model_out, required_inputs_list)
+
+    return all_labels, all_predictions, all_weights, all_required_inputs

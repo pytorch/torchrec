@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import itertools
 import sys
 from typing import cast, Iterator, List, Optional
 
@@ -181,13 +182,13 @@ class RandomRecDataset(IterableDataset[Batch]):
             ids_per_features=ids_per_features,
             num_dense=num_dense,
             manual_seed=manual_seed,
-            num_batches=num_batches,
+            num_batches=None,
             num_generated_batches=num_generated_batches,
         )
         self.num_batches: int = cast(int, num_batches if not None else sys.maxsize)
 
     def __iter__(self) -> Iterator[Batch]:
-        return iter(self.batch_generator)
+        return itertools.islice(iter(self.batch_generator), self.num_batches)
 
     def __len__(self) -> int:
         return self.num_batches

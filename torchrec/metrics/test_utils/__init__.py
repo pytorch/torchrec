@@ -263,7 +263,7 @@ def rec_metric_value_test_helper(
             **kwargs,
         )
         for i in range(nsteps):
-            labels, predictions, weights = parse_task_model_outputs(
+            labels, predictions, weights, _ = parse_task_model_outputs(
                 tasks, model_outs[i]
             )
             if target_compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:

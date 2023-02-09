@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import itertools
 import unittest
 
 from torchrec.datasets.random import RandomRecDataset
@@ -133,3 +134,23 @@ class RandomDataLoader(unittest.TestCase):
         self.assertEqual(len(feat2), 16)
         for batch in feat2:
             self.assertEqual(len(batch), 50)
+
+    # We want RandomRecDataset to support len() and
+    # itertools.chain() so the random dataloader can
+    # run the same code as real dataset dataloaders
+    # and substitute when wanted without issue.
+    def test_len_and_itertools_chain(self) -> None:
+        dataset = RandomRecDataset(
+            keys=["feat1", "feat2"],
+            batch_size=16,
+            hash_size=100,
+            ids_per_feature=50,
+            num_dense=5,
+            num_generated_batches=-1,
+            num_batches=5,
+        )
+        self.assertEqual(len(dataset), 5)
+        it = itertools.chain(iter(dataset), iter(dataset))
+        for _ in range(10):
+            next(it)
+        self.assertRaises(StopIteration, lambda: next(it))
