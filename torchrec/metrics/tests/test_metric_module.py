@@ -82,7 +82,7 @@ class TestMetricModule(RecMetricModule):
     def _update_rec_metrics(self, model_out: Dict[str, torch.Tensor]) -> None:
         if isinstance(model_out, MagicMock):
             return
-        labels, predictions, weights = parse_task_model_outputs(
+        labels, predictions, weights, _ = parse_task_model_outputs(
             self.rec_tasks, model_out
         )
         self.rec_metrics.update(predictions=predictions, labels=labels, weights=weights)
