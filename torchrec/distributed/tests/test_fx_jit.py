@@ -141,6 +141,21 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         return [self._kernel_type]
 
 
+class TestQuantECSharder(QuantEmbeddingCollectionSharder):
+    def __init__(self, sharding_type: str, kernel_type: str) -> None:
+        super().__init__()
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
+
+
 def quantize(
     module: torch.nn.Module,
     inplace: bool,
@@ -324,6 +339,7 @@ class ModelTraceScriptTest(unittest.TestCase):
     def DMP_QEC(
         self,
         world_size: int,
+        sharding_enabled: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
         device = torch.device("cuda:0")
@@ -347,50 +363,38 @@ class ModelTraceScriptTest(unittest.TestCase):
         )
 
         quant_model = quantize(model, inplace=True)
+        m = quant_model
 
-        class TestQuantECSharder(QuantEmbeddingCollectionSharder):
-            def __init__(self, sharding_type: str, kernel_type: str) -> None:
-                super().__init__()
-                self._sharding_type = sharding_type
-                self._kernel_type = kernel_type
-
-            def sharding_types(self, compute_device_type: str) -> List[str]:
-                return [self._sharding_type]
-
-            def compute_kernels(
-                self, sharding_type: str, compute_device_type: str
-            ) -> List[str]:
-                return [self._kernel_type]
-
-        sharders = [
-            cast(
-                ModuleSharder[torch.nn.Module],
-                TestQuantECSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
-                    kernel_type=EmbeddingComputeKernel.QUANT.value,
-                ),
-            )
-        ]
-        topology = Topology(world_size=world_size, compute_device="cuda")
-        plan = EmbeddingShardingPlanner(
-            topology=topology,
-            batch_size=10,
-            enumerator=EmbeddingEnumerator(
+        if sharding_enabled:
+            sharders = [
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantECSharder(
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ]
+            topology = Topology(world_size=world_size, compute_device="cuda")
+            plan = EmbeddingShardingPlanner(
                 topology=topology,
-                batch_size=1,
-                estimator=[
-                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
-                    EmbeddingStorageEstimator(topology=topology),
-                ],
-            ),
-        ).plan(quant_model, sharders)
-        dmp = DistributedModelParallel(
-            quant_model,
-            plan=plan,
-            device=device,
-            env=ShardingEnv.from_local(world_size=world_size, rank=0),
-            init_data_parallel=False,
-        )
+                batch_size=10,
+                enumerator=EmbeddingEnumerator(
+                    topology=topology,
+                    batch_size=1,
+                    estimator=[
+                        EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                        EmbeddingStorageEstimator(topology=topology),
+                    ],
+                ),
+            ).plan(quant_model, sharders)
+            m = DistributedModelParallel(
+                quant_model,
+                plan=plan,
+                device=device,
+                env=ShardingEnv.from_local(world_size=world_size, rank=0),
+                init_data_parallel=False,
+            )
 
         inputs = []
         for _ in range(5):
@@ -421,7 +425,7 @@ class ModelTraceScriptTest(unittest.TestCase):
 
         return (
             quant_model,
-            dmp,
+            m,
             [model_input_to_forward_args(*inp) for inp in inputs],
         )
 
@@ -449,7 +453,18 @@ class ModelTraceScriptTest(unittest.TestCase):
                     ),
                     FxJitTestType.FX_JIT,
                 ),
-                (self.DMP_QEC, FxJitTestType.CREATE_ONLY),
+                (
+                    lambda world_size: self.DMP_QEC(
+                        world_size=world_size, sharding_enabled=True
+                    ),
+                    FxJitTestType.CREATE_ONLY,  # waiting for torch.Await support
+                ),
+                (
+                    lambda world_size: self.DMP_QEC(
+                        world_size=world_size, sharding_enabled=False
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
                 (self.shard_modules_QEBC, FxJitTestType.FX_JIT),
             ]
         ]
