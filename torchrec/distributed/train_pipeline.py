@@ -488,6 +488,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        run_all_batches: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -505,10 +506,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
         self._batch_i: Optional[In] = None
         self._batch_ip1: Optional[In] = None
-        self._batch_ip2: Optional[In] = None
         self._connected = False
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+        self._run_all_batches = run_all_batches
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         # batch 1
@@ -542,16 +543,20 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._sync_pipeline()
             self.__class__.synced_pipeline_id[id(self._model)] = id(self)
 
+        if self._run_all_batches and self._batch_i is None and self._batch_ip1 is None:
+            raise StopIteration
+
         if self._model.training:
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
-                batch_ip2 = next(dataloader_iter)
-                self._batch_ip2 = batch_ip2 = _to_device(
-                    batch_ip2, self._device, non_blocking=True
-                )
+                batch_ip2 = next(dataloader_iter, None)
+                if batch_ip2 is not None:
+                    batch_ip2 = _to_device(batch_ip2, self._device, non_blocking=True)
+                elif not self._run_all_batches:
+                    raise StopIteration
         batch_i = cast(In, self._batch_i)
         batch_ip1 = cast(In, self._batch_ip1)
 
@@ -566,16 +571,17 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 event = torch.cuda.current_stream().record_event()
             (losses, output) = cast(Tuple[torch.Tensor, Out], self._model(batch_i))
 
-        # Data Distribution
-        with record_function("## sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_dist_stream):
-                _wait_for_batch(batch_ip1, self._memcpy_stream)
-                # Ensure event in default stream has been called before
-                # starting data dist
-                if self._data_dist_stream:
-                    # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
-                    self._data_dist_stream.wait_event(event)
-                _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
+        if batch_ip1 is not None:
+            # Data Distribution
+            with record_function("## sparse_data_dist ##"):
+                with torch.cuda.stream(self._data_dist_stream):
+                    _wait_for_batch(batch_ip1, self._memcpy_stream)
+                    # Ensure event in default stream has been called before
+                    # starting data dist
+                    if self._data_dist_stream:
+                        # pyre-ignore [61]: Local variable `event` is undefined, or not always defined
+                        self._data_dist_stream.wait_event(event)
+                    _start_data_dist(self._pipelined_modules, batch_ip1, self._context)
 
         if self._model.training:
             # Backward
