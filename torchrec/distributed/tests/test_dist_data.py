@@ -16,6 +16,7 @@ import torch.distributed as dist
 from hypothesis import given, settings
 
 from torchrec.distributed.dist_data import (
+    _get_recat,
     KJTAllToAll,
     KJTAllToAllSplitsAwaitable,
     PooledEmbeddingsAllGather,
@@ -842,13 +843,25 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
         )
         _input.requires_grad = True
 
+        sparse_features_recat = (
+            _get_recat(
+                local_split=features_per_rank[rank],
+                num_splits=world_size,
+                device=device,
+                stagger=1,
+                batch_size_per_rank=batch_size_per_rank,
+            )
+            if len(set(batch_size_per_rank)) > 1
+            else None
+        )
+
         res = a2a(
             local_embs=_input,
             lengths=lengths_after_sdd_a2a,
             input_splits=input_splits,
             output_splits=output_splits,
-            sparse_features_recat=None,
             batch_size_per_rank=batch_size_per_rank,
+            sparse_features_recat=sparse_features_recat,
         ).wait()
 
         atol, rtol = None, None

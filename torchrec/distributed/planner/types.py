@@ -255,10 +255,11 @@ class ShardingOption:
     def is_pooled(self) -> bool:
         if isinstance(self.module[1], EmbeddingCollectionInterface):
             return False
-        for name, module in self.module[1].named_modules():
-            if self.name in name:
-                if isinstance(module, EmbeddingCollectionInterface):
-                    return False
+        for module in self.module[1].modules():
+            if isinstance(module, EmbeddingCollectionInterface):
+                for name, _ in module.named_parameters():
+                    if self.name in name:
+                        return False
         return True
 
     def __hash__(self) -> int:
