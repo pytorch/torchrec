@@ -983,8 +983,6 @@ class SequenceEmbeddingsAllToAll(nn.Module):
         variable_batch_size = (
             batch_size_per_rank is not None and len(set(batch_size_per_rank)) > 1
         )
-        if variable_batch_size:
-            assert sparse_features_recat is not None
 
         if sparse_features_recat is not None:
             forward_recat_tensor = torch.ops.fbgemm.invert_permute(
