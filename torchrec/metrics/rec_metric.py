@@ -314,6 +314,9 @@ class RecMetric(nn.Module, abc.ABC):
         process_group: Optional[dist.ProcessGroup] = None,
         **kwargs: Dict[str, Any],
     ) -> None:
+        torch._C._log_api_usage_once(
+            f"torchrec.metrics.rec_metric.{self.__class__.__name__}"
+        )
         # TODO(stellaya): consider to inherit from TorchMetrics.Metric or
         # TorchMetrics.MetricCollection.
         if (
