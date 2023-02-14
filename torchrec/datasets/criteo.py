@@ -181,23 +181,45 @@ class BinaryCriteoUtils:
         out_dense_file: str,
         out_sparse_file: str,
         out_labels_file: str,
+        dataset_name: str = "criteo_1tb",
         path_manager_key: str = PATH_MANAGER_KEY,
     ) -> None:
         """
         Convert one Criteo tsv file to three npy files: one for dense (np.float32), one
         for sparse (np.int32), and one for labels (np.int32).
 
+        The tsv file is expected to be part of the Criteo 1TB Click Logs Dataset ("criteo_1tb")
+        or the Criteo Kaggle Display Advertising Challenge dataset ("criteo_kaggle").
+
+        For the "criteo_kaggle" test set, we set the labels to -1 representing filler data,
+        because label data is not included in the "criteo_kaggle" test set.
+
         Args:
             in_file (str): Input tsv file path.
             out_dense_file (str): Output dense npy file path.
             out_sparse_file (str): Output sparse npy file path.
             out_labels_file (str): Output labels npy file path.
+            dataset_name (str): The dataset name. "criteo_1tb" or "criteo_kaggle" is expected.
             path_manager_key (str): Path manager key used to load from different
                 filesystems.
 
         Returns:
             None.
         """
+
+        # Add fake label for criteo_kaggle test set, which does not include label data
+        def row_mapper_with_fake_label_constant(
+            row: List[str],
+        ) -> Tuple[List[int], List[int], int]:
+            label = -1
+            dense = [int(row[i] or "0") for i in range(0, 0 + INT_FEATURE_COUNT)]
+            sparse = [
+                int(row[i] or "0", 16)
+                for i in range(
+                    0 + INT_FEATURE_COUNT, 0 + INT_FEATURE_COUNT + CAT_FEATURE_COUNT
+                )
+            ]
+            return dense, sparse, label
 
         def row_mapper(row: List[str]) -> Tuple[List[int], List[int], int]:
             # Missing values are mapped to zero for both dense and sparse features
@@ -213,7 +235,10 @@ class BinaryCriteoUtils:
 
         dense, sparse, labels = [], [], []
         for (row_dense, row_sparse, row_label) in CriteoIterDataPipe(
-            [in_file], row_mapper=row_mapper
+            [in_file],
+            row_mapper=row_mapper
+            if not (dataset_name == "criteo_kaggle" and "test" in in_file)
+            else row_mapper_with_fake_label_constant,
         ):
             dense.append(row_dense)
             sparse.append(row_sparse)
