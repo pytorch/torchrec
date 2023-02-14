@@ -20,6 +20,7 @@ from typing import (
     Tuple,
     TypeVar,
 )
+from weakref import WeakKeyDictionary
 
 import torch
 from torch.autograd.profiler import record_function
@@ -481,7 +482,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     `DistributedDataParallel` modules.
     """
 
-    synced_pipeline_id: Dict[int, int] = {}
+    last_synced_pipeline: """WeakKeyDictionary[
+        torch.nn.Module,
+        TrainPipelineSparseDist[In, Out],
+    ]""" = WeakKeyDictionary()
 
     def __init__(
         self,
@@ -533,14 +537,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 batch_ip1, self._device, non_blocking=True
             )
         self._connected = True
-        self.__class__.synced_pipeline_id[id(self._model)] = id(self)
+        self.__class__.last_synced_pipeline[self._model] = self
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._connected:
             self._connect(dataloader_iter)
-        elif self.__class__.synced_pipeline_id.get(id(self._model), None) != id(self):
+        elif self.__class__.last_synced_pipeline.get(self._model, None) != self:
             self._sync_pipeline()
-            self.__class__.synced_pipeline_id[id(self._model)] = id(self)
+            self.__class__.last_synced_pipeline[self._model] = self
 
         if self._model.training:
             with record_function("## zero_grad ##"):
