@@ -346,6 +346,7 @@ def _gen_named_parameters_by_table_fused(
     emb_module: SplitTableBatchedEmbeddingBagsCodegen,
     table_name_to_count: Dict[str, int],
     config: GroupedEmbeddingConfig,
+    pg: Optional[dist.ProcessGroup] = None,
 ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
     # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
     for t_idx, (rows, dim, location, _) in enumerate(emb_module.embedding_specs):
@@ -378,8 +379,9 @@ def _gen_named_parameters_by_table_fused(
         # pyre-ignore
         weight._in_backward_optimizers = [
             EmbeddingFusedOptimizer(
-                config,
-                emb_module,
+                config=config,
+                emb_module=emb_module,
+                pg=pg,
                 create_for_table=table_name,
                 param_weight_for_table=weight,
             )
@@ -571,9 +573,10 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
             _gen_named_parameters_by_table_fused(
-                self._emb_module,
-                self.table_name_to_count.copy(),
-                self._config,
+                emb_module=self._emb_module,
+                table_name_to_count=self.table_name_to_count.copy(),
+                config=self._config,
+                pg=pg,
             )
         )
         self.init_parameters()
@@ -838,9 +841,10 @@ class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
             _gen_named_parameters_by_table_fused(
-                self._emb_module,
-                self.table_name_to_count.copy(),
-                self._config,
+                emb_module=self._emb_module,
+                table_name_to_count=self.table_name_to_count.copy(),
+                config=self._config,
+                pg=pg,
             )
         )
         self.init_parameters()
