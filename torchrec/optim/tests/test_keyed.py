@@ -49,11 +49,8 @@ class TestKeyedOptimizer(unittest.TestCase):
 
         # Set up example KeyedOptimizer.
         param_1_t, param_2_t = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 4.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_1, param_2 = Variable(param_1_t), Variable(param_2_t)
         keyed_optimizer = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_1": param_1, "param_2": param_2},
             {
                 param_1: {
@@ -145,11 +142,8 @@ class TestKeyedOptimizer(unittest.TestCase):
     def test_non_param_state_key(self) -> None:
         with self.assertRaisesRegex(ValueError, "All state keys must be params."):
             param_1_t = torch.tensor([1.0, 2.0])
-            # pyre-fixme[19]: Expected 0 positional arguments.
             param_1 = Variable(param_1_t)
             KeyedOptimizer(
-                # pyre-fixme[6]: For 1st param expected `Mapping[str,
-                #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
                 {"param_1": param_1},
                 {param_1: 1.0, "non_param_state_key": 2.0},
                 [{"params": [param_1], "param_group_val_0": 3.0}],
@@ -197,11 +191,8 @@ class TestCombinedOptimizer(unittest.TestCase):
     def test_pickle(self) -> None:
         # Set up example KeyedOptimizer 1.
         param_1_t = torch.tensor([1.0, 2.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_1 = Variable(param_1_t)
         keyed_optimizer_1 = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_1": param_1},
             {param_1: {"one": 1.0}},
             [{"params": [param_1], "param_group_val_0": 2.0}],
@@ -209,11 +200,8 @@ class TestCombinedOptimizer(unittest.TestCase):
 
         # Set up example KeyedOptimizer 2.
         param_2_t = torch.tensor([-1.0, -2.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_2 = Variable(param_2_t)
         keyed_optimizer_2 = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_2": param_2},
             {param_2: {"two": -1.0}},
             [{"params": [param_2], "param_group_val_0": -2.0}],
@@ -237,11 +225,8 @@ class TestCombinedOptimizer(unittest.TestCase):
     def test_load_state_dict(self) -> None:
         # Set up example KeyedOptimizer 1.
         param_1_t = torch.tensor([1.0, 2.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_1 = Variable(param_1_t)
         keyed_optimizer_1 = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_1": param_1},
             {param_1: {"one": 1.0}},
             [{"params": [param_1], "param_group_val_0": 2.0}],
@@ -249,11 +234,8 @@ class TestCombinedOptimizer(unittest.TestCase):
 
         # Set up example KeyedOptimizer 2.
         param_2_t = torch.tensor([-1.0, -2.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_2 = Variable(param_2_t)
         keyed_optimizer_2 = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_2": param_2},
             {param_2: {"two": -1.0}},
             [{"params": [param_2], "param_group_val_0": -2.0}],
@@ -284,11 +266,8 @@ class TestCombinedOptimizer(unittest.TestCase):
 class TestOptimizerWrapper(unittest.TestCase):
     def test_load_state_dict(self) -> None:
         param_1_t = torch.tensor([1.0, 2.0])
-        # pyre-fixme[19]: Expected 0 positional arguments.
         param_1 = Variable(param_1_t)
         keyed_optimizer = KeyedOptimizer(
-            # pyre-fixme[6]: For 1st param expected `Mapping[str,
-            #  Union[ShardedTensor, Tensor]]` but got `Mapping[str, Variable]`.
             {"param_1": param_1},
             {param_1: {"one": 1.0}},
             [{"params": [param_1], "param_group_val_0": 2.0}],

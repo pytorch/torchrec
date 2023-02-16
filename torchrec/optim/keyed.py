@@ -246,7 +246,6 @@ class KeyedOptimizer(optim.Optimizer):
                     and key in sparse_grad_parameter_names
                 ):
                     t = t.to_sparse()
-                # pyre-fixme[8, 9, 19]
                 param.grad = torch.autograd.Variable(t)
         self.step(closure=None)
 
