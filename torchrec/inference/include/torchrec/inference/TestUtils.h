@@ -28,6 +28,9 @@ createRequest(size_t batchSize, size_t numFeatures, at::Tensor embedding);
 
 JaggedTensor createJaggedTensor(const std::vector<std::vector<int32_t>>& input);
 
+c10::List<at::Tensor> createIValueList(
+    const std::vector<std::vector<int32_t>>& input);
+
 at::Tensor createEmbeddingTensor(
     const std::vector<std::vector<int32_t>>& input);
 

@@ -87,7 +87,7 @@ struct PredictionBatch : public boost::noncopyable {
 
   size_t batchSize;
 
-  c10::Dict<std::string, at::Tensor> forwardArgs;
+  c10::impl::GenericDict forwardArgs;
 
   std::vector<RequestContext> contexts;
 
@@ -102,7 +102,7 @@ struct PredictionBatch : public boost::noncopyable {
   // noncopyable struct and not trigger copy-constructor.
   PredictionBatch(
       size_t bs,
-      c10::Dict<std::string, at::Tensor> fa,
+      c10::impl::GenericDict fa,
       std::vector<RequestContext> ctxs,
       std::unique_ptr<ResourceManagerGuard> rmg = nullptr)
       : batchSize(bs),
@@ -114,14 +114,29 @@ struct PredictionBatch : public boost::noncopyable {
       std::string methodNameArg,
       std::vector<c10::IValue> argsArg,
       folly::Promise<std::unique_ptr<torchrec::PredictionResponse>> promise)
-      : methodName(std::move(methodNameArg)), args(std::move(argsArg)) {
+      : methodName(std::move(methodNameArg)),
+        args(std::move(argsArg)),
+        forwardArgs(
+            c10::impl::GenericDict(at::StringType::get(), at::AnyType::get())) {
     contexts.push_back(RequestContext{1u, std::move(promise)});
+  }
+
+  size_t sizeOfIValue(const c10::IValue& val) const {
+    size_t size = 0;
+    if (val.isTensor()) {
+      size += val.toTensor().storage().nbytes();
+    } else if (val.isList()) {
+      for (const auto& v : val.toListRef()) {
+        size += sizeOfIValue(v);
+      }
+    }
+    return size;
   }
 
   inline size_t size() const {
     size_t size = 0;
     for (const auto& iter : forwardArgs) {
-      size += iter.value().storage().nbytes();
+      size += sizeOfIValue(iter.value());
     }
     return size;
   }
