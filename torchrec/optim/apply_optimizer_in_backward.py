@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterable, Type
 from warnings import warn
 
 import torch
-from torch.distributed.optim import _apply_optimizer_in_backward
 
 
 def apply_optimizer_in_backward(
@@ -44,6 +43,8 @@ def apply_optimizer_in_backward(
         print(param_1._optimizer, param_1._optimizer_kwargs)
         >> torch.optim.SGD, {"lr": .02}
     """
+
+    from torch.distributed.optim import _apply_optimizer_in_backward
 
     warn(
         "This API is deprecated. Please use Pytorch Distributed's _apply_optimizer_in_backward API instead.",
