@@ -86,13 +86,18 @@ TEST(BatchingQueueTest, Basic) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("cuda_features").numel());
-  ASSERT_EQ(value->forwardArgs.at("cuda_features").device().type(), at::kCUDA);
-  ASSERT_EQ(2 * (2 + 4), value->forwardArgs.at("cpu_features").numel());
-  ASSERT_EQ(value->forwardArgs.at("cpu_features").device(), at::kCPU);
+  ASSERT_EQ(
+      2 * (2 + 4), value->forwardArgs.at("cuda_features").toTensor().numel());
+  ASSERT_EQ(
+      value->forwardArgs.at("cuda_features").toTensor().device().type(),
+      at::kCUDA);
+  ASSERT_EQ(
+      2 * (2 + 4), value->forwardArgs.at("cpu_features").toTensor().numel());
+  ASSERT_EQ(
+      value->forwardArgs.at("cpu_features").toTensor().device(), at::kCPU);
   ASSERT_TRUE(at::allclose(
-      value->forwardArgs.at("cuda_features").cpu(),
-      value->forwardArgs.at("cpu_features")));
+      value->forwardArgs.at("cuda_features").toTensor().cpu(),
+      value->forwardArgs.at("cpu_features").toTensor()));
 }
 
 TEST(BatchingQueueTest, MaxBatchSize) {
@@ -132,8 +137,9 @@ TEST(BatchingQueueTest, MaxBatchSize) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  ASSERT_EQ(2 * 2, value->forwardArgs.at("cpu_features").numel());
-  ASSERT_EQ(value->forwardArgs.at("cpu_features").device(), at::kCPU);
+  ASSERT_EQ(2 * 2, value->forwardArgs.at("cpu_features").toTensor().numel());
+  ASSERT_EQ(
+      value->forwardArgs.at("cpu_features").toTensor().device(), at::kCPU);
 }
 
 } // namespace torchrec
