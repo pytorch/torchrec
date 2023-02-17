@@ -5,17 +5,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import unittest
 from typing import Dict, List, Type
 
 import torch
-import torch.distributed as dist
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 from torchrec.metrics.test_utils import (
-    rec_metric_value_test_helper,
+    metric_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,
 )
@@ -82,56 +80,18 @@ class AUCMetricTest(unittest.TestCase):
     clazz: Type[RecMetric] = AUCMetric
     task_name: str = "auc"
 
-    @staticmethod
-    def _test_auc(
-        target_clazz: Type[RecMetric],
-        target_compute_mode: RecComputeMode,
-        task_names: List[str],
-        fused_update_limit: int = 0,
-        compute_on_all_ranks: bool = False,
-        should_validate_update: bool = False,
-    ) -> None:
-        rank = int(os.environ["RANK"])
-        world_size = int(os.environ["WORLD_SIZE"])
-        dist.init_process_group(
-            backend="gloo",
-            world_size=world_size,
-            rank=rank,
-        )
-
-        auc_metrics, test_metrics = rec_metric_value_test_helper(
-            target_clazz=target_clazz,
-            target_compute_mode=target_compute_mode,
-            test_clazz=TestAUCMetric,
-            fused_update_limit=fused_update_limit,
-            compute_on_all_ranks=False,
-            should_validate_update=should_validate_update,
-            world_size=world_size,
-            my_rank=rank,
-            task_names=task_names,
-        )
-
-        if rank == 0:
-            for name in task_names:
-                assert torch.allclose(
-                    auc_metrics[f"auc-{name}|window_auc"], test_metrics[1][name]
-                ), (auc_metrics[f"auc-{name}|window_auc"], test_metrics[1][name])
-                assert torch.allclose(
-                    auc_metrics[f"auc-{name}|local_window_auc"], test_metrics[3][name]
-                ), (auc_metrics[f"auc-{name}|local_window_auc"], test_metrics[3][name])
-        dist.destroy_process_group()
-
     def test_unfused_auc(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=AUCMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             test_clazz=TestAUCMetric,
+            metric_name=AUCMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_auc,
+            entry_point=metric_test_helper,
         )
 
     def test_fused_auc(self) -> None:
@@ -139,12 +99,13 @@ class AUCMetricTest(unittest.TestCase):
             target_clazz=AUCMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
             test_clazz=TestAUCMetric,
+            metric_name=AUCMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_auc,
+            entry_point=metric_test_helper,
         )
 
 
