@@ -376,16 +376,15 @@ def _gen_named_parameters_by_table_fused(
             embedding_dim=dim,
         )
         # this reuses logic in EmbeddingFusedOptimizer but is per table
-        # pyre-ignore
-        weight._in_backward_optimizers = [
-            EmbeddingFusedOptimizer(
-                config=config,
-                emb_module=emb_module,
-                pg=pg,
-                create_for_table=table_name,
-                param_weight_for_table=weight,
-            )
-        ]
+
+        # weight._in_backward_optimizers = [
+        #     EmbeddingFusedOptimizer(
+        #         config,
+        #         emb_module,
+        #         create_for_table=table_name,
+        #         param_weight_for_table=weight,
+        #     )
+        # ]
         yield (table_name, weight)
 
 
