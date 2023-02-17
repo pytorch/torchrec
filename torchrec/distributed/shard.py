@@ -66,6 +66,8 @@ def shard(
         assert isinstance(sharded_ebc, ShardedEmbeddingBagCollection)
     """
 
+    torch._C._log_api_usage_once("torchrec.distributed.shard")
+
     if sharder is None:
         sharder = get_module_to_default_sharders().get(type(module), None)
     assert (
@@ -154,6 +156,8 @@ def shard_modules(
         m = shard(m)
         assert isinstance(m.embedding_bag_collection, ShardedEmbeddingBagCollection)
     """
+
+    torch._C._log_api_usage_once("torchrec.distributed.shard_modules")
 
     if sharders is None:
         sharders = get_default_sharders()
