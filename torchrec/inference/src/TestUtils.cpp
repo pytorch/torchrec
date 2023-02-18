@@ -8,6 +8,7 @@
 
 #include "torchrec/inference/TestUtils.h"
 
+#include <initializer_list>
 #include <memory>
 
 #include <folly/io/IOBuf.h>
@@ -130,6 +131,21 @@ at::Tensor createEmbeddingTensor(
   }
 
   return tensor;
+}
+
+c10::List<at::Tensor> createIValueList(
+    const std::vector<std::vector<int32_t>>& input) {
+  // Input is batch x num_features
+  std::vector<at::Tensor> rows;
+  for (const auto& vec : input) {
+    rows.push_back(at::tensor(vec, at::TensorOptions().dtype(c10::kFloat)));
+  }
+  auto combined = at::stack(rows).transpose(0, 1);
+  c10::List<at::Tensor> retList;
+  for (auto& tensor : combined.split(1)) {
+    retList.push_back(tensor.squeeze(0));
+  }
+  return retList;
 }
 
 } // namespace torchrec

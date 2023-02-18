@@ -16,6 +16,7 @@ from unittest.mock import Mock, patch
 import torch
 import torch.distributed as dist
 import torch.distributed.launcher as pet
+from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 
@@ -227,6 +228,7 @@ def rec_metric_value_test_helper(
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
     tasks = gen_test_tasks(task_names)
     model_outs = []
+
     for _ in range(nsteps):
         _model_outs = [
             gen_test_batch(
@@ -331,12 +333,14 @@ def rec_metric_value_test_launcher(
     target_clazz: Type[RecMetric],
     target_compute_mode: RecComputeMode,
     test_clazz: Type[TestMetric],
+    metric_name: str,
     task_names: List[str],
     fused_update_limit: int,
     compute_on_all_ranks: bool,
     should_validate_update: bool,
     world_size: int,
     entry_point: Callable[..., None],
+    batch_window_size: int = BATCH_WINDOW_SIZE,
     test_nsteps: int = 1,
     n_classes: Optional[int] = None,
 ) -> None:
@@ -366,9 +370,14 @@ def rec_metric_value_test_launcher(
             target_clazz,
             target_compute_mode,
             task_names,
+            test_clazz,
+            metric_name,
             fused_update_limit,
             compute_on_all_ranks,
             should_validate_update,
+            batch_window_size,
+            n_classes,
+            test_nsteps,
         )
 
 
@@ -380,3 +389,74 @@ def rec_metric_accuracy_test_helper(
             world_size=world_size, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
         )
         pet.elastic_launch(lc, entrypoint=entry_point)()
+
+
+def metric_test_helper(
+    target_clazz: Type[RecMetric],
+    target_compute_mode: RecComputeMode,
+    task_names: List[str],
+    test_clazz: Type[TestMetric],
+    metric_name: str,
+    fused_update_limit: int = 0,
+    compute_on_all_ranks: bool = False,
+    should_validate_update: bool = False,
+    batch_window_size: int = BATCH_WINDOW_SIZE,
+    n_classes: Optional[int] = None,
+    nsteps: int = 1,
+    is_time_dependent: bool = False,
+    time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
+) -> None:
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(
+        backend="gloo",
+        world_size=world_size,
+        rank=rank,
+    )
+    target_metrics, test_metrics = rec_metric_value_test_helper(
+        target_clazz=target_clazz,
+        target_compute_mode=target_compute_mode,
+        test_clazz=test_clazz,
+        fused_update_limit=fused_update_limit,
+        compute_on_all_ranks=False,
+        should_validate_update=should_validate_update,
+        world_size=world_size,
+        my_rank=rank,
+        task_names=task_names,
+        batch_window_size=batch_window_size,
+        n_classes=n_classes,
+        nsteps=nsteps,
+        is_time_dependent=is_time_dependent,
+        time_dependent_metric=time_dependent_metric,
+    )
+
+    if rank == 0:
+        for name in task_names:
+            # we don't have lifetime metric for AUC due to OOM.
+            if target_clazz != AUCMetric:
+                assert torch.allclose(
+                    target_metrics[
+                        f"{str(target_clazz._namespace)}-{name}|lifetime_{metric_name}"
+                    ],
+                    test_metrics[0][name],
+                )
+                assert torch.allclose(
+                    target_metrics[
+                        f"{str(target_clazz._namespace)}-{name}|local_lifetime_{metric_name}"
+                    ],
+                    test_metrics[2][name],
+                )
+            assert torch.allclose(
+                target_metrics[
+                    f"{str(target_clazz._namespace)}-{name}|window_{metric_name}"
+                ],
+                test_metrics[1][name],
+            )
+
+            assert torch.allclose(
+                target_metrics[
+                    f"{str(target_clazz._namespace)}-{name}|local_window_{metric_name}"
+                ],
+                test_metrics[3][name],
+            )
+    dist.destroy_process_group()

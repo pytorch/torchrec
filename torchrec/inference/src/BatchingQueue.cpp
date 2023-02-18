@@ -254,9 +254,10 @@ void BatchingQueue::pinMemory(int gpuIdx) {
               return batchItems;
             });
 
-        c10::Dict<std::string, at::Tensor> forwardArgs;
+        c10::impl::GenericDict forwardArgs(
+            at::StringType::get(), at::AnyType::get());
         auto combineForwardArgs =
-            [&](std::unordered_map<std::string, at::Tensor> map) {
+            [&](std::unordered_map<std::string, c10::IValue> map) {
               for (auto& [key, value] : map) {
                 CHECK(!forwardArgs.contains(key));
                 forwardArgs.insert(key, std::move(value));

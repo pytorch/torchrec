@@ -30,7 +30,7 @@ class BatchingFunc {
  public:
   virtual ~BatchingFunc() = default;
 
-  virtual std::unordered_map<std::string, at::Tensor> batch(
+  virtual std::unordered_map<std::string, c10::IValue> batch(
       const std::string& /* featureName */,
       const std::vector<std::shared_ptr<PredictionRequest>>& /* requests */,
       const int64_t& /* totalNumBatch */,
@@ -52,21 +52,23 @@ C10_DECLARE_REGISTRY(TorchRecBatchingFuncRegistry, BatchingFunc);
   REGISTER_TORCHREC_BATCHING_FUNC_WITH_PIORITY(    \
       name, c10::REGISTRY_DEFAULT, __VA_ARGS__);
 
-std::unordered_map<std::string, at::Tensor> combineFloat(
+std::unordered_map<std::string, c10::IValue> combineFloat(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests);
 
-std::unordered_map<std::string, at::Tensor> combineSparse(
+std::unordered_map<std::string, c10::IValue> combineSparse(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests,
     bool isWeighted);
 
-std::unordered_map<std::string, at::Tensor> combineEmbedding(
+std::unordered_map<std::string, c10::IValue> combineEmbedding(
     const std::string& featureName,
     const std::vector<std::shared_ptr<PredictionRequest>>& requests);
 
-std::unordered_map<std::string, at::Tensor> moveToDevice(
-    std::unordered_map<std::string, at::Tensor> combined,
+void moveIValueToDevice(c10::IValue& val, const c10::Device& device);
+
+std::unordered_map<std::string, c10::IValue> moveToDevice(
+    std::unordered_map<std::string, c10::IValue> combined,
     const c10::Device& device);
 
 } // namespace torchrec

@@ -17,6 +17,8 @@
 #include <folly/io/IOBuf.h>
 #include <gtest/gtest.h>
 
+#include "ATen/ops/tensor.h"
+#include "torch/library.h"
 #include "torchrec/inference/TestUtils.h"
 #include "torchrec/inference/Types.h"
 
@@ -44,24 +46,45 @@ TEST(BatchingTest, SparseCombineTest) {
   auto batched =
       combineSparse("id_score_list_features", {request0, request1}, true);
 
-  checkTensor<int32_t>(batched["id_score_list_features.lengths"], {2, 0, 1, 1});
-  checkTensor<int32_t>(batched["id_score_list_features.values"], {0, 1, 2, 3});
+  checkTensor<int32_t>(
+      batched["id_score_list_features.lengths"].toTensor(), {2, 0, 1, 1});
+  checkTensor<int32_t>(
+      batched["id_score_list_features.values"].toTensor(), {0, 1, 2, 3});
   checkTensor<float>(
-      batched["id_score_list_features.weights"], {1.0f, 1.0f, 1.0f, 1.0f});
+      batched["id_score_list_features.weights"].toTensor(),
+      {1.0f, 1.0f, 1.0f, 1.0f});
 }
 
 TEST(BatchingTest, EmbeddingCombineTest) {
-  const auto embedding0 = createEmbeddingTensor({{0, 1}, {2, 3}});
-  const auto embedding1 = createEmbeddingTensor({{4, 5}});
+  std::vector<std::vector<int32_t>> raw_emb0 = {{0, 1}, {2, 3}};
+  std::vector<std::vector<int32_t>> raw_emb1 = {{4, 5}};
+
+  const auto embedding0 = createEmbeddingTensor(raw_emb0);
+  const auto embedding1 = createEmbeddingTensor(raw_emb1);
 
   auto request0 = createRequest(2, 2, embedding0);
   auto request1 = createRequest(1, 2, embedding1);
+  request0->features["ivalue_embedding_features"] = createIValueList(raw_emb0);
+  request1->features["ivalue_embedding_features"] = createIValueList(raw_emb1);
 
-  auto batched = combineEmbedding("embedding_features", {request0, request1});
+  auto batched_dict =
+      combineEmbedding("embedding_features", {request0, request1});
+  auto batchedIValue =
+      combineEmbedding("ivalue_embedding_features", {request0, request1});
+
   // num features, num batches, feature dimision
-  EXPECT_EQ(batched["embedding_features"].sizes(), at::ArrayRef({2L, 3L, 1L}));
-  auto flatten = batched["embedding_features"].flatten();
-  checkTensor<float>(flatten, {0, 1, 4, 2, 3, 5});
+  auto batched = at::stack(batched_dict["embedding_features"].toTensorVector());
+  auto ivalue_batched =
+      at::stack(batchedIValue["ivalue_embedding_features"].toTensorVector());
+
+  std::vector<int64_t> expectShape{2L, 3L, 1L};
+  std::vector<float> expectResult{0, 2, 4, 1, 3, 5};
+  EXPECT_EQ(batched.sizes(), expectShape);
+  EXPECT_EQ(ivalue_batched.sizes(), expectShape);
+  auto flatten = batched.flatten();
+  checkTensor<float>(flatten, expectResult);
+  flatten = ivalue_batched.flatten();
+  checkTensor<float>(flatten, expectResult);
 }
 
 TEST(BatchingTest, DenseCombineTest) {
@@ -80,11 +103,11 @@ TEST(BatchingTest, DenseCombineTest) {
   // num features, num batches, feature dimension
   std::vector<int64_t> expectShape{3L, 2L};
   std::vector<float> expectResult{1.1, 2.0, 0.3, 1.2, 0.9, 2.3};
-  EXPECT_EQ(batchedIOBuf["io_buf"].sizes(), expectShape);
-  EXPECT_EQ(batchedIValue["ivalue"].sizes(), expectShape);
-  auto flatten = batchedIOBuf["io_buf"].flatten();
+  EXPECT_EQ(batchedIOBuf["io_buf"].toTensor().sizes(), expectShape);
+  EXPECT_EQ(batchedIValue["ivalue"].toTensor().sizes(), expectShape);
+  auto flatten = batchedIOBuf["io_buf"].toTensor().flatten();
   checkTensor<float>(flatten, expectResult);
-  flatten = batchedIValue["ivalue"].flatten();
+  flatten = batchedIValue["ivalue"].toTensor().flatten();
   checkTensor<float>(flatten, expectResult);
 }
 
