@@ -14,6 +14,7 @@ import torch.distributed as dist
 from torchrec.metrics.mse import compute_mse, compute_rmse, MSEMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
+    metric_test_helper,
     rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,
@@ -66,63 +67,20 @@ class TestRMSEMetric(TestMetric):
 class MSEMetricTest(unittest.TestCase):
     clazz: Type[RecMetric] = MSEMetric
     task_name: str = "mse"
-
-    @staticmethod
-    def _test_mse(
-        target_clazz: Type[RecMetric],
-        target_compute_mode: RecComputeMode,
-        task_names: List[str],
-        fused_update_limit: int = 0,
-        compute_on_all_ranks: bool = False,
-        should_validate_update: bool = False,
-    ) -> None:
-        rank = int(os.environ["RANK"])
-        world_size = int(os.environ["WORLD_SIZE"])
-        dist.init_process_group(
-            backend="gloo",
-            world_size=world_size,
-            rank=rank,
-        )
-
-        mse_metrics, test_metrics = rec_metric_value_test_helper(
-            target_clazz=target_clazz,
-            target_compute_mode=target_compute_mode,
-            test_clazz=TestMSEMetric,
-            fused_update_limit=fused_update_limit,
-            compute_on_all_ranks=False,
-            should_validate_update=should_validate_update,
-            world_size=world_size,
-            my_rank=rank,
-            task_names=task_names,
-        )
-
-        if rank == 0:
-            for name in task_names:
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|lifetime_mse"], test_metrics[0][name]
-                )
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|window_mse"], test_metrics[1][name]
-                )
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|local_lifetime_mse"], test_metrics[2][name]
-                )
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|local_window_mse"], test_metrics[3][name]
-                )
-        dist.destroy_process_group()
+    rmse_task_name: str = "rmse"
 
     def test_unfused_mse(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             test_clazz=TestMSEMetric,
+            metric_name=MSEMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_mse,
+            entry_point=metric_test_helper,
         )
 
     def test_fused_mse(self) -> None:
@@ -130,61 +88,27 @@ class MSEMetricTest(unittest.TestCase):
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
             test_clazz=TestMSEMetric,
+            metric_name=MSEMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_mse,
+            entry_point=metric_test_helper,
         )
-
-    @staticmethod
-    def _test_rmse(
-        target_clazz: Type[RecMetric],
-        target_compute_mode: RecComputeMode,
-        task_names: List[str],
-        fused_update_limit: int = 0,
-    ) -> None:
-        rank = int(os.environ["RANK"])
-        world_size = int(os.environ["WORLD_SIZE"])
-        dist.init_process_group(
-            backend="gloo",
-            world_size=world_size,
-            rank=rank,
-        )
-
-        mse_metrics, test_metrics = rec_metric_value_test_helper(
-            target_clazz=target_clazz,
-            target_compute_mode=target_compute_mode,
-            test_clazz=TestRMSEMetric,
-            fused_update_limit=fused_update_limit,
-            compute_on_all_ranks=False,
-            should_validate_update=False,
-            world_size=world_size,
-            my_rank=rank,
-            task_names=task_names,
-        )
-
-        if rank == 0:
-            for name in task_names:
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|lifetime_rmse"], test_metrics[0][name]
-                )
-                assert torch.allclose(
-                    mse_metrics[f"mse-{name}|window_rmse"], test_metrics[1][name]
-                )
 
     def test_unfused_rmse(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             test_clazz=TestRMSEMetric,
+            metric_name=MSEMetricTest.rmse_task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_mse,
+            entry_point=metric_test_helper,
         )
 
     def test_fused_rmse(self) -> None:
@@ -192,10 +116,11 @@ class MSEMetricTest(unittest.TestCase):
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
             test_clazz=TestRMSEMetric,
+            metric_name=MSEMetricTest.rmse_task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
             world_size=WORLD_SIZE,
-            entry_point=self._test_mse,
+            entry_point=metric_test_helper,
         )
