@@ -106,9 +106,9 @@ def _calculate_rw_shard_sizes_and_offsets(
     hash_size: int, num_devices: int, columns: int
 ) -> Tuple[List[List[int]], List[List[int]]]:
     """
-    Sets prefix of shard_sizes to be ceil(hash_size/num_devices).
+    Sets prefix of shard_sizes to be `math.ceil(hash_size/num_devices)`.
 
-    For example if hash_size = 10, num_devices = 3, we will allocate the rows as 3,3,3,1
+    For example if hash_size = 10, num_devices = 4, we will allocate the rows as 3,3,3,1
     (rather than 3,3,2,2).
     This is due to implementation in RW sharding that sets block_size_lists to be ceil.
     The balanced way is harder to support on GPU.
