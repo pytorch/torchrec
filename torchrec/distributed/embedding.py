@@ -42,8 +42,8 @@ from torchrec.distributed.sharding.tw_sequence_sharding import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingModuleShardingPlan,
     LazyAwaitable,
-    ModuleShardingPlan,
     Multistreamable,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -311,11 +311,15 @@ class ShardedEmbeddingCollection(
         self._table_names: List[str] = [
             config.name for config in self._embedding_configs
         ]
-        self.module_sharding_plan: ModuleShardingPlan = {
-            table_name: parameter_sharding
-            for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
-            if table_name in self._table_names
-        }
+        self.module_sharding_plan: EmbeddingModuleShardingPlan = cast(
+            EmbeddingModuleShardingPlan,
+            {
+                table_name: parameter_sharding
+                for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
+                if table_name in self._table_names
+            },
+        )
+
         self._env = env
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,

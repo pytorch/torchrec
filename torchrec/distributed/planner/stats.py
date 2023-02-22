@@ -80,6 +80,7 @@ class EmbeddingStats(Stats):
         shard_by_fqn = {
             module_name + "." + param_name: value
             for module_name, param_dict in sharding_plan.plan.items()
+            # pyre-ignore - this is a EmbeddingShardingPlan below
             for param_name, value in param_dict.items()
         }
         stats: Dict[int, Dict[str, Any]] = {

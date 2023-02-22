@@ -393,6 +393,10 @@ for orig_method_name in torch.fx.graph.reflectable_magic_methods:
     scope(orig_method_name)
 
 
+class ModuleShardingPlan:
+    pass
+
+
 @dataclass
 class ParameterSharding:
     """
@@ -419,20 +423,55 @@ class ParameterSharding:
     sharding_spec: Optional[ShardingSpec] = None
 
 
-ModuleShardingPlan = Dict[str, ParameterSharding]
-"""
-Map of ParameterSharding per parameter (usually a table). This describes the sharding plan for a torchrec module (e.g. `EmbeddingBagCollection`)
-"""
+class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):
+    """
+    Map of ParameterSharding per parameter (usually a table). This describes the sharding plan for a torchrec module (e.g. `EmbeddingBagCollection`)
+    """
+
+    def __str__(self) -> str:
+        from tabulate import tabulate
+
+        out = ""
+        param_table = []
+        shard_table = []
+        for param_name, param_sharding in self.items():
+            param_table.append(
+                [
+                    param_name,
+                    param_sharding.sharding_type,
+                    param_sharding.compute_kernel,
+                    param_sharding.ranks,
+                ]
+            )
+            if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
+                shards = param_sharding.sharding_spec.shards
+                if shards is not None:
+                    for shard in shards:
+                        shard_table.append(
+                            [
+                                param_name,
+                                shard.shard_offsets,
+                                shard.shard_sizes,
+                                shard.placement,
+                            ]
+                        )
+        out += "\n\n" + tabulate(
+            param_table, ["param", "sharding type", "compute kernel", "ranks"]
+        )
+        out += "\n\n" + tabulate(
+            shard_table, ["param", "shard offsets", "shard sizes", "placement"]
+        )
+        return out
 
 
 @dataclass
 class ShardingPlan:
     """
     Representation of sharding plan. This uses the FQN of the larger wrapped model (i.e the model that is wrapped using `DistributedModelParallel`)
-    ModuleShardingPlan should be used when TorchRec composability is desired.
+    EmbeddingModuleShardingPlan should be used when TorchRec composability is desired.
 
     Attributes:
-        plan (Dict[str, ModuleShardingPlan]): dict keyed by module path of
+        plan (Dict[str, EmbeddingModuleShardingPlan]): dict keyed by module path of
             dict of parameter sharding specs keyed by parameter name.
     """
 
@@ -449,42 +488,12 @@ class ShardingPlan:
         return self.plan.get(module_path, None)
 
     def __str__(self) -> str:
-        from tabulate import tabulate
-
         out = ""
         for i, (module_path, module_plan) in enumerate(self.plan.items()):
             if i > 0:
                 out += "\n\n"
             out += "module: " + module_path
-            param_table = []
-            shard_table = []
-            for param_name, param_sharding in module_plan.items():
-                param_table.append(
-                    [
-                        param_name,
-                        param_sharding.sharding_type,
-                        param_sharding.compute_kernel,
-                        param_sharding.ranks,
-                    ]
-                )
-                if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
-                    shards = param_sharding.sharding_spec.shards
-                    if shards is not None:
-                        for shard in shards:
-                            shard_table.append(
-                                [
-                                    param_name,
-                                    shard.shard_offsets,
-                                    shard.shard_sizes,
-                                    shard.placement,
-                                ]
-                            )
-            out += "\n\n" + tabulate(
-                param_table, ["param", "sharding type", "compute kernel", "ranks"]
-            )
-            out += "\n\n" + tabulate(
-                shard_table, ["param", "shard offsets", "shard sizes", "placement"]
-            )
+            out += str(module_plan)
         return out
 
 
@@ -675,7 +684,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
     def shard(
         self,
         module: M,
-        params: ModuleShardingPlan,
+        params: EmbeddingModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedModule[Any, Any, Any, Any]:
@@ -687,7 +696,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
         Args:
             module (M): module to shard.
-            params (ModuleShardingPlan): dict of fully qualified parameter names
+            params (EmbeddingModuleShardingPlan): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
             device (torch.device): compute device.
