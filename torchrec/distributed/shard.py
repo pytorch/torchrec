@@ -85,6 +85,9 @@ def shard(
         else:
             device = torch.device("cpu")
 
+    if isinstance(plan, ModuleShardingPlan):
+        return sharder.shard(module, plan, env, device)
+
     # Run sharding generators.
     shardable_parameters = sharder.shardable_parameters(module)
     if isinstance(plan, Callable):

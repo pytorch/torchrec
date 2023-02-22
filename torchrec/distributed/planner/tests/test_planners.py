@@ -15,7 +15,12 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import PlannerError, PlannerErrorType, Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ModuleSharder, ShardingPlan, ShardingType
+from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
+    ModuleSharder,
+    ShardingPlan,
+    ShardingType,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -62,7 +67,9 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         expected_ranks = [[0], [0], [1], [1]]
         ranks = [
             cast(List[int], param_shard.ranks)
-            for param_shard in sharding_plan.plan["sparse.ebc"].values()
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            ).values()
         ]
 
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
@@ -82,7 +89,9 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         expected_ranks = [[0], [0, 1], [1]]
         ranks = [
             cast(List[int], param_shard.ranks)
-            for param_shard in sharding_plan.plan["sparse.ebc"].values()
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            ).values()
         ]
 
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
@@ -129,7 +138,9 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         expected_ranks = [[0, 1]]
         ranks = [
             cast(List[int], param_shard.ranks)
-            for param_shard in sharding_plan.plan["sparse.ebc"].values()
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            ).values()
         ]
 
         self.assertEqual(sorted(expected_ranks), sorted(ranks))

@@ -20,9 +20,9 @@ from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionS
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     ModuleSharder,
-    ModuleShardingPlan,
     ParameterSharding,
     ShardingType,
     ShardMetadata,
@@ -526,9 +526,9 @@ def construct_module_sharding_plan(
     local_size: Optional[int] = None,
     world_size: Optional[int] = None,
     device_type: Optional[str] = None,
-) -> ModuleShardingPlan:
+) -> EmbeddingModuleShardingPlan:
     """
-    Helper function to create module sharding plans (ModuleShardingPlan) for an module
+    Helper function to create module sharding plans (EmbeddingModuleShardingPlan) for an module
     Args:
         module (nn.Module): module to create plan for.
         per_param_sharding: Dict[str, Callable[[nn.Parameter, int, int, str], ParameterSharding]]: A mapping of parameter names to a generator function
@@ -572,7 +572,7 @@ def construct_module_sharding_plan(
     local_size = local_size or get_local_size()
     world_size = world_size or dist.get_world_size()
 
-    per_parameter_sharding: ModuleShardingPlan = {}
+    per_parameter_sharding = EmbeddingModuleShardingPlan()
     for table_name, sharding_plan_generator in per_param_sharding.items():
         param = shardable_parameters[table_name]
         per_parameter_sharding[table_name] = sharding_plan_generator(

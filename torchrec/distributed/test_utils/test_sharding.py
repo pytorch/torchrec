@@ -37,6 +37,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestSparseNNBase,
 )
 from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
     ModuleSharder,
     ShardedTensor,
     ShardingEnv,
@@ -317,7 +318,9 @@ def sharding_single_rank_test(
         """
 
         for group in plan.plan:
-            for _, parameter_sharding in plan.plan[group].items():
+            for _, parameter_sharding in cast(
+                EmbeddingModuleShardingPlan, plan.plan[group]
+            ).items():
                 if (
                     parameter_sharding.sharding_type
                     in {

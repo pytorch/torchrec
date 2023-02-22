@@ -8,7 +8,19 @@
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Set, Tuple, Type, Union
+from typing import (
+    Any,
+    cast,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 
 import torch
 from torch import nn, Tensor
@@ -35,9 +47,9 @@ from torchrec.distributed.sharding.twcw_sharding import TwCwPooledEmbeddingShard
 from torchrec.distributed.sharding.twrw_sharding import TwRwPooledEmbeddingSharding
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     LazyAwaitable,
-    ModuleShardingPlan,
     NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -322,11 +334,14 @@ class ShardedEmbeddingBagCollection(
             config.name for config in self._embedding_bag_configs
         ]
 
-        self.module_sharding_plan: ModuleShardingPlan = {
-            table_name: parameter_sharding
-            for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
-            if table_name in self._table_names
-        }
+        self.module_sharding_plan: EmbeddingModuleShardingPlan = cast(
+            EmbeddingModuleShardingPlan,
+            {
+                table_name: parameter_sharding
+                for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
+                if table_name in self._table_names
+            },
+        )
         self._env = env
 
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
