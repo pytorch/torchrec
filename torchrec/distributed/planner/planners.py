@@ -45,6 +45,7 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.sharding_plan import get_default_sharders, placement
 from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     ModuleSharder,
     ParameterSharding,
@@ -68,7 +69,7 @@ def _to_sharding_plan(
         shards = sharding_option.shards
         sharding_type = sharding_option.sharding_type
 
-        module_plan = plan.get(sharding_option.path, {})
+        module_plan = plan.get(sharding_option.path, EmbeddingModuleShardingPlan())
         module_plan[sharding_option.name] = ParameterSharding(
             sharding_spec=None
             if sharding_type == ShardingType.DATA_PARALLEL.value
