@@ -36,7 +36,7 @@ jobs:
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Update pip
       run: |
         sudo yum update -y
@@ -88,7 +88,7 @@ jobs:
           --package_name torchrec-test \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
         path: dist/*.whl
@@ -136,7 +136,7 @@ jobs:
         sudo lshw -C display
     # Checkout the repository to the GitHub Actions runner
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Update pip
       run: |
         sudo yum update -y
