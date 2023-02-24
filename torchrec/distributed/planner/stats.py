@@ -9,7 +9,7 @@ import logging
 from collections import defaultdict
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
-from torchrec.distributed.planner.constants import BIGINT_DTYPE
+from torchrec.distributed.planner.constants import BIGINT_DTYPE, NUM_POOLINGS
 from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
     FixedPercentageStorageReservation,
@@ -229,6 +229,7 @@ class EmbeddingStats(Stats):
                     "Compute Kernel",
                     "Perf (ms)",
                     "Pooling Factor",
+                    "Number of Poolings",
                     "Output",
                     "Features",
                     "Emb Dim",
@@ -241,6 +242,7 @@ class EmbeddingStats(Stats):
                     "----------------",
                     "-----------",
                     "----------------",
+                    "--------------------",
                     "--------",
                     "----------",
                     "--------",
@@ -255,6 +257,19 @@ class EmbeddingStats(Stats):
                     round(sum([cast(float, shard.perf) for shard in so.shards]), 3)
                 )
                 pooling_factor = str(round(sum(so.input_lengths), 3))
+
+                table_name = so.name
+                if constraints:
+                    table_constraints = constraints.get(table_name)
+                else:
+                    table_constraints = None
+                if table_constraints:
+                    num_poolings = table_constraints.num_poolings
+                else:
+                    num_poolings = None
+                num_poolings = num_poolings or [NUM_POOLINGS] * len(so.input_lengths)
+                num_poolings = str(round(sum(num_poolings), 3))
+
                 output = "pooled" if so.is_pooled else "sequence"
                 num_features = len(so.input_lengths)
                 embedding_dim = so.tensor.shape[1]
@@ -266,6 +281,7 @@ class EmbeddingStats(Stats):
                         so.compute_kernel,
                         shard_perfs,
                         pooling_factor,
+                        num_poolings,
                         output,
                         num_features,
                         embedding_dim,
