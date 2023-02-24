@@ -30,8 +30,8 @@ from torchrec.distributed.test_utils.multi_process import (
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
-    ModuleShardingPlan,
     ParameterSharding,
     ShardingEnv,
     ShardingPlan,
@@ -52,7 +52,7 @@ def _test_sharding(
     world_size: int,
     kjt_input_per_rank: List[KeyedJaggedTensor],
     backend: str,
-    module_sharding_plan: ModuleShardingPlan,
+    module_sharding_plan: EmbeddingModuleShardingPlan,
     local_size: Optional[int] = None,
 ) -> None:
     trec_dist.comm_ops.set_gradient_division(False)
@@ -626,41 +626,43 @@ class ShardingPlanTest(unittest.TestCase):
     def test_str(self) -> None:
         plan = ShardingPlan(
             {
-                "ebc": {
-                    "user_id": ParameterSharding(
-                        sharding_type="table_wise",
-                        compute_kernel="fused",
-                        ranks=[0],
-                        sharding_spec=EnumerableShardingSpec(
-                            [
-                                ShardMetadata(
-                                    shard_offsets=[0, 0],
-                                    shard_sizes=[4096, 32],
-                                    placement="rank:0/cuda:0",
-                                ),
-                            ]
+                "ebc": EmbeddingModuleShardingPlan(
+                    {
+                        "user_id": ParameterSharding(
+                            sharding_type="table_wise",
+                            compute_kernel="fused",
+                            ranks=[0],
+                            sharding_spec=EnumerableShardingSpec(
+                                [
+                                    ShardMetadata(
+                                        shard_offsets=[0, 0],
+                                        shard_sizes=[4096, 32],
+                                        placement="rank:0/cuda:0",
+                                    ),
+                                ]
+                            ),
                         ),
-                    ),
-                    "movie_id": ParameterSharding(
-                        sharding_type="row_wise",
-                        compute_kernel="dense",
-                        ranks=[0, 1],
-                        sharding_spec=EnumerableShardingSpec(
-                            [
-                                ShardMetadata(
-                                    shard_offsets=[0, 0],
-                                    shard_sizes=[2048, 32],
-                                    placement="rank:0/cuda:0",
-                                ),
-                                ShardMetadata(
-                                    shard_offsets=[2048, 0],
-                                    shard_sizes=[2048, 32],
-                                    placement="rank:0/cuda:1",
-                                ),
-                            ]
+                        "movie_id": ParameterSharding(
+                            sharding_type="row_wise",
+                            compute_kernel="dense",
+                            ranks=[0, 1],
+                            sharding_spec=EnumerableShardingSpec(
+                                [
+                                    ShardMetadata(
+                                        shard_offsets=[0, 0],
+                                        shard_sizes=[2048, 32],
+                                        placement="rank:0/cuda:0",
+                                    ),
+                                    ShardMetadata(
+                                        shard_offsets=[2048, 0],
+                                        shard_sizes=[2048, 32],
+                                        placement="rank:0/cuda:1",
+                                    ),
+                                ]
+                            ),
                         ),
-                    ),
-                }
+                    }
+                )
             }
         )
         expected = """

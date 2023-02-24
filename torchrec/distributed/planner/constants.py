@@ -16,6 +16,7 @@ CROSS_NODE_BANDWIDTH: float = 12.5 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 
 MIN_CW_DIM: int = 128
 POOLING_FACTOR: float = 1.0
+NUM_POOLINGS: float = 1.0
 
 BIGINT_DTYPE: int = 8
 
