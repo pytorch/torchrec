@@ -38,6 +38,7 @@ class MetricName(MetricNameBase):
     DEFAULT = ""
 
     NE = "ne"
+    LOG_LOSS = "logloss"
     THROUGHPUT = "throughput"
     TOTAL_EXAMPLES = "total_examples"
     CTR = "ctr"
