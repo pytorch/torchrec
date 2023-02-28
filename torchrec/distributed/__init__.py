@@ -24,7 +24,7 @@ These include:
   * support for various compute kernels, which are optimized for compute device
     (CPU/GPU) and may include batching together embedding tables and/or optimizer
     fusion.
-    
+
 * pipelined training through `TrainPipelineSparseDist` that overlaps dataloading
   device transfer (copy to GPU), inter*device communications (input_dist), and
   computation (forward, backward) for increased performance.
@@ -34,6 +34,7 @@ These include:
 
 from torchrec.distributed.comm import get_local_rank, get_local_size  # noqa
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
+from torchrec.distributed.shard import shard, shard_modules  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
     TrainPipeline,
     TrainPipelineBase,

@@ -9,9 +9,9 @@ from typing import List
 
 import torch
 from torch import nn
-from torchrec import EmbeddingBagCollection, KeyedJaggedTensor
 from torchrec.modules.deepfm import DeepFM, FactorizationMachine
-from torchrec.sparse.jagged_tensor import KeyedTensor
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 class SparseArch(nn.Module):
