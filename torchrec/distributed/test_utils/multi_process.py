@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
+import torch.nn as nn
 from torchrec.distributed.comm import _CROSS_PG, _INTRA_PG
 from torchrec.test_utils import (
     get_free_port,
@@ -112,6 +113,7 @@ class MultiProcessTestBase(unittest.TestCase):
             None,
         ],
         world_size: int,
+        unsharded_model_list: List[nn.Module],
         # pyre-ignore
         **kwargs,
     ) -> None:
@@ -120,6 +122,7 @@ class MultiProcessTestBase(unittest.TestCase):
         for rank in range(world_size):
             kwargs["rank"] = rank
             kwargs["world_size"] = world_size
+            kwargs["unsharded_model"] = unsharded_model_list[rank]
             p = ctx.Process(
                 target=callable,
                 kwargs=kwargs,

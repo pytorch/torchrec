@@ -53,8 +53,12 @@ def sharding_single_rank(
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        print(
+            f"rank {rank} world_size {world_size} backend {backend} local_size {local_size}"
+        )
         kjt_input = kjt_input.to(ctx.device)
-        unsharded_model = unsharded_model.to(ctx.device)
+        # unsharded_model = unsharded_model.to(ctx.device)
+        print(f"device {ctx.device}")
 
         # Shard model.
         planner = EmbeddingShardingPlanner(
@@ -117,21 +121,24 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharder_type: str,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
-
-        fused_ebc = FusedEmbeddingBagCollection(
-            tables=[
-                EmbeddingBagConfig(
-                    name="table_0",
-                    feature_names=["feature_0", "feature_1"],
-                    embedding_dim=8,
-                    num_embeddings=10,
+        world_size = 2
+        fused_ebc_list = []
+        for rank in range(world_size):
+            fused_ebc_list.append(
+                FusedEmbeddingBagCollection(
+                    tables=[
+                        EmbeddingBagConfig(
+                            name="table_0",
+                            feature_names=["feature_0", "feature_1"],
+                            embedding_dim=8,
+                            num_embeddings=10,
+                        )
+                    ],
+                    optimizer_type=torch.optim.SGD,
+                    optimizer_kwargs={"lr": 0.02},
+                    device=torch.device(f"cuda:{rank}"),
                 )
-            ],
-            optimizer_type=torch.optim.SGD,
-            optimizer_kwargs={"lr": 0.02},
-            device=torch.device("cuda"),
-        )
+            )
 
         #             instance 0   instance 1  instance 2
         # "feature_0"   [0, 1]       None        [2]
@@ -146,8 +153,8 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
 
         self._run_multi_process_test(
             callable=sharding_single_rank,
-            world_size=2,
-            unsharded_model=fused_ebc,
+            world_size=world_size,
+            unsharded_model_list=fused_ebc_list,
             kjt_input=kjt_input,
             sharders=[TestFusedEBCSharder(sharding_type=sharding_type)],
             backend="nccl",
