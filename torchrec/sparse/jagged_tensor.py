@@ -573,6 +573,8 @@ def _jagged_tensor_string(
 class ComputeKJTToJTDict(torch.nn.Module):
     """Converts a KeyedJaggedTensor to a dict of JaggedTensors.
 
+    Args:
+
     Example::
         #              0       1        2  <-- dim_1
         # "Feature0"   [V0,V1] None    [V2]
@@ -593,6 +595,7 @@ class ComputeKJTToJTDict(torch.nn.Module):
     ) -> Dict[str, JaggedTensor]:
         """
         Converts a KeyedJaggedTensor into a dict of JaggedTensors.
+
         Args:
             keyed_jagged_tensor (KeyedJaggedTensor): tensor to convert
         Returns:
