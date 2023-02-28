@@ -18,6 +18,7 @@ class RecMetricEnumBase(StrValueMixin, Enum):
 
 class RecMetricEnum(RecMetricEnumBase):
     NE = "ne"
+    LOG_LOSS = "log_loss"
     CTR = "ctr"
     AUC = "auc"
     CALIBRATION = "calibration"
