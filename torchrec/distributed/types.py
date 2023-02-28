@@ -646,6 +646,61 @@ class ShardedModule(
             yield key
 
 
+class InferShardedModule(
+    abc.ABC,
+    nn.Module,
+    Generic[CompIn, DistOut, Out, ShrdCtx],
+    ModuleNoCopyMixin,
+):
+    """
+    Specialization of ShardedModule for Inference.
+    As Inference does not require Awaitable type in interface.
+    All Awaitables are replaced with their result type.
+    """
+
+    @abc.abstractmethod
+    def __init__(self) -> None:
+        super().__init__()
+        torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
+
+    @abc.abstractmethod
+    def create_context(self) -> ShrdCtx:
+        pass
+
+    @abc.abstractmethod
+    def input_dist(
+        self,
+        ctx: ShrdCtx,
+        # pyre-ignore[2]
+        *input,
+        # pyre-ignore[2]
+        **kwargs,
+    ) -> CompIn:
+        pass
+
+    @abc.abstractmethod
+    def compute(self, ctx: ShrdCtx, dist_input: CompIn) -> DistOut:
+        pass
+
+    @abc.abstractmethod
+    def output_dist(self, ctx: ShrdCtx, output: DistOut) -> Out:
+        pass
+
+    def compute_and_output_dist(self, ctx: ShrdCtx, input: CompIn) -> Out:
+        output = self.compute(ctx, input)
+        return self.output_dist(ctx, output)
+
+    # pyre-ignore[2]
+    def forward(self, *input, **kwargs) -> Out:
+        ctx = self.create_context()
+        dist_input = self.input_dist(ctx, *input, **kwargs)
+        return self.compute_and_output_dist(ctx, dist_input)
+
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        for key, _ in self.named_parameters(prefix):
+            yield key
+
+
 class ShardableModule(abc.ABC, nn.Module):
     @abc.abstractmethod
     # pyre-ignore [3]

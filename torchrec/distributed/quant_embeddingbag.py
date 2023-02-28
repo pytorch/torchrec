@@ -12,14 +12,12 @@ from torch import nn
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
-    ListOfKJTListSplitsAwaitable,
 )
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
     KJTList,
     ListOfKJTList,
-    ShardedEmbeddingModule,
 )
 from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
@@ -27,8 +25,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
-    Awaitable,
-    LazyAwaitable,
+    InferShardedModule,
     NullShardedModuleContext,
     NullShardingContext,
     ParameterSharding,
@@ -61,7 +58,7 @@ def create_infer_embedding_bag_sharding(
 
 
 class ShardedQuantEmbeddingBagCollection(
-    ShardedEmbeddingModule[
+    InferShardedModule[
         ListOfKJTList,
         List[List[torch.Tensor]],
         KeyedTensor,
@@ -176,7 +173,7 @@ class ShardedQuantEmbeddingBagCollection(
     # pyre-ignore [14]
     def input_dist(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
-    ) -> Awaitable[Awaitable[ListOfKJTList]]:
+    ) -> ListOfKJTList:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
@@ -191,11 +188,12 @@ class ShardedQuantEmbeddingBagCollection(
                     self._features_order_tensor,
                 )
             features_by_shards = features.split(self._feature_splits)
-            awaitables = [
-                self._input_dists[i].forward(features_by_shards[i])
-                for i in range(len(self._input_dists))
-            ]
-            return ListOfKJTListSplitsAwaitable(awaitables)
+            return ListOfKJTList(
+                [
+                    self._input_dists[i].forward(features_by_shards[i]).wait().wait()
+                    for i in range(len(self._input_dists))
+                ]
+            )
 
     def compute(
         self,
@@ -209,9 +207,8 @@ class ShardedQuantEmbeddingBagCollection(
         self,
         ctx: NullShardedModuleContext,
         output: List[List[torch.Tensor]],
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> KeyedTensor:
         return EmbeddingBagCollectionAwaitable(
-            # syntax for torchscript
             awaitables=[
                 dist.forward(output[i]) for i, dist in enumerate(self._output_dists)
             ],
@@ -221,7 +218,7 @@ class ShardedQuantEmbeddingBagCollection(
 
     def compute_and_output_dist(
         self, ctx: NullShardedModuleContext, input: ListOfKJTList
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> KeyedTensor:
         return self.output_dist(ctx, self.compute(ctx, input))
 
     def copy(self, device: torch.device) -> nn.Module:
@@ -242,6 +239,7 @@ class ShardedQuantEmbeddingBagCollection(
 class QuantEmbeddingBagCollectionSharder(
     BaseQuantEmbeddingSharder[QuantEmbeddingBagCollection]
 ):
+    # pyre-ignore
     def shard(
         self,
         module: QuantEmbeddingBagCollection,
