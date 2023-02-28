@@ -111,7 +111,7 @@ class MultiProcessTestBase(unittest.TestCase):
             ...,
             None,
         ],
-        world_size: int,
+        world_size: int = 2,
         # pyre-ignore
         **kwargs,
     ) -> None:
