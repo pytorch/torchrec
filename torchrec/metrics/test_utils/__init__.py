@@ -225,6 +225,7 @@ def rec_metric_value_test_helper(
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
     n_classes: Optional[int] = None,
+    **kwargs: Any,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
     tasks = gen_test_tasks(task_names)
     model_outs = []
@@ -247,9 +248,10 @@ def rec_metric_value_test_helper(
         tasks: List[RecTaskInfo],
         timestamps: Optional[List[float]] = None,
         time_mock: Optional[Mock] = None,
+        **kwargs: Any,
     ) -> Dict[str, torch.Tensor]:
+
         window_size = world_size * batch_size * batch_window_size
-        kwargs: Dict[str, Any] = {}
         if n_classes:
             kwargs["number_of_classes"] = n_classes
         target_metric_obj = target_clazz(
@@ -304,11 +306,11 @@ def rec_metric_value_test_helper(
         time_dependent_target_clazz_path = time_dependent_metric[target_clazz]
         with patch(time_dependent_target_clazz_path + ".time.monotonic") as time_mock:
             result_metrics = get_target_rec_metric_value(
-                model_outs, tasks, timestamps, time_mock
+                model_outs, tasks, timestamps, time_mock, **kwargs
             )
         test_metrics = get_test_rec_metric_value(model_outs, tasks, timestamps)
     else:
-        result_metrics = get_target_rec_metric_value(model_outs, tasks)
+        result_metrics = get_target_rec_metric_value(model_outs, tasks, **kwargs)
         test_metrics = get_test_rec_metric_value(model_outs, tasks)
 
     return result_metrics, test_metrics
@@ -343,6 +345,7 @@ def rec_metric_value_test_launcher(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     test_nsteps: int = 1,
     n_classes: Optional[int] = None,
+    **kwargs: Any,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lc = get_launch_config(
@@ -365,6 +368,7 @@ def rec_metric_value_test_launcher(
             nsteps=test_nsteps,
             batch_window_size=1,
             n_classes=n_classes,
+            **kwargs,
         )
         pet.elastic_launch(lc, entrypoint=entry_point)(
             target_clazz,
@@ -405,6 +409,7 @@ def metric_test_helper(
     nsteps: int = 1,
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
+    **kwargs: Any,
 ) -> None:
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -428,6 +433,7 @@ def metric_test_helper(
         nsteps=nsteps,
         is_time_dependent=is_time_dependent,
         time_dependent_metric=time_dependent_metric,
+        **kwargs,
     )
 
     if rank == 0:

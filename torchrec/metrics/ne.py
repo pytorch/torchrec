@@ -56,6 +56,17 @@ def compute_ne(
     return ce_sum / ce_norm
 
 
+def compute_logloss(
+    ce_sum: torch.Tensor,
+    pos_labels: torch.Tensor,
+    neg_labels: torch.Tensor,
+    eta: float,
+) -> torch.Tensor:
+    labels_sum = pos_labels + neg_labels
+    labels_sum.clamp_(min=eta)
+    return ce_sum / labels_sum
+
+
 def get_ne_states(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor, eta: float
 ) -> Dict[str, torch.Tensor]:
@@ -79,9 +90,15 @@ class NEMetricComputation(RecMetricComputation):
 
     The constructor arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
+
+    Args:
+        include_logloss (bool): return vanilla logloss as one of metrics results, on top of NE.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self, *args: Any, include_logloss: bool = False, **kwargs: Any
+    ) -> None:
+        self._include_logloss: bool = include_logloss
         super().__init__(*args, **kwargs)
         self._add_state(
             "cross_entropy_sum",
@@ -134,7 +151,7 @@ class NEMetricComputation(RecMetricComputation):
             self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
-        return [
+        reports = [
             MetricComputationReport(
                 name=MetricName.NE,
                 metric_prefix=MetricPrefix.LIFETIME,
@@ -158,6 +175,30 @@ class NEMetricComputation(RecMetricComputation):
                 ),
             ),
         ]
+        if self._include_logloss:
+            reports += [
+                MetricComputationReport(
+                    name=MetricName.LOG_LOSS,
+                    metric_prefix=MetricPrefix.LIFETIME,
+                    value=compute_logloss(
+                        cast(torch.Tensor, self.cross_entropy_sum),
+                        cast(torch.Tensor, self.pos_labels),
+                        cast(torch.Tensor, self.neg_labels),
+                        self.eta,
+                    ),
+                ),
+                MetricComputationReport(
+                    name=MetricName.LOG_LOSS,
+                    metric_prefix=MetricPrefix.WINDOW,
+                    value=compute_logloss(
+                        self.get_window_state("cross_entropy_sum"),
+                        self.get_window_state("pos_labels"),
+                        self.get_window_state("neg_labels"),
+                        self.eta,
+                    ),
+                ),
+            ]
+        return reports
 
 
 class NEMetric(RecMetric):
