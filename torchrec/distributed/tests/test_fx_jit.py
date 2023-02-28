@@ -8,6 +8,7 @@
 #!/usr/bin/env python3
 
 import unittest
+from dataclasses import dataclass, field
 from enum import Enum
 
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
@@ -169,9 +170,11 @@ def quantize(
         module,
         qconfig_spec={
             EmbeddingBagCollection: qconfig,
+            EmbeddingCollection: qconfig,
         },
         mapping={
             EmbeddingBagCollection: QuantEmbeddingBagCollection,
+            EmbeddingCollection: QuantEmbeddingCollection,
         },
         inplace=inplace,
     )
@@ -211,57 +214,131 @@ def model_input_to_forward_args(
     )
 
 
-class ModelTraceScriptTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.device = torch.device("cuda:0")
-        self.num_features = 2
-        self.num_float_features = 10
-        self.num_weighted_features = 2
+def model_input_to_forward_args_kjt(
+    mi: ModelInput,
+) -> Tuple[List[str], torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    kjt = mi.idlist_features
+    return (
+        kjt._keys,
+        kjt._values,
+        kjt._lengths,
+        kjt._offsets,
+    )
 
-        self.tables = [
+
+@dataclass
+class TestModelInfo:
+    device: torch.device
+    num_features: int
+    num_float_features: int
+    num_weighted_features: int
+    tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]] = field(
+        default_factory=list
+    )
+    weighted_tables: List[EmbeddingBagConfig] = field(default_factory=list)
+    model: torch.nn.Module = torch.nn.Module()
+    quant_model: torch.nn.Module = torch.nn.Module()
+    sharders: List[ModuleSharder] = field(default_factory=list)
+
+
+class ModelTraceScriptTest(unittest.TestCase):
+    def _set_up_qebc(self) -> TestModelInfo:
+        model_info = TestModelInfo(
+            device=torch.device("cuda:0"),
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=2,
+        )
+
+        model_info.tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=4,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
-            for i in range(self.num_features)
+            for i in range(model_info.num_features)
         ]
-        self.weighted_tables = [
+        model_info.weighted_tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 1) * 4,
                 name="weighted_table_" + str(i),
                 feature_names=["weighted_feature_" + str(i)],
             )
-            for i in range(self.num_weighted_features)
+            for i in range(model_info.num_weighted_features)
         ]
-        self.model = TorchTypesModelInputWrapper(
+        model_info.model = TorchTypesModelInputWrapper(
             TestSparseNN(
-                tables=self.tables,
-                weighted_tables=self.weighted_tables,
-                num_float_features=self.num_float_features,
-                dense_device=self.device,
-                sparse_device=self.device,
+                tables=model_info.tables,
+                weighted_tables=model_info.weighted_tables,
+                num_float_features=model_info.num_float_features,
+                dense_device=model_info.device,
+                sparse_device=model_info.device,
             )
         )
 
-        self.model.training = False
-        self.quant_model = quantize(self.model, inplace=True)
+        model_info.model.training = False
+        model_info.quant_model = quantize(model_info.model, inplace=True)
 
-        self.sharders = [
+        model_info.sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
                     sharding_type=ShardingType.TABLE_WISE.value,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
-                    shardable_params=[table.name for table in self.tables],
+                    shardable_params=[table.name for table in model_info.tables],
                 ),
             ),
             cast(ModuleSharder[torch.nn.Module], EmbeddingCollectionSharder()),
         ]
 
-    def _prep_inputs(self, world_size: int) -> List[Tuple[ModelInput]]:
+        return model_info
+
+    def _set_up_qec(self) -> TestModelInfo:
+        model_info = TestModelInfo(
+            device=torch.device("cuda:0"),
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=0,
+        )
+        model_info.tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 11,
+                embedding_dim=16,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(model_info.num_features)
+        ]
+
+        model_info.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=model_info.tables,
+                    device=model_info.device,
+                )
+            )
+        )
+
+        model_info.model.training = False
+        model_info.quant_model = quantize(model_info.model, inplace=True)
+
+        model_info.sharders = [
+            cast(
+                ModuleSharder[torch.nn.Module],
+                TestQuantECSharder(
+                    sharding_type=ShardingType.TABLE_WISE.value,
+                    kernel_type=EmbeddingComputeKernel.QUANT.value,
+                ),
+            )
+        ]
+
+        return model_info
+
+    def _prep_inputs(
+        self, model_info: TestModelInfo, world_size: int
+    ) -> List[Tuple[ModelInput]]:
         inputs = []
         for _ in range(5):
             inputs.append(
@@ -269,10 +346,10 @@ class ModelTraceScriptTest(unittest.TestCase):
                     ModelInput.generate(
                         batch_size=16,
                         world_size=world_size,
-                        num_float_features=self.num_float_features,
-                        tables=self.tables,
-                        weighted_tables=self.weighted_tables,
-                    )[1][0].to(self.device),
+                        num_float_features=model_info.num_float_features,
+                        tables=model_info.tables,
+                        weighted_tables=model_info.weighted_tables,
+                    )[1][0].to(model_info.device),
                 )
             )
         return inputs
@@ -282,19 +359,41 @@ class ModelTraceScriptTest(unittest.TestCase):
         world_size: int
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
+        model_info = self._set_up_qebc()
         sharded_model = shard_modules(
-            module=self.quant_model,
-            sharders=self.sharders,
-            device=self.device,
+            module=model_info.quant_model,
+            sharders=model_info.sharders,
+            device=model_info.device,
             env=ShardingEnv.from_local(world_size=world_size, rank=0),
         )
 
-        inputs = self._prep_inputs(world_size)
+        inputs = self._prep_inputs(model_info, world_size)
 
         return (
-            self.quant_model,
+            model_info.quant_model,
             sharded_model,
             [model_input_to_forward_args(*inp) for inp in inputs],
+        )
+
+    def shard_modules_QEC(
+        self,
+        world_size: int
+        # pyre-ignore
+    ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
+        model_info = self._set_up_qec()
+        sharded_model = shard_modules(
+            module=model_info.quant_model,
+            sharders=model_info.sharders,
+            device=model_info.device,
+            env=ShardingEnv.from_local(world_size=world_size, rank=0),
+        )
+
+        inputs = self._prep_inputs(model_info, world_size)
+
+        return (
+            model_info.quant_model,
+            sharded_model,
+            [model_input_to_forward_args_kjt(*inp) for inp in inputs],
         )
 
     def DMP_QEBC(
@@ -303,6 +402,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         unwrap_dmp: bool
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
+        model_info = self._set_up_qebc()
         topology = Topology(world_size=world_size, compute_device="cuda")
         plan = EmbeddingShardingPlanner(
             topology=topology,
@@ -315,23 +415,23 @@ class ModelTraceScriptTest(unittest.TestCase):
                     EmbeddingStorageEstimator(topology=topology),
                 ],
             ),
-        ).plan(self.quant_model, self.sharders)
+        ).plan(model_info.quant_model, model_info.sharders)
 
         dmp = DistributedModelParallel(
-            self.quant_model,
+            model_info.quant_model,
             plan=plan,
-            device=self.device,
+            device=model_info.device,
             env=ShardingEnv.from_local(world_size=world_size, rank=0),
             init_data_parallel=False,
         )
 
-        dmp = dmp.copy(self.device)
+        dmp = dmp.copy(model_info.device)
 
-        inputs = self._prep_inputs(world_size)
+        inputs = self._prep_inputs(model_info, world_size)
 
         m = dmp.module if unwrap_dmp else dmp
         return (
-            self.quant_model,
+            model_info.quant_model,
             m,
             [model_input_to_forward_args(*inp) for inp in inputs],
         )
@@ -342,39 +442,9 @@ class ModelTraceScriptTest(unittest.TestCase):
         sharding_enabled: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
-        device = torch.device("cuda:0")
-        num_features = 4
-        num_float_features = 10
-
-        tables = [
-            EmbeddingConfig(
-                num_embeddings=(i + 1) * 11,
-                embedding_dim=16,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(num_features)
-        ]
-
-        model = KJTInputWrapper(
-            module_kjt_input=torch.nn.Sequential(
-                EmbeddingCollection(tables=tables, device=device)
-            )
-        )
-
-        quant_model = quantize(model, inplace=True)
-        m = quant_model
+        model_info = self._set_up_qec()
 
         if sharding_enabled:
-            sharders = [
-                cast(
-                    ModuleSharder[torch.nn.Module],
-                    TestQuantECSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.QUANT.value,
-                    ),
-                )
-            ]
             topology = Topology(world_size=world_size, compute_device="cuda")
             plan = EmbeddingShardingPlanner(
                 topology=topology,
@@ -387,46 +457,22 @@ class ModelTraceScriptTest(unittest.TestCase):
                         EmbeddingStorageEstimator(topology=topology),
                     ],
                 ),
-            ).plan(quant_model, sharders)
+            ).plan(model_info.quant_model, model_info.sharders)
             m = DistributedModelParallel(
-                quant_model,
+                model_info.quant_model,
                 plan=plan,
-                device=device,
+                device=model_info.device,
                 env=ShardingEnv.from_local(world_size=world_size, rank=0),
                 init_data_parallel=False,
             )
+            model_info.model = m.module
 
-        inputs = []
-        for _ in range(5):
-            inputs.append(
-                (
-                    ModelInput.generate(
-                        batch_size=16,
-                        world_size=world_size,
-                        num_float_features=num_float_features,
-                        tables=tables,
-                        weighted_tables=[],
-                    )[1][0].to(device),
-                )
-            )
-
-        def model_input_to_forward_args(
-            mi: ModelInput,
-        ) -> Tuple[
-            List[str], torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]
-        ]:
-            kjt = mi.idlist_features
-            return (
-                kjt._keys,
-                kjt._values,
-                kjt._lengths,
-                kjt._offsets,
-            )
+        inputs = self._prep_inputs(model_info, world_size)
 
         return (
-            quant_model,
-            m,
-            [model_input_to_forward_args(*inp) for inp in inputs],
+            model_info.quant_model,
+            model_info.model,
+            [model_input_to_forward_args_kjt(*inp) for inp in inputs],
         )
 
     def _models_with_inputs(
@@ -466,6 +512,7 @@ class ModelTraceScriptTest(unittest.TestCase):
                     FxJitTestType.FX_JIT,
                 ),
                 (self.shard_modules_QEBC, FxJitTestType.FX_JIT),
+                (self.shard_modules_QEC, FxJitTestType.CREATE_ONLY),
             ]
         ]
 
