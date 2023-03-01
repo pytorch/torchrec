@@ -44,7 +44,7 @@ from torchrec.test_utils import skip_if_asan_class
 def sharding_single_rank(
     rank: int,
     world_size: int,
-    unsharded_model: nn.Module,
+    unsharded_model_list: List[nn.Module],
     kjt_input: KeyedJaggedTensor,
     sharders: List[ModuleSharder[nn.Module]],
     backend: str,
@@ -53,8 +53,8 @@ def sharding_single_rank(
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        unsharded_model = unsharded_model_list[rank]
         kjt_input = kjt_input.to(ctx.device)
-        unsharded_model = unsharded_model.to(ctx.device)
 
         # Shard model.
         planner = EmbeddingShardingPlanner(
@@ -117,21 +117,24 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharder_type: str,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
-
-        fused_ebc = FusedEmbeddingBagCollection(
-            tables=[
-                EmbeddingBagConfig(
-                    name="table_0",
-                    feature_names=["feature_0", "feature_1"],
-                    embedding_dim=8,
-                    num_embeddings=10,
+        world_size = 2
+        fused_ebc_list = []
+        for rank in range(world_size):
+            fused_ebc_list.append(
+                FusedEmbeddingBagCollection(
+                    tables=[
+                        EmbeddingBagConfig(
+                            name="table_0",
+                            feature_names=["feature_0", "feature_1"],
+                            embedding_dim=8,
+                            num_embeddings=10,
+                        )
+                    ],
+                    optimizer_type=torch.optim.SGD,
+                    optimizer_kwargs={"lr": 0.02},
+                    device=torch.device(f"cuda:{rank}"),
                 )
-            ],
-            optimizer_type=torch.optim.SGD,
-            optimizer_kwargs={"lr": 0.02},
-            device=torch.device("cuda"),
-        )
+            )
 
         #             instance 0   instance 1  instance 2
         # "feature_0"   [0, 1]       None        [2]
@@ -146,8 +149,8 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
 
         self._run_multi_process_test(
             callable=sharding_single_rank,
-            world_size=2,
-            unsharded_model=fused_ebc,
+            world_size=world_size,
+            unsharded_model_list=fused_ebc_list,
             kjt_input=kjt_input,
             sharders=[TestFusedEBCSharder(sharding_type=sharding_type)],
             backend="nccl",
