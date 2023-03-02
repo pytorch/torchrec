@@ -515,7 +515,7 @@ class ModelTraceScriptTest(unittest.TestCase):
                     FxJitTestType.FX_JIT,
                 ),
                 (self.shard_modules_QEBC, FxJitTestType.FX_JIT),
-                (self.shard_modules_QEC, FxJitTestType.CREATE_ONLY),
+                (self.shard_modules_QEC, FxJitTestType.FX_JIT),
             ]
         ]
 
@@ -528,6 +528,10 @@ class ModelTraceScriptTest(unittest.TestCase):
         for non_sharded_model, model, inputs, test_type in self._models_with_inputs(
             world_size=2
         ):
+            print(
+                f"test_fxtrace_jitscript: non_sharded_model:{non_sharded_model}\n model:{model}"
+            )
+
             if test_type == FxJitTestType.CREATE_ONLY:
                 continue
 

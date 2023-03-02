@@ -15,10 +15,7 @@ from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding,
     EmbeddingShardingInfo,
 )
-from torchrec.distributed.embedding_sharding import (
-    EmbeddingSharding,
-    ListOfKJTListSplitsAwaitable,
-)
+from torchrec.distributed.embedding_sharding import EmbeddingSharding
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
@@ -31,12 +28,7 @@ from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardin
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
 )
-from torchrec.distributed.types import (
-    Awaitable,
-    LazyAwaitable,
-    ParameterSharding,
-    ShardingEnv,
-)
+from torchrec.distributed.types import ParameterSharding, ShardingEnv
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
@@ -47,6 +39,8 @@ from torchrec.quant.embedding_modules import (
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
+
+torch.fx.wrap("len")
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -91,52 +85,49 @@ def _construct_jagged_tensors(
     lengths = features.lengths().view(-1, features.stride())
     values = features.values()
     length_per_key = features.length_per_key()
-    values_list = torch.split(values, length_per_key) if need_indices else None
+
     embeddings_list = torch.split(embeddings, length_per_key, dim=0)
     stride = features.stride()
     lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
-    for i, key in enumerate(features.keys()):
-        ret[key] = JaggedTensor(
-            lengths=lengths_tuple[i],
-            values=embeddings_list[i],
-            # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
-            weights=values_list[i] if need_indices else None,
-        )
+    if need_indices:
+        values_list = torch.split(values, length_per_key)
+        for i, key in enumerate(features.keys()):
+            ret[key] = JaggedTensor(
+                lengths=lengths_tuple[i],
+                values=embeddings_list[i],
+                weights=values_list[i],
+            )
+    else:
+        for i, key in enumerate(features.keys()):
+            ret[key] = JaggedTensor(
+                lengths=lengths_tuple[i],
+                values=embeddings_list[i],
+                weights=None,
+            )
     return ret
 
 
-class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
-    def __init__(
-        self,
-        awaitables_per_sharding: List[Awaitable[List[torch.Tensor]]],
-        features_per_sharding: List[List[KeyedJaggedTensor]],
-        need_indices: bool = False,
-    ) -> None:
-        super().__init__()
-        self._awaitables_per_sharding: List[
-            Awaitable[List[torch.Tensor]]
-        ] = awaitables_per_sharding
-        self._features_per_sharding: List[
-            List[KeyedJaggedTensor]
-        ] = features_per_sharding
-        self._need_indices = need_indices
-
-    def _wait_impl(self) -> Dict[str, JaggedTensor]:
-        jt_dict: Dict[str, JaggedTensor] = {}
-        for w_sharding, f_sharding in zip(
-            self._awaitables_per_sharding,
-            self._features_per_sharding,
-        ):
-            emb_sharding = w_sharding.wait()
-            for emb, f in zip(emb_sharding, f_sharding):
-                jt_dict.update(
-                    _construct_jagged_tensors(
-                        embeddings=emb,
-                        features=f,
-                        need_indices=self._need_indices,
-                    )
+@torch.fx.wrap
+def output_jt_dict(
+    emb_per_sharding: List[List[torch.Tensor]],
+    features_per_sharding: List[KJTList],
+    need_indices: bool,
+) -> Dict[str, JaggedTensor]:
+    jt_dict: Dict[str, JaggedTensor] = {}
+    for emb_sharding, f_sharding in zip(
+        emb_per_sharding,
+        features_per_sharding,
+    ):
+        # Can not use zip here as Iterator of KJTList is not supported by jit
+        for i in range(len(emb_sharding)):
+            jt_dict.update(
+                _construct_jagged_tensors(
+                    embeddings=emb_sharding[i],
+                    features=f_sharding[i],
+                    need_indices=need_indices,
                 )
-        return jt_dict
+            )
+    return jt_dict
 
 
 class ShardedQuantEmbeddingCollection(
@@ -252,11 +243,12 @@ class ShardedQuantEmbeddingCollection(
             self._output_dists.append(sharding.create_output_dist(device))
 
     # pyre-ignore [14]
+    # pyre-ignore
     def input_dist(
         self,
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[ListOfKJTList]]:
+    ) -> ListOfKJTList:
         if self._has_uninitialized_input_dist:
             self._create_input_dist(
                 input_feature_names=features.keys() if features is not None else [],
@@ -277,11 +269,13 @@ class ShardedQuantEmbeddingCollection(
             features_by_sharding = features.split(
                 self._feature_splits,
             )
-            awaitables = [
-                input_dist(features)
-                for input_dist, features in zip(self._input_dists, features_by_sharding)
-            ]
-            return ListOfKJTListSplitsAwaitable(awaitables)
+
+            return ListOfKJTList(
+                [
+                    self._input_dists[i].forward(features_by_sharding[i]).wait().wait()
+                    for i in range(len(self._input_dists))
+                ]
+            )
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: ListOfKJTList
@@ -292,31 +286,40 @@ class ShardedQuantEmbeddingCollection(
             dist_input,
         ):
             ctx.sharding_contexts.append(InferSequenceShardingContext(features))
-            ret.append([o.view(-1, self._embedding_dim) for o in lookup(features)])
+            ret.append(
+                [o.view(-1, self._embedding_dim) for o in lookup.forward(features)]
+            )
         return ret
 
+    # pyre-ignore
     def output_dist(
         self, ctx: EmbeddingCollectionContext, output: List[List[torch.Tensor]]
-    ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
-        awaitables_per_sharding: List[Awaitable[List[torch.Tensor]]] = []
+    ) -> Dict[str, JaggedTensor]:
+        emb_per_sharding: List[List[torch.Tensor]] = []
         features_per_sharding: List[List[KeyedJaggedTensor]] = []
         for odist, embeddings, sharding_ctx in zip(
             self._output_dists,
             output,
             ctx.sharding_contexts,
         ):
-            awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
+            emb_per_sharding.append(odist.forward(embeddings, sharding_ctx).wait())
             features_per_sharding.append(sharding_ctx.features)
-        return EmbeddingCollectionAwaitable(
-            awaitables_per_sharding=awaitables_per_sharding,
-            features_per_sharding=features_per_sharding,
-            need_indices=self._need_indices,
+
+        return output_jt_dict(
+            emb_per_sharding, features_per_sharding, self._need_indices
         )
 
+    # pyre-ignore
     def compute_and_output_dist(
         self, ctx: EmbeddingCollectionContext, input: ListOfKJTList
-    ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
+    ) -> Dict[str, JaggedTensor]:
         return self.output_dist(ctx, self.compute(ctx, input))
+
+    # pyre-ignore
+    def forward(self, *input, **kwargs) -> Dict[str, JaggedTensor]:
+        ctx = self.create_context()
+        dist_input = self.input_dist(ctx, *input, **kwargs)
+        return self.compute_and_output_dist(ctx, dist_input)
 
     def copy(self, device: torch.device) -> nn.Module:
         if self._has_uninitialized_output_dist:
