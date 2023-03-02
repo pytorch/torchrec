@@ -19,6 +19,8 @@ from torchrec import EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
+    KJTList,
+    ListOfKJTList,
     ModuleSharder,
     ShardingType,
 )
@@ -39,12 +41,13 @@ from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.distributed.types import Awaitable, ShardingEnv
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.fx.tracer import Tracer as TorchrecFxTracer
+from torchrec.fx.utils import fake_range
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 class FxJitTestType(Enum):
@@ -570,3 +573,19 @@ class ModelTraceScriptTest(unittest.TestCase):
                     eager_output = model(*inp)
                     script_output = gm_script(*inp)
                     assert_close(eager_output, script_output)
+
+    def test_jitscript(self) -> None:
+        # Check main types to be torch jit scriptable
+        for clz in [
+            JaggedTensor,
+            KeyedJaggedTensor,
+            KeyedTensor,
+            KJTList,
+            ListOfKJTList,
+        ]:
+            # Using torch.jit._script._recursive_compile_class instead of torch.jit.script
+            # As classes later is more restrictive, checking no inheritance
+            # (e.g. Multistreamable which we so far do not need in jit script) etc.
+            # We need those classes not as it is, but as composable blocks in model.
+            # _recursive_compile_class for that is enough
+            torch.jit._script._recursive_compile_class(clz, fake_range())
