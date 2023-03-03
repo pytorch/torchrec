@@ -587,15 +587,13 @@ class ShardedModule(
             qcomm_codecs_registry = {}
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
-    @abc.abstractmethod
     def create_context(self) -> ShrdCtx:
-        pass
+        raise NotImplementedError("ShardedModule::create_context is not implemented")
 
     @property
     def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
         return self._qcomm_codecs_registry
 
-    @abc.abstractmethod
     def input_dist(
         self,
         ctx: ShrdCtx,
@@ -604,15 +602,13 @@ class ShardedModule(
         # pyre-ignore[2]
         **kwargs,
     ) -> Awaitable[Awaitable[CompIn]]:
-        pass
+        raise NotImplementedError("ShardedModule::input_dist is not implemented")
 
-    @abc.abstractmethod
     def compute(self, ctx: ShrdCtx, dist_input: CompIn) -> DistOut:
-        pass
+        raise NotImplementedError("ShardedModule::compute is not implemented")
 
-    @abc.abstractmethod
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
-        pass
+        raise NotImplementedError("ShardedModule::output_dist is not implemented")
 
     def compute_and_output_dist(
         self, ctx: ShrdCtx, input: CompIn
@@ -626,6 +622,8 @@ class ShardedModule(
         return self.output_dist(ctx, output)
 
     # pyre-ignore[2]
+    # input_dist/compute/output_dist construction in forward is a common pattern we see
+    # however, ShardedModules may have any implementation for their own forward (and can override)
     def forward(self, *input, **kwargs) -> LazyAwaitable[Out]:
         """
         Executes the input dist, compute, and output dist steps.
