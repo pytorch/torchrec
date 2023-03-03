@@ -531,7 +531,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 f = jt_dict[feature_name]
                 values = f.values()
                 offsets = f.offsets()
-                lookup = emb_module(
+                lookup = emb_module.forward(
                     indices=values.int(),
                     offsets=offsets.int(),
                 )

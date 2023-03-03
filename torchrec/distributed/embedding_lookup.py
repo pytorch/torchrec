@@ -437,7 +437,9 @@ class MetaInferGroupedEmbeddingsLookup(
             self._feature_splits,
         )
         for i in range(len(self._emb_modules)):
-            embeddings.append(self._emb_modules[i](features_by_group[i]).view(-1))
+            embeddings.append(
+                self._emb_modules[i].forward(features_by_group[i]).view(-1)
+            )
 
         return embeddings_cat_empty_rank_handle(embeddings, self._dummy_embs_tensor)
 
