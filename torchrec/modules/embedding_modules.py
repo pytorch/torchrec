@@ -92,33 +92,41 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
         table_1 = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2", "f3"]
         )
+        
+        # In this case f2 and f3 will share the same underlying embeddings
 
         ebc = EmbeddingBagCollection(tables=[table_0, table_1])
 
         #        0       1        2  <-- batch
         # "f1"   [0,1] None    [2]
         # "f2"   [3]    [4]    [5,6,7]
+        # "f3"   [2]    [3]    [4,5,6]
         #  ^
         # feature
 
         features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 13]),
         )
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.8899, -0.1342, -1.9060, -0.0905, -0.2814, -0.9369, -0.7783],
-            [ 0.0000,  0.0000,  0.0000,  0.1598,  0.0695,  1.3265, -0.1011],
-            [-0.4256, -1.1846, -2.1648, -1.0893,  0.3590, -1.9784, -0.7681]],
-            grad_fn=<CatBackward0>)
+        tensor([[-2.0360,  2.1592, -1.0956, -0.4304,  1.3894, -0.4074, -0.7311,  1.4207,
+                 -1.1492, -0.8902,  0.3098],
+                [ 0.0000,  0.0000,  0.0000, -0.1287,  0.9210,  2.1538, -0.3409, -0.4304,
+                  1.3894, -0.4074, -0.7311],
+                [-0.7212,  2.0752,  0.5539, -1.2743,  0.0042,  2.6311, -2.6611, -1.1642,
+                  2.1510,  3.2190, -0.8265]], grad_fn=<CatBackward0>)
+        # We can see from above that the f2 embeddings of batch_sample_0 ([-0.4304,  1.3894, -0.4074, -0.7311])
+        # is exactly the same as the f3 embeddings of batch_sample_1 ([-0.4304,  1.3894, -0.4074, -0.7311])
+        
         print(pooled_embeddings.keys())
-        ['f1', 'f2']
+        ['f1', 'f2', 'f3']
         print(pooled_embeddings.offset_per_key())
-        tensor([0, 3, 7])
+        tensor([0, 3, 7, 11])
     """
 
     def __init__(
