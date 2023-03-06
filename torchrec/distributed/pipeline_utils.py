@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+
+import logging
+from dataclasses import dataclass, field
+from typing import Any, cast, Dict, List, Optional, Set, Tuple, TypeVar
+
+import torch
+from torch.fx.node import Node
+from torch.profiler import record_function
+from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
+from torchrec.distributed.types import Awaitable
+from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
+from torchrec.streamable import Multistreamable, Pipelineable
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+In = TypeVar("In", bound=Pipelineable)
+Out = TypeVar("Out")
+
+
+def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
+    assert isinstance(
+        batch, (torch.Tensor, Pipelineable)
+    ), f"{type(batch)} must implement Pipelineable interface"
+    return cast(In, batch.to(device=device, non_blocking=non_blocking))
+
+
+def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> None:
+    if stream is None:
+        return
+    torch.cuda.current_stream().wait_stream(stream)
+    # As mentioned in https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html,
+    # PyTorch uses the "caching allocator" for memory allocation for tensors. When a tensor is
+    # freed, its memory is likely to be reused by newly constructed tenosrs.  By default,
+    # this allocator traces whether a tensor is still in use by only the CUDA stream where it
+    # was created.   When a tensor is used by additional CUDA streams, we need to call record_stream
+    # to tell the allocator about all these streams.  Otherwise, the allocator might free the
+    # underlying memory of the tensor once it is no longer used by the creator stream.  This is
+    # a notable programming trick when we write programs using multi CUDA streams.
+    cur_stream = torch.cuda.current_stream()
+    assert isinstance(
+        batch, (torch.Tensor, Multistreamable)
+    ), f"{type(batch)} must implement Multistreamable interface"
+    batch.record_stream(cur_stream)
+
+
+@dataclass
+class TrainPipelineContext:
+    # pyre-ignore [4]
+    input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
+    # pyre-ignore [4]
+    feature_processor_forwards: List[Any] = field(default_factory=list)
+
+
+class Tracer(torch.fx.Tracer):
+    # Disable proxying buffers during tracing. Ideally, proxying buffers would
+    # be disabled, but some models are currently mutating buffer values, which
+    # causes errors during tracing. If those models can be rewritten to not do
+    # that, we can likely remove this line
+    proxy_buffer_attributes = False
+
+    def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
+        super().__init__()
+        self._leaf_modules: List[str] = leaf_modules if leaf_modules is not None else []
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        if isinstance(m, ShardedModule) or module_qualified_name in self._leaf_modules:
+            return True
+        return super().is_leaf_module(m, module_qualified_name)
+
+
+@dataclass
+class ArgInfo:
+    # attributes of input batch, e.g. batch.attr1.attr2 call
+    # will produce ["attr1", "attr2"]
+    input_attrs: List[str]
+    # batch[attr1].attr2 will produce [True, False]
+    is_getitems: List[bool]
+    # name for kwarg of pipelined forward() call or None
+    # for a positional arg
+    name: Optional[str]
+
+
+class PipelinedForward:
+    def __init__(
+        self,
+        name: str,
+        args: List[ArgInfo],
+        module: ShardedModule,
+        context: TrainPipelineContext,
+        dist_stream: Optional[torch.cuda.streams.Stream],
+    ) -> None:
+        self._name = name
+        self._args = args
+        self._module = module
+        self._context = context
+        self._dist_stream = dist_stream
+
+    # pyre-ignore [2, 24]
+    def __call__(self, *input, **kwargs) -> Awaitable:
+        assert self._name in self._context.input_dist_requests
+        request = self._context.input_dist_requests[self._name]
+        assert isinstance(request, Awaitable)
+        with record_function("## wait_sparse_data_dist ##"):
+            # Finish waiting on the dist_stream,
+            # in case some delayed stream scheduling happens during the wait() call.
+            with torch.cuda.stream(self._dist_stream):
+                data = request.wait()
+
+        # Make sure that both result of input_dist and context
+        # are properly transferred to the current stream.
+        if self._dist_stream is not None:
+            torch.cuda.current_stream().wait_stream(self._dist_stream)
+            cur_stream = torch.cuda.current_stream()
+
+            assert isinstance(
+                data, (torch.Tensor, Multistreamable)
+            ), f"{type(data)} must implement Multistreamable interface"
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
+            data.record_stream(cur_stream)
+
+            ctx = self._context.module_contexts[self._name]
+            ctx.record_stream(cur_stream)
+
+        if len(self._context.feature_processor_forwards) > 0:
+            with record_function("## feature_processor ##"):
+                for i, sparse_feature in enumerate(data):
+                    for fp_forward in self._context.feature_processor_forwards:
+                        data[i] = fp_forward(sparse_feature)
+
+        return self._module.compute_and_output_dist(
+            self._context.module_contexts[self._name], data
+        )
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def args(self) -> List[ArgInfo]:
+        return self._args
+
+
+def _get_node_args_helper(
+    # pyre-ignore
+    arguments,
+    num_found: int,
+    feature_processor_arguments: Optional[List[Node]] = None,
+) -> Tuple[List[ArgInfo], int]:
+    """
+    Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
+    It also counts the number of (args + kwargs) found.
+    """
+
+    arg_info_list = [ArgInfo([], [], None) for _ in range(len(arguments))]
+    for arg, arg_info in zip(arguments, arg_info_list):
+        if arg is None:
+            num_found += 1
+            continue
+        while True:
+            if not isinstance(arg, torch.fx.Node):
+                break
+            child_node = arg
+
+            if child_node.op == "placeholder":
+                num_found += 1
+                break
+            # skip this fp node
+            elif (
+                feature_processor_arguments is not None
+                and child_node in feature_processor_arguments
+            ):
+                arg = child_node.args[0]
+            elif (
+                child_node.op == "call_function"
+                and child_node.target.__module__ == "builtins"
+                # pyre-ignore[16]
+                and child_node.target.__name__ == "getattr"
+            ):
+                arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, False)
+                arg = child_node.args[0]
+            elif (
+                child_node.op == "call_function"
+                and child_node.target.__module__ == "_operator"
+                # pyre-ignore[16]
+                and child_node.target.__name__ == "getitem"
+            ):
+                arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, True)
+                arg = child_node.args[0]
+            else:
+                break
+    return arg_info_list, num_found
+
+
+def _get_node_args(
+    node: Node, feature_processor_nodes: Optional[List[Node]] = None
+) -> Tuple[List[ArgInfo], int]:
+    num_found = 0
+    pos_arg_info_list, num_found = _get_node_args_helper(
+        node.args, num_found, feature_processor_nodes
+    )
+    kwargs_arg_info_list, num_found = _get_node_args_helper(
+        node.kwargs.values(), num_found
+    )
+
+    # Replace with proper names for kwargs
+    for name, arg_info_list in zip(node.kwargs, kwargs_arg_info_list):
+        arg_info_list.name = name
+
+    arg_info_list = pos_arg_info_list + kwargs_arg_info_list
+    return arg_info_list, num_found
+
+
+def _get_unsharded_module_names_helper(
+    model: torch.nn.Module,
+    path: str,
+    unsharded_module_names: Set[str],
+) -> bool:
+    sharded_children = set()
+    for name, child in model.named_children():
+        curr_path = path + name
+        if isinstance(child, ShardedModule):
+            sharded_children.add(name)
+        else:
+            child_sharded = _get_unsharded_module_names_helper(
+                child,
+                curr_path + ".",
+                unsharded_module_names,
+            )
+            if child_sharded:
+                sharded_children.add(name)
+
+    if len(sharded_children) > 0:
+        for name, _ in model.named_children():
+            if name not in sharded_children:
+                unsharded_module_names.add(path + name)
+
+    return len(sharded_children) > 0
+
+
+def _get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
+    """
+    Returns a list of top level modules do not contain any sharded sub modules.
+    """
+
+    unsharded_module_names: Set[str] = set()
+    _get_unsharded_module_names_helper(
+        model,
+        "",
+        unsharded_module_names,
+    )
+    return list(unsharded_module_names)
+
+
+def _rewrite_model(  # noqa C901
+    model: torch.nn.Module,
+    context: TrainPipelineContext,
+    dist_stream: Optional[torch.cuda.streams.Stream],
+) -> List[ShardedModule]:
+    # Get underlying nn.Module
+    if isinstance(model, DistributedModelParallel):
+        model = model.module
+
+    # Collect feature processors.
+    for _, m in model.named_modules():
+        if isinstance(m, BaseGroupedFeatureProcessor):
+            context.feature_processor_forwards.append(m.forward)
+            # pyre-ignore[8]: Incompatible attribute type
+            m.forward = lambda x: x
+
+    # Collect a list of sharded modules.
+    sharded_modules = {}
+    fp_modules = {}
+    for name, m in model.named_modules():
+        if isinstance(m, ShardedModule):
+            sharded_modules[name] = m
+        if isinstance(m, BaseGroupedFeatureProcessor):
+            fp_modules[name] = m
+
+    # Trace a model.
+    tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
+    graph = tracer.trace(model)
+
+    feature_processor_nodes = []
+    # find the fp node
+    for node in graph.nodes:
+        if node.op == "call_module" and node.target in fp_modules:
+            feature_processor_nodes.append(node)
+    # Select sharded modules, which are top-level in the forward call graph,
+    # i.e. which don't have input transformations, i.e.
+    # rely only on 'builtins.getattr'.
+    ret = []
+    for node in graph.nodes:
+        if node.op == "call_module" and node.target in sharded_modules:
+            total_num_args = len(node.args) + len(node.kwargs)
+            if total_num_args == 0:
+                continue
+            arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
+            if num_found == total_num_args:
+                logger.info(f"Module '{node.target}'' will be pipelined")
+                child = sharded_modules[node.target]
+                child.forward = PipelinedForward(
+                    node.target,
+                    arg_info_list,
+                    child,
+                    context,
+                    dist_stream,
+                )
+                ret.append(child)
+    return ret
+
+
+def _start_data_dist(
+    pipelined_modules: List[ShardedModule],
+    batch: In,
+    context: TrainPipelineContext,
+) -> None:
+    context.input_dist_requests.clear()
+    context.module_contexts.clear()
+    for module in pipelined_modules:
+        forward = module.forward
+        assert isinstance(forward, PipelinedForward)
+
+        # Retrieve argument for the input_dist of EBC
+        # is_getitem True means this argument could be retrieved by a list
+        # False means this argument is getting while getattr
+        # and this info was done in the _rewrite_model by tracing the
+        # entire model to get the arg_info_list
+        args = []
+        kwargs = {}
+        for arg_info in forward.args:
+            if arg_info.input_attrs:
+                arg = batch
+                for attr, is_getitem in zip(arg_info.input_attrs, arg_info.is_getitems):
+                    if is_getitem:
+                        arg = arg[attr]
+                    else:
+                        arg = getattr(arg, attr)
+                if arg_info.name:
+                    kwargs[arg_info.name] = arg
+                else:
+                    args.append(arg)
+            else:
+                args.append(None)
+        # Start input distribution.
+        module_ctx = module.create_context()
+        context.module_contexts[forward.name] = module_ctx
+        context.input_dist_requests[forward.name] = module.input_dist(
+            module_ctx, *args, **kwargs
+        )
+
+    # Call wait on the first awaitable in the input dist for the tensor splits
+    for key, awaitable in context.input_dist_requests.items():
+        context.input_dist_requests[key] = awaitable.wait()

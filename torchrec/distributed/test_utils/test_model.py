@@ -14,14 +14,26 @@ from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
     EmbeddingTowerSharder,
 )
-from torchrec.distributed.embedding_types import EmbeddingTableConfig
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    EmbeddingTableConfig,
+    KJTList,
+    ShardingType,
+)
 from torchrec.distributed.embeddingbag import (
+    EmbeddingBagCollectionContext,
     EmbeddingBagCollectionSharder,
     EmbeddingBagSharder,
+    ShardedEmbeddingBagCollection,
 )
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
-from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.distributed.types import (
+    Awaitable,
+    ParameterSharding,
+    QuantizedCommCodecs,
+    ShardingEnv,
+)
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.modules.embedding_configs import (
     BaseEmbeddingConfig,
@@ -33,6 +45,72 @@ from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerColle
 from torchrec.modules.feature_processor import PositionWeightedProcessor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
+
+
+@dataclass
+class ModelInputSimple(Pipelineable):
+    float_features: torch.Tensor
+    label: torch.Tensor
+
+    def to(self, device: torch.device, non_blocking: bool) -> "ModelInputSimple":
+        return ModelInputSimple(
+            float_features=self.float_features.to(
+                device=device, non_blocking=non_blocking
+            ),
+            label=self.label.to(device=device, non_blocking=non_blocking),
+        )
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
+        self.float_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
+        self.label.record_stream(stream)
+
+
+class TestModule(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = nn.Linear(10, 1)
+        self.loss_fn = nn.BCEWithLogitsLoss()
+
+    def forward(
+        self, model_input: ModelInputSimple
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        pred = self.model(model_input.float_features)
+        loss = self.loss_fn(pred, model_input.label)
+        return (loss, pred)
+
+
+class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
+    def input_dist(
+        self,
+        ctx: EmbeddingBagCollectionContext,
+        features: KeyedJaggedTensor,
+    ) -> Awaitable[Awaitable[KJTList]]:
+        return super().input_dist(ctx, features)
+
+
+class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
+    def shard(
+        self,
+        module: EmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> TestShardedEmbeddingBagCollection:
+        return TestShardedEmbeddingBagCollection(
+            module, params, env, self.fused_params, device
+        )
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [
+            ShardingType.ROW_WISE.value,
+        ]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.DENSE.value]
 
 
 @dataclass

@@ -7,22 +7,20 @@
 
 import os
 import unittest
-from dataclasses import dataclass
-from typing import cast, Dict, List, Optional, Tuple
+from typing import cast, List
 
 import torch
 import torch.distributed as dist
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionContext,
-    EmbeddingBagCollectionSharder,
-    ShardedEmbeddingBagCollection,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
+    ModelInputSimple,
+    TestCustomEBCSharder,
     TestEBCSharder,
+    TestModule,
     TestSparseNN,
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
@@ -30,87 +28,12 @@ from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
     TrainPipelineSparseDist,
 )
-from torchrec.distributed.types import (
-    Awaitable,
-    ModuleSharder,
-    ParameterSharding,
-    ShardingEnv,
-    ShardingType,
-)
+from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.streamable import Pipelineable
 from torchrec.test_utils import get_free_port, init_distributed_single_host
-
-
-class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
-    def input_dist(
-        self,
-        ctx: EmbeddingBagCollectionContext,
-        features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KJTList]]:
-        return super().input_dist(ctx, features)
-
-
-class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
-    def shard(
-        self,
-        module: EmbeddingBagCollection,
-        params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
-        device: Optional[torch.device] = None,
-    ) -> TestShardedEmbeddingBagCollection:
-        return TestShardedEmbeddingBagCollection(
-            module, params, env, self.fused_params, device
-        )
-
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [
-            ShardingType.ROW_WISE.value,
-        ]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
-
-
-@dataclass
-class ModelInputSimple(Pipelineable):
-    float_features: torch.Tensor
-    label: torch.Tensor
-
-    def to(self, device: torch.device, non_blocking: bool) -> "ModelInputSimple":
-        return ModelInputSimple(
-            float_features=self.float_features.to(
-                device=device, non_blocking=non_blocking
-            ),
-            label=self.label.to(device=device, non_blocking=non_blocking),
-        )
-
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
-        self.float_features.record_stream(stream)
-        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
-        self.label.record_stream(stream)
-
-
-class TestModule(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.model = nn.Linear(10, 1)
-        self.loss_fn = nn.BCEWithLogitsLoss()
-
-    def forward(
-        self, model_input: ModelInputSimple
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        pred = self.model(model_input.float_features)
-        loss = self.loss_fn(pred, model_input.label)
-        return (loss, pred)
 
 
 class TrainPipelineBaseTest(unittest.TestCase):
