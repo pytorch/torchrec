@@ -41,13 +41,8 @@ def _to_lengths(offsets: torch.Tensor) -> torch.Tensor:
     return offsets[1:] - offsets[:-1]
 
 
-@torch.jit.script_if_tracing
 def _batched_lengths_to_offsets(lengths: torch.Tensor) -> torch.Tensor:
-    (f, b) = lengths.shape
-    offsets_0 = lengths.new_zeros((f, 1))
-    offsets_1 = torch.cumsum(lengths, dim=-1).to(lengths.dtype)
-    offsets = torch.cat([offsets_0, offsets_1], dim=-1)
-    return offsets
+    return torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
 
 
 def _maybe_compute_lengths(
