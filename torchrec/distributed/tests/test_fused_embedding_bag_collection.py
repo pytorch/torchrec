@@ -53,8 +53,6 @@ def sharding_single_rank(
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-        kjt_input = kjt_input.to(ctx.device)
-        unsharded_model = unsharded_model.to(ctx.device)
 
         # Shard model.
         planner = EmbeddingShardingPlanner(
@@ -79,10 +77,10 @@ def sharding_single_rank(
         # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
         # in normal author modelling code this won't be an issue because each rank would individually create
         # their model. output from sharded_pred is correctly on the correct device.
-        unsharded_model_pred = (
-            unsharded_model(kjt_input).values().detach().clone().cpu()
+        unsharded_model_pred = unsharded_model(kjt_input).values()
+        sharded_pred = (
+            sharded_model(kjt_input.to(ctx.device)).values().detach().clone().cpu()
         )
-        sharded_pred = sharded_model(kjt_input).values().detach().clone().cpu()
 
         # Compare predictions of sharded vs unsharded models.
         torch.testing.assert_close(sharded_pred, unsharded_model_pred)
@@ -117,7 +115,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharder_type: str,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
 
         fused_ebc = FusedEmbeddingBagCollection(
             tables=[
@@ -130,7 +127,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             ],
             optimizer_type=torch.optim.SGD,
             optimizer_kwargs={"lr": 0.02},
-            device=torch.device("cuda"),
         )
 
         #             instance 0   instance 1  instance 2

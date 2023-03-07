@@ -12,6 +12,7 @@ from typing import cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
+from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
@@ -122,7 +123,7 @@ class TrainPipelineBaseTest(unittest.TestCase):
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPUs",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     def test_equal_to_non_pipelined(self) -> None:
         model_cpu = TestModule()
@@ -140,9 +141,9 @@ class TrainPipelineBaseTest(unittest.TestCase):
         dataloader = iter(data)
         pipeline = TrainPipelineBase(model_gpu, optimizer_gpu, self.device)
 
-        for example in data[:-1]:
+        for batch in data[:-1]:
             optimizer_cpu.zero_grad()
-            loss, pred = model_cpu(example)
+            loss, pred = model_cpu(batch)
             loss.backward()
             optimizer_cpu.step()
 
@@ -214,25 +215,24 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         ]
         dataloader = iter(data)
 
-        for example in data[:-2]:
+        for batch in data[:-2]:
             optimizer_cpu.zero_grad()
-            loss, pred = unsharded_model(example)
-            example.idlist_features._jt_dict = None
-            if example.idscore_features is not None:
-                example.idscore_features._jt_dict = None
+            loss, pred = unsharded_model(batch)
+            batch.idlist_features._jt_dict = None
+            if batch.idscore_features is not None:
+                batch.idscore_features._jt_dict = None
             loss.backward()
             optimizer_cpu.step()
             pred_gpu = pipeline.progress(dataloader)
 
             self.assertEqual(pred_gpu.device, self.device)
-            self.assertEqual(pred_gpu.cpu().size(), pred.size())
             torch.testing.assert_close(pred_gpu.cpu(), pred)
             self.assertEqual(len(pipeline._pipelined_modules), 3)
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPUs",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     def test_position_weighted_feature_processor(self) -> None:
         max_feature_length = 100
@@ -280,51 +280,9 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             test_unsharded_model, distributed_model, fp_tables
         )
 
-    def _test_move_cpu_gpu_helper(
-        self, distributed_model: DistributedModelParallel
-    ) -> None:
-        model_cpu = TestSparseNN(
-            tables=self.tables, weighted_tables=self.weighted_tables
-        )
-        optimizer_cpu = optim.SGD(model_cpu.parameters(), lr=0.1)
-        optimizer_distributed = KeyedOptimizerWrapper(
-            dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
-            lambda params: optim.SGD(params, lr=0.1),
-        )
-        pipeline = TrainPipelineSparseDist(
-            distributed_model, optimizer_distributed, self.device
-        )
-
-        data = [
-            ModelInput.generate(
-                tables=self.tables,
-                weighted_tables=self.weighted_tables,
-                batch_size=1,
-                world_size=1,
-                num_float_features=10,
-            )[0]
-            for i in range(5)
-        ]
-        dataloader = iter(data)
-
-        for example in data[:-2]:
-            optimizer_cpu.zero_grad()
-            loss, pred = model_cpu(example)
-            loss.backward()
-            optimizer_cpu.step()
-
-            pred_gpu = pipeline.progress(dataloader)
-
-            self.assertEqual(pred_gpu.device, self.device)
-            self.assertEqual(pred_gpu.cpu().size(), pred.size())
-            self.assertEqual(len(pipeline._pipelined_modules), 2)
-
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    @unittest.skipIf(
-        not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPUs",
-    )
-    def test_move_cpu_gpu(self) -> None:
+    def _setup_pipeline(
+        self, sharder: EmbeddingBagCollectionSharder, execute_all_batches: bool
+    ) -> TrainPipelineSparseDist[ModelInput, torch.Tensor]:
         unsharded_model = TestSparseNN(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
@@ -339,32 +297,142 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             sharders=[
                 cast(
                     ModuleSharder[nn.Module],
-                    TestEBCSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
-                        kernel_type=EmbeddingComputeKernel.DENSE.value,
-                    ),
+                    sharder,
                 )
             ],
         )
-        self._test_move_cpu_gpu_helper(distributed_model)
+        optimizer_distributed = KeyedOptimizerWrapper(
+            dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
+            lambda params: optim.SGD(params, lr=0.1),
+        )
+        return TrainPipelineSparseDist(
+            model=distributed_model,
+            optimizer=optimizer_distributed,
+            device=self.device,
+            execute_all_batches=execute_all_batches,
+        )
+
+    def _setup_cpu_model_and_opt(self) -> Tuple[TestSparseNN, optim.SGD]:
+        cpu_model = TestSparseNN(
+            tables=self.tables, weighted_tables=self.weighted_tables
+        )
+        cpu_optimizer = optim.SGD(cpu_model.parameters(), lr=0.1)
+        return cpu_model, cpu_optimizer
+
+    def _generate_data(self, num_batches: int = 5) -> List[ModelInput]:
+        return [
+            ModelInput.generate(
+                tables=self.tables,
+                weighted_tables=self.weighted_tables,
+                batch_size=1,
+                world_size=1,
+                num_float_features=10,
+            )[0]
+            for i in range(num_batches)
+        ]
+
+    def _test_pipelining(
+        self,
+        sharder: EmbeddingBagCollectionSharder,
+        execute_all_batches: bool,
+    ) -> None:
+        pipeline = self._setup_pipeline(sharder, execute_all_batches)
+        cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
+        data = self._generate_data()
+
+        dataloader = iter(data)
+        if not execute_all_batches:
+            data = data[:-2]
+
+        for batch in data:
+            cpu_optimizer.zero_grad()
+            loss, pred = cpu_model(batch)
+            loss.backward()
+            cpu_optimizer.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(len(pipeline._pipelined_modules), 2)
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.cpu().size(), pred.size())
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(execute_all_batches=st.booleans())
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_pipelining(self, execute_all_batches: bool) -> None:
+        pipeline = self._setup_pipeline(
+            TestEBCSharder(
+                sharding_type=ShardingType.TABLE_WISE.value,
+                kernel_type=EmbeddingComputeKernel.FUSED.value,
+            ),
+            execute_all_batches,
+        )
+        cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
+        data = self._generate_data()
+
+        dataloader = iter(data)
+        if not execute_all_batches:
+            data = data[:-2]
+
+        for batch in data:
+            cpu_optimizer.zero_grad()
+            loss, pred = cpu_model(batch)
+            loss.backward()
+            cpu_optimizer.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(len(pipeline._pipelined_modules), 2)
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.cpu().size(), pred.size())
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPUs",
+        "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipelining(self) -> None:
-        unsharded_model = TestSparseNN(
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-            sparse_device=torch.device("meta"),
+    def test_multi_dataloader_pipelining(self) -> None:
+        pipeline = self._setup_pipeline(
+            sharder=TestEBCSharder(
+                sharding_type=ShardingType.TABLE_WISE.value,
+                kernel_type=EmbeddingComputeKernel.FUSED.value,
+            ),
+            execute_all_batches=True,
         )
-        distributed_model = DistributedModelParallel(
-            unsharded_model,
-            env=ShardingEnv.from_process_group(self.pg),
-            init_data_parallel=False,
-            device=self.device,
-            sharders=[cast(ModuleSharder[nn.Module], TestCustomEBCSharder())],
+        cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
+        data = self._generate_data(num_batches=7)
+
+        cpu_preds = []
+        for batch in data:
+            cpu_optimizer.zero_grad()
+            loss, pred = cpu_model(batch)
+            loss.backward()
+            cpu_optimizer.step()
+            cpu_preds.append(pred)
+
+        dataloaders = [iter(data[:-3]), iter(data[-3:-2]), iter(data[-2:])]
+        gpu_preds = []
+        for dataloader in dataloaders:
+            while True:
+                try:
+                    pred = pipeline.progress(dataloader)
+                    self.assertEqual(pred.device, self.device)
+                    self.assertEqual(len(pipeline._pipelined_modules), 2)
+                    gpu_preds.append(pred.cpu())
+                except StopIteration:
+                    break
+
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        self.assertEqual(len(cpu_preds), len(gpu_preds))
+        self.assertTrue(
+            all(
+                [
+                    cpu_pred.size() == gpu_pred.size()
+                    for cpu_pred, gpu_pred in zip(cpu_preds, gpu_preds)
+                ]
+            )
         )
-        self._test_move_cpu_gpu_helper(distributed_model)
