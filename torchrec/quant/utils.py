@@ -14,6 +14,7 @@ from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.quant_embeddingbag import ShardedQuantEmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    EmbeddingCollection as QuantEmbeddingCollection,
 )
 
 
@@ -76,6 +77,14 @@ def _meta_to_cpu_placement(
             output_dtype=module.output_dtype(),
         )
         setattr(root_module, name, qebc_cpu)
-        return
-    for name, submodule in module.named_children():
-        _meta_to_cpu_placement(submodule, module, name)
+    elif isinstance(module, QuantEmbeddingCollection) and module.device.type == "meta":
+        qec_cpu = QuantEmbeddingCollection(
+            tables=module.embedding_configs(),
+            device=torch.device("cpu"),
+            need_indices=module.need_indices(),
+            output_dtype=module.output_dtype(),
+        )
+        setattr(root_module, name, qec_cpu)
+    else:
+        for name, submodule in module.named_children():
+            _meta_to_cpu_placement(submodule, module, name)
