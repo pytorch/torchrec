@@ -48,6 +48,7 @@ class MetricName(MetricNameBase):
     RMSE = "rmse"
     AUC = "auc"
     MULTICLASS_RECALL = "multiclass_recall"
+    WEIGHTED_AVG = "weighted_avg"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -69,6 +70,8 @@ class MetricNamespace(MetricNamespaceBase):
     MODEL_CONFIGURATOR = "model_configurator"
 
     MULTICLASS_RECALL = "multiclass_recall"
+
+    WEIGHTED_AVG = "weighted_avg"
 
 
 class MetricPrefix(StrValueMixin, Enum):

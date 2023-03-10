@@ -25,6 +25,7 @@ class RecMetricEnum(RecMetricEnumBase):
     MSE = "mse"
     MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
+    WEIGHTED_AVG = "weighted_avg"
 
 
 @dataclass(unsafe_hash=True, eq=True)
