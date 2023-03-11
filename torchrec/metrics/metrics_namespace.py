@@ -47,6 +47,7 @@ class MetricName(MetricNameBase):
     MAE = "mae"
     RMSE = "rmse"
     AUC = "auc"
+    GROUPED_AUC = "grouped_auc"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
 

@@ -210,7 +210,9 @@ class RecMetricModule(nn.Module):
             self.memory_usage_mb_avg * (compute_count - 1) + memory_usage_mb
         ) / compute_count
 
-    def _update_rec_metrics(self, model_out: Dict[str, torch.Tensor]) -> None:
+    def _update_rec_metrics(
+        self, model_out: Dict[str, torch.Tensor], **kwargs: Any
+    ) -> None:
         r"""the internal update function to parse the model output.
         Override this function if the implementation cannot support
         the model output format.
@@ -219,9 +221,9 @@ class RecMetricModule(nn.Module):
             labels, predictions, weights, required_inputs = parse_task_model_outputs(
                 self.rec_tasks, model_out, self.get_required_inputs()
             )
-            kwargs: Dict[str, Any] = (
-                {"required_inputs": required_inputs} if required_inputs else {}
-            )
+            if required_inputs:
+                kwargs["required_inputs"] = required_inputs
+
             self.rec_metrics.update(
                 predictions=predictions,
                 labels=labels,
@@ -229,14 +231,14 @@ class RecMetricModule(nn.Module):
                 **kwargs,
             )
 
-    def update(self, model_out: Dict[str, torch.Tensor]) -> None:
+    def update(self, model_out: Dict[str, torch.Tensor], **kwargs: Any) -> None:
         r"""update() is called per batch, usually right after forward() to
         update the local states of metrics based on the model_output.
 
         Throughput.update() is also called due to the implementation sliding window
         throughput.
         """
-        self._update_rec_metrics(model_out)
+        self._update_rec_metrics(model_out, **kwargs)
         if self.throughput_metric:
             self.throughput_metric.update()
         self.trained_batches += 1
