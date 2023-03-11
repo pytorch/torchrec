@@ -34,6 +34,7 @@ class DataType(Enum):
     INT64 = "INT64"
     INT32 = "INT32"
     INT8 = "INT8"
+    UINT8 = "UINT8"
     INT4 = "INT4"
     INT2 = "INT2"
 
@@ -45,6 +46,7 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
     DataType.FP16: 16,
     DataType.INT8: 8,
+    DataType.UINT8: 8,
     DataType.INT4: 4,
     DataType.INT2: 2,
 }
@@ -59,8 +61,10 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.INT32
     elif dtype in {torch.long, torch.int64}:
         return DataType.INT64
-    elif dtype in {torch.quint8, torch.qint8, torch.int8, torch.uint8}:
+    elif dtype in {torch.quint8, torch.qint8, torch.int8}:
         return DataType.INT8
+    elif dtype == torch.uint8:
+        return DataType.UINT8
     elif dtype == torch.quint4x2:
         return DataType.INT4
     elif dtype == torch.quint2x4:
@@ -94,7 +98,7 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
         return SparseType.FP32
     elif data_type == DataType.FP16:
         return SparseType.FP16
-    elif data_type == DataType.INT8:
+    elif data_type == DataType.INT8 or data_type == DataType.UINT8:
         return SparseType.INT8
     elif data_type == DataType.INT4:
         return SparseType.INT4
@@ -115,6 +119,8 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.int32
     elif data_type == DataType.INT8:
         return torch.int8
+    elif data_type == DataType.UINT8:
+        return torch.uint8
     elif data_type == DataType.INT4:
         return torch.quint4x2
     elif data_type == DataType.INT2:

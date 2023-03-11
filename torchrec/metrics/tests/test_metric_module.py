@@ -11,7 +11,7 @@ import logging
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -79,7 +79,9 @@ class TestMetricModule(RecMetricModule):
             memory_usage_limit_mb=memory_usage_limit_mb,
         )
 
-    def _update_rec_metrics(self, model_out: Dict[str, torch.Tensor]) -> None:
+    def _update_rec_metrics(
+        self, model_out: Dict[str, torch.Tensor], **kwargs: Any
+    ) -> None:
         if isinstance(model_out, MagicMock):
             return
         labels, predictions, weights, _ = parse_task_model_outputs(

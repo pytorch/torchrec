@@ -129,6 +129,7 @@ class RecMetricComputation(Metric, abc.ABC):
         compute_on_all_ranks: bool = False,
         should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
+        fused_update_limit: int = 0,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -355,6 +356,8 @@ class RecMetric(nn.Module, abc.ABC):
             if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
             else self._tasks
         ):
+            # pyre-ignore
+            kwargs["fused_update_limit"] = fused_update_limit
             # This Pyre error seems to be Pyre's bug as it can be inferred by mypy
             # according to https://github.com/python/mypy/issues/3048.
             # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
@@ -519,14 +522,20 @@ class RecMetric(nn.Module, abc.ABC):
                     has_valid_weights = self._check_nonempty_weights(weights)
                     if torch.any(has_valid_weights):
                         self._metrics_computations[0].update(
-                            predictions=predictions, labels=labels, weights=weights
+                            predictions=predictions,
+                            labels=labels,
+                            weights=weights,
+                            **kwargs,
                         )
                         self._metrics_computations[0].has_valid_update.logical_or_(
                             has_valid_weights
                         )
                 else:
                     self._metrics_computations[0].update(
-                        predictions=predictions, labels=labels, weights=weights
+                        predictions=predictions,
+                        labels=labels,
+                        weights=weights,
+                        **kwargs,
                     )
             else:
                 for task, metric_ in zip(self._tasks, self._metrics_computations):
