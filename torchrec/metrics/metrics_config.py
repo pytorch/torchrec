@@ -26,6 +26,7 @@ class RecMetricEnum(RecMetricEnumBase):
     MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
+    TOWER_QPS = "tower_qps"
 
 
 @dataclass(unsafe_hash=True, eq=True)
