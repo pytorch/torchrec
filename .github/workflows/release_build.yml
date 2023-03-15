@@ -165,7 +165,7 @@ jobs:
         conda run -n build_binary python --version
     - name: Install C/C++ compilers
       run: |
-        sudo yum install -y gcc gcc-c++
+        sudo yum install -y gcc gcc-c++ libnvidia-ml-dev
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
