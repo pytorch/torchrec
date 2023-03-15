@@ -505,10 +505,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if device.type == "cuda":
             self._memcpy_stream: Optional[
                 torch.cuda.streams.Stream
-            ] = torch.cuda.Stream()
+            ] = torch.cuda.Stream(priority=-1)
             self._data_dist_stream: Optional[
                 torch.cuda.streams.Stream
-            ] = torch.cuda.Stream()
+            ] = torch.cuda.Stream(priority=-1)
         else:
             self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
             self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
