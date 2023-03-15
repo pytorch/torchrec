@@ -136,7 +136,8 @@ void BatchingQueue::createBatch() {
           observer_->addBatchingQueueTimeoutCount(1);
           rejectionExecutor_->add(
               [promise = std::move(front.context.promise)]() mutable {
-                handleRequestException(promise, "Batching queue timeout");
+                handleRequestException<GPUOverloadException>(
+                    promise, "Batching queue timeout");
               });
           queue.pop();
           continue;
@@ -279,7 +280,7 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             // A device could not be chosen in time. Time out.
             observer_->addGPUBusyCount(1);
             rejectionExecutor_->add([ctxs = std::move(contexts)]() mutable {
-              handleBatchException(
+              handleBatchException<PredictionException>(
                   ctxs, "All GPUs are busy. Batching queue timeout.");
             });
             continue;
