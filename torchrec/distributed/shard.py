@@ -197,7 +197,9 @@ def shard_modules(
     if type(module) in sharder_map:
         # If the top level module is itself a shardable module, return the sharded variant.
         # Note, we cannot do an inplace replacement in this case.
-        return shard(module, plan.get_plan_for_module(""), env, device, sharders)
+        return sharder_map[type(module)].shard(
+            module, plan.get_plan_for_module(""), env, device
+        )
 
     def _replace(_model: nn.Module, path: str = "") -> None:
         for child_name, child in _model.named_children():
