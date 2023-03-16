@@ -400,23 +400,30 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
 class EmbeddingCollectionTest(unittest.TestCase):
     def _test_ec(
-        self, tables: List[EmbeddingConfig], features: KeyedJaggedTensor
+        self,
+        tables: List[EmbeddingConfig],
+        features: KeyedJaggedTensor,
+        quant_type: torch.dtype = torch.qint8,
+        output_type: torch.dtype = torch.float,
     ) -> None:
-        eb = EmbeddingCollection(tables=tables)
+        ec = EmbeddingCollection(tables=tables)
 
-        embeddings = eb(features)
+        embeddings = ec(features)
 
         # test forward
         # pyre-ignore [16]
-        eb.qconfig = torch.quantization.QConfig(
+        ec.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=torch.qint8,
+                dtype=output_type
             ),
-            weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
         )
 
-        qeb = QuantEmbeddingCollection.from_float(eb)
-        quantized_embeddings = qeb(features)
+        qec = QuantEmbeddingCollection.from_float(ec)
+        quantized_embeddings = qec(features)
+        self.assertEqual(
+            list(quantized_embeddings.values())[0].values().dtype, output_type
+        )
 
         self.assertEqual(embeddings.keys(), quantized_embeddings.keys())
         for key in embeddings.keys():
@@ -433,8 +440,8 @@ class EmbeddingCollectionTest(unittest.TestCase):
             )
 
         # test state dict
-        state_dict = eb.state_dict()
-        quantized_state_dict = qeb.state_dict()
+        state_dict = ec.state_dict()
+        quantized_state_dict = ec.state_dict()
         self.assertEqual(state_dict.keys(), quantized_state_dict.keys())
 
     # pyre-fixme[56]
@@ -445,9 +452,26 @@ class EmbeddingCollectionTest(unittest.TestCase):
                 DataType.INT8,
             ]
         ),
+        quant_type=st.sampled_from(
+            [
+                torch.half,
+                torch.qint8,
+            ]
+        ),
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_ec(self, data_type: DataType) -> None:
+    def test_ec(
+        self,
+        data_type: DataType,
+        quant_type: torch.dtype,
+        output_type: torch.dtype,
+    ) -> None:
         eb1_config = EmbeddingConfig(
             name="t1",
             embedding_dim=16,
