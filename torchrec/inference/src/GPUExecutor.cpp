@@ -148,7 +148,8 @@ GPUExecutor::~GPUExecutor() {
   std::shared_ptr<PredictionBatch> batch;
   while (batches_.readIfNotEmpty(batch)) {
     rejectionExecutor_->add([batch = std::move(batch)]() {
-      handleBatchException(batch->contexts, "Server shutdown");
+      handleBatchException<PredictionException>(
+          batch->contexts, "Server shutdown");
     });
   }
 }
@@ -215,7 +216,8 @@ void GPUExecutor::process(int idx) {
     if (timeInQueue >= queueTimeout_) {
       observer_->addQueueTimeoutCount(1);
       rejectionExecutor_->add([batch = std::move(batch)]() {
-        handleBatchException(batch->contexts, "GPUExecutor queue timeout");
+        handleBatchException<PredictionException>(
+            batch->contexts, "GPUExecutor queue timeout");
       });
 
       continue;
@@ -305,7 +307,7 @@ void GPUExecutor::process(int idx) {
             observer->addPredictionExceptionCount(1);
             rejectionExecutor_->add(
                 [contexts = std::move(batch->contexts)]() mutable {
-                  handleBatchException(
+                  handleBatchException<PredictionException>(
                       contexts, "GPUExecutor prediction exception");
                 });
           } else {

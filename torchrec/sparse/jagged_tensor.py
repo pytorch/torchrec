@@ -357,8 +357,10 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             #     [7.0, 8.0],
             # ]
         """
-        lengths_list: List[int] = self.lengths().tolist()
-        N = max(lengths_list) if desired_length is None else desired_length
+        if desired_length is None:
+            N = int(torch.max(self.lengths()).item())
+        else:
+            N = desired_length
         return torch.ops.fbgemm.jagged_to_padded_dense(
             self.values(), [self.offsets()], [N], padding_value
         )

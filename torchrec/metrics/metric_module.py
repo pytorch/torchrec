@@ -37,6 +37,7 @@ from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.throughput import ThroughputMetric
+from torchrec.metrics.tower_qps import TowerQPSMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
 
 
@@ -51,6 +52,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.MAE: MAEMetric,
     RecMetricEnum.MULTICLASS_RECALL: MulticlassRecallMetric,
     RecMetricEnum.WEIGHTED_AVG: WeightedAvgMetric,
+    RecMetricEnum.TOWER_QPS: TowerQPSMetric,
 }
 
 
