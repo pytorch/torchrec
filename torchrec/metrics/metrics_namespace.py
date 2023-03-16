@@ -50,6 +50,7 @@ class MetricName(MetricNameBase):
     GROUPED_AUC = "grouped_auc"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
+    TOWER_QPS = "qps"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -73,6 +74,8 @@ class MetricNamespace(MetricNamespaceBase):
     MULTICLASS_RECALL = "multiclass_recall"
 
     WEIGHTED_AVG = "weighted_avg"
+
+    TOWER_QPS = "qps"
 
 
 class MetricPrefix(StrValueMixin, Enum):
