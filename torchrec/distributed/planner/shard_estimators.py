@@ -268,7 +268,7 @@ def perf_func_emb_wall_time(
                 input_lengths=input_lengths,
                 grad_num_elem=hash_size * emb_dim,
                 emb_dim=emb_dim,
-                input_data_type_size=output_data_type_size,
+                input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,

@@ -55,8 +55,8 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
 
         expected_perfs = {
             ("dense", "data_parallel"): [
-                0.0004935158269195386,
-                0.0004935158269195386,
+                0.0005062740117544049,
+                0.0005062740117544049,
             ],
             ("fused", "table_wise"): [0.0011095368078055323],
             ("fused_uvm", "table_wise"): [0.1729105033126532],
@@ -128,8 +128,8 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
 
         expected_perfs = {
             ("dense", "data_parallel"): [
-                0.002677347614879459,
-                0.002677347614879459,
+                0.002690105799714326,
+                0.002690105799714326,
             ],
             ("fused", "table_wise"): [0.001880471390093715],
             ("fused_uvm", "table_wise"): [0.25958192114736517],
