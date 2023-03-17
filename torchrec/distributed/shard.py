@@ -65,9 +65,24 @@ def shard(
         sharded_ebc = shard(ebc, table_row_wise(host_index=0))
         assert isinstance(sharded_ebc, ShardedEmbeddingBagCollection)
     """
-
     torch._C._log_api_usage_once("torchrec.distributed.shard")
+    return _shard(module, plan, env, device, sharder)
 
+
+def _shard(
+    module: nn.Module,
+    plan: Union[
+        ModuleShardingPlan,
+        Dict[str, ParameterShardingGenerator],
+        ParameterShardingGenerator,
+    ],
+    env: Optional[ShardingEnv] = None,
+    device: Optional[torch.device] = None,
+    sharder: Optional[ModuleSharder[nn.Module]] = None,
+) -> nn.Module:
+    """
+    See shard
+    """
     if sharder is None:
         sharder = get_module_to_default_sharders().get(type(module), None)
     assert (
@@ -158,6 +173,21 @@ def shard_modules(
         m = MyModel(device='meta')
         m = shard(m)
         assert isinstance(m.embedding_bag_collection, ShardedEmbeddingBagCollection)
+    """
+
+    torch._C._log_api_usage_once("torchrec.distributed.shard_modules")
+    return _shard_modules(module, env, device, plan, sharders)
+
+
+def _shard_modules(
+    module: nn.Module,
+    env: Optional[ShardingEnv] = None,
+    device: Optional[torch.device] = None,
+    plan: Optional[ShardingPlan] = None,
+    sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+) -> nn.Module:
+    """
+    See shard_modules
     """
 
     torch._C._log_api_usage_once("torchrec.distributed.shard_modules")
