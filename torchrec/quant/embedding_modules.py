@@ -561,6 +561,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             tables,
             device=device,
             need_indices=module.need_indices(),
+            # pyre-ignore
+            output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
         )
 
