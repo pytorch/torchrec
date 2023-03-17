@@ -280,7 +280,7 @@ void BatchingQueue::pinMemory(int gpuIdx) {
             // A device could not be chosen in time. Time out.
             observer_->addGPUBusyCount(1);
             rejectionExecutor_->add([ctxs = std::move(contexts)]() mutable {
-              handleBatchException<PredictionException>(
+              handleBatchException<GPUOverloadException>(
                   ctxs, "All GPUs are busy. Batching queue timeout.");
             });
             continue;

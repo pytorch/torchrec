@@ -506,7 +506,7 @@ class ModelTraceScriptTest(unittest.TestCase):
                     lambda world_size: self.DMP_QEC(
                         world_size=world_size, sharding_enabled=True
                     ),
-                    FxJitTestType.CREATE_ONLY,  # waiting for torch.Await support
+                    FxJitTestType.FX_JIT,
                 ),
                 (
                     lambda world_size: self.DMP_QEC(
@@ -540,8 +540,6 @@ class ModelTraceScriptTest(unittest.TestCase):
 
             # Run model first time to go through lazy initialized blocks before tracing
             # Targeting only inference for this time
-            non_sharded_model.train(False)
-            model.train(False)
 
             non_sharded_model(*inputs[0])
             eager_output = model(*inputs[0])
