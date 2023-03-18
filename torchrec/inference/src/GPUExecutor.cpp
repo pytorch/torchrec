@@ -216,7 +216,7 @@ void GPUExecutor::process(int idx) {
     if (timeInQueue >= queueTimeout_) {
       observer_->addQueueTimeoutCount(1);
       rejectionExecutor_->add([batch = std::move(batch)]() {
-        handleBatchException<GPUOverloadException>(
+        handleBatchException<GPUExecutorOverloadException>(
             batch->contexts, "GPUExecutor queue timeout");
       });
 
