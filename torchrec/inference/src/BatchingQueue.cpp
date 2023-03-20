@@ -34,7 +34,7 @@
 #include <folly/io/Cursor.h>
 #include <glog/logging.h>
 
-#include "torchrec/inference/Exception.h"
+#include "torchrec/inference/ExceptionHandler.h"
 #include "torchrec/inference/Observer.h"
 #include "torchrec/inference/ResourceManager.h"
 #include "torchrec/inference/Types.h"
