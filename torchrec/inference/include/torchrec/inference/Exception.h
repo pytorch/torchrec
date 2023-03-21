@@ -7,13 +7,7 @@
  */
 
 #pragma once
-
-#include <memory>
-#include <string>
-
-#include <folly/futures/Promise.h>
-
-#include "torchrec/inference/Types.h"
+#include <stdexcept>
 
 namespace torchrec {
 
@@ -44,24 +38,4 @@ class GPUExecutorOverloadException : public TorchrecException {
   explicit GPUExecutorOverloadException(const std::string& error)
       : TorchrecException(error) {}
 };
-
-template <typename ExceptionType>
-void handleRequestException(
-    folly::Promise<std::unique_ptr<PredictionResponse>>& promise,
-    const std::string& msg) {
-  auto ex = folly::make_exception_wrapper<ExceptionType>(msg);
-  auto response = std::make_unique<PredictionResponse>();
-  response->exception = std::move(ex);
-  promise.setValue(std::move(response));
-}
-
-template <typename ExceptionType>
-void handleBatchException(
-    std::vector<RequestContext>& contexts,
-    const std::string& msg) {
-  for (auto& context : contexts) {
-    handleRequestException<ExceptionType>(context.promise, msg);
-  }
-}
-
 } // namespace torchrec
