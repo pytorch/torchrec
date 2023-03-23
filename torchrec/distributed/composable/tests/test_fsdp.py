@@ -214,7 +214,7 @@ class FullyShardTest(MultiProcessTestBase):
             load_state_dict(opt_state_dict, opt_reader)
             # use FSDP.optim_state_dict_to_load() API
             new_opt_state_dict = FullyShardedDataParallel.optim_state_dict_to_load(
-                opt_state_dict, m, opt, is_named_optimizer=True
+                m, opt, opt_state_dict, is_named_optimizer=True
             )
             opt.load_state_dict(new_opt_state_dict)
 
