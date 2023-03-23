@@ -307,7 +307,7 @@ void GPUExecutor::process(int idx) {
             observer->addPredictionExceptionCount(1);
             rejectionExecutor_->add(
                 [contexts = std::move(batch->contexts)]() mutable {
-                  handleBatchException<PredictionException>(
+                  handleBatchException<TorchDeployException>(
                       contexts, "GPUExecutor prediction exception");
                 });
           } else {
