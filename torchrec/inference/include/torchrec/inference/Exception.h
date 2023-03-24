@@ -38,4 +38,12 @@ class GPUExecutorOverloadException : public TorchrecException {
   explicit GPUExecutorOverloadException(const std::string& error)
       : TorchrecException(error) {}
 };
+
+// TorchDeployException maps to
+// PredictorUserErrorCode::TORCH_DEPLOY_ERROR
+class TorchDeployException : public TorchrecException {
+ public:
+  explicit TorchDeployException(const std::string& error)
+      : TorchrecException(error) {}
+};
 } // namespace torchrec
