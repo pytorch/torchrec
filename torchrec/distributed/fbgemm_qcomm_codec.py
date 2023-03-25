@@ -62,15 +62,19 @@ class QCommsConfig:
     forward_loss_scale: Optional[float] = None
     backward_loss_scale: Optional[float] = None
     fp8_quantize_dim: Optional[int] = None
+    fp8_quantize_dim_bwd: Optional[int] = None
 
     def __post_init__(self) -> None:
         if (
             self.forward_precision != CommType.FP8
             and self.backward_precision != CommType.FP8
-            and self.fp8_quantize_dim is not None
+            and (
+                self.fp8_quantize_dim is not None
+                or self.fp8_quantize_dim_bwd is not None
+            )
         ):
             raise ValueError(
-                f"fp8_quantize_dim is set to {self.fp8_quantize_dim} but no FP8 precision is found in forward and backward precisions"
+                f"fp8_quantize_dim is set to {self.fp8_quantize_dim} and fp8_quantize_dim_bwd is set to {self.fp8_quantize_dim_bwd} but no FP8 precision is found in forward or backward precisions"
             )
 
 
@@ -98,7 +102,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                 ),
                 loss_scale=qcomms_config.backward_loss_scale,
                 is_fwd=False,
-                row_dim=qcomms_config.fp8_quantize_dim
+                row_dim=qcomms_config.fp8_quantize_dim_bwd
                 if qcomms_config.backward_precision == CommType.FP8
                 else None,
             ),
