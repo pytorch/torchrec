@@ -56,9 +56,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         local_size: Optional[int] = None,
     ) -> None:
         with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-            kjt_input = kjt_input.to(ctx.device)
-            unsharded_model = unsharded_model.to(ctx.device)
-
             # Shard model.
             planner = EmbeddingShardingPlanner(
                 topology=Topology(
@@ -84,8 +81,10 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
             # in normal author modelling code this won't be an issue because each rank would individually create
             # their model. output from sharded_pred is correctly on the correct device.
-            unsharded_model_pred = unsharded_model(kjt_input)
-            sharded_pred = sharded_model(kjt_input)
+            unsharded_model_pred = unsharded_model(kjt_input).values()
+            sharded_pred = (
+                sharded_model(kjt_input.to(ctx.device)).values().deatch().clone().cpu()
+            )
 
             assert set(unsharded_model_pred.keys()) == set(sharded_pred.keys())
 
@@ -121,7 +120,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
 
         fused_ec = FusedEmbeddingCollection(
             tables=[
@@ -178,7 +176,6 @@ class FusedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
-        self.fail("fix test or remove - Test is currently deadlocking and breaking CI")
 
         ec = EmbeddingCollection(
             tables=[
