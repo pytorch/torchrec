@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
 #include <c10/cuda/CUDAGuard.h>
 #include <fmt/format.h>
@@ -231,6 +232,7 @@ void GPUExecutor::process(int idx) {
         << "GPU " << rank_ << " is running batch size " << batch->batchSize
         << ", avg request size " << batch->batchSize / batch->contexts.size();
 
+    std::string exWhat = "";
     try {
       RECORD_USER_SCOPE("Forward");
       // Block current stream until H2D finishes.
@@ -270,6 +272,7 @@ void GPUExecutor::process(int idx) {
       // The observer will record this in the completion executor. Don't
       // observe twice.
       LOG_EVERY_N(ERROR, 100) << "Exception during predict, msg: " << ex.what();
+      exWhat = ex.what();
     }
 
     batch->event->record();
@@ -282,7 +285,8 @@ void GPUExecutor::process(int idx) {
          resultSplitFunc = resultSplitFunc_,
          rank = rank_,
          d2hStream = d2hStream,
-         observer = observer_.get()]() mutable {
+         observer = observer_.get(),
+         exWhat = exWhat]() mutable {
           RECORD_USER_SCOPE("CompletionStage");
           c10::InferenceMode imGuard;
 
@@ -303,13 +307,19 @@ void GPUExecutor::process(int idx) {
                 getTimeElapsedMS(d2hStart).count(), resultSplitFunc->name());
           }
 
+          constexpr std::string_view gpuExceptionContext =
+              "GPUExecutor prediction exception, ";
           if (predictions.isNone()) {
             observer->addPredictionExceptionCount(1);
-            rejectionExecutor_->add(
-                [contexts = std::move(batch->contexts)]() mutable {
-                  handleBatchException<TorchDeployException>(
-                      contexts, "GPUExecutor prediction exception");
-                });
+            rejectionExecutor_->add([contexts = std::move(batch->contexts),
+                                     gpuExceptionContext = gpuExceptionContext,
+                                     exWhat = exWhat]() mutable {
+              handleBatchException<TorchDeployException>(
+                  contexts,
+                  std::string(
+                      gpuExceptionContext.begin(), gpuExceptionContext.end()) +
+                      exWhat);
+            });
           } else {
             size_t offset = 0;
             auto rsfStart = std::chrono::steady_clock::now();
