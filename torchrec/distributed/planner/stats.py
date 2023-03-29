@@ -232,6 +232,8 @@ class EmbeddingStats(Stats):
                     "Number of Poolings",
                     "Output",
                     "Features",
+                    # TODO(T149392538): remove num_poolings and batch_sizes if not specified
+                    "Per-Feature Batch Sizes",
                     "Emb Dim",
                     "Hash Size",
                     "Ranks",
@@ -245,7 +247,8 @@ class EmbeddingStats(Stats):
                     "--------------------",
                     "--------",
                     "----------",
-                    "--------",
+                    "-------------",
+                    "---------",
                     "-----------",
                     "-------",
                 ],
@@ -263,10 +266,16 @@ class EmbeddingStats(Stats):
                     table_constraints = constraints.get(table_name)
                 else:
                     table_constraints = None
+                per_feature_batch_sizes = "N/A"
                 if table_constraints:
                     num_poolings = table_constraints.num_poolings
+                    if table_constraints.batch_sizes:
+                        per_feature_batch_sizes = _reduce_list_string(
+                            table_constraints.batch_sizes
+                        )
                 else:
                     num_poolings = None
+
                 num_poolings = num_poolings or [NUM_POOLINGS] * len(so.input_lengths)
                 num_poolings = str(round(sum(num_poolings), 3))
 
@@ -284,6 +293,7 @@ class EmbeddingStats(Stats):
                         num_poolings,
                         output,
                         num_features,
+                        per_feature_batch_sizes,
                         embedding_dim,
                         hash_size,
                         ",".join(ranks),
@@ -509,3 +519,30 @@ def _collapse_consecutive_ranks(ranks: List[int]) -> List[str]:
         return [f"{min(ranks)}-{max(ranks)}"]
     else:
         return [str(rank) for rank in ranks]
+
+
+def _reduce_list_string(input_list: List[int]) -> str:
+    if len(input_list) == 0:
+        return ""
+    reduced = []
+    count = 1
+    prev_num = input_list[0]
+
+    for num in input_list[1:]:
+        if num == prev_num:
+            count += 1
+        else:
+            if count > 1:
+                reduced.append(f"{prev_num} * {count}")
+            else:
+                reduced.append(str(prev_num))
+            prev_num = num
+            count = 1
+
+    # Handle the last number
+    if count > 1:
+        reduced.append(f"{prev_num}*{count}")
+    else:
+        reduced.append(str(prev_num))
+
+    return ", ".join(reduced)
