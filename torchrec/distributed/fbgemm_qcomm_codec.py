@@ -76,6 +76,14 @@ class QCommsConfig:
             raise ValueError(
                 f"fp8_quantize_dim is set to {self.fp8_quantize_dim} and fp8_quantize_dim_bwd is set to {self.fp8_quantize_dim_bwd} but no FP8 precision is found in forward or backward precisions"
             )
+        if (
+            self.backward_precision == CommType.FP8
+            and self.fp8_quantize_dim_bwd is None
+        ):
+            self.fp8_quantize_dim_bwd = self.fp8_quantize_dim
+            logger.warning(
+                f"No override of FP8 bwd row dim, using general FP8 row dim for backward: {self.fp8_quantize_dim_bwd} "
+            )
 
 
 def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCodecs:
