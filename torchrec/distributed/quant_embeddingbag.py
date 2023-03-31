@@ -24,6 +24,7 @@ from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
     EmbeddingBagCollectionAwaitable,
 )
+from torchrec.distributed.sharding.cw_sharding import InferCwPooledEmbeddingSharding
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     NullShardedModuleContext,
@@ -53,6 +54,10 @@ def create_infer_embedding_bag_sharding(
 ) -> EmbeddingSharding[NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
+    elif sharding_type == ShardingType.COLUMN_WISE.value:
+        return InferCwPooledEmbeddingSharding(
+            sharding_infos, env, device=None, permute_embeddings=True
+        )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 

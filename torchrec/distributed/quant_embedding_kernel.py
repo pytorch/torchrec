@@ -131,12 +131,12 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 (
                     "",
                     local_rows,
-                    table.embedding_dim,
+                    local_cols,
                     data_type_to_sparse_type(config.data_type),
                     location,
                 )
-                for local_rows, table, location in zip(
-                    self._local_rows, config.embedding_tables, managed
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows, self._local_cols, config.embedding_tables, managed
                 )
             ],
             device=device,

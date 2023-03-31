@@ -12,7 +12,11 @@ import torch.distributed as dist  # noqa
 from fbgemm_gpu.permute_pooled_embedding_modules_split import (
     PermutePooledEmbeddingsSplit,
 )
-from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
+from torchrec.distributed.dist_data import EmbeddingsAllToOne
+from torchrec.distributed.embedding_lookup import (
+    GroupedPooledEmbeddingsLookup,
+    InferGroupedPooledEmbeddingsLookup,
+)
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
@@ -23,14 +27,19 @@ from torchrec.distributed.embedding_sharding import (
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
+    KJTList,
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.sharding.tw_sharding import (
     BaseTwEmbeddingSharding,
+    InferTwSparseFeaturesDist,
     TwPooledEmbeddingDist,
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import (
+    Awaitable,
+    NoWait,
+    NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
@@ -132,8 +141,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         self,
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
-        # pyre-fixme[16]: `Optional` has no attribute `size`.
-        world_size = self._pg.size()
+        world_size: int = self._env.world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
         ]
@@ -252,4 +260,107 @@ class CwPooledEmbeddingSharding(
             device,
             callbacks,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )
+
+
+class InferCwPooledEmbeddingSharding(
+    BaseCwEmbeddingSharding[
+        NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor
+    ]
+):
+    def create_input_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSparseFeaturesDist[KJTList]:
+        return InferTwSparseFeaturesDist(
+            self.features_per_rank(),
+            self._world_size,
+        )
+
+    def create_lookup(
+        self,
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
+    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+        return InferGroupedPooledEmbeddingsLookup(
+            grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
+            world_size=self._world_size,
+            fused_params=fused_params,
+        )
+
+    def create_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]:
+        device = device if device is not None else self._device
+        assert device is not None
+
+        dist_out = InferCwPooledEmbeddingDist(
+            device,
+            self._world_size,
+        )
+
+        if self._permute_embeddings and self._embedding_order != list(
+            range(len(self._embedding_order))
+        ):
+            return InferCwPooledEmbeddingDistWithPermute(
+                device, self._world_size, self._embedding_dims, self._embedding_order
+            )
+
+        return dist_out
+
+
+class InferCwPooledEmbeddingDist(
+    BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
+):
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(
+            device=device, world_size=world_size, cat_dim=1
+        )
+
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+        sharding_ctx: Optional[NullShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
+        return self._dist.forward(
+            local_embs,
+        )
+
+
+class InferCwPooledEmbeddingDistWithPermute(
+    BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
+):
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+        embedding_dims: List[int],
+        permute: List[int],
+    ) -> None:
+        super().__init__()
+        self._dist: EmbeddingsAllToOne = EmbeddingsAllToOne(
+            device=device, world_size=world_size, cat_dim=1
+        )
+        self._permute: PermutePooledEmbeddingsSplit = PermutePooledEmbeddingsSplit(
+            embedding_dims,
+            permute,
+        ).to(device)
+
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+        sharding_ctx: Optional[NullShardingContext] = None,
+    ) -> Awaitable[torch.Tensor]:
+        return NoWait(
+            self._permute.forward(
+                self._dist.forward(
+                    local_embs,
+                ).wait()
+            )
         )

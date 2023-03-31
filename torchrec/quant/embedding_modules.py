@@ -249,6 +249,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=16,
                 feature_table_map=feature_table_map,
             )
+
             if device != torch.device("meta") and weight_lists is None:
                 emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
@@ -263,8 +264,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for (_key, tables), emb_module in zip(
             self._key_to_tables.items(), self._emb_modules
         ):
-            for embedding_config, (weight, _) in zip(
-                tables, emb_module.split_embedding_weights(split_scale_shifts=False)
+            for embedding_config, (weight, qscaleshift) in zip(
+                tables, emb_module.split_embedding_weights(split_scale_shifts=True)
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()
                 # register as a buffer so it's exposed in state_dict.
@@ -273,6 +274,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
                 self.embedding_bags[embedding_config.name].register_buffer(
                     "weight", weight
+                )
+                self.embedding_bags[embedding_config.name].register_buffer(
+                    "weight_qscaleshift", qscaleshift
                 )
 
     def forward(
