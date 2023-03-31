@@ -233,6 +233,7 @@ void GPUExecutor::process(int idx) {
         << ", avg request size " << batch->batchSize / batch->contexts.size();
 
     std::string exWhat = "";
+    bool isMultipyException = false;
     try {
       RECORD_USER_SCOPE("Forward");
       // Block current stream until H2D finishes.
@@ -268,6 +269,9 @@ void GPUExecutor::process(int idx) {
 
       observer_->recordPredictionLatency(
           getTimeElapsedMS(forwardStart).count());
+    } catch (torch::deploy::MultipyEmbeddedException& ex) {
+      isMultipyException = true;
+      exWhat = ex.what();
     } catch (const std::exception& ex) {
       // The observer will record this in the completion executor. Don't
       // observe twice.
@@ -286,7 +290,8 @@ void GPUExecutor::process(int idx) {
          rank = rank_,
          d2hStream = d2hStream,
          observer = observer_.get(),
-         exWhat = exWhat]() mutable {
+         exWhat = exWhat,
+         isMultipyException = isMultipyException]() mutable {
           RECORD_USER_SCOPE("CompletionStage");
           c10::InferenceMode imGuard;
 
@@ -313,12 +318,20 @@ void GPUExecutor::process(int idx) {
             observer->addPredictionExceptionCount(1);
             rejectionExecutor_->add([contexts = std::move(batch->contexts),
                                      gpuExceptionContext = gpuExceptionContext,
-                                     exWhat = exWhat]() mutable {
-              handleBatchException<TorchDeployException>(
-                  contexts,
+                                     exWhat = exWhat,
+                                     isMultipyException =
+                                         isMultipyException]() mutable {
+              std::string exceptionMsg =
                   std::string(
                       gpuExceptionContext.begin(), gpuExceptionContext.end()) +
-                      exWhat);
+                  exWhat;
+              if (isMultipyException) {
+                handleBatchException<torch::deploy::MultipyEmbeddedException>(
+                    contexts, exceptionMsg);
+              } else {
+                handleBatchException<TorchDeployException>(
+                    contexts, exceptionMsg);
+              }
             });
           } else {
             size_t offset = 0;
