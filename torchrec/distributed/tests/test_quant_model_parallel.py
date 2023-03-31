@@ -366,7 +366,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             num_float_features=10,
-            dense_device=device,
+            dense_device=torch.device("cpu"),
             sparse_device=torch.device("meta"),
         )
         # pyre-ignore [16]
