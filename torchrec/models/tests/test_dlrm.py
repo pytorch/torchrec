@@ -23,6 +23,7 @@ from torchrec.models.dlrm import (
     InteractionDCNArch,
     InteractionProjectionArch,
     SparseArch,
+    SparseArchRO,
 )
 from torchrec.modules.crossnet import LowRankCrossNet
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -132,6 +133,160 @@ class SparseArchTest(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
         sparse_arch = SparseArch(ebc)
+
+        gm = symbolic_trace(sparse_arch)
+        torch.jit.script(gm)
+
+
+class SparseArchROTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        torch.manual_seed(0)
+        D = 3
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=10, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+
+        eb3_config = EmbeddingBagConfig(
+            name="t3", embedding_dim=D, num_embeddings=10, feature_names=["r1", "r2"]
+        )
+        eb4_config = EmbeddingBagConfig(
+            name="t4",
+            embedding_dim=D,
+            num_embeddings=10,
+            feature_names=["r3"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        ebc_ro = EmbeddingBagCollection(tables=[eb3_config, eb4_config])
+        sparse_arch = SparseArchRO(ebc, ebc_ro)
+
+        keys = ["f1", "f2", "f3", "f4", "f5"]
+        offsets = torch.tensor([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 19])
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=keys,
+            values=torch.tensor(
+                [1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]
+            ),
+            offsets=offsets,
+        )
+        B = (len(offsets) - 1) // len(keys)
+
+        keys_ro = ["r1", "r2", "r3", "r4", "r5"]
+        offsets_ro = torch.tensor([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 19])
+        features_ro = KeyedJaggedTensor.from_offsets_sync(
+            keys=keys_ro,
+            values=torch.tensor(
+                [1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]
+            ),
+            offsets=offsets_ro,
+        )
+        B_RO = (len(offsets_ro) - 1) // len(keys_ro)
+
+        sparse_features, sparse_features_ro = sparse_arch(features, features_ro)
+        F = len(sparse_arch.sparse_feature_names)
+        F_RO = len(sparse_arch.ro_sparse_feature_names)
+        self.assertEqual(sparse_features.shape, (B, F, D))
+        self.assertEqual(sparse_features_ro.shape, (B_RO, F_RO, D))
+
+        expected_values = torch.tensor(
+            [
+                [
+                    [-0.7499, -1.2665, 1.0143],
+                    [-0.7499, -1.2665, 1.0143],
+                    [3.2276, 2.9643, -0.3816],
+                ],
+                [
+                    [0.0082, 0.6241, -0.1119],
+                    [0.0082, 0.6241, -0.1119],
+                    [2.0722, -2.2734, -1.6307],
+                ],
+            ]
+        )
+
+        self.assertTrue(
+            torch.allclose(
+                sparse_features,
+                expected_values,
+                rtol=1e-4,
+                atol=1e-4,
+            ),
+        )
+
+    def test_fx_and_shape(self) -> None:
+        D = 3
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=10, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        eb3_config = EmbeddingBagConfig(
+            name="r1", embedding_dim=D, num_embeddings=10, feature_names=["f1", "f3"]
+        )
+        eb4_config = EmbeddingBagConfig(
+            name="r2",
+            embedding_dim=D,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        ebc_ro = EmbeddingBagCollection(tables=[eb3_config, eb4_config])
+        sparse_arch = SparseArchRO(ebc, ebc_ro)
+        F = len(sparse_arch.sparse_feature_names)
+        F_RO = len(sparse_arch.ro_sparse_feature_names)
+        gm = symbolic_trace(sparse_arch)
+
+        FileCheck().check("KeyedJaggedTensor").run(gm.code)
+
+        keys = ["f1", "f2", "f3", "f4", "f5"]
+        offsets = torch.tensor([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 19])
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=keys,
+            values=torch.tensor(
+                [1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]
+            ),
+            offsets=offsets,
+        )
+
+        B = (len(offsets) - 1) // len(keys)
+        # Ro features
+        keys_ro = ["r1", "r2", "r3", "r4", "r5"]
+        offsets_ro = torch.tensor([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 19])
+        features_ro = KeyedJaggedTensor.from_offsets_sync(
+            keys=keys_ro,
+            values=torch.tensor(
+                [1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]
+            ),
+            offsets=offsets_ro,
+        )
+        B_RO = (len(offsets_ro) - 1) // len(keys_ro)
+
+        sparse_features, sparse_features_ro = gm(features, features_ro)
+        self.assertEqual(sparse_features.shape, (B, F, D))
+        self.assertEqual(sparse_features_ro.shape, (B_RO, F_RO, D))
+
+    def test_fx_script(self) -> None:
+        D = 3
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2", embedding_dim=D, num_embeddings=10, feature_names=["f2"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+        ebc_ro = EmbeddingBagCollection(tables=[eb2_config])
+        sparse_arch = SparseArchRO(ebc, ebc_ro)
 
         gm = symbolic_trace(sparse_arch)
         torch.jit.script(gm)
