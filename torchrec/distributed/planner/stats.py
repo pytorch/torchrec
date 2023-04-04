@@ -229,11 +229,9 @@ class EmbeddingStats(Stats):
                     "Compute Kernel",
                     "Perf (ms)",
                     "Pooling Factor",
-                    "Number of Poolings",
+                    "Num Poolings",
                     "Output",
                     "Features",
-                    # TODO(T149392538): remove num_poolings and batch_sizes if not specified
-                    "Per-Feature Batch Sizes",
                     "Emb Dim",
                     "Hash Size",
                     "Ranks",
@@ -244,41 +242,38 @@ class EmbeddingStats(Stats):
                     "----------------",
                     "-----------",
                     "----------------",
-                    "--------------------",
+                    "--------------",
                     "--------",
                     "----------",
-                    "-------------",
                     "---------",
                     "-----------",
                     "-------",
                 ],
             ]
-            for so in best_plan:
+            feat_batch_sizes = [
+                constraints[so.name].batch_sizes
+                if constraints and constraints.get(so.name)
+                else None
+                for so in best_plan
+            ]
+            if include_batch_sizes := any(feat_batch_sizes):
+                param_table[0].append("Batch Sizes")
+                param_table[1].append("-------------")
+            for i, so in enumerate(best_plan):
                 ranks = sorted([cast(int, shard.rank) for shard in so.shards])
                 ranks = _collapse_consecutive_ranks(ranks)
                 shard_perfs = str(
                     round(sum([cast(float, shard.perf) for shard in so.shards]), 3)
                 )
                 pooling_factor = str(round(sum(so.input_lengths), 3))
-
-                table_name = so.name
-                if constraints:
-                    table_constraints = constraints.get(table_name)
-                else:
-                    table_constraints = None
-                per_feature_batch_sizes = "N/A"
-                if table_constraints:
-                    num_poolings = table_constraints.num_poolings
-                    if table_constraints.batch_sizes:
-                        per_feature_batch_sizes = _reduce_list_string(
-                            table_constraints.batch_sizes
-                        )
-                else:
-                    num_poolings = None
-
-                num_poolings = num_poolings or [NUM_POOLINGS] * len(so.input_lengths)
+                num_poolings = (
+                    cast(List[float], constraints[so.name].num_poolings)
+                    if constraints
+                    and constraints.get(so.name)
+                    and constraints[so.name].num_poolings
+                    else [NUM_POOLINGS] * len(so.input_lengths)
+                )
                 num_poolings = str(round(sum(num_poolings), 3))
-
                 output = "pooled" if so.is_pooled else "sequence"
                 num_features = len(so.input_lengths)
                 embedding_dim = so.tensor.shape[1]
@@ -293,12 +288,14 @@ class EmbeddingStats(Stats):
                         num_poolings,
                         output,
                         num_features,
-                        per_feature_batch_sizes,
                         embedding_dim,
                         hash_size,
                         ",".join(ranks),
                     ]
                 )
+                if include_batch_sizes:
+                    bs = feat_batch_sizes[i]
+                    param_table[-1].append(_reduce_int_list(bs) if bs else "n/a")
             formatted_param_table = _format_table(param_table)
             self._width = max(self._width, len(formatted_param_table[0]) + 6)
 
@@ -521,7 +518,7 @@ def _collapse_consecutive_ranks(ranks: List[int]) -> List[str]:
         return [str(rank) for rank in ranks]
 
 
-def _reduce_list_string(input_list: List[int]) -> str:
+def _reduce_int_list(input_list: List[int]) -> str:
     if len(input_list) == 0:
         return ""
     reduced = []
