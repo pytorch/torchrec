@@ -13,6 +13,11 @@ import torchrec.optim as trec_optim
 
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
 from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
@@ -90,6 +95,71 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("fused_uvm_caching", "table_row_wise"): [
                 0.012695561962491483,
                 0.012695561962491483,
+            ],
+        }
+
+        perfs = {
+            (
+                sharding_option.compute_kernel,
+                sharding_option.sharding_type,
+            ): [shard.perf for shard in sharding_option.shards]
+            for sharding_option in sharding_options
+        }
+
+        self.assertEqual(expected_perfs, perfs)
+
+    def test_1_table_perf_with_fp8_comm(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="table_0",
+                feature_names=["feature_0"],
+            )
+        ]
+        model = TestSparseNN(tables=tables, weighted_tables=[])
+
+        # will get warning for POOLED_EMBEDDINGS_REDUCE_SCATTER not supporting fp8
+        qcomm_codecs_registry = get_qcomm_codecs_registry(
+            qcomms_config=QCommsConfig(
+                forward_precision=CommType.FP8, backward_precision=CommType.FP8
+            )
+        )
+
+        sharding_options = self.enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    EmbeddingBagCollectionSharder(
+                        qcomm_codecs_registry=qcomm_codecs_registry
+                    ),
+                )
+            ],
+        )
+
+        expected_perfs = {
+            ("dense", "data_parallel"): [0.0005062740117544049, 0.0005062740117544049],
+            ("fused", "table_wise"): [0.000846718200207288],
+            ("fused_uvm", "table_wise"): [0.14336342905081956],
+            ("fused_uvm_caching", "table_wise"): [0.03322849048472447],
+            ("fused", "column_wise"): [0.000846718200207288],
+            ("fused_uvm", "column_wise"): [0.14336342905081956],
+            ("fused_uvm_caching", "column_wise"): [0.03322849048472447],
+            ("fused", "table_column_wise"): [0.000846718200207288],
+            ("fused_uvm", "table_column_wise"): [0.14336342905081956],
+            ("fused_uvm_caching", "table_column_wise"): [0.03322849048472447],
+            ("fused", "row_wise"): [0.0002561205605599394, 0.0002561205605599394],
+            ("fused_uvm", "row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm_caching", "row_wise"): [
+                0.007906921553027078,
+                0.007906921553027078,
+            ],
+            ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
+            ("fused_uvm", "table_row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm_caching", "table_row_wise"): [
+                0.007906921553027078,
+                0.007906921553027078,
             ],
         }
 
