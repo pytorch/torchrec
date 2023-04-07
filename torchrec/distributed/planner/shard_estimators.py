@@ -33,7 +33,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import prod, sharder_name
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import CommOp, ModuleSharder, ShardingType
 
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 
@@ -109,6 +109,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
             else:
                 is_weighted = False
 
+            table_data_type_size = sharding_option.tensor.element_size()
+            (
+                fwd_a2a_comm_data_type_size,
+                bwd_a2a_comm_data_type_size,
+                fwd_sr_comm_data_type_size,
+                bwd_sr_comm_data_type_size,
+            ) = _extract_comm_data_type_size(sharder, sharding_option)
+
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
@@ -119,7 +127,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 local_world_size=self._topology.local_world_size,
                 input_lengths=sharding_option.input_lengths,
                 input_data_type_size=BIGINT_DTYPE,
-                output_data_type_size=sharding_option.tensor.element_size(),
+                table_data_type_size=table_data_type_size,
+                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
+                bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                 num_poolings=num_poolings,
                 hbm_mem_bw=self._topology.hbm_mem_bw,
                 ddr_mem_bw=self._topology.ddr_mem_bw,
@@ -146,7 +158,11 @@ def perf_func_emb_wall_time(
     local_world_size: int,
     input_lengths: List[float],
     input_data_type_size: float,
-    output_data_type_size: float,
+    table_data_type_size: float,
+    fwd_a2a_comm_data_type_size: float,
+    bwd_a2a_comm_data_type_size: float,
+    fwd_sr_comm_data_type_size: float,
+    bwd_sr_comm_data_type_size: float,
     num_poolings: List[float],
     hbm_mem_bw: float,
     ddr_mem_bw: float,
@@ -174,8 +190,11 @@ def perf_func_emb_wall_time(
             input query feature.
         input_data_type_size (float): the data type size of the distributed
             data_parallel input.
-        output_data_type_size (float): the data type size of the distributed
-            data_parallel output.
+        table_data_type_size (float): the data type size of the table.
+        fwd_comm_data_type_size (float): the data type size of the distributed
+            data_parallel input during forward communication.
+        bwd_comm_data_type_size (float): the data type size of the distributed
+            data_parallel input during backward communication.
         num_poolings (List[float]): number of poolings per sample, typically 1.0.
         hbm_mem_bw (float): the bandwidth of the device HBM.
         ddr_mem_bw (float): the bandwidth of the system DDR memory.
@@ -216,7 +235,9 @@ def perf_func_emb_wall_time(
                 input_lengths=input_lengths,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
+                table_data_type_size=table_data_type_size,
+                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
@@ -234,7 +255,11 @@ def perf_func_emb_wall_time(
                 input_lengths=input_lengths,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
+                table_data_type_size=table_data_type_size,
+                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
+                bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
@@ -251,7 +276,11 @@ def perf_func_emb_wall_time(
                 input_lengths=input_lengths,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
+                table_data_type_size=table_data_type_size,
+                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
+                bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
@@ -269,7 +298,7 @@ def perf_func_emb_wall_time(
                 grad_num_elem=hash_size * emb_dim,
                 emb_dim=emb_dim,
                 input_data_type_size=input_data_type_size,
-                output_data_type_size=output_data_type_size,
+                table_data_type_size=table_data_type_size,
                 num_poolings=num_poolings,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
@@ -293,7 +322,9 @@ def _get_tw_sharding_perf(
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
-    output_data_type_size: float,
+    table_data_type_size: float,
+    fwd_a2a_comm_data_type_size: float,
+    bwd_a2a_comm_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
     inter_host_bw: float,
@@ -318,10 +349,15 @@ def _get_tw_sharding_perf(
 
     # minimum embedding dim is set to 32 due to kernel usage
     embedding_lookup_size = (
-        batch_inputs * world_size * max(emb_dim, 32) * output_data_type_size
+        batch_inputs * world_size * max(emb_dim, 32) * table_data_type_size
     )
 
-    output_write_size = batch_outputs * world_size * emb_dim * output_data_type_size
+    fwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+    )
+    bwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
+    )
 
     # embedding dim below 128 will reduce kernel efficency
     block_usage_penalty = 1
@@ -332,10 +368,10 @@ def _get_tw_sharding_perf(
             block_usage_penalty = QUARTER_BLOCK_PENALTY
 
     comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
-    fwd_comms = output_write_size / comms_bw
+    fwd_comms = fwd_output_write_size / comms_bw
 
     fwd_compute = (
-        (input_read_size + embedding_lookup_size + output_write_size)
+        (input_read_size + embedding_lookup_size + fwd_output_write_size)
         * block_usage_penalty
         / device_bw
     )
@@ -343,7 +379,7 @@ def _get_tw_sharding_perf(
         # only consider forward compute and comms for inference
         return fwd_compute + fwd_comms
 
-    bwd_comms = fwd_comms
+    bwd_comms = bwd_output_write_size / comms_bw
 
     bwd_grad_indice_weights_kernel = (
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
@@ -372,7 +408,11 @@ def _get_rw_sharding_perf(
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
-    output_data_type_size: float,
+    table_data_type_size: float,
+    fwd_a2a_comm_data_type_size: float,
+    bwd_a2a_comm_data_type_size: float,
+    fwd_sr_comm_data_type_size: float,
+    bwd_sr_comm_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
     inter_host_bw: float,
@@ -395,20 +435,29 @@ def _get_rw_sharding_perf(
     if is_weighted or has_feature_processor:
         input_read_size *= 2
 
-    embedding_lookup_size = batch_inputs * world_size * emb_dim * output_data_type_size
+    embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
 
-    output_write_size = batch_outputs * world_size * emb_dim * output_data_type_size
+    fwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
+        if is_pooled
+        else batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+    )
+    bwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
+        if is_pooled
+        else batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
+    )
 
     comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
-    fwd_comms = output_write_size / comms_bw
+    fwd_comms = fwd_output_write_size / comms_bw
 
     fwd_compute = (
-        input_read_size + embedding_lookup_size + output_write_size
+        input_read_size + embedding_lookup_size + fwd_output_write_size
     ) / device_bw
 
-    bwd_comms = fwd_comms
+    bwd_comms = bwd_output_write_size / comms_bw
 
-    bwd_batched_copy = output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+    bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
 
     bwd_grad_indice_weights_kernel = (
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
@@ -435,7 +484,11 @@ def _get_twrw_sharding_perf(
     input_lengths: List[float],
     emb_dim: int,
     input_data_type_size: float,
-    output_data_type_size: float,
+    table_data_type_size: float,
+    fwd_a2a_comm_data_type_size: float,
+    bwd_a2a_comm_data_type_size: float,
+    fwd_sr_comm_data_type_size: float,
+    bwd_sr_comm_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
     inter_host_bw: float,
@@ -458,20 +511,34 @@ def _get_twrw_sharding_perf(
     if is_weighted or has_feature_processor:
         input_read_size *= 2
 
-    embedding_lookup_size = batch_inputs * world_size * emb_dim * output_data_type_size
+    embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
 
-    output_write_size = batch_outputs * world_size * emb_dim * output_data_type_size
+    fwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
+    )
+    bwd_output_write_size = (
+        batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
+    )
 
-    fwd_comms = output_write_size / intra_host_bw
+    # intra host comm
+    fwd_comms = fwd_output_write_size / intra_host_bw
 
+    # inter host comm
     if world_size > local_world_size:
-        fwd_comms += output_write_size * (local_world_size / world_size) / inter_host_bw
+        inter_host_fwd_fwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+        )
+        fwd_comms += (
+            inter_host_fwd_fwd_output_write_size
+            * (local_world_size / world_size)
+            / inter_host_bw
+        )
 
     fwd_compute = (
-        input_read_size + embedding_lookup_size + output_write_size
+        input_read_size + embedding_lookup_size + fwd_output_write_size
     ) / device_bw
 
-    bwd_comms = fwd_comms
+    bwd_comms = bwd_output_write_size / intra_host_bw
 
     bwd_grad_indice_weights_kernel = (
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
@@ -479,7 +546,7 @@ def _get_twrw_sharding_perf(
         else 0
     )
 
-    bwd_batched_copy = output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+    bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
 
     bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
 
@@ -501,7 +568,7 @@ def _get_dp_sharding_perf(
     grad_num_elem: int,
     emb_dim: int,
     input_data_type_size: float,
-    output_data_type_size: float,
+    table_data_type_size: float,
     num_poolings: List[float],
     device_bw: float,
     inter_host_bw: float,
@@ -522,10 +589,10 @@ def _get_dp_sharding_perf(
     if is_weighted or has_feature_processor:
         input_read_size *= 2
 
-    embedding_lookup_size = batch_inputs * emb_dim * output_data_type_size
+    embedding_lookup_size = batch_inputs * emb_dim * table_data_type_size
 
-    output_write_size = batch_outputs * emb_dim * output_data_type_size
-    table_size = grad_num_elem * output_data_type_size
+    output_write_size = batch_outputs * emb_dim * table_data_type_size
+    table_size = grad_num_elem * table_data_type_size
 
     fwd_compute = (
         input_read_size + embedding_lookup_size + output_write_size
@@ -561,6 +628,64 @@ def _get_dp_sharding_perf(
         + bwd_grad_indice_weights_kernel
         + bwd_compute
         + fwd_compute
+    )
+
+
+def _extract_comm_data_type_size(
+    sharder: ModuleSharder[nn.Module], sharding_option: ShardingOption
+) -> Tuple[float, float, float, float]:
+    table_data_type_size = sharding_option.tensor.element_size()
+
+    fwd_a2a_comm_data_type_size = table_data_type_size
+    bwd_a2a_comm_data_type_size = table_data_type_size
+    fwd_sr_comm_data_type_size = table_data_type_size
+    bwd_sr_comm_data_type_size = table_data_type_size
+
+    if sharder.qcomm_codecs_registry is not None:
+        qcomm_codecs_registry = sharder.qcomm_codecs_registry
+        if (
+            sharding_option.is_pooled
+            and CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name in qcomm_codecs_registry
+        ):
+            codecs = sharder.qcomm_codecs_registry[
+                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name
+            ]
+            fwd_a2a_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.forward.quantized_dtype
+            ).element_size()
+            bwd_a2a_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.backward.quantized_dtype
+            ).element_size()
+
+        if (
+            not sharding_option.is_pooled
+            and CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name in qcomm_codecs_registry
+        ):
+            codecs = qcomm_codecs_registry[CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name]
+            fwd_a2a_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.forward.quantized_dtype
+            ).element_size()
+            bwd_a2a_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.backward.quantized_dtype
+            ).element_size()
+
+        if (
+            sharding_option.is_pooled
+            and CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name in qcomm_codecs_registry
+        ):
+            codecs = qcomm_codecs_registry[CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name]
+            fwd_sr_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.forward.quantized_dtype
+            ).element_size()
+            bwd_sr_comm_data_type_size = torch.tensor(
+                [], dtype=codecs.backward.quantized_dtype
+            ).element_size()
+
+    return (
+        fwd_a2a_comm_data_type_size,
+        bwd_a2a_comm_data_type_size,
+        fwd_sr_comm_data_type_size,
+        bwd_sr_comm_data_type_size,
     )
 
 

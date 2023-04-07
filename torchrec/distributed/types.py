@@ -125,6 +125,7 @@ class QuantizedCommCodec(Generic[QuantizationContext]):
     ) -> torch.Tensor:
         ...
 
+    @property
     def quantized_dtype(self) -> torch.dtype:
         """
         tensor.dtype of the resultant encode(input_tensor)
