@@ -374,6 +374,8 @@ def _generate_rec_metrics(
                 "One of RecMetricDef.rec_tasks and RecMetricDef.rec_task_indices "
                 "should be a non-empty list"
             )
+        if isinstance(metric_enum, str):
+            metric_enum = getattr(RecMetricEnum, metric_enum)
 
         rec_metrics.append(
             REC_METRICS_MAPPING[metric_enum](

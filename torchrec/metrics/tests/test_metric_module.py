@@ -173,6 +173,31 @@ class MetricModuleTest(unittest.TestCase):
             metric_module_seperate_task_info.rec_metrics[0]._tasks,
             metric_module_unified_task_info.rec_metrics[0]._tasks,
         )
+        config = dataclasses.replace(
+            DefaultMetricsConfig,
+            rec_metrics={
+                "NE": RecMetricDef(
+                    rec_tasks=[], rec_task_indices=[0], window_size=_DEFAULT_WINDOW_SIZE
+                )
+            },
+        )
+        metric_module_unified_task_info = generate_metric_module(
+            TestMetricModule,
+            metrics_config=config,
+            batch_size=128,
+            world_size=64,
+            my_rank=0,
+            state_metrics_mapping={StateMetricEnum.OPTIMIZERS: mock_optimizer},
+            device=torch.device("cpu"),
+        )
+        self.assertEqual(
+            metric_module_seperate_task_info.rec_metrics[0]._namespace,
+            metric_module_unified_task_info.rec_metrics[0]._namespace,
+        )
+        self.assertEqual(
+            metric_module_seperate_task_info.rec_metrics[0]._tasks,
+            metric_module_unified_task_info.rec_metrics[0]._tasks,
+        )
 
     @staticmethod
     def _run_trainer_checkpointing() -> None:
