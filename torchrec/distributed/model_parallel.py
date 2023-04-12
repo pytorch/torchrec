@@ -351,7 +351,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                     has_meta_param = True
             for name, buffer in module._buffers.items():
                 if isinstance(buffer, torch.Tensor) and buffer.device.type == "meta":
-                    module._buffers[name] = torch.empty_like(buffer, device=self.device)
+                    module._buffers[name] = torch.zeros_like(buffer, device=self.device)
 
             # Init parameters if at least one parameter is over 'meta' device.
             if has_meta_param and hasattr(module, "reset_parameters"):
