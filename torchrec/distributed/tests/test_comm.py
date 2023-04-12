@@ -14,6 +14,7 @@ from typing import Callable
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
+from libfb.py.pyre import none_throws
 from torchrec.test_utils import get_free_port, seed_and_log
 
 
@@ -195,4 +196,73 @@ class TestAllToAll(unittest.TestCase):
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_alltoall_sequence,
+        )
+
+    @classmethod
+    def _test_alltoall_pooled(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
+        # Each rank's local batch size
+        batch_size_per_rank = [4, 4]
+        # Global batch size is the sum of all rank's local batch size
+        B_global = sum(batch_size_per_rank)
+        # sum of dimensions of the embedding tables hosted on each rank
+        dim_sum_per_rank = [8, 8]
+        D_local_sum = dim_sum_per_rank[rank]
+
+        # Construct pooled embeddings
+        pooled_embeddings = torch.randn([B_global, D_local_sum], requires_grad=True).to(
+            device
+        )
+        pooled_embeddings.retain_grad()
+
+        # Save a copy for running again with gradient division
+        pooled_embeddings_gradient_division = (
+            pooled_embeddings.detach().clone().to(device)
+        )
+        pooled_embeddings_gradient_division.requires_grad = True
+        pooled_embeddings_gradient_division.retain_grad()
+
+        # Run alltoall_pooled with gradient division disabled
+        comm_ops.set_gradient_division(False)
+        a2a_embedding = comm_ops.alltoall_pooled(
+            pooled_embeddings, batch_size_per_rank, dim_sum_per_rank
+        ).wait()
+        a2a_embedding.retain_grad()
+        a2a_embedding.backward(a2a_embedding)
+
+        # Run alltoall_pooled with gradient division enabled
+        comm_ops.set_gradient_division(True)
+        a2a_embedding_gradient_division = comm_ops.alltoall_pooled(
+            pooled_embeddings_gradient_division, batch_size_per_rank, dim_sum_per_rank
+        ).wait()
+        a2a_embedding_gradient_division.retain_grad()
+        a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
+
+        assert torch.equal(
+            none_throws(pooled_embeddings.grad),
+            torch.mul(
+                none_throws(pooled_embeddings_gradient_division.grad), world_size
+            ),
+        )
+        dist.destroy_process_group()
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    def test_alltoall_pooled(self) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_alltoall_pooled,
         )
