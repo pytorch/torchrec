@@ -9,6 +9,8 @@ from functools import partial
 from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
+import torch.distributed as dist
+from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,
@@ -21,6 +23,7 @@ PREDICTIONS = "predictions"
 LABELS = "labels"
 WEIGHTS = "weights"
 GROUPING_KEYS = "grouping_keys"
+REQUIRED_INPUTS = "required_inputs"
 
 
 def _compute_auc_helper(
@@ -105,6 +108,7 @@ def compute_auc_per_group(
             auc = _compute_auc_helper(
                 grouped_predictions, grouped_labels, grouped_weights
             )
+            auc_groups_sum = auc_groups_sum.to(auc.device)
             auc_groups_sum += auc.view(1)
         avg_auc = (
             auc_groups_sum / len(group_indices)
@@ -147,6 +151,7 @@ class AUCMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Grouped AUC and Fused Update Limit cannot be enabled together yet."
             )
+
         self._grouped_auc: bool = grouped_auc
         self._add_state(
             PREDICTIONS,
@@ -209,7 +214,6 @@ class AUCMetricComputation(RecMetricComputation):
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
-        grouping_keys: Optional[torch.Tensor] = None,
         **kwargs: Dict[str, Any],
     ) -> None:
         """
@@ -248,11 +252,16 @@ class AUCMetricComputation(RecMetricComputation):
             dim=-1,
         )
         if self._grouped_auc:
+            if REQUIRED_INPUTS not in kwargs or (
+                (grouping_keys := kwargs[REQUIRED_INPUTS].get(GROUPING_KEYS)) is None
+            ):
+                raise RecMetricException(
+                    f"Input '{GROUPING_KEYS}' are required for AUCMetricComputation grouped update"
+                )
             getattr(self, GROUPING_KEYS)[0] = torch.cat(
-                # pyre-ignore
                 [
                     cast(torch.Tensor, getattr(self, GROUPING_KEYS)[0])[start_index:],
-                    grouping_keys,
+                    grouping_keys.squeeze(),
                 ],
                 dim=0,
             )
@@ -294,3 +303,33 @@ class AUCMetricComputation(RecMetricComputation):
 class AUCMetric(RecMetric):
     _namespace: MetricNamespace = MetricNamespace.AUC
     _computation_class: Type[RecMetricComputation] = AUCMetricComputation
+
+    def __init__(
+        self,
+        world_size: int,
+        my_rank: int,
+        batch_size: int,
+        tasks: List[RecTaskInfo],
+        compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+        window_size: int = 100,
+        fused_update_limit: int = 0,
+        compute_on_all_ranks: bool = False,
+        should_validate_update: bool = False,
+        process_group: Optional[dist.ProcessGroup] = None,
+        **kwargs: Dict[str, Any],
+    ) -> None:
+        super().__init__(
+            world_size=world_size,
+            my_rank=my_rank,
+            batch_size=batch_size,
+            tasks=tasks,
+            compute_mode=compute_mode,
+            window_size=window_size,
+            fused_update_limit=fused_update_limit,
+            compute_on_all_ranks=compute_on_all_ranks,
+            should_validate_update=should_validate_update,
+            process_group=process_group,
+            **kwargs,
+        )
+        if kwargs.get("grouped_auc"):
+            self._required_inputs.add(GROUPING_KEYS)

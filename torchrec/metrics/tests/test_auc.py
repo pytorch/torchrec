@@ -6,13 +6,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import Dict, Iterable, List, Type, Union
+from typing import Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from torch import no_grad
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
-from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
+from torchrec.metrics.rec_metric import (
+    RecComputeMode,
+    RecMetric,
+    RecMetricException,
+    RecTaskInfo,
+)
 from torchrec.metrics.test_utils import (
     metric_test_helper,
     rec_metric_value_test_launcher,
@@ -256,8 +261,8 @@ class GroupedAUCValueTest(unittest.TestCase):
         labels: torch.Tensor,
         predictions: torch.Tensor,
         weights: torch.Tensor,
-        grouping_keys: torch.Tensor,
         expected_auc: torch.Tensor,
+        grouping_keys: Optional[torch.Tensor] = None,
     ) -> None:
         num_task = labels.shape[0]
         batch_size = labels.shape[0]
@@ -266,8 +271,9 @@ class GroupedAUCValueTest(unittest.TestCase):
             "predictions": {},
             "labels": {},
             "weights": {},
-            "grouping_keys": grouping_keys,
         }
+        if grouping_keys is not None:
+            inputs["required_inputs"] = {"grouping_keys": grouping_keys}
         for i in range(num_task):
             task_info = RecTaskInfo(
                 name=f"Task:{i}",
@@ -282,7 +288,6 @@ class GroupedAUCValueTest(unittest.TestCase):
             inputs["labels"][task_info.name] = labels[i]
             # pyre-ignore
             inputs["weights"][task_info.name] = weights[i]
-            # inputs["grouping_keys"][task_info.name] = grouping_keys[i]
 
         auc = AUCMetric(
             world_size=1,
@@ -317,3 +322,34 @@ class GroupedAUCValueTest(unittest.TestCase):
             except AssertionError:
                 print("Assertion error caught with data set ", inputs)
                 raise
+
+    def test_misconfigured_grouped_auc(self) -> None:
+        with self.assertRaises(RecMetricException):
+            self._test_grouped_auc_helper(
+                **{
+                    "labels": torch.tensor([[1, 0, 0, 1, 1]]),
+                    "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
+                    "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
+                    # no provided grouping_keys
+                    "expected_auc": torch.tensor([0.2419]),
+                },
+            )
+
+    def test_required_input_for_grouped_auc(self) -> None:
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=1,
+            tasks=[
+                RecTaskInfo(
+                    name="Task:0",
+                    label_name="label",
+                    prediction_name="prediction",
+                    weight_name="weight",
+                )
+            ],
+            # pyre-ignore
+            grouped_auc=True,
+        )
+
+        self.assertIn("grouping_keys", auc.get_required_inputs())
