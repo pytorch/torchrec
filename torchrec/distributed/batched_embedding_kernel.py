@@ -185,13 +185,15 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         # that state_dict look identical to no-fused version.
         table_to_shard_params: Dict[str, ShardParams] = {}
 
-        split_embedding_weights = emb_module.split_embedding_weights()
-        split_optimizer_states = emb_module.split_optimizer_states()
+        embedding_weights_by_table = emb_module.split_embedding_weights()
 
-        for table_config, optimizer_states, weight in itertools.zip_longest(
+        all_optimizer_states = emb_module.get_optimizer_state()
+        optimizer_states_keys_by_table: Dict[str, List[torch.Tensor]] = {}
+
+        for (table_config, optimizer_states, weight,) in itertools.zip_longest(
             config.embedding_tables,
-            split_optimizer_states,
-            split_embedding_weights,
+            all_optimizer_states,
+            embedding_weights_by_table,
         ):
             # When EmbeddingFusedOptimizer is created for composability, only create state
             if create_for_table is not None and create_for_table != table_config.name:
@@ -200,15 +202,18 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 table_to_shard_params[table_config.name] = ShardParams(
                     optimizer_states=[], local_metadata=[], embedding_weights=[]
                 )
-
+            optimizer_state_values = None
             if optimizer_states:
-                for optimizer_state in optimizer_states:
-                    assert table_config.local_rows == optimizer_state.size(0)
-
+                optimizer_state_values = tuple(optimizer_states.values())
+                for optimizer_state_value in optimizer_state_values:
+                    assert table_config.local_rows == optimizer_state_value.size(0)
+                optimizer_states_keys_by_table[table_config.name] = list(
+                    optimizer_states.keys()
+                )
             local_metadata = table_config.local_metadata
 
             table_to_shard_params[table_config.name].optimizer_states.append(
-                optimizer_states
+                optimizer_state_values
             )
             table_to_shard_params[table_config.name].local_metadata.append(
                 local_metadata
@@ -268,7 +273,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 [opt_state is not None for opt_state in shard_params.optimizer_states]
             ):
                 # pyre-ignore
-                def get_momentum(momentum_idx: int) -> ShardedTensor:
+                def get_sharded_optim_state(momentum_idx: int) -> ShardedTensor:
                     assert momentum_idx > 0
                     momentum_local_shards: List[Shard] = []
                     optimizer_sharded_tensor_metadata: ShardedTensorMetadata
@@ -319,16 +324,25 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                         process_group=self._pg,
                     )
 
-                if all(
+                num_states: int = min(
                     # pyre-ignore
-                    [len(opt_state) >= 1 for opt_state in shard_params.optimizer_states]
-                ):
-                    state[weight][f"{table_config.name}.momentum1"] = get_momentum(1)
-                if all(
-                    # pyre-ignore
-                    [len(opt_state) >= 2 for opt_state in shard_params.optimizer_states]
-                ):
-                    state[weight][f"{table_config.name}.momentum2"] = get_momentum(2)
+                    [len(opt_state) for opt_state in shard_params.optimizer_states]
+                )
+                optimizer_state_keys = []
+                if num_states > 0:
+                    optimizer_state_keys = optimizer_states_keys_by_table[
+                        table_config.name
+                    ]
+                for cur_state_idx in range(0, num_states):
+                    if cur_state_idx == 0:
+                        # for backward compatibility
+                        cur_state_key = "momentum1"
+                    else:
+                        cur_state_key = optimizer_state_keys[cur_state_idx]
+
+                    state[weight][
+                        f"{table_config.name}.{cur_state_key}"
+                    ] = get_sharded_optim_state(cur_state_idx + 1)
 
         super().__init__(params, state, [param_group])
 
