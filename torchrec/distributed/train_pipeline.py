@@ -6,7 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import itertools
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -22,12 +24,20 @@ from typing import (
 )
 
 import torch
+from torch import distributed as dist
 from torch.autograd.profiler import record_function
 from torch.cuda import Event
 from torch.fx.node import Node
+from torchrec.distributed.dist_data import KJTAllToAll
+from torchrec.distributed.embedding_sharding import (
+    FusedKJTListSplitsAwaitable,
+    KJTListSplitsAwaitable,
+    KJTSplitsAllToAllMeta,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -249,6 +259,45 @@ class PipelinedForward:
         return self._args
 
 
+class KJTAllToAllForward:
+    def __init__(
+        self, pg: dist.ProcessGroup, splits: List[int], stagger: int = 1
+    ) -> None:
+        self._pg = pg
+        self._splits = splits
+        self._stagger = stagger
+        self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
+
+    def __call__(self, input: KeyedJaggedTensor) -> KJTSplitsAllToAllMeta:
+        with torch.no_grad():
+            assert len(input.keys()) == sum(self._splits)
+            rank = dist.get_rank(self._pg)
+            local_keys = input.keys()[
+                self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
+            ]
+            input_splits = input.dist_splits(self._splits)
+            device = input.values().device
+            splits_tensors = [
+                torch.tensor(split, device=device) for split in input_splits
+            ]
+            batch_size_tensor = torch.tensor(
+                [input.stride()] * self._pg.size(), device=device
+            )
+            splits_tensors.append(batch_size_tensor)
+            return KJTSplitsAllToAllMeta(
+                pg=self._pg,
+                input=input,
+                splits=self._splits,
+                splits_tensors=splits_tensors,
+                input_splits=input_splits,
+                input_tensors=input.dist_tensors(),
+                labels=input.dist_labels(),
+                keys=local_keys,
+                device=device,
+                stagger=self._stagger,
+            )
+
+
 def _start_data_dist(
     pipelined_modules: List[ShardedModule],
     batch: In,
@@ -287,10 +336,29 @@ def _start_data_dist(
         context.input_dist_requests[forward.name] = module.input_dist(
             module_ctx, *args, **kwargs
         )
+    _fuse_input_dist_splits(context)
 
-    # Call wait on the first awaitable in the input dist for the tensor splits
-    for key, awaitable in context.input_dist_requests.items():
-        context.input_dist_requests[key] = awaitable.wait()
+
+def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
+    names_per_pg = defaultdict(list)
+    for name, request in context.input_dist_requests.items():
+        pg = None
+        if isinstance(request, KJTListSplitsAwaitable):
+            for awaitable in request.awaitables:
+                if isinstance(awaitable, KJTSplitsAllToAllMeta):
+                    pg = awaitable.pg
+                    break
+        names_per_pg[pg].append(name)
+
+    for pg, names in names_per_pg.items():
+        requests = FusedKJTListSplitsAwaitable(
+            # pyre-ignore[6]
+            requests=[context.input_dist_requests[name] for name in names],
+            contexts=[context.module_contexts[name] for name in names],
+            pg=pg,
+        ).wait()
+        for name, request in zip(names, requests):
+            context.input_dist_requests[name] = request
 
 
 def _get_node_args_helper(
@@ -464,6 +532,24 @@ def _rewrite_model(  # noqa C901
     return ret
 
 
+def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> None:
+    """
+    Overrides each input dist forward to support fusing the splits collective.
+    NOTE: this can only be called after the input dists are initialized.
+    """
+    for module in pipelined_modules:
+        assert not module._has_uninitialized_input_dist
+        # pyre-ignore[29]
+        for input_dist in module._input_dists:
+            if hasattr(input_dist, "_dist"):
+                assert isinstance(input_dist._dist, KJTAllToAll)
+                input_dist._dist.forward = KJTAllToAllForward(
+                    pg=input_dist._dist._pg,
+                    splits=input_dist._dist._splits,
+                    stagger=input_dist._dist._stagger,
+                )
+
+
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     """
     This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
@@ -525,12 +611,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         # executes last batch in pipeline
         if self._batch_i and self._execute_all_batches:
             return
-        self._init_pipelined_modules()
 
         # batch 1
         self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
         if self._batch_i is None:
             raise StopIteration
+        self._init_pipelined_modules(self._batch_i)
         self._sparse_data_dist(self._batch_i)
 
         # batch 2
@@ -569,19 +655,28 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         return output
 
-    def _init_pipelined_modules(self) -> None:
+    def _init_pipelined_modules(self, batch: In) -> None:
+        """
+        Retrieves the pipelined modules after overriding their forwards, initializes the
+        modules' input dists, and overrides the input dist forwards to support fusing
+        the splits collective in the input dist.
+        """
         if self._pipelined_modules:
             return
         self._pipelined_modules = _rewrite_model(
             self._model, self._context, self._data_dist_stream
         )
+        # initializes input dist, so we can override input dist forwards
+        self._sparse_data_dist(self._batch_i)
+        _override_input_dist_forwards(self._pipelined_modules)
 
     def _copy_batch_to_gpu(self, dataloader_iter: Iterator[In]) -> Optional[In]:
         """
         Retrieves batch from dataloader and moves it to the provided device.
 
-        Raises StopIteration when dataloader iterator is exhausted; unless
-        execute_all_batches=True, then returns None.
+        Raises:
+            StopIteration: if the dataloader iterator is exhausted; unless
+                `self._execute_all_batches=True`, then returns None.
         """
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
