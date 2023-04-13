@@ -26,7 +26,6 @@ from typing import (
 import torch
 from torch import distributed as dist
 from torch.autograd.profiler import record_function
-from torch.cuda import Event
 from torch.fx.node import Node
 from torchrec.distributed.dist_data import KJTAllToAll
 from torchrec.distributed.embedding_sharding import (
@@ -174,9 +173,35 @@ class Tracer(torch.fx.Tracer):
 
 @dataclass
 class TrainPipelineContext:
+    """
+    Context information for a `TrainPipelineSparseDist` instance.
+
+    Attributes:
+        input_dist_splits_requests (Dict[str, Awaitable[Any]]): Stores input dist
+            requests in the splits awaitable stage, which occurs after starting the
+            input dist.
+        input_dist_tensors_requests (Dict[str, Awaitable[Any]]): Stores input dist
+            requests in the tensors awaitable stage, which occurs after calling `wait()`
+            on the splits awaitable.
+        module_contexts (Dict[str, Multistreamable]): Stores module contexts from the
+            input dist for the current batch.
+        module_contexts_next_batch (Dict[str, Multistreamable]): Stores module contexts
+            from the input dist for the next batch.
+        fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
+            List of fused splits input dist awaitable and the corresponding module names
+            of each awaitable.
+        feature_processor_forwards (List[Any]): List of feature processor forwards.
+    """
+
     # pyre-ignore [4]
-    input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    input_dist_splits_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    # pyre-ignore [4]
+    input_dist_tensors_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
+    module_contexts_next_batch: Dict[str, Multistreamable] = field(default_factory=dict)
+    fused_splits_awaitables: List[
+        Tuple[List[str], FusedKJTListSplitsAwaitable]
+    ] = field(default_factory=list)
     # pyre-ignore [4]
     feature_processor_forwards: List[Any] = field(default_factory=list)
 
@@ -216,8 +241,8 @@ class PipelinedForward:
 
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
-        assert self._name in self._context.input_dist_requests
-        request = self._context.input_dist_requests[self._name]
+        assert self._name in self._context.input_dist_tensors_requests
+        request = self._context.input_dist_tensors_requests[self._name]
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
             # Finish waiting on the dist_stream,
@@ -303,8 +328,9 @@ def _start_data_dist(
     batch: In,
     context: TrainPipelineContext,
 ) -> None:
-    context.input_dist_requests.clear()
-    context.module_contexts.clear()
+    context.input_dist_splits_requests.clear()
+    context.module_contexts_next_batch.clear()
+    context.fused_splits_awaitables.clear()
     for module in pipelined_modules:
         forward = module.forward
         assert isinstance(forward, PipelinedForward)
@@ -332,8 +358,8 @@ def _start_data_dist(
                 args.append(None)
         # Start input distribution.
         module_ctx = module.create_context()
-        context.module_contexts[forward.name] = module_ctx
-        context.input_dist_requests[forward.name] = module.input_dist(
+        context.module_contexts_next_batch[forward.name] = module_ctx
+        context.input_dist_splits_requests[forward.name] = module.input_dist(
             module_ctx, *args, **kwargs
         )
     _fuse_input_dist_splits(context)
@@ -341,7 +367,7 @@ def _start_data_dist(
 
 def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
     names_per_pg = defaultdict(list)
-    for name, request in context.input_dist_requests.items():
+    for name, request in context.input_dist_splits_requests.items():
         pg = None
         if isinstance(request, KJTListSplitsAwaitable):
             for awaitable in request.awaitables:
@@ -351,14 +377,21 @@ def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
         names_per_pg[pg].append(name)
 
     for pg, names in names_per_pg.items():
-        requests = FusedKJTListSplitsAwaitable(
-            # pyre-ignore[6]
-            requests=[context.input_dist_requests[name] for name in names],
-            contexts=[context.module_contexts[name] for name in names],
-            pg=pg,
-        ).wait()
-        for name, request in zip(names, requests):
-            context.input_dist_requests[name] = request
+        context.fused_splits_awaitables.append(
+            (
+                names,
+                FusedKJTListSplitsAwaitable(
+                    # pyre-ignore[6]
+                    requests=[
+                        context.input_dist_splits_requests[name] for name in names
+                    ],
+                    contexts=[
+                        context.module_contexts_next_batch[name] for name in names
+                    ],
+                    pg=pg,
+                ),
+            )
+        )
 
 
 def _get_node_args_helper(
@@ -616,8 +649,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
         if self._batch_i is None:
             raise StopIteration
+
         self._init_pipelined_modules(self._batch_i)
-        self._sparse_data_dist(self._batch_i)
+        self._start_sparse_data_dist(self._batch_i)
+        self._wait_sparse_data_dist()
 
         # batch 2
         self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
@@ -629,17 +664,18 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
-        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
-
         with record_function("## wait_for_batch ##"):
             _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
 
+        self._start_sparse_data_dist(self._batch_ip1)
+
+        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
+
         # forward
         with record_function("## forward ##"):
-            event = self._record_forward_event()
             losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
 
-        self._sparse_data_dist(self._batch_ip1, event)
+        self._wait_sparse_data_dist()
 
         if self._model.training:
             # backward
@@ -667,7 +703,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._model, self._context, self._data_dist_stream
         )
         # initializes input dist, so we can override input dist forwards
-        self._sparse_data_dist(self._batch_i)
+        self._start_sparse_data_dist(self._batch_i)
         _override_input_dist_forwards(self._pipelined_modules)
 
     def _copy_batch_to_gpu(self, dataloader_iter: Iterator[In]) -> Optional[In]:
@@ -687,31 +723,28 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                     raise StopIteration
                 return batch
 
-    def _sparse_data_dist(
-        self, batch: Optional[In], event: Optional[Event] = None
-    ) -> None:
+    def _start_sparse_data_dist(self, batch: Optional[In]) -> None:
         """
-        Waits for batch to finish getting copied to GPU and forward pass to complete,
-        then starts the input distribution.
+        Waits for batch to finish getting copied to GPU, then starts the input dist.
         """
         if batch is None:
             return
-        with record_function("## sparse_data_dist ##"):
+        with record_function("## start_sparse_data_dist ##"):
             with torch.cuda.stream(self._data_dist_stream):
                 _wait_for_batch(batch, self._memcpy_stream)
-                # ensure event in default stream is called before starting data dist
-                if event is not None:
-                    # pyre-ignore[16]
-                    self._data_dist_stream.wait_event(event)
                 _start_data_dist(self._pipelined_modules, batch, self._context)
 
-    def _record_forward_event(self) -> Optional[Event]:
+    def _wait_sparse_data_dist(self) -> None:
         """
-        Creates an event in the default stream if using multiple streams (ie. CUDA),
-        before starting forward pass.
+        Waits on the input dist splits requests to get the input dist tensors requests,
+        and populates the context with them.
         """
-        return (
-            torch.cuda.current_stream().record_event()
-            if self._data_dist_stream
-            else None
-        )
+        with record_function("## wait_sparse_data_dist ##"):
+            with torch.cuda.stream(self._data_dist_stream):
+                self._context.module_contexts = (
+                    self._context.module_contexts_next_batch.copy()
+                )
+                self._context.input_dist_tensors_requests.clear()
+                for names, awaitable in self._context.fused_splits_awaitables:
+                    for name, request in zip(names, awaitable.wait()):
+                        self._context.input_dist_tensors_requests[name] = request
