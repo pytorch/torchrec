@@ -14,7 +14,7 @@ from typing import Callable
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
-from libfb.py.pyre import none_throws
+from torchrec.distributed.utils import none_throws
 from torchrec.test_utils import get_free_port, seed_and_log
 
 
