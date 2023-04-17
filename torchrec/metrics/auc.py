@@ -197,13 +197,13 @@ class AUCMetricComputation(RecMetricComputation):
             return
 
         getattr(self, PREDICTIONS).append(
-            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+            torch.zeros((self._n_tasks, 1), dtype=torch.float, device=self.device)
         )
         getattr(self, LABELS).append(
-            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+            torch.zeros((self._n_tasks, 1), dtype=torch.float, device=self.device)
         )
         getattr(self, WEIGHTS).append(
-            torch.zeros((self._n_tasks, 1), dtype=torch.double, device=self.device)
+            torch.zeros((self._n_tasks, 1), dtype=torch.float, device=self.device)
         )
         if self._grouped_auc:
             getattr(self, GROUPING_KEYS).append(torch.tensor([-1], device=self.device))
@@ -229,9 +229,9 @@ class AUCMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Inputs 'predictions' and 'weights' should not be None for AUCMetricComputation update"
             )
-        predictions = predictions.double()
-        labels = labels.double()
-        weights = weights.double()
+        predictions = predictions.float()
+        labels = labels.float()
+        weights = weights.float()
         num_samples = getattr(self, PREDICTIONS)[0].size(-1)
         batch_size = predictions.size(-1)
         start_index = max(num_samples + batch_size - self._window_size, 0)

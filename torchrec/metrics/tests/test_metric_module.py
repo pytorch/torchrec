@@ -431,11 +431,11 @@ class MetricModuleTest(unittest.TestCase):
             state_metrics_mapping={StateMetricEnum.OPTIMIZERS: mock_optimizer},
             device=torch.device("cpu"),
         )
-        # 3 (tensors) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 24)
+        # 3 (tensors) * 4 (float)
+        self.assertEqual(metric_module.get_memory_usage(), 12)
         metric_module.update(gen_test_batch(128))
-        # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 8 (double)
-        self.assertEqual(metric_module.get_memory_usage(), 3096)
+        # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 4 (float)
+        self.assertEqual(metric_module.get_memory_usage(), 1548)
 
     def test_check_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()
