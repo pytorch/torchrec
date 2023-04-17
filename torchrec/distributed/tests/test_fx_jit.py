@@ -102,7 +102,9 @@ class ModelTraceScriptTest(unittest.TestCase):
         )
 
         model_info.model.training = False
-        model_info.quant_model = quantize(model_info.model, inplace=True)
+        model_info.quant_model = quantize(
+            model_info.model, inplace=True, register_tbes=True
+        )
 
         model_info.sharders = [
             cast(
