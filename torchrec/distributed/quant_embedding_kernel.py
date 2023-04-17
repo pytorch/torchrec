@@ -29,7 +29,11 @@ from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
     GroupedEmbeddingConfig,
 )
-from torchrec.distributed.fused_params import tbe_fused_params, TBEToRegisterMixIn
+from torchrec.distributed.fused_params import (
+    is_fused_param_register_tbe,
+    tbe_fused_params,
+    TBEToRegisterMixIn,
+)
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -128,17 +132,18 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
             else:
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
+        self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
-                    "",
+                    table.name,
                     local_rows,
-                    table.embedding_dim,
+                    local_cols,
                     data_type_to_sparse_type(config.data_type),
                     location,
                 )
-                for local_rows, table, location in zip(
-                    self._local_rows, config.embedding_tables, managed
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows, self._local_cols, config.embedding_tables, managed
                 )
             ],
             device=device,
@@ -166,11 +171,18 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module.forward(
-            indices=features.values().int(),
-            offsets=features.offsets().int(),
-            per_sample_weights=features.weights_or_none(),
-        )
+        if self._emb_module_registered:
+            return self.emb_module(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+                per_sample_weights=features.weights_or_none(),
+            )
+        else:
+            return self.emb_module.forward(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+                per_sample_weights=features.weights_or_none(),
+            )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -239,17 +251,18 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
             else:
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
+        self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
-                    "",
+                    table.name,
                     local_rows,
-                    table.embedding_dim,
+                    local_cols,
                     data_type_to_sparse_type(config.data_type),
                     location,
                 )
-                for local_rows, table, location in zip(
-                    self._local_rows, config.embedding_tables, managed
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows, self._local_cols, config.embedding_tables, managed
                 )
             ],
             device=device,
@@ -282,10 +295,16 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
         ]
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module.forward(
-            indices=features.values().int(),
-            offsets=features.offsets().int(),
-        )
+        if self._emb_module_registered:
+            return self.emb_module(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+            )
+        else:
+            return self.emb_module.forward(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+            )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
