@@ -29,6 +29,7 @@ from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
     GroupedEmbeddingConfig,
 )
+from torchrec.distributed.fused_params import tbe_fused_params, TBEToRegisterMixIn
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -108,7 +109,7 @@ def _quantize_weight(
     return quant_weight_list
 
 
-class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
+class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -126,6 +127,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
                 )
             else:
                 managed.append(EmbeddingLocation.HOST)
+        self._config: GroupedEmbeddingConfig = config
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
@@ -144,7 +146,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
             feature_table_map=self._feature_table_map,
             row_alignment=16,
             uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
-            **(fused_params or {}),
+            **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
@@ -157,6 +159,11 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         self,
     ) -> IntNBitTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         return self.emb_module.forward(
@@ -213,7 +220,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag):
         return ret
 
 
-class QuantBatchedEmbedding(BaseBatchedEmbedding):
+class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -231,6 +238,7 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
                 )
             else:
                 managed.append(EmbeddingLocation.HOST)
+        self._config: GroupedEmbeddingConfig = config
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
@@ -249,7 +257,7 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
             feature_table_map=self._feature_table_map,
             row_alignment=16,
             uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
-            **(fused_params or {}),
+            **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
@@ -259,6 +267,11 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding):
         self,
     ) -> IntNBitTableBatchedEmbeddingBagsCodegen:
         return self._emb_module
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return {self._emb_module: self._config}
 
     def split_embedding_weights(self) -> List[torch.Tensor]:
         return [
