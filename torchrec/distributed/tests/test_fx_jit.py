@@ -279,6 +279,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         dmp = DistributedModelParallel(
             model_info.quant_model,
             plan=plan,
+            sharders=model_info.sharders,
             device=model_info.sparse_device,
             env=ShardingEnv.from_local(world_size=world_size, rank=0),
             init_data_parallel=False,
@@ -323,6 +324,7 @@ class ModelTraceScriptTest(unittest.TestCase):
             m = DistributedModelParallel(
                 model_info.quant_model,
                 plan=plan,
+                sharders=model_info.sharders,
                 device=model_info.sparse_device,
                 env=ShardingEnv.from_local(world_size=world_size, rank=0),
                 init_data_parallel=False,

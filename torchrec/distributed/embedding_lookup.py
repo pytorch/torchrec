@@ -12,6 +12,9 @@ from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.batched_embedding_kernel import (
@@ -32,6 +35,10 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     KJTList,
+)
+from torchrec.distributed.fused_params import (
+    get_tbes_to_register_from_iterable,
+    TBEToRegisterMixIn,
 )
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
@@ -381,7 +388,7 @@ class GroupedPooledEmbeddingsLookup(
 
 
 class MetaInferGroupedEmbeddingsLookup(
-    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
+    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor], TBEToRegisterMixIn
 ):
     """
     meta embedding lookup module for inference since inference lookup has references
@@ -427,6 +434,11 @@ class MetaInferGroupedEmbeddingsLookup(
         )
 
         self.grouped_configs = grouped_configs
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._emb_modules)
 
     def forward(
         self,
@@ -492,7 +504,7 @@ class MetaInferGroupedEmbeddingsLookup(
 
 
 class MetaInferGroupedPooledEmbeddingsLookup(
-    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
+    BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor], TBEToRegisterMixIn
 ):
     """
     meta embedding bag lookup module for inference since inference lookup has references
@@ -540,6 +552,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 
         self.grouped_configs = grouped_configs
         self._feature_processor = feature_processor
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._emb_modules)
 
     def forward(
         self,
@@ -682,6 +699,7 @@ class InferGroupedLookupMixin(ABC):
 class InferGroupedPooledEmbeddingsLookup(
     InferGroupedLookupMixin,
     BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    TBEToRegisterMixIn,
 ):
     def __init__(
         self,
@@ -704,10 +722,16 @@ class InferGroupedPooledEmbeddingsLookup(
                 )
             )
 
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
+
 
 class InferGroupedEmbeddingsLookup(
     InferGroupedLookupMixin,
     BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    TBEToRegisterMixIn,
 ):
     def __init__(
         self,
@@ -726,3 +750,8 @@ class InferGroupedEmbeddingsLookup(
                     fused_params=fused_params,
                 )
             )
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)

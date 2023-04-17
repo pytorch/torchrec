@@ -14,16 +14,26 @@ import torch
 from torch import quantization as quant
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.embedding_types import ModuleSharder
+from torchrec.distributed.fused_params import FUSED_PARAM_REGISTER_TBE_BOOL
 from torchrec.distributed.planner import Topology
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
+from torchrec.distributed.quant_embedding import (
+    QuantEmbeddingCollectionSharder,
+    ShardedQuantEmbeddingCollection,
+)
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollection,
     QuantEmbeddingBagCollectionSharder,
+    ShardedQuantEmbeddingBagCollection,
 )
 
 from torchrec.distributed.test_utils.test_model import ModelInput
+from torchrec.distributed.types import ParameterSharding, ShardingEnv
 from torchrec.distributed.utils import CopyableMixin
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import (
+    data_type_to_sparse_type,
+    dtype_to_data_type,
+    EmbeddingBagConfig,
+)
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
@@ -170,6 +180,25 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
     ) -> List[str]:
         return [self._kernel_type]
 
+    def shard(
+        self,
+        module: QuantEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedQuantEmbeddingBagCollection:
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(module.output_dtype())
+        )
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
+        return ShardedQuantEmbeddingBagCollection(
+            module=module,
+            table_name_to_parameter_sharding=params,
+            env=env,
+            fused_params=fused_params,
+        )
+
 
 class TestQuantECSharder(QuantEmbeddingCollectionSharder):
     def __init__(self, sharding_type: str, kernel_type: str) -> None:
@@ -184,6 +213,20 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         return [self._kernel_type]
+
+    def shard(
+        self,
+        module: QuantEmbeddingCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedQuantEmbeddingCollection:
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(module.output_dtype())
+        )
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
+        return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
 
 
 class KJTInputWrapper(torch.nn.Module):
