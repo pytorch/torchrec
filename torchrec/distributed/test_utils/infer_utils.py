@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+import torchrec
 from torch import quantization as quant
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.embedding_types import ModuleSharder
@@ -37,6 +38,7 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
+    MODULE_ATTR_REGISTER_TBES_BOOL,
 )
 
 
@@ -141,7 +143,15 @@ def quantize(
     module: torch.nn.Module,
     inplace: bool,
     output_type: torch.dtype = torch.float,
+    register_tbes: bool = False,
 ) -> torch.nn.Module:
+    if register_tbes:
+        for m in module.modules():
+            if isinstance(
+                m, torchrec.modules.embedding_modules.EmbeddingBagCollection
+            ) or isinstance(m, torchrec.modules.embedding_modules.EmbeddingCollection):
+                setattr(m, MODULE_ATTR_REGISTER_TBES_BOOL, True)
+
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
