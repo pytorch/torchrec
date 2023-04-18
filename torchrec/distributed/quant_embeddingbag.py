@@ -8,6 +8,9 @@
 from typing import Any, Dict, List, Optional, Type
 
 import torch
+from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
@@ -16,6 +19,7 @@ from torchrec.distributed.embedding_sharding import (
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
+    GroupedEmbeddingConfig,
     KJTList,
     ListOfKJTList,
     ShardedEmbeddingModule,
@@ -23,6 +27,10 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
     EmbeddingBagCollectionAwaitable,
+)
+from torchrec.distributed.fused_params import (
+    get_tbes_to_register_from_iterable,
+    is_fused_param_register_tbe,
 )
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
@@ -135,6 +143,14 @@ class ShardedQuantEmbeddingBagCollection(
                     "weight", lookup_state_dict[key]
                 )
 
+        # Optional registration of TBEs for model post processing utilities
+        if is_fused_param_register_tbe(fused_params):
+            tbes: Dict[
+                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+            ] = get_tbes_to_register_from_iterable(self._lookups)
+
+            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
+
     def _create_input_dist(
         self,
         input_feature_names: List[str],
@@ -162,7 +178,11 @@ class ShardedQuantEmbeddingBagCollection(
         fused_params: Optional[Dict[str, Any]],
     ) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup(fused_params=fused_params))
+            self._lookups.append(
+                sharding.create_lookup(
+                    fused_params=fused_params,
+                )
+            )
 
     def _create_output_dist(self, device: Optional[torch.device] = None) -> None:
         for sharding in self._sharding_type_to_sharding.values():

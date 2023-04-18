@@ -60,9 +60,9 @@ class TestAUCMetric(TestMetric):
     ) -> None:
         for k, v in new_states.items():
             if k not in states:
-                states[k] = v.double().detach().clone()
+                states[k] = v.float().detach().clone()
             else:
-                states[k] = torch.cat([states[k], v.double()])
+                states[k] = torch.cat([states[k], v.float()])
 
     @staticmethod
     def _get_states(
@@ -146,7 +146,7 @@ class AUCMetricValueTest(unittest.TestCase):
             [[1] * 5000 + [0] * 10000 + [1] * 5000]
         )
 
-        expected_auc = torch.tensor([1], dtype=torch.double)
+        expected_auc = torch.tensor([1], dtype=torch.float)
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
@@ -160,7 +160,7 @@ class AUCMetricValueTest(unittest.TestCase):
             [[0] * 5000 + [1] * 10000 + [0] * 5000]
         )
 
-        expected_auc = torch.tensor([0], dtype=torch.double)
+        expected_auc = torch.tensor([0], dtype=torch.float)
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
@@ -172,7 +172,7 @@ class AUCMetricValueTest(unittest.TestCase):
         self.labels["DefaultTask"] = torch.Tensor([[0] * 10000 + [1] * 10000])
         self.weights["DefaultTask"] = torch.ones([1, 20000])
 
-        expected_auc = torch.tensor([0.5], dtype=torch.double)
+        expected_auc = torch.tensor([0.5], dtype=torch.float)
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)

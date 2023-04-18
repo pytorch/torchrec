@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
 import torch
+from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding,
@@ -19,10 +22,15 @@ from torchrec.distributed.embedding_sharding import EmbeddingSharding
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
+    GroupedEmbeddingConfig,
     KJTList,
     ListOfKJTList,
     ShardedEmbeddingModule,
     ShardingType,
+)
+from torchrec.distributed.fused_params import (
+    get_tbes_to_register_from_iterable,
+    is_fused_param_register_tbe,
 )
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
@@ -205,6 +213,14 @@ class ShardedQuantEmbeddingCollection(
                 self.embeddings[table_name].register_buffer(
                     "weight", lookup_state_dict[key]
                 )
+
+        # Optional registration of TBEs for model post processing utilities
+        if is_fused_param_register_tbe(fused_params):
+            tbes: Dict[
+                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+            ] = get_tbes_to_register_from_iterable(self._lookups)
+
+            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
 
     def _create_input_dist(
         self,
