@@ -48,6 +48,7 @@ class MetricName(MetricNameBase):
     RMSE = "rmse"
     AUC = "auc"
     GROUPED_AUC = "grouped_auc"
+    RECALL_SESSION_LEVEL = "recall_session_level"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "qps"
@@ -74,6 +75,7 @@ class MetricNamespace(MetricNamespaceBase):
     MULTICLASS_RECALL = "multiclass_recall"
 
     WEIGHTED_AVG = "weighted_avg"
+    RECALL_SESSION_LEVEL = "recall_session_level"
 
     TOWER_QPS = "qps"
 
