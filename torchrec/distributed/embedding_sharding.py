@@ -163,7 +163,7 @@ def group_tables(
                                     compute_kernel_type = EmbeddingComputeKernel.QUANT
                                 if (
                                     table.data_type == data_type
-                                    and table.pooling == pooling
+                                    and table.pooling.value == pooling.value
                                     and table.has_feature_processor
                                     == has_feature_processor
                                     and compute_kernel_type == compute_kernel

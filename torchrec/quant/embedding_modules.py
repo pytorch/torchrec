@@ -50,6 +50,8 @@ try:
 except ImportError:
     pass
 
+MODULE_ATTR_REGISTER_TBES_BOOL: str = "__register_tbes_in_named_modules"
+
 
 def quantize_state_dict(
     module: nn.Module,
@@ -183,6 +185,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
+        register_tbes: bool = False,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -274,6 +277,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 self.embedding_bags[embedding_config.name].register_buffer(
                     "weight", weight
                 )
+        self.register_tbes = register_tbes
+        if register_tbes:
+            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
 
     def forward(
         self,
@@ -358,6 +364,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             # pyre-ignore [16]
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
+            register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
         )
 
     def embedding_bag_configs(
@@ -440,6 +447,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
+        register_tbes: bool = False,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -505,6 +513,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
             tables
         )
+        self.register_tbes = register_tbes
+        if register_tbes:
+            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
 
     def forward(
         self,

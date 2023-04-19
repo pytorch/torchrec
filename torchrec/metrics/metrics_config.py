@@ -25,8 +25,20 @@ class RecMetricEnum(RecMetricEnumBase):
     MSE = "mse"
     MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
+    RECALL_SESSION_LEVEL = "recall_session_level"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "tower_qps"
+
+
+@dataclass(unsafe_hash=True, eq=True)
+class SessionMetricDef:
+    # hyperparameters required for session level metrics
+    # session_var_name: name of session tensor in the model_out
+    # top_threshold: predictiones ranked in top "top_threshold" are considered as positive
+    # run_ranking_of_labels: if True, labels are also ranked as predictions
+    session_var_name: str
+    top_threshold: Optional[int] = None
+    run_ranking_of_labels: bool = False
 
 
 @dataclass(unsafe_hash=True, eq=True)
@@ -35,6 +47,9 @@ class RecTaskInfo:
     label_name: str = "label"
     prediction_name: str = "prediction"
     weight_name: str = "weight"
+    session_metric_def: Optional[
+        SessionMetricDef
+    ] = None  # used for session level metrics
 
 
 class RecComputeMode(Enum):

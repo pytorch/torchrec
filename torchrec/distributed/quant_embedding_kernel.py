@@ -29,7 +29,11 @@ from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
     GroupedEmbeddingConfig,
 )
-from torchrec.distributed.fused_params import tbe_fused_params, TBEToRegisterMixIn
+from torchrec.distributed.fused_params import (
+    is_fused_param_register_tbe,
+    tbe_fused_params,
+    TBEToRegisterMixIn,
+)
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -128,11 +132,16 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
             else:
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
+        self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
-                    "",
+                    table.name,
                     local_rows,
+                    # TODO(ivankobzarev):
+                    # _copy_config makes local_cols be aligned with TBE specific alignment and local_cols become not equal to table.embedding_dim, while logical size is table.embedding_dim.
+                    # Using logical size table.embedding_dim here for now.
+                    # This Needed to be changed to local_cols to support CW sharding in future when logical cols number != table.embedding_dim.
                     table.embedding_dim,
                     data_type_to_sparse_type(config.data_type),
                     location,
@@ -166,11 +175,22 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module.forward(
-            indices=features.values().int(),
-            offsets=features.offsets().int(),
-            per_sample_weights=features.weights_or_none(),
-        )
+        # Conditional call of .forward function for FX:
+        # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
+        # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
+        # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
+        if self._emb_module_registered:
+            return self.emb_module(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+                per_sample_weights=features.weights_or_none(),
+            )
+        else:
+            return self.emb_module.forward(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+                per_sample_weights=features.weights_or_none(),
+            )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -239,10 +259,11 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
             else:
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
+        self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
-                    "",
+                    table.name,
                     local_rows,
                     table.embedding_dim,
                     data_type_to_sparse_type(config.data_type),
@@ -282,10 +303,16 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
         ]
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module.forward(
-            indices=features.values().int(),
-            offsets=features.offsets().int(),
-        )
+        if self._emb_module_registered:
+            return self.emb_module(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+            )
+        else:
+            return self.emb_module.forward(
+                indices=features.values().int(),
+                offsets=features.offsets().int(),
+            )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
