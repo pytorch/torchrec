@@ -323,7 +323,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 weights = torch.cat(weights)
 
             embeddings.append(
-                emb_op.forward(
+                # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
+                emb_op(
+                    indices=indices.int(),
+                    offsets=offsets.int(),
+                    per_sample_weights=weights if self._is_weighted else None,
+                )
+                if self.register_tbes
+                else emb_op.forward(
                     indices=indices.int(),
                     offsets=offsets.int(),
                     per_sample_weights=weights if self._is_weighted else None,
@@ -542,9 +549,11 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 f = jt_dict[feature_name]
                 values = f.values()
                 offsets = f.offsets()
-                lookup = emb_module.forward(
-                    indices=values.int(),
-                    offsets=offsets.int(),
+                # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
+                lookup = (
+                    emb_module(indices=values.int(), offsets=offsets.int())
+                    if self.register_tbes
+                    else emb_module.forward(indices=values.int(), offsets=offsets.int())
                 )
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
