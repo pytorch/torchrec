@@ -38,6 +38,12 @@ from torchrec.distributed.utils import (
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
+try:
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
+except OSError:
+    pass
+
 
 _DDP_STATE_DICT_PREFIX = "module."
 
