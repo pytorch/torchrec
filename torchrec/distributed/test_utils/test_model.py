@@ -491,6 +491,7 @@ class TestSparseArch(nn.Module):
             for fp in self.fps:
                 fp_features = fp(fp_features)
         ebc = self.ebc(features)
+        ebc = _post_ebc_test_wrap_function(ebc)
         fp_ebc: Optional[KeyedTensor] = (
             self.fp_ebc(fp_features) if self.fp_ebc is not None else None
         )
@@ -1007,3 +1008,11 @@ def _get_default_rtol_and_atol(
     actual_rtol, actual_atol = _DTYPE_PRECISIONS.get(actual.dtype, (0.0, 0.0))
     expected_rtol, expected_atol = _DTYPE_PRECISIONS.get(expected.dtype, (0.0, 0.0))
     return max(actual_rtol, expected_rtol), max(actual_atol, expected_atol)
+
+
+@torch.fx.wrap
+def _post_ebc_test_wrap_function(kt: KeyedTensor) -> KeyedTensor:
+    for _ in kt.values():
+        continue
+
+    return kt

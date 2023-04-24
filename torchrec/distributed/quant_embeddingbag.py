@@ -237,7 +237,7 @@ class ShardedQuantEmbeddingBagCollection(
             # syntax for torchscript
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
-        )
+        ).wait()
 
     # pyre-ignore
     def compute_and_output_dist(
