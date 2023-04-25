@@ -10,10 +10,31 @@ import unittest
 import torch
 from torch.testing import FileCheck  # @manual
 from torchrec.fx import symbolic_trace, Tracer
-from torchrec.models.deepfm import FMInteractionArch, SimpleDeepFMNN
+from torchrec.models.deepfm import DenseArch, FMInteractionArch, SimpleDeepFMNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+
+
+class DenseArchTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        torch.manual_seed(0)
+
+        B = 20
+        D = 3
+        in_features = 10
+        dense_arch = DenseArch(
+            in_features=in_features, hidden_layer_size=10, embedding_dim=D
+        )
+
+        dense_arch_input = torch.rand((B, in_features))
+        dense_embedded = dense_arch(dense_arch_input)
+        self.assertEqual(dense_embedded.size(), (B, D))
+
+        # check tracer compatibility
+        gm = torch.fx.GraphModule(dense_arch, Tracer().trace(dense_arch))
+        script = torch.jit.script(gm)
+        script(dense_arch_input)
 
 
 class FMInteractionArchTest(unittest.TestCase):
