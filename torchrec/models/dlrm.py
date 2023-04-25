@@ -470,21 +470,21 @@ class DLRM(nn.Module):
         D = 8
 
         eb1_config = EmbeddingBagConfig(
-           name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
         )
         eb2_config = EmbeddingBagConfig(
-           name="t2",
-           embedding_dim=D,
-           num_embeddings=100,
-           feature_names=["f2"],
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
         model = DLRM(
-           embedding_bag_collection=ebc,
-           dense_in_features=100,
-           dense_arch_layer_sizes=[20],
-           over_arch_layer_sizes=[5, 1],
+            embedding_bag_collection=ebc,
+            dense_in_features=100,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
         )
 
         features = torch.rand((B, 100))
@@ -495,14 +495,14 @@ class DLRM(nn.Module):
         # ^
         # feature
         sparse_features = KeyedJaggedTensor.from_offsets_sync(
-           keys=["f1", "f3"],
-           values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
-           offsets=torch.tensor([0, 2, 4, 6, 8]),
+            keys=["f1", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
+            offsets=torch.tensor([0, 2, 4, 6, 8]),
         )
 
         logits = model(
-           dense_features=features,
-           sparse_features=sparse_features,
+            dense_features=features,
+            sparse_features=sparse_features,
         )
     """
 
