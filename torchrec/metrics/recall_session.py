@@ -9,8 +9,8 @@ import logging
 from typing import Any, cast, Dict, List, Optional, Set, Type, Union
 
 import torch
-from libfb.py.pyre import none_throws
 from torch import distributed as dist
+from torchrec.distributed.utils import none_throws
 from torchrec.metrics.metrics_config import RecTaskInfo, SessionMetricDef
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
