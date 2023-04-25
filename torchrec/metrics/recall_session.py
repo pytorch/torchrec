@@ -10,7 +10,6 @@ from typing import Any, cast, Dict, List, Optional, Set, Type, Union
 
 import torch
 from torch import distributed as dist
-from torchrec.distributed.utils import none_throws
 from torchrec.metrics.metrics_config import RecTaskInfo, SessionMetricDef
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
@@ -149,7 +148,7 @@ class RecallSessionMetricComputation(RecMetricComputation):
             or self.session_var_name not in kwargs["required_inputs"]
         ):
             raise RecMetricException(
-                "Need the {} input to update the bucket metric".format(
+                "Need the {} input to update the session metric".format(
                     self.session_var_name
                 )
             )
@@ -239,15 +238,13 @@ class RecallSessionMetric(RecMetric):
                 "Fused update is not supported for recall session-level metrics"
             )
         for task in tasks:
-            session_metric_def = none_throws(
-                task.session_metric_def, "Please, specify the session metric definition"
-            )
+            if task.session_metric_def is None:
+                raise RecMetricException(
+                    "Please, specify the session metric definition"
+                )
+            session_metric_def = task.session_metric_def
             if session_metric_def.top_threshold is None:
                 raise RecMetricException("Please, specify the top threshold")
-            if session_metric_def.session_var_name is None:
-                raise RecMetricException(
-                    "Please, specify the session var name in your model output"
-                )
 
         super().__init__(
             world_size=world_size,
@@ -266,15 +263,23 @@ class RecallSessionMetric(RecMetric):
     ) -> Dict[str, Any]:
         if isinstance(task_config, list):
             raise RecMetricException("Session metric can only take one task at a time")
-        return {"session_metric_def": none_throws(task_config.session_metric_def)}
+
+        if task_config.session_metric_def is None:
+            raise RecMetricException("Please, specify the session metric definition")
+
+        return {"session_metric_def": task_config.session_metric_def}
 
     def _get_task_required_inputs(
         self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
     ) -> Set[str]:
         if isinstance(task_config, list):
             raise RecMetricException("Session metric can only take one task at a time")
+
+        if task_config.session_metric_def is None:
+            raise RecMetricException("Please, specify the session metric definition")
+
         return (
-            {none_throws(task_config.session_metric_def).session_var_name}
-            if none_throws(task_config.session_metric_def).session_var_name
+            {task_config.session_metric_def.session_var_name}
+            if task_config.session_metric_def.session_var_name
             else set()
         )

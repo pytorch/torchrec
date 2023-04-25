@@ -11,6 +11,7 @@ from typing import Dict, Optional, Union
 import torch
 from torch import no_grad
 from torchrec.metrics.metrics_config import RecTaskInfo, SessionMetricDef
+from torchrec.metrics.rec_metric import RecMetricException
 
 from torchrec.metrics.recall_session import RecallSessionMetric
 
@@ -205,6 +206,40 @@ class RecallSessionValueTest(unittest.TestCase):
                 test_data_with_no_positive_examples,
             )
             raise
+
+    def test_error_messages(self) -> None:
+
+        task_info1 = RecTaskInfo(
+            name="Task1",
+            label_name="label1",
+            prediction_name="prediction1",
+            weight_name="weight1",
+        )
+
+        task_info2 = RecTaskInfo(
+            name="Task2",
+            label_name="label2",
+            prediction_name="prediction2",
+            weight_name="weight2",
+            session_metric_def=SessionMetricDef(session_var_name="session"),
+        )
+
+        error_message1 = "Please, specify the session metric definition"
+        with self.assertRaisesRegex(RecMetricException, error_message1):
+            _ = RecallSessionMetric(
+                world_size=1,
+                my_rank=5,
+                batch_size=100,
+                tasks=[task_info1],
+            )
+        error_message2 = "Please, specify the top threshold"
+        with self.assertRaisesRegex(RecMetricException, error_message2):
+            _ = RecallSessionMetric(
+                world_size=1,
+                my_rank=5,
+                batch_size=100,
+                tasks=[task_info2],
+            )
 
     def test_tasks_input_propagation(self) -> None:
         task_info1 = RecTaskInfo(
