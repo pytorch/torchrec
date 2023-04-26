@@ -142,15 +142,17 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
     def __init__(
         self,
         input_tensors: List[torch.Tensor],
+        num_workers: int,
+        device: torch.device,
         pg: dist.ProcessGroup,
     ) -> None:
         super().__init__()
-        self.num_workers: int = pg.size()
+        self.num_workers: int = num_workers
 
         with record_function("## all2all_data:kjt splits ##"):
             self._output_tensor: torch.Tensor = torch.empty(
-                [self.num_workers * len(input_tensors)],
-                device=input_tensors[0].device,
+                [num_workers * len(input_tensors)],
+                device=device,
                 dtype=input_tensors[0].dtype,
             )
             input_tensor = torch.stack(input_tensors, dim=1).flatten()
@@ -329,7 +331,9 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
         )
         input_tensors.append(batch_size_tensor)
 
-        self._splits_awaitable = SplitsAllToAllAwaitable(input_tensors, self._pg)
+        self._splits_awaitable = SplitsAllToAllAwaitable(
+            input_tensors, self._workers, self._device, self._pg
+        )
 
     def _wait_impl(self) -> KJTAllToAllTensorsAwaitable:
         """
@@ -426,7 +430,9 @@ class KJTAllToAll(nn.Module):
         super().__init__()
         assert len(splits) == pg.size()
         self._pg: dist.ProcessGroup = pg
+        self._workers: int = pg.size()
         self._splits = splits
+        self._no_dist: bool = all(s == 0 for s in splits)
         self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
         self._stagger = stagger
 
@@ -447,6 +453,7 @@ class KJTAllToAll(nn.Module):
         """
 
         device = input.values().device
+
         with torch.no_grad():
             assert len(input.keys()) == sum(self._splits)
             rank = dist.get_rank(self._pg)
