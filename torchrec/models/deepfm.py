@@ -82,8 +82,12 @@ class DenseArch(nn.Module):
         B = 20
         D = 3
         in_features = 10
-        dense_arch = DenseArch(in_features=10, hidden_layer_size=10, embedding_dim=D)
-        dense_embedded = dense_arch(torch.rand((B, 10)))
+        dense_arch = DenseArch(
+            in_features=in_features, hidden_layer_size=10, embedding_dim=D
+        )
+
+        dense_arch_input = torch.rand((B, in_features))
+        dense_embedded = dense_arch(dense_arch_input)
     """
 
     def __init__(
