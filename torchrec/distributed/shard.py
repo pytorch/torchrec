@@ -24,6 +24,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingPlan,
 )
+from torchrec.distributed.utils import init_parameters
 
 
 def _join_module_path(path: str, name: str) -> str:
@@ -142,6 +143,7 @@ def shard_modules(
     device: Optional[torch.device] = None,
     plan: Optional[ShardingPlan] = None,
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+    init_params: bool = False,
 ) -> nn.Module:
     """
     Replaces all sub_modules that are embedding modules with their sharded variants. This embedding_module -> sharded_embedding_module mapping
@@ -159,6 +161,10 @@ def shard_modules(
             `EmbeddingShardingPlanner.collective_plan()`.
         sharders (Optional[List[ModuleSharder[nn.Module]]]): `ModuleSharders` available
             to shard with, defaults to `get_default_sharders()`.
+        init_params: (Optional[bool]): If ``True``, will materialize parameters and
+            buffers that are on meta device, and will move module to ``device``. Note that
+            this only applies if `device.type != "meta"``. Default: `False`.
+
 
     Example::
 
@@ -176,15 +182,16 @@ def shard_modules(
     """
 
     torch._C._log_api_usage_once("torchrec.distributed.shard_modules")
-    return _shard_modules(module, env, device, plan, sharders)
+    return _shard_modules(module, env, device, plan, sharders, init_params)
 
 
-def _shard_modules(
+def _shard_modules(  # noqa: C901
     module: nn.Module,
     env: Optional[ShardingEnv] = None,
     device: Optional[torch.device] = None,
     plan: Optional[ShardingPlan] = None,
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+    init_params: Optional[bool] = False,
 ) -> nn.Module:
     """
     See shard_modules
@@ -249,5 +256,8 @@ def _shard_modules(
                 _replace(child, child_path)
 
     _replace(module)
+    if init_params and device is not None and device.type != "meta":
+        init_parameters(module, device)
+        module = module.to(device)
 
     return module
