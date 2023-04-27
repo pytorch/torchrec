@@ -31,6 +31,15 @@ class BaseFeatureProcessor(nn.Module):
         pass
 
 
+@torch.fx.wrap
+def position_weighted_module_update_features(
+    features: Dict[str, JaggedTensor],
+    weighted_features: Dict[str, JaggedTensor],
+) -> Dict[str, JaggedTensor]:
+    features.update(weighted_features)
+    return features
+
+
 # Will be deprecated soon, please use PositionWeightedProcessor, see full doc below
 class PositionWeightedModule(BaseFeatureProcessor):
     """
@@ -77,8 +86,7 @@ class PositionWeightedModule(BaseFeatureProcessor):
                 offsets=features[key].offsets(),
                 weights=torch.gather(position_weight, dim=0, index=seq),
             )
-        features.update(weighted_features)
-        return features
+        return position_weighted_module_update_features(features, weighted_features)
 
 
 class BaseGroupedFeatureProcessor(nn.Module):
