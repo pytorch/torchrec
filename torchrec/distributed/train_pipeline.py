@@ -493,6 +493,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     def __init__(
         self,
         model: torch.nn.Module,
+        sampling_module: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         execute_all_batches: bool = True,
@@ -517,6 +518,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip2: Optional[In] = None
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+        self._sampling_module = sampling_module
 
     def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
         # pipeline is already filled
@@ -544,6 +546,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 self._optimizer.zero_grad()
 
         self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
+        self._batch_ip2 = self._sampling_module(self._batch_ip2)
 
         with record_function("## wait_for_batch ##"):
             _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
