@@ -23,7 +23,7 @@ from torch.distributed.checkpoint import (
     save_state_dict,
 )
 from torch.distributed.launcher.api import elastic_launch, LaunchConfig
-from torchrec.distributed.shard import shard as trec_shard
+from torchrec.distributed.shard import shard as trec_shard, shard_modules
 from torchrec.distributed.sharding_plan import column_wise
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -31,6 +31,58 @@ from torchrec.test_utils import skip_if_asan
 
 
 class DDPTest(unittest.TestCase):
+    @classmethod
+    def _run_init_parameters(cls, path: str) -> None:
+        rank = int(os.environ["LOCAL_RANK"])
+        world_size = int(os.environ["WORLD_SIZE"])
+        if torch.cuda.is_available():
+            device: torch.device = torch.device(f"cuda:{rank}")
+            backend = "nccl"
+            torch.cuda.set_device(device)
+        else:
+            device: torch.device = torch.device("cpu")
+            backend = "gloo"
+        dist.init_process_group(backend=backend)
+        num_float_features = 32
+
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4 * world_size,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(3)
+        ]
+        weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 1) * 4 * world_size,
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(2)
+        ]
+        m = TestSparseNN(
+            tables=tables,
+            num_float_features=num_float_features,
+            weighted_tables=weighted_tables,
+            dense_device=device,
+        )
+        # Put all tensors on meta device, then init_params should
+        # materialize them.
+        for name, param in m._parameters.items():
+            if isinstance(param, torch.Tensor):
+                m._parameters[name] = torch.nn.Parameter(
+                    torch.empty_like(param, device="meta"),
+                    requires_grad=param.requires_grad,
+                )
+
+        shard_modules(m, device=device, init_params=True)
+        # init_params should move m to `device`
+        for p in m.parameters():
+            assert p.device == device
+
     @classmethod
     def _run(cls, path: str) -> None:
         rank = int(os.environ["LOCAL_RANK"])
@@ -144,3 +196,26 @@ class DDPTest(unittest.TestCase):
                 max_restarts=0,
             )
             elastic_launch(config=lc, entrypoint=self._run)(path)
+
+    @skip_if_asan
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    #  `torch.cuda.device_count() <= 1` to decorator factory `unittest.skipIf`.
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_init_params(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as path:
+            lc = LaunchConfig(
+                min_nodes=1,
+                max_nodes=1,
+                nproc_per_node=2,
+                run_id=str(uuid.uuid4()),
+                rdzv_backend="c10d",
+                rdzv_endpoint=os.path.join(tmpdir, "rdzv"),
+                rdzv_configs={"store_type": "file"},
+                start_method="spawn",
+                monitor_interval=1,
+                max_restarts=0,
+            )
+            elastic_launch(config=lc, entrypoint=self._run_init_parameters)(path)
