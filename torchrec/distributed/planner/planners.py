@@ -56,6 +56,12 @@ from torchrec.distributed.types import (
 )
 
 
+def _reset_shard_rank(proposal: List[ShardingOption]) -> None:
+    for sharding_option in proposal:
+        for shard in sharding_option.shards:
+            shard.rank = None
+
+
 def _to_sharding_plan(
     sharding_options: List[ShardingOption],
     topology: Topology,
@@ -237,15 +243,16 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
                 self._num_proposals += 1
                 try:
+                    # plan is just proposal where shard.rank is populated
                     plan = self._partitioner.partition(
-                        proposal=copy.deepcopy(proposal),
+                        proposal=proposal,
                         storage_constraint=storage_constraint,
                     )
                     self._num_plans += 1
                     perf_rating = self._perf_model.rate(plan=plan)
                     if perf_rating < best_perf_rating:
                         best_perf_rating = perf_rating
-                        best_plan = plan
+                        best_plan = copy.deepcopy(plan)
                     proposal_cache[proposal_key] = (True, plan, perf_rating)
                     proposer.feedback(
                         partitionable=True, plan=plan, perf_rating=perf_rating
@@ -267,6 +274,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     proposal_cache[proposal_key] = (False, None, None)
                     proposer.feedback(partitionable=False)
 
+                # clear shard.rank for each sharding_option
+                _reset_shard_rank(proposal)
                 proposal = proposer.propose()
 
         if best_plan:
