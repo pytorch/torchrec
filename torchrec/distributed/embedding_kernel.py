@@ -8,7 +8,7 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -54,6 +54,7 @@ def get_state_dict(
         nn.ModuleList,
         List[Union[nn.Module, torch.Tensor]],
         List[torch.Tensor],
+        List[Tuple[torch.Tensor, Optional[torch.Tensor]]],
     ],
     pg: Optional[dist.ProcessGroup] = None,
     destination: Optional[Dict[str, Any]] = None,
@@ -76,14 +77,21 @@ def get_state_dict(
 
     for embedding_table, param in zip(embedding_tables, params):
         key = get_key_from_embedding_table(embedding_table)
-        assert embedding_table.local_rows == param.size(0)
-        if embedding_table.compute_kernel not in [
+        is_quant = embedding_table.compute_kernel in [
             EmbeddingComputeKernel.QUANT,
             EmbeddingComputeKernel.QUANT_UVM,
             EmbeddingComputeKernel.QUANT_UVM_CACHING,
-        ]:
-            assert embedding_table.local_cols == param.size(1)
-        # for inference there is no pg, all tensors are local
+        ]
+        qscaleshift_split = None
+        if is_quant:
+            # For QUANT* param is Tuple[torch.Tensor, Optional[torch.Tensor]] where first argument is the weight table, the second is optional quantization extra information, depending on quantization type. e.g. for fbgemm rowwise quantization this is scale and shift for each row.
+            assert isinstance(param, tuple)
+            qscaleshift_split = param[1]
+            param = param[0]
+
+        assert embedding_table.local_rows == param.size(0)
+        assert embedding_table.local_cols == param.size(1)
+
         if embedding_table.global_metadata is not None and pg is not None:
             # set additional field of sharded tensor based on local tensor properties
             embedding_table.global_metadata.tensor_properties.dtype = param.dtype
@@ -97,6 +105,8 @@ def get_state_dict(
             )
         else:
             destination[key] = param
+            if qscaleshift_split is not None:
+                destination[f"{key}_qscaleshift"] = qscaleshift_split
 
     if pg is not None:
         # Populate the remaining destinations that have a global metadata
