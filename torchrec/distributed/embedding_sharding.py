@@ -7,7 +7,7 @@
 
 import abc
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
 from torch import nn
@@ -361,7 +361,7 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[F]]:
+    ) -> Union[Awaitable[Awaitable[F]], F]:
         pass
 
 
@@ -375,7 +375,7 @@ class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[C, T, W]):
         self,
         local_embs: T,
         sharding_ctx: Optional[C] = None,
-    ) -> Awaitable[W]:
+    ) -> Union[Awaitable[W], W]:
         pass
 
 

@@ -171,7 +171,7 @@ class InferTwSequenceEmbeddingDist(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[InferSequenceShardingContext] = None,
-    ) -> Awaitable[List[torch.Tensor]]:
+    ) -> List[torch.Tensor]:
         """
         Performs AlltoOne operation on sequence embeddings tensor.
 
