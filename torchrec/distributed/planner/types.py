@@ -219,6 +219,7 @@ class ShardingOption:
         # part of final solution
         self.shards = shards
         self.dependency = dependency
+        self._is_pooled: Optional[bool] = None
 
     @property
     def tensor(self) -> torch.Tensor:
@@ -253,14 +254,20 @@ class ShardingOption:
 
     @property
     def is_pooled(self) -> bool:
+        if self._is_pooled is not None:
+            return self._is_pooled
+
         if isinstance(self.module[1], EmbeddingCollectionInterface):
-            return False
+            self._is_pooled = False
+            return self.is_pooled
         for module in self.module[1].modules():
             if isinstance(module, EmbeddingCollectionInterface):
                 for name, _ in module.named_parameters():
                     if self.name in name:
-                        return False
-        return True
+                        self._is_pooled = False
+                        return self._is_pooled
+        self._is_pooled = True
+        return self._is_pooled
 
     def __hash__(self) -> int:
         return hash(
