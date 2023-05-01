@@ -22,6 +22,7 @@ from torchrec.distributed.comm_ops import (
 )
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
+from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
@@ -507,13 +508,15 @@ class KJTOneToAll(nn.Module):
         Returns:
             Awaitable[List[KeyedJaggedTensor]]: awaitable of `KeyedJaggedTensor` splits.
         """
-
+        fx_marker("KJT_ONE_TO_ALL_FORWARD_BEGIN", kjt)
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
             kjts[rank].to(torch.device("cuda", rank), non_blocking=True)
             for rank in range(self._world_size)
         ]
-        return NoWait(KJTList(dist_kjts))
+        ret = NoWait(KJTList(dist_kjts))
+        fx_marker("KJT_ONE_TO_ALL_FORWARD_END", kjt)
+        return ret
 
 
 class PooledEmbeddingsAwaitable(Awaitable[torch.Tensor]):

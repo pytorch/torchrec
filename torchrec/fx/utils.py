@@ -6,9 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import inspect
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
 import torch
+
+from torch.fx._symbolic_trace import is_fx_tracing
 
 # Not importing DistributedModelParallel here to avoid circular dependencies as DMP depends on torchrec.fx.tracer
 # def dmp_fx_trace_forward(dmp: DistributedModelParallel)
@@ -119,3 +121,25 @@ def dmp_fx_trace_forward(  # noqa: C901
     wrapper.__signature__ = sign
 
     return wrapper
+
+
+@torch.fx.wrap
+# pyre-ignore
+def _fx_marker(s: str, any_proxy_unused: Any) -> None:
+    pass
+
+
+# pyre-ignore
+def fx_marker(s: str, any_proxy_unused: Any) -> None:
+    if is_fx_tracing():
+        _fx_marker(s, any_proxy_unused)
+
+
+def is_marker_node(node: torch.fx.Node, marker_name: str) -> bool:
+    # bool() syntax for pyre
+    return bool(
+        node.op == "call_function"
+        and node.target == _fx_marker
+        and isinstance(node.args[0], str)
+        and node.args[0] == marker_name
+    )

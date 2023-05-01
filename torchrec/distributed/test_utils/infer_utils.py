@@ -16,7 +16,7 @@ from torch import quantization as quant
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.embedding_types import ModuleSharder
 from torchrec.distributed.fused_params import FUSED_PARAM_REGISTER_TBE_BOOL
-from torchrec.distributed.planner import Topology
+from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.quant_embedding import (
     QuantEmbeddingCollectionSharder,
     ShardedQuantEmbeddingCollection,
@@ -57,6 +57,7 @@ class TestModelInfo:
     quant_model: torch.nn.Module = torch.nn.Module()
     sharders: List[ModuleSharder] = field(default_factory=list)
     topology: Optional[Topology] = None
+    planner: Optional[EmbeddingShardingPlanner] = None
 
 
 def prep_inputs(
