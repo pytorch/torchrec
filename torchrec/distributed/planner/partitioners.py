@@ -142,6 +142,10 @@ class GreedyPerfPartitioner(Partitioner):
         """
 
         _topology: Topology = copy.deepcopy(storage_constraint)
+        # shallow copy to keep an almost sorted list around
+        # we try to not modify the order of devices in the topology
+        # since _get_host_level_devices relies on the order
+        sorted_devices = _topology.devices.copy()
         _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
@@ -171,7 +175,7 @@ class GreedyPerfPartitioner(Partitioner):
                 ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
                 GreedyPerfPartitioner._device_partition(
                     sharding_option_group.sharding_options[0],
-                    _topology.devices,
+                    sorted_devices,
                     _topology.local_world_size,
                 )
             else:
@@ -189,17 +193,19 @@ class GreedyPerfPartitioner(Partitioner):
         local_world_size: int = 1,
     ) -> None:
         for shard in sharding_option.shards:
-            sorted_devices = sorted(
-                devices,
+            devices.sort(
                 # We use the "local_rank" as the secondary key for sorting. This
                 # is to even out the pressure on different hosts. For example, in UVM
                 # case, we will allocate UVM table with the global rank order, and host0
                 # will use a lot more CPU memory than the others. With local rank as the
                 # secondary key, we could even out CPU memory pressure on different host
-                key=lambda device: (device.perf, device.rank % local_world_size),
+                key=lambda device: (
+                    device.perf,
+                    device.rank % local_world_size,
+                )
             )
             success = False
-            for device in sorted_devices:
+            for device in devices:
                 if cast(Storage, shard.storage).fits_in(device.storage):
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
@@ -253,6 +259,8 @@ class GreedyPerfPartitioner(Partitioner):
             if success:
                 # successfully found a host and partitioned on that host
                 # need to update the devices
+                # resorting host_devices before copying data back
+                host_devices.sort(key=lambda device: device.rank)
                 for device, device_copy in zip(devices, host_devices):
                     device.storage = device_copy.storage
                     device.perf = device_copy.perf
