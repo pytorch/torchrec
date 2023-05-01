@@ -25,8 +25,8 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.embeddingbag import (
+    construct_output_kt,
     create_sharding_infos_by_sharding,
-    EmbeddingBagCollectionAwaitable,
 )
 from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
@@ -217,7 +217,7 @@ class ShardedQuantEmbeddingBagCollection(
             features_by_shards = features.split(self._feature_splits)
             return ListOfKJTList(
                 [
-                    self._input_dists[i].forward(features_by_shards[i]).wait().wait()
+                    self._input_dists[i].forward(features_by_shards[i])
                     for i in range(len(self._input_dists))
                 ]
             )
@@ -236,14 +236,13 @@ class ShardedQuantEmbeddingBagCollection(
         ctx: NullShardedModuleContext,
         output: List[List[torch.Tensor]],
     ) -> KeyedTensor:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
+        return construct_output_kt(
+            embeddings=[
                 dist.forward(output[i]) for i, dist in enumerate(self._output_dists)
             ],
-            # syntax for torchscript
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
-        ).wait()
+        )
 
     # pyre-ignore
     def compute_and_output_dist(

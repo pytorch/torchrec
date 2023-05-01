@@ -264,6 +264,24 @@ def _check_need_pos(module: EmbeddingBagCollectionInterface) -> bool:
     return False
 
 
+def construct_output_kt(
+    embeddings: List[torch.Tensor],
+    embedding_names: List[str],
+    embedding_dims: List[int],
+) -> KeyedTensor:
+    cat_embeddings: torch.Tensor
+    if len(embeddings) == 1:
+        cat_embeddings = embeddings[0]
+    else:
+        cat_embeddings = torch.cat(embeddings, dim=1)
+    return KeyedTensor(
+        keys=embedding_names,
+        length_per_key=embedding_dims,
+        values=cat_embeddings,
+        key_dim=1,
+    )
+
+
 class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
@@ -277,16 +295,10 @@ class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
         self._embedding_names = embedding_names
 
     def _wait_impl(self) -> KeyedTensor:
-        embeddings = [w.wait() for w in self._awaitables]
-        if len(embeddings) == 1:
-            embeddings = embeddings[0]
-        else:
-            embeddings = torch.cat(embeddings, dim=1)
-        return KeyedTensor(
-            keys=self._embedding_names,
-            length_per_key=self._embedding_dims,
-            values=embeddings,
-            key_dim=1,
+        return construct_output_kt(
+            embeddings=[w.wait() for w in self._awaitables],
+            embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
         )
 
 

@@ -21,7 +21,7 @@ from torchrec.distributed.comm_ops import (
     reduce_scatter_v_pooled,
 )
 from torchrec.distributed.embedding_types import KJTList
-from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
+from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -498,7 +498,7 @@ class KJTOneToAll(nn.Module):
         self._world_size = world_size
         assert self._world_size == len(splits)
 
-    def forward(self, kjt: KeyedJaggedTensor) -> Awaitable[KJTList]:
+    def forward(self, kjt: KeyedJaggedTensor) -> KJTList:
         """
         Splits features first and then sends the slices to the corresponding devices.
 
@@ -514,7 +514,7 @@ class KJTOneToAll(nn.Module):
             kjts[rank].to(torch.device("cuda", rank), non_blocking=True)
             for rank in range(self._world_size)
         ]
-        ret = NoWait(KJTList(dist_kjts))
+        ret = KJTList(dist_kjts)
         fx_marker("KJT_ONE_TO_ALL_FORWARD_END", kjt)
         return ret
 
@@ -675,7 +675,7 @@ class EmbeddingsAllToOne(nn.Module):
         self._world_size = world_size
         self._cat_dim = cat_dim
 
-    def forward(self, tensors: List[torch.Tensor]) -> Awaitable[torch.Tensor]:
+    def forward(self, tensors: List[torch.Tensor]) -> torch.Tensor:
         """
         Performs AlltoOne operation on pooled/sequence embeddings tensors.
 
@@ -687,14 +687,12 @@ class EmbeddingsAllToOne(nn.Module):
         """
         assert len(tensors) == self._world_size
         non_cat_size = tensors[0].size(1 - self._cat_dim)
-        return NoWait(
-            torch.ops.fbgemm.merge_pooled_embeddings(
-                tensors,
-                non_cat_size,
-                # syntax for torchscript
-                str(self._device),
-                self._cat_dim,
-            )
+        return torch.ops.fbgemm.merge_pooled_embeddings(
+            tensors,
+            non_cat_size,
+            # syntax for torchscript
+            str(self._device),
+            self._cat_dim,
         )
 
 
@@ -718,7 +716,7 @@ class SeqEmbeddingsAllToOne(nn.Module):
         self._device = device
         self._world_size = world_size
 
-    def forward(self, tensors: List[torch.Tensor]) -> Awaitable[List[torch.Tensor]]:
+    def forward(self, tensors: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Performs AlltoOne operation on pooled embeddings tensors.
 
@@ -730,11 +728,9 @@ class SeqEmbeddingsAllToOne(nn.Module):
         """
 
         assert len(tensors) == self._world_size
-        return NoWait(
-            torch.ops.fbgemm.all_to_one_device(
-                tensors,
-                self._device,
-            )
+        return torch.ops.fbgemm.all_to_one_device(
+            tensors,
+            self._device,
         )
 
 

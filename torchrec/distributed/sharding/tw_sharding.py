@@ -372,7 +372,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KJTList]]:
+    ) -> KJTList:
         """
         Performs OnetoAll operation on sparse features.
 
@@ -382,7 +382,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         Returns:
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
-        return NoWait(self._dist.forward(sparse_features))
+        return self._dist.forward(sparse_features)
 
 
 class InferTwPooledEmbeddingDist(
@@ -408,7 +408,7 @@ class InferTwPooledEmbeddingDist(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[NullShardingContext] = None,
-    ) -> Awaitable[torch.Tensor]:
+    ) -> torch.Tensor:
         """
         Performs AlltoOne operation on pooled embedding tensors.
 
