@@ -294,7 +294,7 @@ class ShardedQuantEmbeddingCollection(
 
             return ListOfKJTList(
                 [
-                    self._input_dists[i].forward(features_by_sharding[i]).wait().wait()
+                    self._input_dists[i].forward(features_by_sharding[i])
                     for i in range(len(self._input_dists))
                 ]
             )
@@ -324,7 +324,7 @@ class ShardedQuantEmbeddingCollection(
             output,
             ctx.sharding_contexts,
         ):
-            emb_per_sharding.append(odist.forward(embeddings, sharding_ctx).wait())
+            emb_per_sharding.append(odist.forward(embeddings, sharding_ctx))
             features_per_sharding.append(sharding_ctx.features)
 
         return output_jt_dict(
