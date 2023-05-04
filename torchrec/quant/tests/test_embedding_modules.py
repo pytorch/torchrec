@@ -78,9 +78,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         # test state dict
         state_dict = ebc.state_dict()
         quantized_state_dict = qebc.state_dict()
-        self.assertTrue(
-            set(state_dict.keys()).issubset(set(quantized_state_dict.keys()))
-        )
+        self.assertEqual(state_dict.keys(), quantized_state_dict.keys())
 
     # pyre-fixme[56]
     @given(
@@ -341,9 +339,8 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         test_model.ebc = QuantEmbeddingBagCollection.from_float(ebc)
 
         state_dict = test_model.state_dict()
-        self.assertTrue(
-            set(before_quant_state_dict.keys()).issubset(set(state_dict.keys()))
-        )
+        self.assertEqual(state_dict.keys(), before_quant_state_dict.keys())
+        test_model.load_state_dict(state_dict)
 
     def test_trace_and_script(self) -> None:
         data_type = DataType.FP16
