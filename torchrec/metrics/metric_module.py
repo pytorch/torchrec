@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch.profiler import record_function
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
@@ -242,10 +243,11 @@ class RecMetricModule(nn.Module):
         Throughput.update() is also called due to the implementation sliding window
         throughput.
         """
-        self._update_rec_metrics(model_out, **kwargs)
-        if self.throughput_metric:
-            self.throughput_metric.update()
-        self.trained_batches += 1
+        with record_function("## RecMetricModule:update ##"):
+            self._update_rec_metrics(model_out, **kwargs)
+            if self.throughput_metric:
+                self.throughput_metric.update()
+            self.trained_batches += 1
 
     def _adjust_compute_interval(self) -> None:
         """
@@ -306,21 +308,21 @@ class RecMetricModule(nn.Module):
         """
         self.compute_count += 1
         self.check_memory_usage(self.compute_count)
-
-        ret: Dict[str, MetricValue] = {}
-        if self.rec_metrics:
-            self._adjust_compute_interval()
-            ret.update(self.rec_metrics.compute())
-        if self.throughput_metric:
-            ret.update(self.throughput_metric.compute())
-        if self.state_metrics:
-            for namespace, component in self.state_metrics.items():
-                ret.update(
-                    {
-                        f"{compose_customized_metric_key(namespace, metric_name)}": metric_value
-                        for metric_name, metric_value in component.get_metrics().items()
-                    }
-                )
+        with record_function("## RecMetricModule:compute ##"):
+            ret: Dict[str, MetricValue] = {}
+            if self.rec_metrics:
+                self._adjust_compute_interval()
+                ret.update(self.rec_metrics.compute())
+            if self.throughput_metric:
+                ret.update(self.throughput_metric.compute())
+            if self.state_metrics:
+                for namespace, component in self.state_metrics.items():
+                    ret.update(
+                        {
+                            f"{compose_customized_metric_key(namespace, metric_name)}": metric_value
+                            for metric_name, metric_value in component.get_metrics().items()
+                        }
+                    )
         return ret
 
     def local_compute(self) -> Dict[str, MetricValue]:
