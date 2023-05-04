@@ -34,6 +34,7 @@ from typing import (
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch.profiler import record_function
 from torchmetrics import Metric
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import (
@@ -239,10 +240,11 @@ class RecMetricComputation(Metric, abc.ABC):
         return
 
     def compute(self) -> List[MetricComputationReport]:
-        if self._my_rank == 0 or self._compute_on_all_ranks:
-            return self._compute()
-        else:
-            return []
+        with record_function(f"## {self.__class__.__name__}:compute ##"):
+            if self._my_rank == 0 or self._compute_on_all_ranks:
+                return self._compute()
+            else:
+                return []
 
     def local_compute(self) -> List[MetricComputationReport]:
         return self._compute()
@@ -588,16 +590,17 @@ class RecMetric(nn.Module, abc.ABC):
         weights: Optional[RecModelOutput],
         **kwargs: Dict[str, Any],
     ) -> None:
-        if self._fused_update_limit > 0:
-            self._update_buffers[self.PREDICTIONS].append(predictions)
-            self._update_buffers[self.LABELS].append(labels)
-            if weights is not None:
-                self._update_buffers[self.WEIGHTS].append(weights)
-            self._check_fused_update(force=False)
-        else:
-            self._update(
-                predictions=predictions, labels=labels, weights=weights, **kwargs
-            )
+        with record_function(f"## {self.__class__.__name__}:update ##"):
+            if self._fused_update_limit > 0:
+                self._update_buffers[self.PREDICTIONS].append(predictions)
+                self._update_buffers[self.LABELS].append(labels)
+                if weights is not None:
+                    self._update_buffers[self.WEIGHTS].append(weights)
+                self._check_fused_update(force=False)
+            else:
+                self._update(
+                    predictions=predictions, labels=labels, weights=weights, **kwargs
+                )
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
