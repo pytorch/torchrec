@@ -100,6 +100,7 @@ def get_num_groups(world_size: Optional[int] = None) -> int:
 
 def intra_and_cross_node_pg(
     device: Optional[torch.device] = None,
+    backend: Optional[str] = None,
 ) -> Tuple[Optional[dist.ProcessGroup], Optional[dist.ProcessGroup]]:
     """
     Creates sub process groups (intra and cross node)
@@ -116,7 +117,8 @@ def intra_and_cross_node_pg(
     local_size = get_local_size(my_size)
     my_group_rank = get_group_rank(my_size, my_rank)
     group_count = get_num_groups(my_size)
-    backend = dist.get_backend()
+    if backend is None:
+        backend = dist.get_backend()
 
     logger.info(
         f"[{my_rank}] my_local_rank = {my_local_rank}, local_size = {local_size},"
