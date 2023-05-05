@@ -9,18 +9,7 @@ import abc
 import copy
 import itertools
 from dataclasses import dataclass
-from typing import (
-    Any,
-    cast,
-    Dict,
-    Generic,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -436,10 +425,7 @@ def _gen_named_parameters_by_table_dense(
         yield (table_name, weight)
 
 
-SplitWeightType = TypeVar("SplitWeightType")
-
-
-class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
+class BaseBatchedEmbedding(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -503,14 +489,13 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
         self.flush()
         return get_state_dict(
             self._config.embedding_tables,
-            # pyre-ignore
             self.split_embedding_weights(),
             self._pg,
             destination,
             prefix,
         )
 
-    def split_embedding_weights(self) -> List[SplitWeightType]:
+    def split_embedding_weights(self) -> List[torch.Tensor]:
         return self.emb_module.split_embedding_weights()
 
     @property
@@ -556,7 +541,7 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
             yield name, param
 
 
-class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
+class BatchedFusedEmbedding(BaseBatchedEmbedding, FusedOptimizerModule):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -647,7 +632,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
         self._emb_module.flush()
 
 
-class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
+class BatchedDenseEmbedding(BaseBatchedEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -697,7 +682,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
         )
 
 
-class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
+class BaseBatchedEmbeddingBag(BaseEmbedding):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -769,14 +754,13 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         self.flush()
         return get_state_dict(
             self._config.embedding_tables,
-            # pyre-ignore
             self.split_embedding_weights(),
             self._pg,
             destination,
             prefix,
         )
 
-    def split_embedding_weights(self) -> List[SplitWeightType]:
+    def split_embedding_weights(self) -> List[torch.Tensor]:
         return self.emb_module.split_embedding_weights()
 
     @property
@@ -822,9 +806,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             yield name, param
 
 
-class BatchedFusedEmbeddingBag(
-    BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizerModule
-):
+class BatchedFusedEmbeddingBag(BaseBatchedEmbeddingBag, FusedOptimizerModule):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -918,7 +900,7 @@ class BatchedFusedEmbeddingBag(
         self._emb_module.flush()
 
 
-class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
+class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
