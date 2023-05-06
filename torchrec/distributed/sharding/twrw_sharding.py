@@ -71,7 +71,9 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._rank: int = self._env.rank
         self._device = device
         self._need_pos = need_pos
-        intra_pg, cross_pg = intra_and_cross_node_pg(device)
+        intra_pg, cross_pg = intra_and_cross_node_pg(
+            device, backend=dist.get_backend(self._pg)
+        )
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
