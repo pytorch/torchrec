@@ -52,4 +52,17 @@ c10::IValue splitDictOfTensors(
 c10::IValue
 splitDictWithMaskTensor(c10::IValue result, size_t nOffset, size_t nLength);
 
+class DictWithMaskTensorResultSplitFunc : public torchrec::ResultSplitFunc {
+ public:
+  virtual std::string name() override;
+
+  virtual c10::IValue splitResult(
+      c10::IValue result,
+      size_t offset,
+      size_t length,
+      size_t /* nTotalLength */) override;
+
+  c10::IValue moveToHost(c10::IValue result) override;
+};
+
 } // namespace torchrec
