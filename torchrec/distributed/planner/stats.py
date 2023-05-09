@@ -203,7 +203,7 @@ class EmbeddingStats(Stats):
 
             rank_hbm = f"{round(used_hbm_gb, 1)} ({used_hbm_ratio:.0%})"
             rank_ddr = f"{round(used_ddr_gb, 1)} ({used_ddr_ratio:.0%})"
-            rank_total_perf = f"{round(perf[rank].total, 3)}"
+            rank_perf = _format_perf_breakdown(perf[rank])
             rank_input = f"{round(stats[rank]['input_sizes'], 2)}"
             rank_output = f"{round(stats[rank]['output_sizes'], 2)}"
             rank_shards = " ".join(
@@ -215,7 +215,7 @@ class EmbeddingStats(Stats):
                     rank,
                     rank_hbm,
                     rank_ddr,
-                    rank_total_perf,
+                    rank_perf,
                     rank_input,
                     rank_output,
                     rank_shards,
@@ -265,10 +265,13 @@ class EmbeddingStats(Stats):
             for i, so in enumerate(best_plan):
                 ranks = sorted([cast(int, shard.rank) for shard in so.shards])
                 ranks = _collapse_consecutive_ranks(ranks)
-                shard_perfs = [cast(Perf, shard.perf) for shard in so.shards]
-                shard_total_perfs = str(
-                    round(sum([perf.total for perf in shard_perfs]), 3)
-                )
+
+                so_perf = Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0)
+                for shard in so.shards:
+                    so_perf += cast(Perf, shard.perf)
+
+                shard_perfs = _format_perf_breakdown(so_perf)
+
                 pooling_factor = str(round(sum(so.input_lengths), 3))
                 num_poolings = (
                     cast(List[float], constraints[so.name].num_poolings)
@@ -287,7 +290,7 @@ class EmbeddingStats(Stats):
                         so.fqn,
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
-                        shard_total_perfs,
+                        shard_perfs,
                         pooling_factor,
                         num_poolings,
                         output,
@@ -321,9 +324,11 @@ class EmbeddingStats(Stats):
         for row in formatted_table:
             self._stats_table.append(f"# {row: <{self._width-3}}#")
 
+        perf_breakdown = "Perf: Total perf (Forward compute, Forward comms, Backward compute, Backward comms)"
         legend = "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
         hbm_info = "HBM: estimated peak memory usage for shards, dense tensors, and features (KJT)"
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {perf_breakdown: <{self._width-3}}#")
         self._stats_table.append(f"# {legend: <{self._width-3}}#")
         self._stats_table.append(f"# {hbm_info: <{self._width-3}}#")
 
@@ -503,6 +508,24 @@ def _get_sharding_type_abbr(sharding_type: str) -> str:
         raise ValueError(
             f"Unrecognized or unsupported sharding type provided: {sharding_type}"
         )
+
+
+def _format_perf_breakdown(perf: Perf) -> str:
+    breakdown = [
+        perf.fwd_compute,
+        perf.fwd_comms,
+        perf.bwd_compute,
+        perf.bwd_comms,
+    ]
+    breakdown_string = ",".join(
+        [str(round(num)) if num >= 1 else round_to_one_sigfig(num) for num in breakdown]
+    )
+
+    return f"{str(round(perf.total, 3))} ({breakdown_string})"
+
+
+def round_to_one_sigfig(x: float) -> str:
+    return f'{float(f"{x:.1g}"):g}'
 
 
 def _format_table(table: List[List[Union[str, int]]]) -> List[str]:
