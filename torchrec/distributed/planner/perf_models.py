@@ -7,7 +7,7 @@
 
 from typing import cast, List
 
-from torchrec.distributed.planner.types import PerfModel, ShardingOption, Topology
+from torchrec.distributed.planner.types import Perf, PerfModel, ShardingOption, Topology
 
 
 class NoopPerfModel(PerfModel):
@@ -19,6 +19,6 @@ class NoopPerfModel(PerfModel):
         for sharding_option in plan:
             for shard in sharding_option.shards:
                 # pyre-ignore [6]: Expected `typing_extensions.SupportsIndex`
-                perfs[shard.rank] += cast(float, shard.perf)
+                perfs[shard.rank] += cast(Perf, shard.perf).total
 
         return max(perfs)
