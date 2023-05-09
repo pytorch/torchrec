@@ -292,7 +292,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     def to_dense(self) -> List[torch.Tensor]:
         """
-        Constructs dense-reprensentation tensor from JT.
+        Constructs a dense-representation of the JT's values.
 
         Returns:
             List[torch.Tensor]: list of tensors.
@@ -303,9 +303,9 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
             jt = JaggedTensor(values=values, offsets=offsets)
 
-            torch_list = jt.to_dense()
+            values_list = jt.to_dense()
 
-            # torch_list = [
+            # values_list = [
             #     torch.tensor([1.0, 2.0]),
             #     torch.tensor([]),
             #     torch.tensor([3.0]),
@@ -321,13 +321,47 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             tensor_list.append(self.values()[offset:next_offset])
         return tensor_list
 
+    def to_dense_weights(self) -> Optional[List[torch.Tensor]]:
+        """
+        Constructs a dense-representation of the JT's weights.
+
+        Returns:
+            Optional[List[torch.Tensor]]: list of tensors, `None` if no weights.
+
+        Example::
+
+            values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+            weights = torch.Tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+            offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+            jt = JaggedTensor(values=values, weights=weights, offsets=offsets)
+
+            weights_list = jt.to_dense_weights()
+
+            # weights_list = [
+            #     torch.tensor([0.1, 0.2]),
+            #     torch.tensor([]),
+            #     torch.tensor([0.3]),
+            #     torch.tensor([0.4]),
+            #     torch.tensor([0.5]),
+            #     torch.tensor([0.6, 0.7, 0.8]),
+            # ]
+        """
+        if self.weights_or_none() is None:
+            return None
+        tensor_list = []
+        for index in range(self.offsets().size(0) - 1):
+            offset = self.offsets()[index].item()
+            next_offset = self.offsets()[index + 1].item()
+            tensor_list.append(self.weights()[offset:next_offset])
+        return tensor_list
+
     def to_padded_dense(
         self,
         desired_length: Optional[int] = None,
         padding_value: float = 0.0,
     ) -> torch.Tensor:
         """
-        Constructs 2D dense Tensor from JT to shape (B, N,).
+        Constructs a 2D dense tensor from the JT's values of shape (B, N,).
 
         Note that `B` is the length of self.lengths() and `N` is the longest feature
         length or `desired_length`.
@@ -359,7 +393,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             #     [3.0, 10.0],
             #     [4.0, 10.0],
             #     [5.0, 10.0],
-            #     [7.0, 8.0],
+            #     [6.0, 7.0],
             # ]
         """
         if desired_length is None:
@@ -368,6 +402,58 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             N = desired_length
         return torch.ops.fbgemm.jagged_to_padded_dense(
             self.values(), [self.offsets()], [N], padding_value
+        )
+
+    def to_padded_dense_weights(
+        self,
+        desired_length: Optional[int] = None,
+        padding_value: float = 0.0,
+    ) -> Optional[torch.Tensor]:
+        """
+        Constructs a 2D dense tensor from the JT's weights of shape (B, N,).
+
+        Note that `B` is the length of self.lengths() and `N` is the longest feature
+        length or `desired_length`.
+
+        If `desired_length` > `length` we will pad with `padding_value`, otherwise we
+        will select the last value at `desired_length`.
+
+        Args:
+            desired_length (int): the length of the tensor.
+            padding_value (float): padding value if we need to pad.
+
+        Returns:
+            Optional[torch.Tensor]: 2d dense tensor, `None` if no weights.
+
+        Example::
+
+            values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+            weights = torch.Tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+            offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+            jt = JaggedTensor(values=values, weights=weights, offsets=offsets)
+
+            d_wt = jt.to_padded_dense_weights(
+                desired_length=2,
+                padding_value=1.0,
+            )
+
+            # d_wt = [
+            #     [0.1, 0.2],
+            #     [1.0, 1.0],
+            #     [0.3, 1.0],
+            #     [0.4, 1.0],
+            #     [0.5, 1.0],
+            #     [0.6, 0.7],
+            # ]
+        """
+        if self.weights_or_none() is None:
+            return None
+        if desired_length is None:
+            N = int(torch.max(self.lengths()).item())
+        else:
+            N = desired_length
+        return torch.ops.fbgemm.jagged_to_padded_dense(
+            self.weights(), [self.offsets()], [N], padding_value
         )
 
     def lengths(self) -> torch.Tensor:
