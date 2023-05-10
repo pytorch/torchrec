@@ -26,6 +26,7 @@ from torchrec.distributed.planner.constants import (
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    Perf,
     PlannerError,
     ShardEstimator,
     ShardingOption,
@@ -173,7 +174,7 @@ def perf_func_emb_wall_time(
     has_feature_processor: bool = False,
     caching_ratio: Optional[float] = None,
     is_inference: bool = False,
-) -> List[float]:
+) -> List[Perf]:
     """
     Attempts to model perfs as a function of relative wall times.
 
@@ -333,7 +334,7 @@ def _get_tw_sharding_perf(
     is_weighted: bool = False,
     is_inference: bool = False,
     has_feature_processor: bool = False,
-) -> float:
+) -> Perf:
     batch_inputs = sum(
         [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
@@ -377,7 +378,9 @@ def _get_tw_sharding_perf(
     )
     if is_inference:
         # only consider forward compute and comms for inference
-        return fwd_compute + fwd_comms
+        return Perf(
+            fwd_compute=fwd_compute, fwd_comms=fwd_comms, bwd_compute=0, bwd_comms=0
+        )
 
     bwd_comms = bwd_output_write_size / comms_bw
 
@@ -392,12 +395,11 @@ def _get_tw_sharding_perf(
 
     # in order of model parallel execution, starting with:
     # BWD DP -> BWD MP ... FWD MP -> FWD DP
-    return (
-        bwd_comms
-        + bwd_grad_indice_weights_kernel
-        + bwd_compute
-        + fwd_compute
-        + fwd_comms
+    return Perf(
+        fwd_compute=fwd_compute,
+        fwd_comms=fwd_comms,
+        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+        bwd_comms=bwd_comms,
     )
 
 
@@ -420,7 +422,7 @@ def _get_rw_sharding_perf(
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
-) -> float:
+) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / world_size
@@ -467,13 +469,11 @@ def _get_rw_sharding_perf(
 
     bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
 
-    return (
-        bwd_comms
-        + bwd_batched_copy
-        + bwd_grad_indice_weights_kernel
-        + bwd_compute
-        + fwd_compute
-        + fwd_comms
+    return Perf(
+        fwd_compute=fwd_compute,
+        fwd_comms=fwd_comms,
+        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+        bwd_comms=bwd_comms + bwd_batched_copy,
     )
 
 
@@ -496,7 +496,7 @@ def _get_twrw_sharding_perf(
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
-) -> float:
+) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
         / local_world_size
@@ -550,13 +550,11 @@ def _get_twrw_sharding_perf(
 
     bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
 
-    return (
-        bwd_comms
-        + bwd_batched_copy
-        + bwd_grad_indice_weights_kernel
-        + bwd_compute
-        + fwd_compute
-        + fwd_comms
+    return Perf(
+        fwd_compute=fwd_compute,
+        fwd_comms=fwd_comms,
+        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+        bwd_comms=bwd_comms + bwd_batched_copy,
     )
 
 
@@ -575,7 +573,7 @@ def _get_dp_sharding_perf(
     is_pooled: bool,
     is_weighted: bool = False,
     has_feature_processor: bool = False,
-) -> float:
+) -> Perf:
     batch_inputs = sum(
         [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
     )
@@ -622,12 +620,11 @@ def _get_dp_sharding_perf(
         else 0
     )
 
-    return (
-        all_reduce
-        + optimizer_kernels
-        + bwd_grad_indice_weights_kernel
-        + bwd_compute
-        + fwd_compute
+    return Perf(
+        fwd_compute=fwd_compute,
+        fwd_comms=0,
+        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+        bwd_comms=all_reduce + optimizer_kernels,
     )
 
 

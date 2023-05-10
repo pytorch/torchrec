@@ -13,6 +13,7 @@ from torchrec.distributed.planner.types import (
     DeviceHardware,
     PartitionByType,
     Partitioner,
+    Perf,
     PlannerError,
     PlannerErrorType,
     ShardingOption,
@@ -28,7 +29,7 @@ def _sort_devices_by_perf(
     def _get_perf_sum(device_list: List[DeviceHardware]) -> float:
         perf = 0
         for device in device_list:
-            perf += device.perf
+            perf += device.perf.total
         return perf
 
     return sorted(devices, key=_get_perf_sum)
@@ -127,15 +128,15 @@ class GreedyPerfPartitioner(Partitioner):
             # First [sharding_options[0] and sharding_options[1]] will be placed on the
             # topology with the uniform strategy, resulting in
 
-            topology.devices[0].perf = (1,2)
-            topology.devices[1].perf = (1,2)
+            topology.devices[0].perf.total = (1,2)
+            topology.devices[1].perf.total = (1,2)
 
             # Finally sharding_options[2] and sharding_options[3]] will be placed on the
             # topology with the device strategy (see docstring of `partition_by_device` for
             # more details).
 
-            topology.devices[0].perf = (1,2) + (3,4)
-            topology.devices[1].perf = (1,2) + (3,4)
+            topology.devices[0].perf.total = (1,2) + (3,4)
+            topology.devices[1].perf.total = (1,2) + (3,4)
 
             # The topology updates are done after the end of all the placements (the other
             # in the example is just for clarity).
@@ -199,17 +200,14 @@ class GreedyPerfPartitioner(Partitioner):
                 # case, we will allocate UVM table with the global rank order, and host0
                 # will use a lot more CPU memory than the others. With local rank as the
                 # secondary key, we could even out CPU memory pressure on different host
-                key=lambda device: (
-                    device.perf,
-                    device.rank % local_world_size,
-                )
+                key=lambda device: (device.perf.total, device.rank % local_world_size),
             )
             success = False
             for device in devices:
                 if cast(Storage, shard.storage).fits_in(device.storage):
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
-                    device.perf += cast(float, shard.perf)
+                    device.perf += cast(Perf, shard.perf)
                     success = True
                     break
             if not success:
@@ -300,4 +298,4 @@ class GreedyPerfPartitioner(Partitioner):
                 else:
                     sharding_option.shards[i].rank = devices[i].rank
                     devices[i].storage -= storage_needed
-                    devices[i].perf += cast(float, sharding_option.shards[i].perf)
+                    devices[i].perf += cast(Perf, sharding_option.shards[i].perf)

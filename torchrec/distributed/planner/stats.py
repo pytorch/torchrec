@@ -18,6 +18,7 @@ from torchrec.distributed.planner.storage_reservations import (
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    Perf,
     ShardingOption,
     Stats,
     Storage,
@@ -150,14 +151,17 @@ class EmbeddingStats(Stats):
 
         used_hbm = [0] * topology.world_size
         used_ddr = [0] * topology.world_size
-        perf = [0.0] * topology.world_size
+        perf = [
+            Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0)
+            for _ in range(topology.world_size)
+        ]
         for sharding_option in best_plan:
             for shard in sharding_option.shards:
                 shard_storage = cast(Storage, shard.storage)
                 rank = cast(int, shard.rank)
                 used_hbm[rank] += shard_storage.hbm
                 used_ddr[rank] += shard_storage.ddr
-                perf[rank] += cast(float, shard.perf)
+                perf[rank] += cast(Perf, shard.perf)
 
         used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in used_hbm]
         used_ddr = [ddr + dense_storage.ddr + kjt_storage.ddr for ddr in used_ddr]
@@ -200,7 +204,7 @@ class EmbeddingStats(Stats):
 
             rank_hbm = f"{round(used_hbm_gb, 1)} ({used_hbm_ratio:.0%})"
             rank_ddr = f"{round(used_ddr_gb, 1)} ({used_ddr_ratio:.0%})"
-            rank_perf = f"{round(perf[rank], 3)}"
+            rank_total_perf = f"{round(perf[rank].total, 3)}"
             rank_input = f"{round(stats[rank]['input_sizes'], 2)}"
             rank_output = f"{round(stats[rank]['output_sizes'], 2)}"
             rank_shards = " ".join(
@@ -212,7 +216,7 @@ class EmbeddingStats(Stats):
                     rank,
                     rank_hbm,
                     rank_ddr,
-                    rank_perf,
+                    rank_total_perf,
                     rank_input,
                     rank_output,
                     rank_shards,
@@ -262,8 +266,9 @@ class EmbeddingStats(Stats):
             for i, so in enumerate(best_plan):
                 ranks = sorted([cast(int, shard.rank) for shard in so.shards])
                 ranks = _collapse_consecutive_ranks(ranks)
-                shard_perfs = str(
-                    round(sum([cast(float, shard.perf) for shard in so.shards]), 3)
+                shard_perfs = [cast(Perf, shard.perf) for shard in so.shards]
+                shard_total_perfs = str(
+                    round(sum([perf.total for perf in shard_perfs]), 3)
                 )
                 pooling_factor = str(round(sum(so.input_lengths), 3))
                 num_poolings = (
@@ -283,7 +288,7 @@ class EmbeddingStats(Stats):
                         so.fqn,
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
-                        shard_perfs,
+                        shard_total_perfs,
                         pooling_factor,
                         num_poolings,
                         output,
@@ -407,9 +412,9 @@ class EmbeddingStats(Stats):
 
         return ranks, input_sizes, output_sizes
 
-    def _log_max_perf_and_max_hbm(self, perf: List[float], used_hbm: List[int]) -> None:
-        max_perf = max(perf)
-        max_perf_indices = [i for i in range(len(perf)) if perf[i] == max_perf]
+    def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
+        max_perf = max([perf.total for perf in perfs])
+        max_perf_indices = [i for i in range(len(perfs)) if perfs[i] == max_perf]
         rank_text = "ranks" if len(max_perf_indices) > 1 else "rank"
         max_perf_indices = _collapse_consecutive_ranks(max_perf_indices)
         max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"

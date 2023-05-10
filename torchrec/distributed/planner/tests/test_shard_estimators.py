@@ -24,7 +24,7 @@ from torchrec.distributed.planner.shard_estimators import (
     _calculate_storage_specific_sizes,
     EmbeddingPerfEstimator,
 )
-from torchrec.distributed.planner.types import Topology
+from torchrec.distributed.planner.types import Perf, Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.tests.test_quant_model_parallel import _quantize
@@ -60,41 +60,174 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
 
         expected_perfs = {
             ("dense", "data_parallel"): [
-                0.0005062740117544049,
-                0.0005062740117544049,
+                Perf(
+                    fwd_compute=9.356002212235228e-05,
+                    fwd_comms=0,
+                    bwd_compute=0.00018712004424470456,
+                    bwd_comms=0.000225593945387348,
+                ),
+                Perf(
+                    fwd_compute=9.356002212235228e-05,
+                    fwd_comms=0,
+                    bwd_compute=0.00018712004424470456,
+                    bwd_comms=0.000225593945387348,
+                ),
             ],
-            ("fused", "table_wise"): [0.0011095368078055323],
-            ("fused_uvm", "table_wise"): [0.1729105033126532],
-            ("fused_uvm_caching", "table_wise"): [0.040145097917908434],
-            ("fused", "column_wise"): [0.0011095368078055323],
-            ("fused_uvm", "column_wise"): [0.1729105033126532],
-            ("fused_uvm_caching", "column_wise"): [0.040145097917908434],
-            ("fused", "table_column_wise"): [0.0011095368078055323],
-            ("fused_uvm", "table_column_wise"): [0.1729105033126532],
-            ("fused_uvm_caching", "table_column_wise"): [0.040145097917908434],
+            ("fused", "table_wise"): [
+                Perf(
+                    fwd_compute=0.000327460077428233,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.000654920154856466,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm", "table_wise"): [
+                Perf(
+                    fwd_compute=0.05759444891237746,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.11518889782475492,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm_caching", "table_wise"): [
+                Perf(
+                    fwd_compute=0.013339313780795867,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.026678627561591735,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused", "column_wise"): [
+                Perf(
+                    fwd_compute=0.000327460077428233,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.000654920154856466,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm", "column_wise"): [
+                Perf(
+                    fwd_compute=0.05759444891237746,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.11518889782475492,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm_caching", "column_wise"): [
+                Perf(
+                    fwd_compute=0.013339313780795867,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.026678627561591735,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused", "table_column_wise"): [
+                Perf(
+                    fwd_compute=0.000327460077428233,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.000654920154856466,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm", "table_column_wise"): [
+                Perf(
+                    fwd_compute=0.05759444891237746,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.11518889782475492,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
+            ("fused_uvm_caching", "table_column_wise"): [
+                Perf(
+                    fwd_compute=0.013339313780795867,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.026678627561591735,
+                    bwd_comms=6.357828776041667e-05,
+                )
+            ],
             ("fused", "row_wise"): [
-                0.00043569201211068144,
-                0.00043569201211068144,
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
             ],
             ("fused_uvm", "row_wise"): [
-                0.054393095128676475,
-                0.054393095128676475,
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
             ],
             ("fused_uvm_caching", "row_wise"): [
-                0.012695561962491483,
-                0.012695561962491483,
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
             ],
             ("fused", "table_row_wise"): [
-                0.00043569201211068144,
-                0.00043569201211068144,
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
             ],
             ("fused_uvm", "table_row_wise"): [
-                0.054393095128676475,
-                0.054393095128676475,
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
             ],
             ("fused_uvm_caching", "table_row_wise"): [
-                0.012695561962491483,
-                0.012695561962491483,
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
             ],
         }
 
@@ -138,40 +271,40 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
         )
 
-        expected_perfs = {
+        expected_total_perfs = {
             ("dense", "data_parallel"): [0.0005062740117544049, 0.0005062740117544049],
             ("fused", "table_wise"): [0.000846718200207288],
             ("fused_uvm", "table_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_wise"): [0.03322849048472447],
+            ("fused_uvm_caching", "table_wise"): [0.03322849048472446],
             ("fused", "column_wise"): [0.000846718200207288],
             ("fused_uvm", "column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "column_wise"): [0.03322849048472447],
+            ("fused_uvm_caching", "column_wise"): [0.03322849048472446],
             ("fused", "table_column_wise"): [0.000846718200207288],
             ("fused_uvm", "table_column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_column_wise"): [0.03322849048472447],
+            ("fused_uvm_caching", "table_column_wise"): [0.03322849048472446],
             ("fused", "row_wise"): [0.0002561205605599394, 0.0002561205605599394],
             ("fused_uvm", "row_wise"): [0.03392836626838235, 0.03392836626838235],
             ("fused_uvm_caching", "row_wise"): [
-                0.007906921553027078,
-                0.007906921553027078,
+                0.007906921553027076,
+                0.007906921553027076,
             ],
             ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
             ("fused_uvm", "table_row_wise"): [0.03392836626838235, 0.03392836626838235],
             ("fused_uvm_caching", "table_row_wise"): [
-                0.007906921553027078,
-                0.007906921553027078,
+                0.007906921553027076,
+                0.007906921553027076,
             ],
         }
 
-        perfs = {
+        total_perfs = {
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): [shard.perf for shard in sharding_option.shards]
+            ): [cast(Perf, shard.perf).total for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
 
-        self.assertEqual(expected_perfs, perfs)
+        self.assertEqual(expected_total_perfs, total_perfs)
 
     def test_sequence_2_table_perf(self) -> None:
         tables = [
@@ -196,37 +329,31 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
         )
 
-        expected_perfs = {
-            ("dense", "data_parallel"): [
-                0.002690105799714326,
-                0.002690105799714326,
-            ],
+        expected_total_perfs = {
+            ("dense", "data_parallel"): [0.0026901057997143255, 0.0026901057997143255],
             ("fused", "table_wise"): [0.001880471390093715],
             ("fused_uvm", "table_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "table_wise"): [0.060433813055248066],
+            ("fused_uvm_caching", "table_wise"): [0.06043381305524807],
             ("fused", "column_wise"): [0.001880471390093715],
             ("fused_uvm", "column_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "column_wise"): [0.060433813055248066],
-            ("fused", "row_wise"): [
-                0.0007915177871551004,
-                0.0007915177871551004,
-            ],
-            ("fused_uvm", "row_wise"): [0.1036341050091912, 0.1036341050091912],
+            ("fused_uvm_caching", "column_wise"): [0.06043381305524807],
+            ("fused", "row_wise"): [0.0007915177871551004, 0.0007915177871551004],
+            ("fused_uvm", "row_wise"): [0.10363410500919118, 0.10363410500919118],
             ("fused_uvm_caching", "row_wise"): [
-                0.024158779217047007,
-                0.024158779217047007,
+                0.024158779217047004,
+                0.024158779217047004,
             ],
         }
 
-        perfs = {
+        total_perfs = {
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): [shard.perf for shard in sharding_option.shards]
+            ): [cast(Perf, shard.perf).total for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
 
-        self.assertEqual(expected_perfs, perfs)
+        self.assertEqual(expected_total_perfs, total_perfs)
 
     def test_inference_1_table_perf(self) -> None:
         tables = [
@@ -255,21 +382,21 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
         )
 
-        expected_perfs = {
+        expected_total_perfs = {
             ("quant", "table_wise"): [0.0001296231579222408],
             ("quant_uvm", "table_wise"): [0.018350937787224266],
             ("quant_uvm_caching", "table_wise"): [0.004269758427175579],
         }
 
-        perfs = {
+        total_perfs = {
             (
                 sharding_option.compute_kernel,
                 sharding_option.sharding_type,
-            ): [shard.perf for shard in sharding_option.shards]
+            ): [cast(Perf, shard.perf).total for shard in sharding_option.shards]
             for sharding_option in sharding_options
         }
 
-        self.assertEqual(perfs, expected_perfs)
+        self.assertEqual(total_perfs, expected_total_perfs)
 
 
 # pyre-ignore[3]
