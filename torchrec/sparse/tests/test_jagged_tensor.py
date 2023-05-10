@@ -173,6 +173,34 @@ class TestJaggedTensor(unittest.TestCase):
         for t0, expected_t0 in zip(torch_list, expected_list):
             self.assertTrue(torch.equal(t0, expected_t0))
 
+    def test_to_dense_weights(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+        jt = JaggedTensor(
+            values=values,
+            weights=weights,
+            offsets=offsets,
+        )
+        weights_list = jt.to_dense_weights()
+        expected_weights_list = [
+            torch.tensor([0.1, 0.2]),
+            torch.tensor([]),
+            torch.tensor([0.3]),
+            torch.tensor([0.4]),
+            torch.tensor([0.5]),
+            torch.tensor([0.6, 0.7, 0.8]),
+        ]
+        for t0, expected_t0 in zip(weights_list, expected_weights_list):
+            self.assertTrue(torch.equal(t0, expected_t0))
+
+        jt = JaggedTensor(
+            values=values,
+            offsets=offsets,
+        )
+        weights_list = jt.to_dense_weights()
+        self.assertIsNone(weights_list)
+
     def test_to_padded_dense(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).type(
             torch.float64
@@ -246,6 +274,96 @@ class TestJaggedTensor(unittest.TestCase):
         ]
         expected_t2 = torch.tensor(t2_value).type(torch.int64)
         self.assertTrue(torch.equal(t2, expected_t2))
+
+    def test_to_padded_dense_weights(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).type(
+            torch.float64
+        )
+        weights = torch.Tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+        jt = JaggedTensor(
+            values=values,
+            weights=weights,
+            offsets=offsets,
+        )
+        t0_weights = jt.to_padded_dense_weights()
+        expected_t0_weights = [
+            [0.1, 0.2, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.3, 0.0, 0.0],
+            [0.4, 0.0, 0.0],
+            [0.5, 0.0, 0.0],
+            [0.6, 0.7, 0.8],
+        ]
+
+        expected_t0_weights = torch.tensor(expected_t0_weights)
+        self.assertTrue(torch.equal(t0_weights, expected_t0_weights))
+
+        t1_weights = jt.to_padded_dense_weights(desired_length=2, padding_value=1.0)
+        expected_t1_weights = [
+            [0.1, 0.2],
+            [1.0, 1.0],
+            [0.3, 1.0],
+            [0.4, 1.0],
+            [0.5, 1.0],
+            [0.6, 0.7],
+        ]
+        expected_t1_weights = torch.tensor(expected_t1_weights)
+        self.assertTrue(torch.equal(t1_weights, expected_t1_weights))
+
+        values = torch.Tensor(
+            [
+                [1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0],
+                [10.0, 11.0, 12.0],
+            ]
+        ).type(torch.int64)
+        weights = torch.Tensor(
+            [
+                [0.1, 0.2, 0.3],
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+                [1.0, 1.1, 1.2],
+            ]
+        )
+        jt = JaggedTensor(
+            values=values,
+            weights=weights,
+            lengths=torch.IntTensor([1, 0, 2, 0]),
+        )
+        t2_weights = jt.to_padded_dense_weights(desired_length=3)
+        expected_t2_weights = [
+            [
+                [0.1, 0.2, 0.3],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+                [0.0, 0.0, 0.0],
+            ],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+        ]
+        expected_t2_weights = torch.tensor(expected_t2_weights)
+        self.assertTrue(torch.equal(t2_weights, expected_t2_weights))
+
+        jt = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 0]),
+        )
+        t3_weights = jt.to_padded_dense_weights(desired_length=3)
+        self.assertIsNone(t3_weights)
 
     def test_key_lookup(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])

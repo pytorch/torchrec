@@ -172,47 +172,6 @@ class DictOfTensorsResultSplitFunc : public ResultSplitFunc {
   }
 };
 
-class DictWithMaskTensorResultSplitFunc : public torchrec::ResultSplitFunc {
- public:
-  std::string name() override {
-    return "dict_with_mask_tensor";
-  }
-
-  c10::IValue splitResult(
-      c10::IValue result,
-      size_t offset,
-      size_t length,
-      size_t /* nTotalLength */) override {
-    return splitDictWithMaskTensor(result, offset, length);
-  }
-
-  c10::IValue moveToHost(c10::IValue result) {
-    const auto& dict = result.toGenericDict();
-    c10::impl::GenericDict moved(
-        c10::StringType::get(),
-        c10::TupleType::create(
-            {c10::TensorType::get(), c10::TensorType::get()}));
-    moved.reserve(dict.size());
-
-    for (auto& entry : dict) {
-      const auto& key = entry.key();
-      const auto& value = entry.value();
-      TORCH_CHECK(value.isTuple());
-      const auto tuple = value.toTuple();
-      TORCH_CHECK(tuple->elements().size() == 2);
-      std::vector<c10::IValue> values;
-      values.reserve(2);
-      for (int i = 0; i < 2; ++i) {
-        const auto& tensor = tuple->elements()[i].toTensor();
-        values.push_back(
-            tensor.to(at::Device(at::kCPU), /* non_blocking */ true));
-      }
-      moved.insert(key, c10::ivalue::Tuple::create(std::move(values)));
-    }
-    return moved;
-  }
-};
-
 REGISTER_TORCHREC_RESULTSPLIT_FUNC(dict_of_tensor, DictOfTensorResultSplitFunc);
 
 REGISTER_TORCHREC_RESULTSPLIT_FUNC(
@@ -224,4 +183,42 @@ REGISTER_TORCHREC_RESULTSPLIT_FUNC(
     DictWithMaskTensorResultSplitFunc);
 
 } // namespace
+
+std::string DictWithMaskTensorResultSplitFunc::name() {
+  return "dict_with_mask_tensor";
+}
+
+c10::IValue DictWithMaskTensorResultSplitFunc::splitResult(
+    c10::IValue result,
+    size_t offset,
+    size_t length,
+    size_t /* nTotalLength */) {
+  return splitDictWithMaskTensor(result, offset, length);
+}
+
+c10::IValue DictWithMaskTensorResultSplitFunc::moveToHost(c10::IValue result) {
+  const auto& dict = result.toGenericDict();
+  c10::impl::GenericDict moved(
+      c10::StringType::get(),
+      c10::TupleType::create({c10::TensorType::get(), c10::TensorType::get()}));
+  moved.reserve(dict.size());
+
+  for (auto& entry : dict) {
+    const auto& key = entry.key();
+    const auto& value = entry.value();
+    TORCH_CHECK(value.isTuple());
+    const auto tuple = value.toTuple();
+    TORCH_CHECK(tuple->elements().size() == 2);
+    std::vector<c10::IValue> values;
+    values.reserve(2);
+    for (int i = 0; i < 2; ++i) {
+      const auto& tensor = tuple->elements()[i].toTensor();
+      values.push_back(
+          tensor.to(at::Device(at::kCPU), /* non_blocking */ true));
+    }
+    moved.insert(key, c10::ivalue::Tuple::create(std::move(values)));
+  }
+  return moved;
+}
+
 } // namespace torchrec
