@@ -208,6 +208,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
             table_name_to_parameter_sharding=params,
             env=env,
             fused_params=fused_params,
+            device=device,
         )
 
 
