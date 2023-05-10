@@ -156,6 +156,7 @@ class ShardedQuantEmbeddingCollection(
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
 
@@ -179,9 +180,10 @@ class ShardedQuantEmbeddingCollection(
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
+        self._device = device
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
-        self._create_lookups(fused_params)
+        self._create_lookups(fused_params, device)
         self._output_dists: List[nn.Module] = []
 
         self._feature_splits: List[int] = []
@@ -192,6 +194,8 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_dim: int = module.embedding_dim()
         self._need_indices: bool = module.need_indices()
+
+        self._fused_params = fused_params
 
         # This provides consistency between this class and the EmbeddingBagCollection's
         # nn.Module API calls (state_dict, named_modules, etc)
@@ -226,11 +230,14 @@ class ShardedQuantEmbeddingCollection(
         self,
         input_feature_names: List[str],
         device: torch.device,
+        input_dist_device: Optional[torch.device] = None,
     ) -> None:
         feature_names: List[str] = []
         self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
-            self._input_dists.append(sharding.create_input_dist())
+            self._input_dists.append(
+                sharding.create_input_dist(device=input_dist_device)
+            )
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
         self._features_order: List[int] = []
@@ -247,9 +254,15 @@ class ShardedQuantEmbeddingCollection(
             persistent=False,
         )
 
-    def _create_lookups(self, fused_params: Optional[Dict[str, Any]]) -> None:
+    def _create_lookups(
+        self,
+        fused_params: Optional[Dict[str, Any]],
+        device: Optional[torch.device] = None,
+    ) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup(fused_params=fused_params))
+            self._lookups.append(
+                sharding.create_lookup(fused_params=fused_params, device=device)
+            )
 
     def _create_output_dist(
         self,
@@ -269,6 +282,7 @@ class ShardedQuantEmbeddingCollection(
             self._create_input_dist(
                 input_feature_names=features.keys() if features is not None else [],
                 device=features.device(),
+                input_dist_device=self._device,
             )
             self._has_uninitialized_input_dist = False
         if self._has_uninitialized_output_dist:
