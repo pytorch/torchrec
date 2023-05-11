@@ -18,6 +18,7 @@ from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
     PartitionByType,
+    Perf,
     PlannerError,
     Storage,
     Topology,
@@ -103,7 +104,9 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
 
         for sharding_option in sharding_options:
-            sharding_option.shards[0].perf = 100
+            sharding_option.shards[0].perf = Perf(
+                fwd_compute=40, fwd_comms=30, bwd_compute=20, bwd_comms=10
+            )
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
         candidate_topology = copy.deepcopy(self.topology)
@@ -127,8 +130,15 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(solution_topology.devices[0].perf, 200)
-        self.assertEqual(solution_topology.devices[1].perf, 200)
+        expected_perf = Perf(
+            fwd_compute=80,
+            fwd_comms=60,
+            bwd_compute=40,
+            bwd_comms=20,
+        )
+
+        self.assertEqual(solution_topology.devices[0].perf, expected_perf)
+        self.assertEqual(solution_topology.devices[1].perf, expected_perf)
 
         self.assertEqual(
             solution_topology.devices[0].storage,
@@ -145,7 +155,11 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
 
         for i, sharding_option in enumerate(sharding_options):
-            perf = 100 if i > 0 else 300
+            perf = (
+                Perf(fwd_compute=40, fwd_comms=30, bwd_compute=20, bwd_comms=10)
+                if i > 0
+                else Perf(fwd_compute=75, fwd_comms=75, bwd_compute=75, bwd_comms=75)
+            )
             sharding_option.shards[0].perf = perf
             sharding_option.shards[0].storage = Storage(hbm=1000, ddr=1000)
 
@@ -170,8 +184,13 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         }
         self.assertEqual(expected_ranks, ranks)
 
-        self.assertEqual(solution_topology.devices[0].perf, 300)
-        self.assertEqual(solution_topology.devices[1].perf, 300)
+        expected_perfs = [
+            Perf(fwd_compute=75, fwd_comms=75, bwd_compute=75, bwd_comms=75),
+            Perf(fwd_compute=120, fwd_comms=90, bwd_compute=60, bwd_comms=30),
+        ]
+
+        self.assertEqual(solution_topology.devices[0].perf, expected_perfs[0])
+        self.assertEqual(solution_topology.devices[1].perf, expected_perfs[1])
 
         self.assertEqual(
             solution_topology.devices[0].storage,
@@ -205,9 +224,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             module=self.model, sharders=[TWRWSharder()]
         )
         for sharding_option in sharding_options:
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=40, fwd_comms=30, bwd_compute=20, bwd_comms=10
+                )
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
@@ -238,7 +258,13 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 # there are two shards allocated to each device
                 self.topology.devices[i].storage - Storage(2000, 2000),
             )
-            self.assertEqual(solution_topology.devices[i].perf, 200)
+            expected_perf = Perf(
+                fwd_compute=80,
+                fwd_comms=60,
+                bwd_compute=40,
+                bwd_comms=20,
+            )
+            self.assertEqual(solution_topology.devices[i].perf, expected_perf)
 
     def test_rw_unbalanced_perf_uniform(self) -> None:
         self.topology = Topology(world_size=4, compute_device="cuda")
@@ -261,9 +287,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             module=self.model, sharders=[RWSharder()]
         )
         for sharding_option in sharding_options:
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=25, fwd_comms=25, bwd_compute=25, bwd_comms=25
+                )
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.UNIFORM.value
 
@@ -324,9 +351,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             sharders=[TWCWSharder()],
         )
         for sharding_option in sharding_options:
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=25, fwd_comms=25, bwd_compute=25, bwd_comms=25
+                )
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
@@ -387,9 +415,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
 
         for sharding_option in sharding_options:
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=25, fwd_comms=25, bwd_compute=25, bwd_comms=25
+                )
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
 
@@ -450,9 +479,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
 
         for i, sharding_option in enumerate(sharding_options):
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=25, fwd_comms=25, bwd_compute=25, bwd_comms=25
+                )
                 shard.storage = Storage(hbm=1000, ddr=1000)
             sharding_option.partition_by = PartitionByType.HOST.value
             if i <= 2:
@@ -480,12 +510,17 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         solution_topology = self.partitioner._topology
         for i in range(self.topology.world_size):
             total_storage = Storage(0, 0)
-            total_perf = 0
+            total_perf = Perf(
+                fwd_compute=0,
+                fwd_comms=0,
+                bwd_compute=0,
+                bwd_comms=0,
+            )
             for sharding_option in sharding_plan:
                 for shard in sharding_option.shards:
                     if shard.rank == i:
                         total_storage += cast(Storage, shard.storage)
-                        total_perf += shard.perf
+                        total_perf += cast(Perf, shard.perf)
             self.assertEqual(
                 solution_topology.devices[i].storage + total_storage,
                 self.topology.devices[i].storage,
@@ -531,9 +566,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
 
         for i, sharding_option in enumerate(sharding_options):
-            perf = 100.0
             for shard in sharding_option.shards:
-                shard.perf = perf
+                shard.perf = Perf(
+                    fwd_compute=25, fwd_comms=25, bwd_compute=25, bwd_comms=25
+                )
                 shard.storage = Storage(
                     # pyre-ignore [6]
                     hbm=self.topology.devices[0].storage.hbm / 2,

@@ -26,6 +26,44 @@ from torchrec.distributed.planner.constants import (
 from torchrec.distributed.types import ModuleSharder, ShardingPlan
 from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 
+# ---- Perf ---- #
+
+
+@dataclass(repr=True, eq=True)
+class Perf:
+    """
+    Representation of the breakdown of the perf estimate a single shard of an
+    embedding table.
+    """
+
+    fwd_compute: float
+    fwd_comms: float
+    bwd_compute: float
+    bwd_comms: float
+
+    @property
+    def total(self) -> float:
+        return self.fwd_compute + self.bwd_compute + self.fwd_comms + self.bwd_comms
+
+    def __add__(self, other: "Perf") -> "Perf":
+        return Perf(
+            fwd_compute=self.fwd_compute + other.fwd_compute,
+            fwd_comms=self.fwd_comms + other.fwd_comms,
+            bwd_compute=self.bwd_compute + other.bwd_compute,
+            bwd_comms=self.bwd_comms + other.bwd_comms,
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.fwd_compute,
+                self.fwd_comms,
+                self.bwd_compute,
+                self.bwd_comms,
+            )
+        )
+
+
 # ---- TOPOLOGY ---- #
 
 
@@ -66,7 +104,7 @@ class DeviceHardware:
 
     rank: int
     storage: Storage
-    perf: float = 0
+    perf: Perf
 
 
 class Topology:
@@ -105,6 +143,7 @@ class Topology:
                 DeviceHardware(
                     rank=rank,
                     storage=Storage(hbm=hbm_per_device, ddr=ddr_cap),
+                    perf=Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0),
                 )
             )
 
@@ -174,7 +213,7 @@ class Shard:
     size: List[int]
     offset: List[int]
     storage: Optional[Storage] = None
-    perf: Optional[float] = None
+    perf: Optional[Perf] = None
     rank: Optional[int] = None
 
     def __hash__(self) -> int:
