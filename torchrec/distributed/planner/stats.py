@@ -418,16 +418,28 @@ class EmbeddingStats(Stats):
         return ranks, input_sizes, output_sizes
 
     def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
-        max_perf = max([perf.total for perf in perfs])
-        max_perf_indices = [i for i in range(len(perfs)) if perfs[i] == max_perf]
-        rank_text = "ranks" if len(max_perf_indices) > 1 else "rank"
-        max_perf_indices = _collapse_consecutive_ranks(max_perf_indices)
-        max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"
-        longest_critical_path = (
-            f"Longest Critical Path: {round(max_perf, 3)} ms on {max_perf_ranks}"
+
+        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text([perf.total for perf in perfs])}"
+        max_fwd_compute_perf_text = f"Maximum of Forward Compute: {_generate_max_text([perf.fwd_compute for perf in perfs])}"
+        max_fwd_comms_perf_text = f"Maximum of Forward Comms: {_generate_max_text([perf.fwd_comms for perf in perfs])}"
+        max_bwd_compute_perf_text = f"Maximum of Backward Compute: {_generate_max_text([perf.bwd_compute for perf in perfs])}"
+        max_bwd_comms_perf_text = f"Maximum of Backward Comms: {_generate_max_text([perf.bwd_comms for perf in perfs])}"
+
+        sum_of_maxima = (
+            max(perf.fwd_compute for perf in perfs)
+            + max(perf.fwd_comms for perf in perfs)
+            + max(perf.bwd_compute for perf in perfs)
+            + max(perf.bwd_comms for perf in perfs)
         )
+        sum_of_maxima_text = f"Sum of Maxima: {round(sum_of_maxima, 3)} ms"
+
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {longest_critical_path : <{self._width-3}}#")
+        self._stats_table.append(f"# {max_total_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {max_fwd_compute_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {max_fwd_comms_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {max_bwd_compute_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {max_bwd_comms_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {sum_of_maxima_text : <{self._width-3}}#")
 
         max_hbm = max(used_hbm)
         max_hbm_indices = [i for i in range(len(used_hbm)) if used_hbm[i] == max_hbm]
@@ -490,6 +502,17 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"# {'Compute Kernels:' : <{self._width-3}}#")
         for compute_kernel_count in compute_kernels_count:
             self._stats_table.append(f"#    {compute_kernel_count : <{self._width-6}}#")
+
+
+def _generate_max_text(perfs: List[float]) -> str:
+    max_perf = max(perfs)
+
+    max_perf_indices = [i for i in range(len(perfs)) if perfs[i] == max_perf]
+    rank_text = "ranks" if len(max_perf_indices) > 1 else "rank"
+    max_perf_indices = _collapse_consecutive_ranks(max_perf_indices)
+    max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"
+
+    return f"{round(max_perf, 3)} ms on {max_perf_ranks}"
 
 
 def _get_sharding_type_abbr(sharding_type: str) -> str:
