@@ -10,7 +10,7 @@ import logging
 from decimal import Decimal
 from typing import cast, Dict, List, Optional, Set, Tuple
 
-from torchrec.distributed.planner.types import Proposer, ShardingOption
+from torchrec.distributed.planner.types import Perf, Proposer, ShardingOption
 from torchrec.distributed.planner.utils import prod
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -28,7 +28,8 @@ class GreedyProposer(Proposer):
 
     Args:
         use_depth (bool): When enabled, sharding_options of a fqn are sorted based on
-            `max(shard.perf)`, otherwise sharding_options are sorted by `sum(shard.perf)`.
+            `max(shard.perf.total)`, otherwise sharding_options are sorted by
+            `sum(shard.perf.total)`.
         threshold (Optional[int]): Threshold for early stopping. When specified, the
             proposer stops proposing when the proposals have consecutive worse perf_rating
             than best_perf_rating.
@@ -252,9 +253,9 @@ def _sharding_option_score(
     sharding_option: ShardingOption, use_depth: bool = True
 ) -> float:
     return (
-        max([cast(float, shard.perf) for shard in sharding_option.shards])
+        max([cast(Perf, shard.perf).total for shard in sharding_option.shards])
         if use_depth
-        else sum([cast(float, shard.perf) for shard in sharding_option.shards])
+        else sum([cast(Perf, shard.perf).total for shard in sharding_option.shards])
     )
 
 

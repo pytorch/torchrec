@@ -83,7 +83,7 @@ class TestProposers(unittest.TestCase):
             proposal = cast(List[ShardingOption], self.greedy_proposer.propose())
             proposal.sort(
                 key=lambda sharding_option: (
-                    max([shard.perf for shard in sharding_option.shards]),
+                    max([shard.perf.total for shard in sharding_option.shards]),
                     sharding_option.name,
                 )
             )
@@ -174,7 +174,7 @@ class TestProposers(unittest.TestCase):
         while proposal:
             proposal.sort(
                 key=lambda sharding_option: (
-                    max([shard.perf for shard in sharding_option.shards]),
+                    max([shard.perf.total for shard in sharding_option.shards]),
                     sharding_option.name,
                 )
             )
