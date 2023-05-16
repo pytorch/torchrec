@@ -17,6 +17,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,
 )
+from pyre_extensions import none_throws
 from torch import Tensor
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -223,9 +224,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for key, emb_configs in self._key_to_tables.items():
             (pooling, data_type) = key
             embedding_specs = []
-            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
-                [] if table_name_to_quantized_weights else None
-            )
+            weight_lists: Optional[
+                List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+            ] = ([] if table_name_to_quantized_weights else None)
             feature_table_map: List[int] = []
 
             for idx, table in enumerate(emb_configs):
@@ -239,8 +240,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                     )
                 )
                 if table_name_to_quantized_weights:
-                    # pyre-ignore
-                    weight_lists.append(table_name_to_quantized_weights[table.name])
+                    none_throws(weight_lists).append(
+                        table_name_to_quantized_weights[table.name]
+                    )
                 feature_table_map.extend([idx] * table.num_features())
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
@@ -478,12 +480,13 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
                 )
-            weight_lists: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = (
-                [] if table_name_to_quantized_weights else None
-            )
+            weight_lists: Optional[
+                List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
+            ] = ([] if table_name_to_quantized_weights else None)
             if table_name_to_quantized_weights:
-                # pyre-ignore
-                weight_lists.append(table_name_to_quantized_weights[config.name])
+                none_throws(weight_lists).append(
+                    table_name_to_quantized_weights[config.name]
+                )
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
                     (
