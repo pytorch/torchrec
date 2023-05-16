@@ -85,9 +85,9 @@ def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
 
 
 def pooling_type_to_str(pooling_type: PoolingType) -> str:
-    if pooling_type == PoolingType.SUM:
+    if pooling_type.value == PoolingType.SUM.value:
         return "sum"
-    elif pooling_type == PoolingType.MEAN:
+    elif pooling_type.value == PoolingType.MEAN.value:
         return "mean"
     else:
         raise ValueError(f"Unsupported pooling type {pooling_type}")
