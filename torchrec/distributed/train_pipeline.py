@@ -5,8 +5,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""
+NOTE: Due to an internal packaging issue, `train_pipeline.py` must be compatible with
+older versions of TorchRec. Importing new modules from other files may break model
+publishing flows.
+"""
 import abc
+import itertools
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -19,15 +26,22 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    Union,
 )
 
 import torch
+from torch import distributed as dist
 from torch.autograd.profiler import record_function
-from torch.cuda import Event
 from torch.fx.node import Node
+from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
+from torchrec.distributed.embedding_sharding import (
+    KJTListAwaitable,
+    KJTListSplitsAwaitable,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable
 from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -162,11 +176,188 @@ class Tracer(torch.fx.Tracer):
         return super().is_leaf_module(m, module_qualified_name)
 
 
+# TODO: remove after packaging issue is resolved.
+class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
+    def __init__(
+        self,
+        input_tensors: List[torch.Tensor],
+        pg: dist.ProcessGroup,
+    ) -> None:
+        super().__init__()
+        self.num_workers: int = pg.size()
+        with record_function("## all2all_data:kjt splits ##"):
+            self._output_tensor: torch.Tensor = torch.empty(
+                [self.num_workers * len(input_tensors)],
+                device=input_tensors[0].device,
+                dtype=input_tensors[0].dtype,
+            )
+            input_tensor = torch.stack(input_tensors, dim=1).flatten()
+            self._splits_awaitable: dist.Work = dist.all_to_all_single(
+                output=self._output_tensor,
+                input=input_tensor,
+                group=pg,
+                async_op=True,
+            )
+
+    def _wait_impl(self) -> List[List[int]]:
+        self._splits_awaitable.wait()
+        return self._output_tensor.view(self.num_workers, -1).T.tolist()
+
+
+# TODO: remove after packaging issue is resolved.
+C = TypeVar("C", bound=Multistreamable)
+T = TypeVar("T")
+
+
+# TODO: remove after packaging issue is resolved.
+def _set_sharding_context(
+    tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
+    ctx: C,
+) -> None:
+    for awaitable, sharding_context in zip(
+        tensors_awaitables,
+        getattr(ctx, "sharding_contexts", []),
+    ):
+        if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
+            if hasattr(sharding_context, "batch_size_per_rank"):
+                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
+            if hasattr(sharding_context, "input_splits"):
+                sharding_context.input_splits = awaitable._input_splits["values"]
+            if hasattr(sharding_context, "output_splits"):
+                sharding_context.output_splits = awaitable._output_splits["values"]
+            if hasattr(sharding_context, "sparse_features_recat"):
+                sharding_context.sparse_features_recat = awaitable._recat
+
+
+# TODO: remove after packaging issue is resolved.
+@dataclass
+class KJTSplitsAllToAllMeta:
+    pg: dist.ProcessGroup
+    input: KeyedJaggedTensor
+    splits: List[int]
+    splits_tensors: List[torch.Tensor]
+    input_splits: List[List[int]]
+    input_tensors: List[torch.Tensor]
+    labels: List[str]
+    keys: List[str]
+    device: torch.device
+    stagger: int
+
+
+# TODO: remove after packaging issue is resolved.
+def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
+    return [
+        flat_list[sum(splits[:i]) : sum(splits[:i]) + n] for i, n in enumerate(splits)
+    ]
+
+
+# TODO: remove after packaging issue is resolved.
+class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
+    def __init__(
+        self,
+        requests: List[KJTListSplitsAwaitable[C]],
+        contexts: List[C],
+        pg: Optional[dist.ProcessGroup],
+    ) -> None:
+        super().__init__()
+        self._contexts = contexts
+        self._awaitables: List[
+            Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
+        ] = [awaitable for request in requests for awaitable in request.awaitables]
+        self._output_lengths: List[int] = [
+            len(request.awaitables) for request in requests
+        ]
+        self._lengths: List[int] = [
+            len(awaitable.splits_tensors)
+            if isinstance(awaitable, KJTSplitsAllToAllMeta)
+            else 0
+            for awaitable in self._awaitables
+        ]
+        splits_tensors = [
+            splits_tensor
+            for awaitable in self._awaitables
+            for splits_tensor in (
+                awaitable.splits_tensors
+                if isinstance(awaitable, KJTSplitsAllToAllMeta)
+                else []
+            )
+        ]
+        self._splits_awaitable: Optional[SplitsAllToAllAwaitable] = (
+            SplitsAllToAllAwaitable(
+                input_tensors=splits_tensors,
+                pg=pg,
+            )
+            if splits_tensors and pg
+            else None
+        )
+
+    def _wait_impl(self) -> List[KJTListAwaitable]:
+        if self._splits_awaitable:
+            splits_list = self._splits_awaitable.wait()
+            splits_per_awaitable = _split(splits_list, self._lengths)
+        else:
+            splits_per_awaitable = [[] for _ in range(len(self._lengths))]
+        tensors_awaitables = []
+        for splits, awaitable in zip(splits_per_awaitable, self._awaitables):
+            if not splits:  # NoWait
+                tensors_awaitables.append(awaitable.wait())
+                continue
+            output_splits = splits[:-1]
+            batch_size_per_rank = splits[-1]
+            tensors_awaitables.append(
+                KJTAllToAllTensorsAwaitable(
+                    pg=awaitable.pg,
+                    input=awaitable.input,
+                    splits=awaitable.splits,
+                    input_splits=awaitable.input_splits,
+                    output_splits=output_splits,
+                    input_tensors=awaitable.input_tensors,
+                    labels=awaitable.labels,
+                    batch_size_per_rank=batch_size_per_rank,
+                    keys=awaitable.keys,
+                    device=awaitable.device,
+                    stagger=awaitable.stagger,
+                )
+            )
+        output = []
+        awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
+        for awaitables, ctx in zip(awaitables_per_output, self._contexts):
+            _set_sharding_context(awaitables, ctx)
+            output.append(KJTListAwaitable(awaitables))
+        return output
+
+
 @dataclass
 class TrainPipelineContext:
+    """
+    Context information for a `TrainPipelineSparseDist` instance.
+
+    Attributes:
+        input_dist_splits_requests (Dict[str, Awaitable[Any]]): Stores input dist
+            requests in the splits awaitable stage, which occurs after starting the
+            input dist.
+        input_dist_tensors_requests (Dict[str, Awaitable[Any]]): Stores input dist
+            requests in the tensors awaitable stage, which occurs after calling `wait()`
+            on the splits awaitable.
+        module_contexts (Dict[str, Multistreamable]): Stores module contexts from the
+            input dist for the current batch.
+        module_contexts_next_batch (Dict[str, Multistreamable]): Stores module contexts
+            from the input dist for the next batch.
+        fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
+            List of fused splits input dist awaitable and the corresponding module names
+            of each awaitable.
+        feature_processor_forwards (List[Any]): List of feature processor forwards.
+    """
+
     # pyre-ignore [4]
-    input_dist_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    input_dist_splits_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
+    # pyre-ignore [4]
+    input_dist_tensors_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
+    module_contexts_next_batch: Dict[str, Multistreamable] = field(default_factory=dict)
+    fused_splits_awaitables: List[
+        Tuple[List[str], FusedKJTListSplitsAwaitable]
+    ] = field(default_factory=list)
     # pyre-ignore [4]
     feature_processor_forwards: List[Any] = field(default_factory=list)
 
@@ -206,8 +397,8 @@ class PipelinedForward:
 
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
-        assert self._name in self._context.input_dist_requests
-        request = self._context.input_dist_requests[self._name]
+        assert self._name in self._context.input_dist_tensors_requests
+        request = self._context.input_dist_tensors_requests[self._name]
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
             # Finish waiting on the dist_stream,
@@ -249,13 +440,53 @@ class PipelinedForward:
         return self._args
 
 
+class KJTAllToAllForward:
+    def __init__(
+        self, pg: dist.ProcessGroup, splits: List[int], stagger: int = 1
+    ) -> None:
+        self._pg = pg
+        self._splits = splits
+        self._stagger = stagger
+        self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
+
+    def __call__(self, input: KeyedJaggedTensor) -> KJTSplitsAllToAllMeta:
+        with torch.no_grad():
+            assert len(input.keys()) == sum(self._splits)
+            rank = dist.get_rank(self._pg)
+            local_keys = input.keys()[
+                self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
+            ]
+            input_splits = input.dist_splits(self._splits)
+            device = input.values().device
+            splits_tensors = [
+                torch.tensor(split, device=device) for split in input_splits
+            ]
+            batch_size_tensor = torch.tensor(
+                [input.stride()] * self._pg.size(), device=device
+            )
+            splits_tensors.append(batch_size_tensor)
+            return KJTSplitsAllToAllMeta(
+                pg=self._pg,
+                input=input,
+                splits=self._splits,
+                splits_tensors=splits_tensors,
+                input_splits=input_splits,
+                input_tensors=input.dist_tensors(),
+                labels=input.dist_labels(),
+                keys=local_keys,
+                device=device,
+                stagger=self._stagger,
+            )
+
+
 def _start_data_dist(
     pipelined_modules: List[ShardedModule],
     batch: In,
     context: TrainPipelineContext,
 ) -> None:
-    context.input_dist_requests.clear()
-    context.module_contexts.clear()
+    context.input_dist_splits_requests.clear()
+    context.module_contexts_next_batch.clear()
+    context.fused_splits_awaitables.clear()
     for module in pipelined_modules:
         forward = module.forward
         assert isinstance(forward, PipelinedForward)
@@ -283,14 +514,40 @@ def _start_data_dist(
                 args.append(None)
         # Start input distribution.
         module_ctx = module.create_context()
-        context.module_contexts[forward.name] = module_ctx
-        context.input_dist_requests[forward.name] = module.input_dist(
+        context.module_contexts_next_batch[forward.name] = module_ctx
+        context.input_dist_splits_requests[forward.name] = module.input_dist(
             module_ctx, *args, **kwargs
         )
+    _fuse_input_dist_splits(context)
 
-    # Call wait on the first awaitable in the input dist for the tensor splits
-    for key, awaitable in context.input_dist_requests.items():
-        context.input_dist_requests[key] = awaitable.wait()
+
+def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
+    names_per_pg = defaultdict(list)
+    for name, request in context.input_dist_splits_requests.items():
+        pg = None
+        if isinstance(request, KJTListSplitsAwaitable):
+            for awaitable in request.awaitables:
+                if isinstance(awaitable, KJTSplitsAllToAllMeta):
+                    pg = awaitable.pg
+                    break
+        names_per_pg[pg].append(name)
+
+    for pg, names in names_per_pg.items():
+        context.fused_splits_awaitables.append(
+            (
+                names,
+                FusedKJTListSplitsAwaitable(
+                    # pyre-ignore[6]
+                    requests=[
+                        context.input_dist_splits_requests[name] for name in names
+                    ],
+                    contexts=[
+                        context.module_contexts_next_batch[name] for name in names
+                    ],
+                    pg=pg,
+                ),
+            )
+        )
 
 
 def _get_node_args_helper(
@@ -464,6 +721,24 @@ def _rewrite_model(  # noqa C901
     return ret
 
 
+def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> None:
+    """
+    Overrides each input dist forward to support fusing the splits collective.
+    NOTE: this can only be called after the input dists are initialized.
+    """
+    for module in pipelined_modules:
+        assert not module._has_uninitialized_input_dist
+        # pyre-ignore[29]
+        for input_dist in module._input_dists:
+            if hasattr(input_dist, "_dist"):
+                assert isinstance(input_dist._dist, KJTAllToAll)
+                input_dist._dist.forward = KJTAllToAllForward(
+                    pg=input_dist._dist._pg,
+                    splits=input_dist._dist._splits,
+                    stagger=input_dist._dist._stagger,
+                )
+
+
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     """
     This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
@@ -525,13 +800,15 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         # executes last batch in pipeline
         if self._batch_i and self._execute_all_batches:
             return
-        self._init_pipelined_modules()
 
         # batch 1
         self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
         if self._batch_i is None:
             raise StopIteration
-        self._sparse_data_dist(self._batch_i)
+
+        self._init_pipelined_modules(self._batch_i)
+        self._start_sparse_data_dist(self._batch_i)
+        self._wait_sparse_data_dist()
 
         # batch 2
         self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
@@ -543,17 +820,18 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
-        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
-
         with record_function("## wait_for_batch ##"):
             _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
 
+        self._start_sparse_data_dist(self._batch_ip1)
+
+        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
+
         # forward
         with record_function("## forward ##"):
-            event = self._record_forward_event()
             losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
 
-        self._sparse_data_dist(self._batch_ip1, event)
+        self._wait_sparse_data_dist()
 
         if self._model.training:
             # backward
@@ -569,19 +847,28 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         return output
 
-    def _init_pipelined_modules(self) -> None:
+    def _init_pipelined_modules(self, batch: In) -> None:
+        """
+        Retrieves the pipelined modules after overriding their forwards, initializes the
+        modules' input dists, and overrides the input dist forwards to support fusing
+        the splits collective in the input dist.
+        """
         if self._pipelined_modules:
             return
         self._pipelined_modules = _rewrite_model(
             self._model, self._context, self._data_dist_stream
         )
+        # initializes input dist, so we can override input dist forwards
+        self._start_sparse_data_dist(self._batch_i)
+        _override_input_dist_forwards(self._pipelined_modules)
 
     def _copy_batch_to_gpu(self, dataloader_iter: Iterator[In]) -> Optional[In]:
         """
         Retrieves batch from dataloader and moves it to the provided device.
 
-        Raises StopIteration when dataloader iterator is exhausted; unless
-        execute_all_batches=True, then returns None.
+        Raises:
+            StopIteration: if the dataloader iterator is exhausted; unless
+                `self._execute_all_batches=True`, then returns None.
         """
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
@@ -592,31 +879,28 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                     raise StopIteration
                 return batch
 
-    def _sparse_data_dist(
-        self, batch: Optional[In], event: Optional[Event] = None
-    ) -> None:
+    def _start_sparse_data_dist(self, batch: Optional[In]) -> None:
         """
-        Waits for batch to finish getting copied to GPU and forward pass to complete,
-        then starts the input distribution.
+        Waits for batch to finish getting copied to GPU, then starts the input dist.
         """
         if batch is None:
             return
-        with record_function("## sparse_data_dist ##"):
+        with record_function("## start_sparse_data_dist ##"):
             with torch.cuda.stream(self._data_dist_stream):
                 _wait_for_batch(batch, self._memcpy_stream)
-                # ensure event in default stream is called before starting data dist
-                if event is not None:
-                    # pyre-ignore[16]
-                    self._data_dist_stream.wait_event(event)
                 _start_data_dist(self._pipelined_modules, batch, self._context)
 
-    def _record_forward_event(self) -> Optional[Event]:
+    def _wait_sparse_data_dist(self) -> None:
         """
-        Creates an event in the default stream if using multiple streams (ie. CUDA),
-        before starting forward pass.
+        Waits on the input dist splits requests to get the input dist tensors requests,
+        and populates the context with them.
         """
-        return (
-            torch.cuda.current_stream().record_event()
-            if self._data_dist_stream
-            else None
-        )
+        with record_function("## wait_sparse_data_dist ##"):
+            with torch.cuda.stream(self._data_dist_stream):
+                self._context.module_contexts = (
+                    self._context.module_contexts_next_batch.copy()
+                )
+                self._context.input_dist_tensors_requests.clear()
+                for names, awaitable in self._context.fused_splits_awaitables:
+                    for name, request in zip(names, awaitable.wait()):
+                        self._context.input_dist_tensors_requests[name] = request
