@@ -213,11 +213,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
 
 
 class TestQuantECSharder(QuantEmbeddingCollectionSharder):
-    def __init__(
-        self,
-        sharding_type: str,
-        kernel_type: str,
-    ) -> None:
+    def __init__(self, sharding_type: str, kernel_type: str) -> None:
         super().__init__()
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
@@ -242,9 +238,7 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
             dtype_to_data_type(module.output_dtype())
         )
         fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
-        return ShardedQuantEmbeddingCollection(
-            module, params, env, fused_params, device
-        )
+        return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
 
 
 class KJTInputWrapper(torch.nn.Module):
