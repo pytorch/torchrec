@@ -7,8 +7,8 @@
 
 import copy
 import itertools
-from collections import defaultdict, OrderedDict
-from typing import Any, Dict, List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -17,8 +17,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,
 )
-from pyre_extensions import none_throws
 from torch import Tensor
+from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
