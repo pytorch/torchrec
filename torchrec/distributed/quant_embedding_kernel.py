@@ -157,7 +157,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
             uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
             **(tbe_fused_params(fused_params) or {}),
         )
-        if device is not None:
+        if device is not None and device.type != "meta":
             self._emb_module.initialize_weights()
 
     def init_parameters(self) -> None:

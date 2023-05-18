@@ -356,20 +356,17 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     Args:
         features_per_rank (List[int]): number of features to send to each rank.
         world_size (int): number of devices in the topology.
-        fused_params (Dict[str, Any]): fused parameters of the model.
     """
 
     def __init__(
         self,
         features_per_rank: List[int],
         world_size: int,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._dist = KJTOneToAll(
-            splits=features_per_rank,
-            world_size=world_size,
-            device=device,
+            features_per_rank,
+            world_size,
         )
 
     def forward(
@@ -436,13 +433,11 @@ class InferTwEmbeddingSharding(
     """
 
     def create_input_dist(
-        self,
-        device: Optional[torch.device] = None,
+        self, device: Optional[torch.device] = None
     ) -> BaseSparseFeaturesDist[KJTList]:
         return InferTwSparseFeaturesDist(
-            features_per_rank=self.features_per_rank(),
-            world_size=self._world_size,
-            device=device,
+            self.features_per_rank(),
+            self._world_size,
         )
 
     def create_lookup(
@@ -455,7 +450,6 @@ class InferTwEmbeddingSharding(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,
             fused_params=fused_params,
-            device=device,
         )
 
     def create_output_dist(
