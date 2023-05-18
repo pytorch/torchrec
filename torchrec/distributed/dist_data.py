@@ -486,21 +486,16 @@ class KJTOneToAll(nn.Module):
         splits (List[int]): lengths of features to split the `KeyJaggedTensor` features
             into before copying them.
         world_size (int): number of devices in the topology.
-        device (torch.device): the device on which the KJTs will be allocated.
     """
 
     def __init__(
         self,
         splits: List[int],
         world_size: int,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._splits = splits
         self._world_size = world_size
-        self._device_type = (
-            "cuda" if device is None or device.type == "cuda" else "meta"
-        )
         assert self._world_size == len(splits)
 
     def forward(self, kjt: KeyedJaggedTensor) -> KJTList:
@@ -516,9 +511,7 @@ class KJTOneToAll(nn.Module):
         fx_marker("KJT_ONE_TO_ALL_FORWARD_BEGIN", kjt)
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
-            kjts[rank]
-            if self._device_type == "meta"
-            else kjts[rank].to(torch.device(self._device_type, rank), non_blocking=True)
+            kjts[rank].to(torch.device("cuda", rank), non_blocking=True)
             for rank in range(self._world_size)
         ]
         ret = KJTList(dist_kjts)
