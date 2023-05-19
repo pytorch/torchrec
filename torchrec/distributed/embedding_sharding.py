@@ -10,8 +10,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
-from torch import nn
-from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
+from torch import distributed as dist, nn
+from torchrec.distributed.dist_data import (
+    KJTAllToAllTensorsAwaitable,
+    SplitsAllToAllAwaitable,
+)
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
     BaseGroupedFeatureProcessor,
@@ -233,6 +236,32 @@ class KJTListAwaitable(Awaitable[KJTList]):
 
 
 C = TypeVar("C", bound=Multistreamable)
+T = TypeVar("T")
+
+
+def _set_sharding_context(
+    tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
+    ctx: C,
+) -> None:
+    for awaitable, sharding_context in zip(
+        tensors_awaitables,
+        getattr(ctx, "sharding_contexts", []),
+    ):
+        if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
+            if hasattr(sharding_context, "batch_size_per_rank"):
+                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
+            if hasattr(sharding_context, "input_splits"):
+                sharding_context.input_splits = awaitable._input_splits["values"]
+            if hasattr(sharding_context, "output_splits"):
+                sharding_context.output_splits = awaitable._output_splits["values"]
+            if hasattr(sharding_context, "sparse_features_recat"):
+                sharding_context.sparse_features_recat = awaitable._recat
+
+
+def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
+    return [
+        flat_list[sum(splits[:i]) : sum(splits[:i]) + n] for i, n in enumerate(splits)
+    ]
 
 
 class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
@@ -267,22 +296,97 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
             KJTListAwaitable: awaitables for tensors of the sparse features.
         """
         tensors_awaitables = [w.wait() for w in self.awaitables]
-        for awaitable, sharding_context in zip(
-            tensors_awaitables,
-            getattr(self.ctx, "sharding_contexts", []),
-        ):
-            if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
-                if hasattr(sharding_context, "batch_size_per_rank"):
-                    sharding_context.batch_size_per_rank = (
-                        awaitable._batch_size_per_rank
-                    )
-                if hasattr(sharding_context, "input_splits"):
-                    sharding_context.input_splits = awaitable._input_splits["values"]
-                if hasattr(sharding_context, "output_splits"):
-                    sharding_context.output_splits = awaitable._output_splits["values"]
-                if hasattr(sharding_context, "sparse_features_recat"):
-                    sharding_context.sparse_features_recat = awaitable._recat
+        _set_sharding_context(tensors_awaitables, self.ctx)
         return KJTListAwaitable(tensors_awaitables)
+
+
+@dataclass
+class KJTSplitsAllToAllMeta:
+    pg: dist.ProcessGroup
+    input: KeyedJaggedTensor
+    splits: List[int]
+    splits_tensors: List[torch.Tensor]
+    input_splits: List[List[int]]
+    input_tensors: List[torch.Tensor]
+    labels: List[str]
+    keys: List[str]
+    device: torch.device
+    stagger: int
+
+
+class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
+    def __init__(
+        self,
+        requests: List[KJTListSplitsAwaitable[C]],
+        contexts: List[C],
+        pg: Optional[dist.ProcessGroup],
+    ) -> None:
+        super().__init__()
+        self._contexts = contexts
+        self._awaitables: List[
+            Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
+        ] = [awaitable for request in requests for awaitable in request.awaitables]
+        self._output_lengths: List[int] = [
+            len(request.awaitables) for request in requests
+        ]
+        self._lengths: List[int] = [
+            len(awaitable.splits_tensors)
+            if isinstance(awaitable, KJTSplitsAllToAllMeta)
+            else 0
+            for awaitable in self._awaitables
+        ]
+        splits_tensors = [
+            splits_tensor
+            for awaitable in self._awaitables
+            for splits_tensor in (
+                awaitable.splits_tensors
+                if isinstance(awaitable, KJTSplitsAllToAllMeta)
+                else []
+            )
+        ]
+        self._splits_awaitable: Optional[SplitsAllToAllAwaitable] = (
+            SplitsAllToAllAwaitable(
+                input_tensors=splits_tensors,
+                pg=pg,
+            )
+            if splits_tensors and pg
+            else None
+        )
+
+    def _wait_impl(self) -> List[KJTListAwaitable]:
+        if self._splits_awaitable:
+            splits_list = self._splits_awaitable.wait()
+            splits_per_awaitable = _split(splits_list, self._lengths)
+        else:
+            splits_per_awaitable = [[] for _ in range(len(self._lengths))]
+        tensors_awaitables = []
+        for splits, awaitable in zip(splits_per_awaitable, self._awaitables):
+            if not splits:  # NoWait
+                tensors_awaitables.append(awaitable.wait())
+                continue
+            output_splits = splits[:-1]
+            batch_size_per_rank = splits[-1]
+            tensors_awaitables.append(
+                KJTAllToAllTensorsAwaitable(
+                    pg=awaitable.pg,
+                    input=awaitable.input,
+                    splits=awaitable.splits,
+                    input_splits=awaitable.input_splits,
+                    output_splits=output_splits,
+                    input_tensors=awaitable.input_tensors,
+                    labels=awaitable.labels,
+                    batch_size_per_rank=batch_size_per_rank,
+                    keys=awaitable.keys,
+                    device=awaitable.device,
+                    stagger=awaitable.stagger,
+                )
+            )
+        output = []
+        awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
+        for awaitables, ctx in zip(awaitables_per_output, self._contexts):
+            _set_sharding_context(awaitables, ctx)
+            output.append(KJTListAwaitable(awaitables))
+        return output
 
 
 class ListOfKJTListAwaitable(Awaitable[ListOfKJTList]):

@@ -84,7 +84,6 @@ class ShardedQuantEmbeddingBagCollection(
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
         fused_params: Optional[Dict[str, Any]] = None,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._embedding_bag_configs: List[
@@ -107,11 +106,11 @@ class ShardedQuantEmbeddingBagCollection(
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
-        self._device = device
+
         self._is_weighted: bool = module.is_weighted()
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
-        self._create_lookups(fused_params, device)
+        self._create_lookups(fused_params)
         self._output_dists: List[nn.Module] = []
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
@@ -155,14 +154,11 @@ class ShardedQuantEmbeddingBagCollection(
     def _create_input_dist(
         self,
         input_feature_names: List[str],
-        features_device: torch.device,
-        input_dist_device: Optional[torch.device] = None,
+        device: torch.device,
     ) -> None:
         feature_names: List[str] = []
         for sharding in self._sharding_type_to_sharding.values():
-            self._input_dists.append(
-                sharding.create_input_dist(device=input_dist_device)
-            )
+            self._input_dists.append(sharding.create_input_dist())
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
 
@@ -173,21 +169,17 @@ class ShardedQuantEmbeddingBagCollection(
                 self._features_order.append(input_feature_names.index(f))
             self.register_buffer(
                 "_features_order_tensor",
-                torch.tensor(
-                    self._features_order, device=features_device, dtype=torch.int32
-                ),
+                torch.tensor(self._features_order, device=device, dtype=torch.int32),
                 persistent=False,
             )
 
     def _create_lookups(
         self,
         fused_params: Optional[Dict[str, Any]],
-        device: Optional[torch.device] = None,
     ) -> None:
         for sharding in self._sharding_type_to_sharding.values():
             self._lookups.append(
                 sharding.create_lookup(
-                    device=device,
                     fused_params=fused_params,
                 )
             )
@@ -204,11 +196,7 @@ class ShardedQuantEmbeddingBagCollection(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
     ) -> ListOfKJTList:
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(
-                features.keys(),
-                features.device(),
-                self._device,
-            )
+            self._create_input_dist(features.keys(), features.device())
             self._has_uninitialized_input_dist = False
         if self._has_uninitialized_output_dist:
             self._create_output_dist(features.device())

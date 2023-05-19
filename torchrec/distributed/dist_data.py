@@ -143,17 +143,15 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
     def __init__(
         self,
         input_tensors: List[torch.Tensor],
-        num_workers: int,
-        device: torch.device,
         pg: dist.ProcessGroup,
     ) -> None:
         super().__init__()
-        self.num_workers: int = num_workers
+        self.num_workers: int = pg.size()
 
         with record_function("## all2all_data:kjt splits ##"):
             self._output_tensor: torch.Tensor = torch.empty(
-                [num_workers * len(input_tensors)],
-                device=device,
+                [self.num_workers * len(input_tensors)],
+                device=input_tensors[0].device,
                 dtype=input_tensors[0].dtype,
             )
             input_tensor = torch.stack(input_tensors, dim=1).flatten()
@@ -332,9 +330,7 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
         )
         input_tensors.append(batch_size_tensor)
 
-        self._splits_awaitable = SplitsAllToAllAwaitable(
-            input_tensors, self._workers, self._device, self._pg
-        )
+        self._splits_awaitable = SplitsAllToAllAwaitable(input_tensors, self._pg)
 
     def _wait_impl(self) -> KJTAllToAllTensorsAwaitable:
         """
@@ -431,9 +427,7 @@ class KJTAllToAll(nn.Module):
         super().__init__()
         assert len(splits) == pg.size()
         self._pg: dist.ProcessGroup = pg
-        self._workers: int = pg.size()
         self._splits = splits
-        self._no_dist: bool = all(s == 0 for s in splits)
         self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
         self._stagger = stagger
 
@@ -454,7 +448,6 @@ class KJTAllToAll(nn.Module):
         """
 
         device = input.values().device
-
         with torch.no_grad():
             assert len(input.keys()) == sum(self._splits)
             rank = dist.get_rank(self._pg)
@@ -486,21 +479,16 @@ class KJTOneToAll(nn.Module):
         splits (List[int]): lengths of features to split the `KeyJaggedTensor` features
             into before copying them.
         world_size (int): number of devices in the topology.
-        device (torch.device): the device on which the KJTs will be allocated.
     """
 
     def __init__(
         self,
         splits: List[int],
         world_size: int,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._splits = splits
         self._world_size = world_size
-        self._device_type = (
-            "cuda" if device is None or device.type == "cuda" else "meta"
-        )
         assert self._world_size == len(splits)
 
     def forward(self, kjt: KeyedJaggedTensor) -> KJTList:
@@ -516,9 +504,7 @@ class KJTOneToAll(nn.Module):
         fx_marker("KJT_ONE_TO_ALL_FORWARD_BEGIN", kjt)
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
-            kjts[rank]
-            if self._device_type == "meta"
-            else kjts[rank].to(torch.device(self._device_type, rank), non_blocking=True)
+            kjts[rank].to(torch.device("cuda", rank), non_blocking=True)
             for rank in range(self._world_size)
         ]
         ret = KJTList(dist_kjts)

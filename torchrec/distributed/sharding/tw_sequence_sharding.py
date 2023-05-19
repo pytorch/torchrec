@@ -204,9 +204,8 @@ class InferTwSequenceEmbeddingSharding(
         self, device: Optional[torch.device] = None
     ) -> BaseSparseFeaturesDist[KJTList]:
         return InferTwSparseFeaturesDist(
-            features_per_rank=self.features_per_rank(),
-            world_size=self._world_size,
-            device=device,
+            self.features_per_rank(),
+            self._world_size,
         )
 
     def create_lookup(
@@ -219,7 +218,6 @@ class InferTwSequenceEmbeddingSharding(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,
             fused_params=fused_params,
-            device=device,
         )
 
     def create_output_dist(
