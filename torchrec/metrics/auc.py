@@ -29,7 +29,7 @@ REQUIRED_INPUTS = "required_inputs"
 def _compute_auc_helper(
     predictions: torch.Tensor, labels: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
-    _, sorted_indices = torch.sort(predictions, descending=True, dim=-1)
+    sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
     sorted_labels = torch.index_select(labels, dim=0, index=sorted_indices)
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
     cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
@@ -54,9 +54,6 @@ def compute_auc(
         labels (torch.Tensor): tensor of size (n_tasks, n_examples).
         weights (torch.Tensor): tensor of size (n_tasks, n_examples).
     """
-    # The return values are sorted_predictions, sorted_index but only
-    # sorted_predictions is needed.
-    _, sorted_indices = torch.sort(predictions, descending=True, dim=-1)
     aucs = []
     for predictions_i, labels_i, weights_i in zip(predictions, labels, weights):
         auc = _compute_auc_helper(predictions_i, labels_i, weights_i)
