@@ -12,7 +12,7 @@ from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
-from torchrec.metrics.rec_metric import RecComputeMode
+from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import gen_test_batch, gen_test_tasks
 
 
@@ -28,7 +28,7 @@ class RecMetricTest(unittest.TestCase):
         ne1 = NEMetric(
             world_size=1,
             my_rank=0,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -37,7 +37,7 @@ class RecMetricTest(unittest.TestCase):
         ne2 = NEMetric(
             world_size=1,
             my_rank=1,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -69,7 +69,7 @@ class RecMetricTest(unittest.TestCase):
         mse = MSEMetric(
             world_size=1,
             my_rank=0,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -121,7 +121,7 @@ class RecMetricTest(unittest.TestCase):
                 label_name=task.label_name,
                 prediction_name=task.prediction_name,
                 weight_name=task.weight_name,
-                batch_size=128,
+                batch_size=64,
             )
             for task in tasks
         ]
@@ -135,7 +135,7 @@ class RecMetricTest(unittest.TestCase):
         ne = NEMetric(
             world_size=1,
             my_rank=0,
-            batch_size=128,
+            batch_size=64,
             tasks=tasks,
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -186,7 +186,7 @@ class RecMetricTest(unittest.TestCase):
         ne = NEMetric(
             world_size=1,
             my_rank=0,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -205,7 +205,7 @@ class RecMetricTest(unittest.TestCase):
         ne = NEMetric(
             world_size=1,
             my_rank=1,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -223,7 +223,7 @@ class RecMetricTest(unittest.TestCase):
         ne = NEMetric(
             world_size=1,
             my_rank=1,
-            batch_size=128,
+            batch_size=64,
             tasks=[DefaultTaskInfo],
             compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             window_size=100,
@@ -238,3 +238,13 @@ class RecMetricTest(unittest.TestCase):
         res = ne.compute()
         self.assertIn("ne-DefaultTask|lifetime_ne", res)
         self.assertIn("ne-DefaultTask|window_ne", res)
+
+    def test_invalid_window_size(self) -> None:
+        with self.assertRaises(ValueError):
+            RecMetric(
+                world_size=8,
+                my_rank=0,
+                window_size=50,
+                batch_size=10,
+                tasks=[DefaultTaskInfo],
+            )

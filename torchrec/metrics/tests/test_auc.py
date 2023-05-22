@@ -133,7 +133,7 @@ class AUCMetricValueTest(unittest.TestCase):
         self.auc = AUCMetric(
             world_size=1,
             my_rank=0,
-            batch_size=20000,
+            batch_size=100,
             tasks=[DefaultTaskInfo],
         )
 
