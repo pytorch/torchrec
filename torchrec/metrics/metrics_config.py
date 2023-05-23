@@ -79,7 +79,8 @@ class RecMetricDef:
             RecTask information stored in the parent ``MetricsConfig``. Only one
             of the two fields should be specified.
         rec_task_indices (List[int]): see the doscstring of ``rec_tasks``.
-        window_size (int): the window size for this metric.
+        window_size (int): the window size for this metric. Note that this is global window size.
+            The local window size is window_size / world_size, and must be larger than batch size.
         arguments (Optional[Dict[str, Any]]): any propritary arguments to be used
             by this Metric.
     """

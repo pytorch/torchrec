@@ -26,7 +26,7 @@ _CUDA_UNAVAILABLE: bool = not torch.cuda.is_available()
 class TestGPU(unittest.TestCase):
     @unittest.skipIf(_CUDA_UNAVAILABLE, "Test needs to run on GPU")
     def test_auc_reset(self) -> None:
-        batch_size = 128
+        batch_size = 64
         auc = AUCMetric(
             world_size=1,
             my_rank=0,

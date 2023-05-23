@@ -346,6 +346,11 @@ class RecMetric(nn.Module, abc.ABC):
             self.LABELS: [],
             self.WEIGHTS: [],
         }
+        if self._window_size < self._batch_size:
+            raise ValueError(
+                f"Local window size must be larger than batch size. Got local window size {self._window_size} and batch size {self._batch_size}."
+            )
+
         if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
             task_per_metric = len(self._tasks)
             self._tasks_iter = self._fused_tasks_iter
