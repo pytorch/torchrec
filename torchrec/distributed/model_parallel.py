@@ -7,7 +7,7 @@
 
 import abc
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
 
 import torch
 import torch.distributed as dist
@@ -16,6 +16,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     sharder_name,
@@ -207,8 +208,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         if sharders is None:
             sharders = get_default_sharders()
-        self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
-            sharder_name(sharder.module_type): sharder for sharder in sharders
+
+        self._sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
+            sharder.module_type: sharder for sharder in sharders
         }
 
         if data_parallel_wrapper is None:
@@ -325,7 +327,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         # shardable module
         module_sharding_plan = self._plan.get_plan_for_module(path)
         if module_sharding_plan:
-            sharder_key = sharder_name(type(module))
+            sharder_key = type(module)
             module = self._sharder_map[sharder_key].shard(
                 module,
                 module_sharding_plan,
