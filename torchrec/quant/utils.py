@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -61,15 +61,25 @@ def recursive_populate_fx_names(module: nn.Module) -> None:
         recursive_populate_fx_names(submodule)
 
 
-def meta_to_cpu_placement(module: DistributedModelParallel) -> None:
-    assert hasattr(module, "_dmp_wrapped_module")
-    _meta_to_cpu_placement(module.module, module, "_dmp_wrapped_module")
+def meta_to_cpu_placement(module: torch.nn.Module) -> None:
+    if hasattr(module, "_dmp_wrapped_module"):
+        # for placement update of dmp module, we need to fetch .module (read access) and write
+        # to .dmp_wrapped_module (write access)
+        assert type(module) == DistributedModelParallel
+        _meta_to_cpu_placement(module.module, module, "_dmp_wrapped_module")
+    else:
+        # shard module case
+        _meta_to_cpu_placement(module, module)
 
 
 def _meta_to_cpu_placement(
-    module: nn.Module, root_module: nn.Module, name: str
+    module: nn.Module, root_module: nn.Module, name: Optional[str] = None
 ) -> None:
-    if isinstance(module, QuantEmbeddingBagCollection) and module.device.type == "meta":
+    if (
+        name is not None
+        and isinstance(module, QuantEmbeddingBagCollection)
+        and module.device.type == "meta"
+    ):
         qebc_cpu = QuantEmbeddingBagCollection(
             tables=module.embedding_bag_configs(),
             is_weighted=module.is_weighted(),
@@ -77,7 +87,11 @@ def _meta_to_cpu_placement(
             output_dtype=module.output_dtype(),
         )
         setattr(root_module, name, qebc_cpu)
-    elif isinstance(module, QuantEmbeddingCollection) and module.device.type == "meta":
+    elif (
+        name is not None
+        and isinstance(module, QuantEmbeddingCollection)
+        and module.device.type == "meta"
+    ):
         qec_cpu = QuantEmbeddingCollection(
             tables=module.embedding_configs(),
             device=torch.device("cpu"),
