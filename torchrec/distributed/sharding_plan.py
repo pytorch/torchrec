@@ -16,6 +16,9 @@ from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.fp_embeddingbag import (
+    FeatureProcessedEmbeddingBagCollectionSharder,
+)
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
@@ -35,6 +38,7 @@ MIN_CW_DIM: int = 128
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
     return [
         cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder()),
+        cast(ModuleSharder[nn.Module], FeatureProcessedEmbeddingBagCollectionSharder()),
         cast(ModuleSharder[nn.Module], EmbeddingCollectionSharder()),
         cast(ModuleSharder[nn.Module], FusedEmbeddingBagCollectionSharder()),
         cast(ModuleSharder[nn.Module], QuantEmbeddingBagCollectionSharder()),
