@@ -297,7 +297,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def ftest_feature_processed_ebc(self) -> None:
+    def test_feature_processed_ebc(self) -> None:
         embedding_bag_configs = [
             EmbeddingBagConfig(
                 name="table_0",
@@ -403,12 +403,6 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             self.device,
         )
 
-        self.assertEqual(len(pipeline._pipelined_modules), 1)
-        self.assertIsInstance(
-            pipeline._pipelined_modules[0],
-            ShardedFeatureProcessedEmbeddingBagCollection,
-        )
-
         for batch in data[:-2]:
             optimizer_no_pipeline.zero_grad()
             loss, pred = sharded_sparse_arch_no_pipeline(batch)
@@ -417,6 +411,12 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
 
             pred_pipeline = pipeline.progress(dataloader)
             torch.testing.assert_close(pred_pipeline.cpu(), pred.cpu())
+
+        self.assertEqual(len(pipeline._pipelined_modules), 1)
+        self.assertIsInstance(
+            pipeline._pipelined_modules[0],
+            ShardedFeatureProcessedEmbeddingBagCollection,
+        )
 
     def _setup_pipeline(
         self, sharder: EmbeddingBagCollectionSharder, execute_all_batches: bool
