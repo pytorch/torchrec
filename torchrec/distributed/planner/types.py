@@ -23,7 +23,12 @@ from torchrec.distributed.planner.constants import (
     INTRA_NODE_BANDWIDTH,
     POOLING_FACTOR,
 )
-from torchrec.distributed.types import ModuleSharder, ShardingPlan
+from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheParams,
+    ModuleSharder,
+    ShardingPlan,
+)
 from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 
 # ---- Perf ---- #
@@ -244,6 +249,10 @@ class ShardingOption:
         partition_by: str,
         compute_kernel: str,
         shards: List[Shard],
+        cache_params: Optional[CacheParams] = None,
+        enforce_hbm: Optional[bool] = None,
+        stochastic_rounding: Optional[bool] = None,
+        bounds_check_mode: Optional[BoundsCheckMode] = None,
         dependency: Optional[str] = None,
     ) -> None:
         self.name = name
@@ -257,6 +266,10 @@ class ShardingOption:
         # relevant to planner output, must be populated if sharding option
         # part of final solution
         self.shards = shards
+        self.cache_params = cache_params
+        self.enforce_hbm = enforce_hbm
+        self.stochastic_rounding = stochastic_rounding
+        self.bounds_check_mode = bounds_check_mode
         self.dependency = dependency
         self._is_pooled: Optional[bool] = None
 
