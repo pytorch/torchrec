@@ -727,16 +727,23 @@ def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> Non
     NOTE: this can only be called after the input dists are initialized.
     """
     for module in pipelined_modules:
-        assert not module._has_uninitialized_input_dist
-        # pyre-ignore[29]
-        for input_dist in module._input_dists:
-            if hasattr(input_dist, "_dist"):
-                assert isinstance(input_dist._dist, KJTAllToAll)
-                input_dist._dist.forward = KJTAllToAllForward(
-                    pg=input_dist._dist._pg,
-                    splits=input_dist._dist._splits,
-                    stagger=input_dist._dist._stagger,
-                )
+        for child_fqn, child_module in module.named_modules():
+            if hasattr(child_module, "_has_uninitialized_input_dist"):
+                assert (
+                    not child_module._has_uninitialized_input_dist
+                ), f"{child_fqn} has uninitialized input dist"
+
+            if not hasattr(child_module, "_input_dists"):
+                continue
+
+            for input_dist in child_module._input_dists:
+                if hasattr(input_dist, "_dist"):
+                    assert isinstance(input_dist._dist, KJTAllToAll)
+                    input_dist._dist.forward = KJTAllToAllForward(
+                        pg=input_dist._dist._pg,
+                        splits=input_dist._dist._splits,
+                        stagger=input_dist._dist._stagger,
+                    )
 
 
 class TrainPipelineSparseDist(TrainPipeline[In, Out]):

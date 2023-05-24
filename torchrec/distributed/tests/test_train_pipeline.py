@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import os
 import unittest
 from dataclasses import dataclass
@@ -21,6 +22,14 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
+from torchrec.distributed.fp_embeddingbag import (
+    FeatureProcessedEmbeddingBagCollectionSharder,
+    ShardedFeatureProcessedEmbeddingBagCollection,
+)
+from torchrec.distributed.sharding_plan import (
+    construct_module_sharding_plan,
+    table_wise,
+)
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
@@ -36,6 +45,7 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ParameterSharding,
     ShardingEnv,
+    ShardingPlan,
     ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -46,6 +56,8 @@ from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
 from torchrec.test_utils import get_free_port, init_distributed_single_host
+
+from .test_fp_embeddingbag_utils import create_module_and_freeze
 
 
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
@@ -279,6 +291,132 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         self._test_feature_processor_helper(
             test_unsharded_model, distributed_model, fp_tables
         )
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def ftest_feature_processed_ebc(self) -> None:
+        embedding_bag_configs = [
+            EmbeddingBagConfig(
+                name="table_0",
+                feature_names=["feature_0"],
+                embedding_dim=3 * 16,
+                num_embeddings=16,
+            ),
+            EmbeddingBagConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=8,
+                num_embeddings=16,
+            ),
+            EmbeddingBagConfig(
+                name="table_2",
+                feature_names=["feature_2"],
+                embedding_dim=8,
+                num_embeddings=16,
+            ),
+            EmbeddingBagConfig(
+                name="table_3",
+                feature_names=["feature_3"],
+                embedding_dim=3 * 16,
+                num_embeddings=16,
+            ),
+        ]
+
+        sharder = cast(
+            ModuleSharder[nn.Module], FeatureProcessedEmbeddingBagCollectionSharder()
+        )
+
+        class DummyWrapper(nn.Module):
+            def __init__(self, sparse_arch):
+                super().__init__()
+                self.m = sparse_arch
+
+            def forward(self, model_input) -> Tuple[torch.Tensor, torch.Tensor]:
+                return self.m(model_input.idlist_features)
+
+        sparse_arch = DummyWrapper(
+            create_module_and_freeze(
+                tables=embedding_bag_configs,
+                device=self.device,
+            )
+        )
+        module_sharding_plan = construct_module_sharding_plan(
+            sparse_arch.m._fp_ebc,
+            per_param_sharding={
+                "table_0": table_wise(rank=0),
+                "table_1": table_wise(rank=0),
+                "table_2": table_wise(rank=0),
+                "table_3": table_wise(rank=0),
+            },
+            local_size=1,
+            world_size=1,
+            device_type=self.device.type,
+            sharder=sharder,
+        )
+        sharded_sparse_arch_no_pipeline = DistributedModelParallel(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"m._fp_ebc": module_sharding_plan}),
+            env=ShardingEnv.from_process_group(self.pg),
+            sharders=[sharder],
+            device=self.device,
+        )
+
+        sharded_sparse_arch_pipeline = DistributedModelParallel(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"m._fp_ebc": module_sharding_plan}),
+            env=ShardingEnv.from_process_group(self.pg),
+            sharders=[sharder],
+            device=self.device,
+        )
+
+        copy_state_dict(
+            sharded_sparse_arch_no_pipeline.state_dict(),
+            sharded_sparse_arch_pipeline.state_dict(),
+        )
+
+        data = [
+            ModelInput.generate(
+                tables=embedding_bag_configs,
+                weighted_tables=[],
+                batch_size=1,
+                world_size=1,
+                num_float_features=0,
+                pooling_avg=5,
+            )[0].to(self.device)
+            for i in range(10)
+        ]
+        dataloader = iter(data)
+
+        optimizer_no_pipeline = optim.SGD(
+            sharded_sparse_arch_no_pipeline.parameters(), lr=0.1
+        )
+        optimizer_pipeline = optim.SGD(
+            sharded_sparse_arch_pipeline.parameters(), lr=0.1
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            sharded_sparse_arch_pipeline,
+            optimizer_pipeline,
+            self.device,
+        )
+
+        self.assertEqual(len(pipeline._pipelined_modules), 1)
+        self.assertIsInstance(
+            pipeline._pipelined_modules[0],
+            ShardedFeatureProcessedEmbeddingBagCollection,
+        )
+
+        for batch in data[:-2]:
+            optimizer_no_pipeline.zero_grad()
+            loss, pred = sharded_sparse_arch_no_pipeline(batch)
+            loss.backward()
+            optimizer_no_pipeline.step()
+
+            pred_pipeline = pipeline.progress(dataloader)
+            torch.testing.assert_close(pred_pipeline.cpu(), pred.cpu())
 
     def _setup_pipeline(
         self, sharder: EmbeddingBagCollectionSharder, execute_all_batches: bool
