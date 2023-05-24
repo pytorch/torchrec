@@ -245,6 +245,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             warmup_steps=warmup_steps,
             compute_on_all_ranks=False,
             should_validate_update=False,
+            window_size=200,
         )
         model_output = gen_test_batch(batch_size)
         for i in range(5):
@@ -279,6 +280,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             warmup_steps=warmup_steps,
             compute_on_all_ranks=False,
             should_validate_update=False,
+            window_size=200,
         )
         for step in range(warmup_steps + extra_steps):
             _model_output = [

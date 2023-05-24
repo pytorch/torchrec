@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+import unittest
+from typing import cast
+
+import torch
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.feature_processor_ import FeatureProcessor, PositionWeightedModule
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+
+class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
+    def test_populate_weights(self) -> None:
+        #     0       1        2  <-- batch
+        # 0   [0,1] None    [2]
+        # 1   [3]    [4]    [5,6,7]
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[
+                EmbeddingBagConfig(
+                    name="t1", embedding_dim=8, num_embeddings=16, feature_names=["f1"]
+                ),
+                EmbeddingBagConfig(
+                    name="t2", embedding_dim=8, num_embeddings=16, feature_names=["f2"]
+                ),
+            ],
+            is_weighted=True,
+        )
+        feature_processors = {
+            "f1": cast(FeatureProcessor, PositionWeightedModule(max_feature_length=10)),
+            "f2": cast(FeatureProcessor, PositionWeightedModule(max_feature_length=5)),
+        }
+
+        fp_ebc = FeatureProcessedEmbeddingBagCollection(ebc, feature_processors)
+
+        pooled_embeddings = fp_ebc(features)
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f2"])
+        self.assertEqual(pooled_embeddings.values().size(), (3, 16))
+        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
