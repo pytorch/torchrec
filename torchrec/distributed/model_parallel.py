@@ -213,6 +213,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             sharder.module_type: sharder for sharder in sharders
         }
 
+        self._init_data_parallel = init_data_parallel
         if data_parallel_wrapper is None:
             data_parallel_wrapper = DefaultDataParallelWrapper()
         self._data_parallel_wrapper: DataParallelWrapper = data_parallel_wrapper
@@ -238,7 +239,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         if init_parameters:
             self._init_parameters(self.module)
 
-        if init_data_parallel:
+        if self._init_data_parallel:
             self.init_data_parallel()
 
     @property
@@ -349,17 +350,24 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         @torch.no_grad()
         def init_parameters(module: nn.Module) -> None:
             # Allocate parameters and buffers if over 'meta' device.
+            # Parameters with "meta" device can have very large tensor size that will
+            # cause GPU OOM. Dense parameter sharding (eg FSDP) is needed in this case.
+            # Initialize parameters on CPU first then FSDP wrapper will handle how to
+            # move the tensor to GPU.
+            init_device = (
+                torch.device("cpu") if self._init_data_parallel else self.device
+            )
             has_meta_param = False
             for name, param in module._parameters.items():
                 if isinstance(param, torch.Tensor) and param.device.type == "meta":
                     module._parameters[name] = nn.Parameter(
-                        torch.empty_like(param, device=self.device),
+                        torch.empty_like(param, device=init_device),
                         requires_grad=param.requires_grad,
                     )
                     has_meta_param = True
             for name, buffer in module._buffers.items():
                 if isinstance(buffer, torch.Tensor) and buffer.device.type == "meta":
-                    module._buffers[name] = torch.zeros_like(buffer, device=self.device)
+                    module._buffers[name] = torch.zeros_like(buffer, device=init_device)
 
             # Init parameters if at least one parameter is over 'meta' device.
             if has_meta_param and hasattr(module, "reset_parameters"):
