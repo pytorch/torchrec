@@ -42,6 +42,11 @@ def set_gradient_division(val: bool) -> None:
     GRADIENT_DIVISION = val
 
 
+def get_gradient_division() -> bool:
+    global GRADIENT_DIVISION
+    return GRADIENT_DIVISION
+
+
 """
 Some commonly used notations for comm ops:
     B - batch size
@@ -666,6 +671,7 @@ class All2All_Pooled_Req(Function):
         dim_sum_per_rank = a2ai.dim_sum_per_rank
         batch_size_per_rank = a2ai.batch_size_per_rank
         B_local = batch_size_per_rank[my_rank]
+
         assert B_global == sum(batch_size_per_rank)
 
         sharded_input_embeddings = input_embeddings.view(-1)
