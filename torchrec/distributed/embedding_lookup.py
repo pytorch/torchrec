@@ -407,7 +407,7 @@ class MetaInferGroupedEmbeddingsLookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
             fused_params: Optional[Dict[str, Any]] = None,
-        ) -> BaseBatchedEmbedding:
+        ) -> BaseBatchedEmbedding[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
             return QuantBatchedEmbedding(
                 config=config,
                 device=device,
@@ -524,7 +524,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
             fused_params: Optional[Dict[str, Any]] = None,
-        ) -> BaseBatchedEmbeddingBag:
+        ) -> BaseBatchedEmbeddingBag[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
             return QuantBatchedEmbeddingBag(
                 config=config,
                 device=device,

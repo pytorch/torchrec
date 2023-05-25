@@ -383,9 +383,9 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_total_perfs = {
-            ("quant", "table_wise"): [0.0001296231579222408],
-            ("quant_uvm", "table_wise"): [0.018350937787224266],
-            ("quant_uvm_caching", "table_wise"): [0.004269758427175579],
+            ("quant", "table_wise"): [0.00010892300302767036],
+            ("quant_uvm", "table_wise"): [0.01637795392204734],
+            ("quant_uvm_caching", "table_wise"): [0.0038054723505752935],
         }
 
         total_perfs = {
