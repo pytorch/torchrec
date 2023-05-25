@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import logging
 from dataclasses import dataclass
 from typing import cast, List
 
@@ -21,6 +22,8 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.types import ShardingType
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _sort_devices_by_perf(
@@ -148,18 +151,24 @@ class GreedyPerfPartitioner(Partitioner):
         # since _get_host_level_devices relies on the order
         sorted_devices = _topology.devices.copy()
         _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
+        logger.info(f"sorted_device {sorted_devices}")
+        logger.info(f"_host_level_devices {_host_level_devices}")
 
         # first partition the uniform sharding options (RW & DP)
         uniform_sharding_options = _get_uniform_sharding_options(proposal)
         GreedyPerfPartitioner._uniform_partition(
             uniform_sharding_options, _topology.devices
         )
+        logger.info(f"uniform_sharding_options {uniform_sharding_options}")
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
         sharding_option_groups = _group_and_sort_non_uniform_sharding_options(proposal)
 
         for sharding_option_group in sharding_option_groups:
+            logger.info(
+                f"sharding_option_group {sharding_option_group.sharding_options[0].shards}"
+            )
             if (
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.HOST.value

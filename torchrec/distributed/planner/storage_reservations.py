@@ -76,7 +76,9 @@ def _reserve_dense_storage(
     )
 
     for device in topology.devices:
+        logger.info(f"device storage before dense reservation: {device.storage}")
         device.storage -= dense_tensor_storage
+        logger.info(f"device storage after dense reservation: {device.storage}")
 
     return dense_tensor_storage
 
@@ -99,7 +101,10 @@ def _reserve_kjt_storage(
     )
 
     for device in topology.devices:
+        logger.info(f"device storage before kjt reservation: {device.storage}")
         device.storage -= kjt_storage
+        logger.info(f"device storage after kjt reservation: {device.storage}")
+
 
     return kjt_storage
 
@@ -211,22 +216,22 @@ class HeuristicalStorageReservation(StorageReservation):
 
         _reserve_storage_percentage(reserved_topology, self._percentage)
 
-        self._dense_storage = _reserve_dense_storage(
-            topology=reserved_topology,
-            module=module,
-            shardable_modules=shardable_modules,
-            multiplier=self._parameter_multiplier,
-            dense_tensor_estimate=self._dense_tensor_estimate,
-        )
+        # self._dense_storage = _reserve_dense_storage(
+        #     topology=reserved_topology,
+        #     module=module,
+        #     shardable_modules=shardable_modules,
+        #     multiplier=self._parameter_multiplier,
+        #     dense_tensor_estimate=self._dense_tensor_estimate,
+        # )
 
-        self._kjt_storage = _reserve_kjt_storage(
-            topology=reserved_topology,
-            batch_size=batch_size,
-            input_lengths=input_lengths,
-            input_data_type_size=BIGINT_DTYPE,
-            # 2 pipelined batches each with 10 internal copies
-            multiplier=20,
-        )
+        # self._kjt_storage = _reserve_kjt_storage(
+        #     topology=reserved_topology,
+        #     batch_size=batch_size,
+        #     input_lengths=input_lengths,
+        #     input_data_type_size=BIGINT_DTYPE,
+        #     # 2 pipelined batches each with 10 internal copies
+        #     multiplier=20,
+        # )
 
         return reserved_topology
 

@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import logging
 from functools import reduce
 from time import perf_counter
 from typing import cast, Dict, List, Optional, Tuple, Union
@@ -54,6 +55,8 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _reset_shard_rank(proposal: List[ShardingOption]) -> None:
@@ -225,6 +228,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
 
         for proposer in self._proposers:
             proposer.load(search_space=search_space)
+
+        device_constraints = [device.storage for device in storage_constraint.devices]
+        logger.info(f"device_constraints {device_constraints}")
 
         for proposer in self._proposers:
             proposal = proposer.propose()
