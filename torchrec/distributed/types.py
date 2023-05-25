@@ -439,6 +439,14 @@ class ModuleShardingPlan:
 
 
 @dataclass
+class CacheParams:
+    algorithm: Optional[CacheAlgorithm] = None
+    load_factor: Optional[float] = None
+    reserved_memory: Optional[float] = None
+    precision: Optional[DataType] = None
+
+
+@dataclass
 class ParameterSharding:
     """
         Describes the sharding of the parameter.
@@ -448,6 +456,10 @@ class ParameterSharding:
         compute_kernel (str): compute kernel to be used by this parameter.
         ranks (Optional[List[int]]): rank of each shard.
         sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
+        cache_params (Optional[CacheParams]): cache params for embedding lookup.
+        enforce_hbm (Optional[bool]): whether to use HBM.
+        stochastic_rounding (Optional[bool]): whether to use stochastic rounding.
+        bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode.
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
@@ -462,6 +474,10 @@ class ParameterSharding:
     compute_kernel: str
     ranks: Optional[List[int]] = None
     sharding_spec: Optional[ShardingSpec] = None
+    cache_params: Optional[CacheParams] = None
+    enforce_hbm: Optional[bool] = None
+    stochastic_rounding: Optional[bool] = None
+    bounds_check_mode: Optional[BoundsCheckMode] = None
 
 
 class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):
