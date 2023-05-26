@@ -25,13 +25,13 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     KJTList,
     ListOfKJTList,
-    ShardedEmbeddingModule,
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
     is_fused_param_register_tbe,
 )
+from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
@@ -139,7 +139,7 @@ def output_jt_dict(
 
 
 class ShardedQuantEmbeddingCollection(
-    ShardedEmbeddingModule[
+    ShardedQuantEmbeddingModuleState[
         ListOfKJTList,
         List[List[torch.Tensor]],
         Dict[str, JaggedTensor],
@@ -219,14 +219,15 @@ class ShardedQuantEmbeddingCollection(
                     )
                 else:
                     continue
+        tbes: Dict[
+            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+        ] = get_tbes_to_register_from_iterable(self._lookups)
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
-            tbes: Dict[
-                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
-            ] = get_tbes_to_register_from_iterable(self._lookups)
-
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
+
+        self._initialize_torch_state(tbes=tbes, tables_weights_prefix="embeddings")
 
     def _create_input_dist(
         self,
