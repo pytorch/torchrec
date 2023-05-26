@@ -646,6 +646,48 @@ class PooledEmbeddingsAllToAll(nn.Module):
         return self._callbacks
 
 
+class EmbeddingsAllToOneReduce(nn.Module):
+    """
+    Merges the pooled/sequence embedding tensor on each device into single tensor.
+
+    Args:
+        device (torch.device): device on which buffer will be allocated.
+        world_size (int): number of devices in the topology.
+        cat_dim (int): which dimension you would like to concatenate on.
+            For pooled embedding it is 1; for sequence embedding it is 0.
+    """
+
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+        cat_dim: int,
+    ) -> None:
+        super().__init__()
+        self._device = device
+        self._world_size = world_size
+        self._cat_dim = cat_dim
+
+    def forward(
+        self,
+        tensors: List[torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Performs AlltoOne operation with Reduce on pooled/sequence embeddings tensors.
+
+        Args:
+            tensors (List[torch.Tensor]): list of embedding tensors.
+
+        Returns:
+            Awaitable[torch.Tensor]: awaitable of the reduced embeddings.
+        """
+        assert len(tensors) == self._world_size
+        return torch.ops.fbgemm.sum_reduce_to_one(
+            tensors,
+            self._device,
+        )
+
+
 class EmbeddingsAllToOne(nn.Module):
     """
     Merges the pooled/sequence embedding tensor on each device into single tensor.
