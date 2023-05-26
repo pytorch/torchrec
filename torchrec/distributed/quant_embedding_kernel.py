@@ -30,6 +30,7 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
 )
 from torchrec.distributed.fused_params import (
+    is_fused_param_quant_state_dict_split_scale_shifts,
     is_fused_param_register_tbe,
     tbe_fused_params,
     TBEToRegisterMixIn,
@@ -136,6 +137,9 @@ class QuantBatchedEmbeddingBag(
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
+        self._quant_state_dict_split_scale_shifts: bool = (
+            is_fused_param_quant_state_dict_split_scale_shifts(fused_params)
+        )
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
@@ -203,12 +207,15 @@ class QuantBatchedEmbeddingBag(
         ), "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
         for config, (weight, weight_qscaleshift) in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(split_scale_shifts=True),
+            self.emb_module.split_embedding_weights(
+                split_scale_shifts=self._quant_state_dict_split_scale_shifts
+            ),
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
-            yield append_prefix(
-                prefix, f"{config.name}.weight_qscaleshift"
-            ), weight_qscaleshift
+            if self._quant_state_dict_split_scale_shifts:
+                yield append_prefix(
+                    prefix, f"{config.name}.weight_qscaleshift"
+                ), weight_qscaleshift
 
     def split_embedding_weights(
         self,
@@ -216,7 +223,7 @@ class QuantBatchedEmbeddingBag(
         return [
             (weight, weight_qscaleshift)
             for weight, weight_qscaleshift in self.emb_module.split_embedding_weights(
-                split_scale_shifts=True
+                split_scale_shifts=self._quant_state_dict_split_scale_shifts
             )
         ]
 
@@ -271,6 +278,9 @@ class QuantBatchedEmbedding(
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
+        self._quant_state_dict_split_scale_shifts: bool = (
+            is_fused_param_quant_state_dict_split_scale_shifts(fused_params)
+        )
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
@@ -311,7 +321,7 @@ class QuantBatchedEmbedding(
         return [
             (weight, weight_qscaleshift)
             for weight, weight_qscaleshift in self.emb_module.split_embedding_weights(
-                split_scale_shifts=True
+                split_scale_shifts=self._quant_state_dict_split_scale_shifts
             )
         ]
 
@@ -332,12 +342,15 @@ class QuantBatchedEmbedding(
     ) -> Iterator[Tuple[str, torch.Tensor]]:
         for config, (weight, weight_qscaleshift) in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(split_scale_shifts=True),
+            self.emb_module.split_embedding_weights(
+                split_scale_shifts=self._quant_state_dict_split_scale_shifts
+            ),
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight
-            yield append_prefix(
-                prefix, f"{config.name}.weight_qscaleshift"
-            ), weight_qscaleshift
+            if self._quant_state_dict_split_scale_shifts:
+                yield append_prefix(
+                    prefix, f"{config.name}.weight_qscaleshift"
+                ), weight_qscaleshift
 
     @classmethod
     def from_float(cls, module: BaseEmbedding) -> "QuantBatchedEmbedding":

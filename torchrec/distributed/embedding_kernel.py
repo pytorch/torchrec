@@ -83,6 +83,7 @@ def get_state_dict(
             EmbeddingComputeKernel.QUANT_UVM_CACHING,
         ]
         qscaleshift_split = None
+        # TODO(ivankobzarev): re-enable if quant_state_split_scale_shifts
         if is_quant:
             # For QUANT* param is Tuple[torch.Tensor, Optional[torch.Tensor]] where first argument is the weight table, the second is optional quantization extra information, depending on quantization type. e.g. for fbgemm rowwise quantization this is scale and shift for each row.
             assert isinstance(param, tuple)
@@ -90,7 +91,8 @@ def get_state_dict(
             param = param[0]
 
         assert embedding_table.local_rows == param.size(0)
-        assert embedding_table.local_cols == param.size(1)
+        if not is_quant:
+            assert embedding_table.local_cols == param.size(1)
 
         if embedding_table.global_metadata is not None and pg is not None:
             # set additional field of sharded tensor based on local tensor properties

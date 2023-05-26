@@ -187,6 +187,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
         register_tbes: bool = False,
+        quant_state_dict_split_scale_shifts: bool = False,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -269,7 +270,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             self._key_to_tables.items(), self._emb_modules
         ):
             for embedding_config, (weight, qscaleshift) in zip(
-                tables, emb_module.split_embedding_weights(split_scale_shifts=True)
+                tables,
+                emb_module.split_embedding_weights(
+                    split_scale_shifts=quant_state_dict_split_scale_shifts
+                ),
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()
                 # register as a buffer so it's exposed in state_dict.
@@ -279,9 +283,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 self.embedding_bags[embedding_config.name].register_buffer(
                     "weight", weight
                 )
-                self.embedding_bags[embedding_config.name].register_buffer(
-                    "weight_qscaleshift", qscaleshift
-                )
+                if quant_state_dict_split_scale_shifts:
+                    self.embedding_bags[embedding_config.name].register_buffer(
+                        "weight_qscaleshift", qscaleshift
+                    )
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
@@ -460,6 +465,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
         register_tbes: bool = False,
+        quant_state_dict_split_scale_shifts: bool = False,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -517,11 +523,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             # TODO: register as param instead of buffer
             # however, since this is only needed for inference, we do not need to expose it as part of parameters.
             # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
-            weights_list = emb_module.split_embedding_weights(split_scale_shifts=True)
-            self.embeddings[config.name].register_buffer("weight", weights_list[0][0])
-            self.embeddings[config.name].register_buffer(
-                "weight_qscaleshift", weights_list[0][1]
+            weights_list = emb_module.split_embedding_weights(
+                split_scale_shifts=quant_state_dict_split_scale_shifts
             )
+            self.embeddings[config.name].register_buffer("weight", weights_list[0][0])
+            if quant_state_dict_split_scale_shifts:
+                self.embeddings[config.name].register_buffer(
+                    "weight_qscaleshift", weights_list[0][1]
+                )
 
             if not config.feature_names:
                 config.feature_names = [config.name]

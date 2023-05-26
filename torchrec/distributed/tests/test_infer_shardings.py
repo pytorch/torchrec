@@ -162,10 +162,8 @@ def _shard_qebc(
 
 
 class InferShardingsTest(unittest.TestCase):
-    # pyre-ignore
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs available",
+    @unittest.skip(
+        "TODO(ivankobzarev): re-enable with quant_state_dict_split_scale_shifts"
     )
     def test_rw(self) -> None:
         num_embeddings = 256

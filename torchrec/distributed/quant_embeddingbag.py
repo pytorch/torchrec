@@ -29,6 +29,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
+    is_fused_param_quant_state_dict_split_scale_shifts,
     is_fused_param_register_tbe,
 )
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
@@ -133,7 +134,13 @@ class ShardedQuantEmbeddingBagCollection(
         if is_fused_param_register_tbe(fused_params):
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
 
-        self._initialize_torch_state(tbes=tbes, tables_weights_prefix="embedding_bags")
+        self._initialize_torch_state(
+            tbes=tbes,
+            tables_weights_prefix="embedding_bags",
+            quant_state_dict_split_scale_shifts=is_fused_param_quant_state_dict_split_scale_shifts(
+                fused_params
+            ),
+        )
 
     def _create_input_dist(
         self,

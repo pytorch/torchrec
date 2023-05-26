@@ -48,6 +48,7 @@ class ShardedQuantEmbeddingModuleState(
         self,
         tbes: Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig],
         tables_weights_prefix: str,  # "embedding_bags" or "embeddings"
+        quant_state_dict_split_scale_shifts: bool = False,
     ) -> None:  # noqa
         assert (
             tables_weights_prefix == "embedding_bags"
@@ -60,6 +61,8 @@ class ShardedQuantEmbeddingModuleState(
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
         # pyre-ignore[16]
+        self._quant_state_dict_split_scale_shifts = quant_state_dict_split_scale_shifts
+        # pyre-ignore[16]
         self._table_name_to_local_shards_qss: Dict[str, List[Shard]] = {}
         # pyre-ignore[16]
         self._table_name_to_sharded_tensor_qss: Dict[
@@ -68,7 +71,9 @@ class ShardedQuantEmbeddingModuleState(
 
         for tbe, config in tbes.items():
             for (tbe_split_w, tbe_split_wq), table in zip(
-                tbe.split_embedding_weights(split_scale_shifts=True),
+                tbe.split_embedding_weights(
+                    split_scale_shifts=quant_state_dict_split_scale_shifts
+                ),
                 config.embedding_tables,
             ):
                 metadata = copy.deepcopy(table.local_metadata)
@@ -84,32 +89,33 @@ class ShardedQuantEmbeddingModuleState(
                     Shard(tensor=tbe_split_w, metadata=metadata),
                 )
 
-                metadata = copy.deepcopy(table.local_metadata)
-                shard_sizes = metadata.shard_sizes
-                shard_sizes_cols = shard_sizes[1]
-                shard_offsets = table.local_metadata.shard_offsets
-                shard_offsets_cols = shard_offsets[1]
-                col_idx = int(shard_offsets_cols / shard_sizes_cols)
-                qss_cols_size = tbe_split_wq.shape[1]
+                if quant_state_dict_split_scale_shifts:
+                    metadata = copy.deepcopy(table.local_metadata)
+                    shard_sizes = metadata.shard_sizes
+                    shard_sizes_cols = shard_sizes[1]
+                    shard_offsets = table.local_metadata.shard_offsets
+                    shard_offsets_cols = shard_offsets[1]
+                    col_idx = int(shard_offsets_cols / shard_sizes_cols)
+                    qss_cols_size = tbe_split_wq.shape[1]
 
-                qss_metadata = ShardMetadata(
-                    shard_offsets=[
-                        metadata.shard_offsets[0],
-                        col_idx * qss_cols_size,
-                    ],
-                    shard_sizes=[tbe_split_wq.shape[0], tbe_split_wq.shape[1]],
-                    placement=table.local_metadata.placement,
-                )
-                # TODO(ivankobzarev): only for "meta" sharding support: cleanup when copy to  "meta" moves all tensors to "meta"
-                # pyre-ignore[16]
-                if qss_metadata.placement.device != tbe_split_wq.device:
-                    qss_metadata.placement = _remote_device(tbe_split_wq.device)
-                _append_table_shard(
-                    # pyre-ignore
-                    self._table_name_to_local_shards_qss,
-                    table.name,
-                    Shard(tensor=tbe_split_wq, metadata=qss_metadata),
-                )
+                    qss_metadata = ShardMetadata(
+                        shard_offsets=[
+                            metadata.shard_offsets[0],
+                            col_idx * qss_cols_size,
+                        ],
+                        shard_sizes=[tbe_split_wq.shape[0], tbe_split_wq.shape[1]],
+                        placement=table.local_metadata.placement,
+                    )
+                    # TODO(ivankobzarev): only for "meta" sharding support: cleanup when copy to  "meta" moves all tensors to "meta"
+                    # pyre-ignore[16]
+                    if qss_metadata.placement.device != tbe_split_wq.device:
+                        qss_metadata.placement = _remote_device(tbe_split_wq.device)
+                    _append_table_shard(
+                        # pyre-ignore
+                        self._table_name_to_local_shards_qss,
+                        table.name,
+                        Shard(tensor=tbe_split_wq, metadata=qss_metadata),
+                    )
 
         for table_name_to_local_shards, table_name_to_sharded_tensor in [
             (self._table_name_to_local_shards, self._table_name_to_sharded_tensor),
@@ -168,13 +174,14 @@ class ShardedQuantEmbeddingModuleState(
                 destination[
                     f"{prefix}{tables_weights_prefix}.{table_name}.weight"
                 ] = sharded_t
-            for (
-                table_name,
-                sharded_t,
-            ) in module._table_name_to_sharded_tensor_qss.items():  # pyre-ignore
-                destination[
-                    f"{prefix}{tables_weights_prefix}.{table_name}.weight_qscaleshift"
-                ] = sharded_t
+            if module._quant_state_dict_split_scale_shifts:
+                for (
+                    table_name,
+                    sharded_t,
+                ) in module._table_name_to_sharded_tensor_qss.items():  # pyre-ignore
+                    destination[
+                        f"{prefix}{tables_weights_prefix}.{table_name}.weight_qscaleshift"
+                    ] = sharded_t
 
         self._register_state_dict_hook(post_state_dict_hook)
 

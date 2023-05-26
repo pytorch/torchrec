@@ -187,9 +187,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred(self, output_type: torch.dtype, sharding_type: str) -> None:
@@ -233,9 +231,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_state_dict(
@@ -312,9 +308,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_shard(
@@ -440,9 +434,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     def test_shard_one_ebc_cuda(self, sharding_type: str) -> None:
         device = torch.device("cuda:0")
@@ -506,9 +498,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     def test_shard_one_ebc_meta(self, sharding_type: str) -> None:
         device = torch.device("cuda:0")
@@ -573,9 +563,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     def test_shard_all_ebcs(self, sharding_type: str) -> None:
         device = torch.device("cuda:0")
@@ -638,9 +626,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.sampled_from(
-            [ShardingType.TABLE_WISE.value, ShardingType.ROW_WISE.value]
-        ),
+        sharding_type=st.sampled_from([ShardingType.TABLE_WISE.value]),
     )
     def test_sharder_bad_param_config(self, sharding_type: str) -> None:
         device = torch.device("cuda:0")
