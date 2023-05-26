@@ -135,19 +135,13 @@ class ShardedQuantEmbeddingBagCollection(
         ):
             lookup_state_dict = lookup.state_dict()
             for key in lookup_state_dict:
-                if key.endswith(".weight"):
-                    table_name = key[: -len(".weight")]
-                    # Register as buffer because this is an inference model, and can potentially use uint8 types.
-                    self.embedding_bags[table_name].register_buffer(
-                        "weight", lookup_state_dict[key]
-                    )
-                elif key.endswith("weight_qscaleshift"):
-                    table_name = key[: -len(".weight_qscaleshift")]
-                    self.embedding_bags[table_name].register_buffer(
-                        "weight_qscaleshift", lookup_state_dict[key]
-                    )
-                else:
+                if not key.endswith(".weight"):
                     continue
+                table_name = key[: -len(".weight")]
+                # Register as buffer because this is an inference model, and can potentially use uint8 types.
+                self.embedding_bags[table_name].register_buffer(
+                    "weight", lookup_state_dict[key]
+                )
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
