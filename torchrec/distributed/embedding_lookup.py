@@ -16,6 +16,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
+
+from torch.autograd.function import FunctionCtx
 from torch.nn.modules.module import _IncompatibleKeys
 from torchrec.distributed.batched_embedding_kernel import (
     BaseBatchedEmbedding,
@@ -25,6 +27,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
 )
+from torchrec.distributed.comm_ops import get_gradient_division
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
 )
@@ -239,6 +242,30 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
                 yield (table_name, tbe_slice)
 
 
+class CommOpGradientScaling(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx: FunctionCtx, input_tensor: torch.Tensor, scale_gradient_factor: int
+    ) -> torch.Tensor:
+        # pyre-ignore
+        ctx.scale_gradient_factor = scale_gradient_factor
+        return input_tensor
+
+    @staticmethod
+    # pyre-ignore[14]: `forward` overrides method defined in `Function` inconsistently.
+    def backward(
+        ctx: FunctionCtx, grad_output: torch.Tensor
+    ) -> Tuple[torch.Tensor, None]:
+        # When gradient division is on, we scale down the gradient by world size
+        # at alltoall backward for model parallelism. However weights
+        # is controlled by DDP so it already has gradient division, so we scale
+        # the gradient back up
+        # pyre-ignore[16]: `FunctionCtx` has no attribute `scale_gradient_factor`
+        grad_output.mul_(ctx.scale_gradient_factor)
+        return grad_output, None
+
+
 class GroupedPooledEmbeddingsLookup(
     BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]
 ):
@@ -252,6 +279,7 @@ class GroupedPooledEmbeddingsLookup(
         device: Optional[torch.device] = None,
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
+        scale_weight_gradients: bool = True,
     ) -> None:
         # TODO rename to _create_embedding_kernel
         def _create_lookup(
@@ -298,6 +326,12 @@ class GroupedPooledEmbeddingsLookup(
         self.grouped_configs = grouped_configs
         self._feature_processor = feature_processor
 
+        self._scale_gradient_factor: int = (
+            dist.get_world_size(pg)
+            if scale_weight_gradients and get_gradient_division()
+            else 1
+        )
+
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
@@ -317,7 +351,14 @@ class GroupedPooledEmbeddingsLookup(
                     and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
                 ):
                     features = self._feature_processor(features)
+
+                if config.is_weighted:
+                    features._weights = CommOpGradientScaling.apply(
+                        features._weights, self._scale_gradient_factor
+                    )
+
                 embeddings.append(emb_op(features))
+
         return embeddings_cat_empty_rank_handle(
             embeddings,
             fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
