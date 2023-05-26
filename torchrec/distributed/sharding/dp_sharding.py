@@ -202,6 +202,9 @@ class DpPooledEmbeddingSharding(
             pg=self._env.process_group,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
+            # For data parallel we need to turn always gradient scaling in for weights
+            # because get_gradient_scaling from comm_ops only affects model_parallel tables, not DP
+            scale_weight_gradients=False,
         )
 
     def create_output_dist(
