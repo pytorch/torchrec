@@ -113,10 +113,7 @@ def _quantize_weight(
     return quant_weight_list
 
 
-class QuantBatchedEmbeddingBag(
-    BaseBatchedEmbeddingBag[Tuple[torch.Tensor, Optional[torch.Tensor]]],
-    TBEToRegisterMixIn,
-):
+class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -201,22 +198,17 @@ class QuantBatchedEmbeddingBag(
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
-        for config, (weight, weight_qscaleshift) in zip(
+        for config, weight in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(split_scale_shifts=True),
+            self.emb_module.split_embedding_weights(),
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
-            yield append_prefix(
-                prefix, f"{config.name}.weight_qscaleshift"
-            ), weight_qscaleshift
 
-    def split_embedding_weights(
-        self,
-    ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
+    def split_embedding_weights(self) -> List[torch.Tensor]:
         return [
-            (weight, weight_qscaleshift)
-            for weight, weight_qscaleshift in self.emb_module.split_embedding_weights(
-                split_scale_shifts=True
+            weight
+            for weight, _ in self.emb_module.split_embedding_weights(
+                split_scale_shifts=False
             )
         ]
 
@@ -248,10 +240,7 @@ class QuantBatchedEmbeddingBag(
         return ret
 
 
-class QuantBatchedEmbedding(
-    BaseBatchedEmbedding[Tuple[torch.Tensor, Optional[torch.Tensor]]],
-    TBEToRegisterMixIn,
-):
+class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -305,13 +294,11 @@ class QuantBatchedEmbedding(
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return {self._emb_module: self._config}
 
-    def split_embedding_weights(
-        self,
-    ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor]]]:
+    def split_embedding_weights(self) -> List[torch.Tensor]:
         return [
-            (weight, weight_qscaleshift)
-            for weight, weight_qscaleshift in self.emb_module.split_embedding_weights(
-                split_scale_shifts=True
+            weight
+            for weight, _ in self.emb_module.split_embedding_weights(
+                split_scale_shifts=False
             )
         ]
 
@@ -330,14 +317,11 @@ class QuantBatchedEmbedding(
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, (weight, weight_qscaleshift) in zip(
+        for config, weight in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(split_scale_shifts=True),
+            self.emb_module.split_embedding_weights(),
         ):
-            yield append_prefix(prefix, f"{config.name}.weight"), weight
-            yield append_prefix(
-                prefix, f"{config.name}.weight_qscaleshift"
-            ), weight_qscaleshift
+            yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
 
     @classmethod
     def from_float(cls, module: BaseEmbedding) -> "QuantBatchedEmbedding":
