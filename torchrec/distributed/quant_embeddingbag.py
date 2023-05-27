@@ -22,6 +22,7 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     KJTList,
     ListOfKJTList,
+    ShardedEmbeddingModule,
 )
 from torchrec.distributed.embeddingbag import (
     construct_output_kt,
@@ -31,8 +32,6 @@ from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
     is_fused_param_register_tbe,
 )
-from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
-from torchrec.distributed.sharding.rw_sharding import InferRwPooledEmbeddingSharding
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
     NullShardedModuleContext,
@@ -62,14 +61,12 @@ def create_infer_embedding_bag_sharding(
 ) -> EmbeddingSharding[NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
-    elif sharding_type == ShardingType.ROW_WISE.value:
-        return InferRwPooledEmbeddingSharding(sharding_infos, env, device=None)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
 class ShardedQuantEmbeddingBagCollection(
-    ShardedQuantEmbeddingModuleState[
+    ShardedEmbeddingModule[
         ListOfKJTList,
         List[List[torch.Tensor]],
         KeyedTensor,
@@ -125,15 +122,40 @@ class ShardedQuantEmbeddingBagCollection(
         self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
 
-        tbes: Dict[
-            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
-        ] = get_tbes_to_register_from_iterable(self._lookups)
+        # This provides consistency between this class and the EmbeddingBagCollection's
+        # nn.Module API calls (state_dict, named_modules, etc)
+        # Currently, Sharded Quant EBC only uses TW sharding, and returns non-sharded tensors as part of state dict
+        # TODO - revisit if we state_dict can be represented as sharded tensor
+        self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
+        for table in self._embedding_bag_configs:
+            self.embedding_bags[table.name] = torch.nn.Module()
+
+        for _sharding_type, lookup in zip(
+            self._sharding_type_to_sharding.keys(), self._lookups
+        ):
+            lookup_state_dict = lookup.state_dict()
+            for key in lookup_state_dict:
+                if key.endswith(".weight"):
+                    table_name = key[: -len(".weight")]
+                    # Register as buffer because this is an inference model, and can potentially use uint8 types.
+                    self.embedding_bags[table_name].register_buffer(
+                        "weight", lookup_state_dict[key]
+                    )
+                elif key.endswith("weight_qscaleshift"):
+                    table_name = key[: -len(".weight_qscaleshift")]
+                    self.embedding_bags[table_name].register_buffer(
+                        "weight_qscaleshift", lookup_state_dict[key]
+                    )
+                else:
+                    continue
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
-            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
+            tbes: Dict[
+                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+            ] = get_tbes_to_register_from_iterable(self._lookups)
 
-        self._initialize_torch_state(tbes=tbes, tables_weights_prefix="embedding_bags")
+            self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
 
     def _create_input_dist(
         self,

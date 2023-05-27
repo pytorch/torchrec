@@ -202,6 +202,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
         )
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
         return ShardedQuantEmbeddingBagCollection(
             module=module,
             table_name_to_parameter_sharding=params,

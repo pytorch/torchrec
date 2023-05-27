@@ -9,16 +9,8 @@ from typing import Any, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import (
-    EmbeddingsAllToOneReduce,
-    KJTAllToAll,
-    KJTOneToAll,
-    PooledEmbeddingsReduceScatter,
-)
-from torchrec.distributed.embedding_lookup import (
-    GroupedPooledEmbeddingsLookup,
-    InferGroupedPooledEmbeddingsLookup,
-)
+from torchrec.distributed.dist_data import KJTAllToAll, PooledEmbeddingsReduceScatter
+from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
@@ -33,13 +25,11 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
-    KJTList,
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
-    NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
@@ -315,49 +305,6 @@ class RwPooledEmbeddingDist(
             return self._dist(local_embs, input_splits=sharding_ctx.batch_size_per_rank)
 
 
-class InferRwPooledEmbeddingDist(
-    BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
-):
-    """
-    Redistributes sequence embedding tensor in RW fashion with an AlltoOne operation.
-
-    Args:
-        device (torch.device): device on which the tensors will be communicated to.
-        world_size (int): number of devices in the topology.
-    """
-
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-    ) -> None:
-        super().__init__()
-        self._dist: EmbeddingsAllToOneReduce = EmbeddingsAllToOneReduce(
-            device=device,
-            world_size=world_size,
-            cat_dim=1,
-        )
-
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: Optional[NullShardingContext] = None,
-    ) -> torch.Tensor:
-        """
-        Performs AlltoOne operation on sequence embeddings tensor.
-
-        Args:
-            local_embs (torch.Tensor): tensor of values to distribute.
-
-        Returns:
-            Awaitable[torch.Tensor]: awaitable of sequence embeddings.
-        """
-
-        return self._dist(
-            local_embs,
-        )
-
-
 class RwPooledEmbeddingSharding(
     BaseRwEmbeddingSharding[
         EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
@@ -408,101 +355,4 @@ class RwPooledEmbeddingSharding(
             #  `Optional[ProcessGroup]`.
             self._pg,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
-        )
-
-
-class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
-    def __init__(
-        self,
-        world_size: int,
-        num_features: int,
-        feature_hash_sizes: List[int],
-        device: Optional[torch.device] = None,
-        is_sequence: bool = False,
-        has_feature_processor: bool = False,
-        need_pos: bool = False,
-    ) -> None:
-        super().__init__()
-        self._world_size: int = world_size
-        self._num_features = num_features
-        feature_block_sizes = [
-            (hash_size + self._world_size - 1) // self._world_size
-            for hash_size in feature_hash_sizes
-        ]
-        self.register_buffer(
-            "_feature_block_sizes_tensor",
-            torch.tensor(
-                feature_block_sizes,
-                device=device,
-                dtype=torch.int32,
-            ),
-        )
-        self._dist = KJTOneToAll(
-            splits=self._world_size * [self._num_features], world_size=world_size
-        )
-        if is_sequence:
-            raise NotImplementedError()
-        self._is_sequence = is_sequence
-        self._has_feature_processor = has_feature_processor
-        self._need_pos = need_pos
-        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
-
-    def forward(
-        self,
-        sparse_features: KeyedJaggedTensor,
-    ) -> KJTList:
-
-        (
-            bucketized_features,
-            self.unbucketize_permute_tensor,
-        ) = bucketize_kjt_before_all2all(
-            sparse_features,
-            num_buckets=self._world_size,
-            block_sizes=self._feature_block_sizes_tensor,
-            output_permute=self._is_sequence,
-            bucketize_pos=self._has_feature_processor
-            if sparse_features.weights_or_none() is None
-            else self._need_pos,
-        )
-        # TODO(ivankobzarev): Store self.unbucketize_permute_tensor in Context for is_sequence
-        return self._dist(bucketized_features)
-
-
-class InferRwPooledEmbeddingSharding(
-    BaseRwEmbeddingSharding[
-        NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor
-    ]
-):
-    def create_input_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
-        num_features = self._get_num_features()
-        feature_hash_sizes = self._get_feature_hash_sizes()
-        return InferRwSparseFeaturesDist(
-            world_size=self._world_size,
-            num_features=num_features,
-            feature_hash_sizes=feature_hash_sizes,
-        )
-
-    def create_lookup(
-        self,
-        device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
-        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
-        return InferGroupedPooledEmbeddingsLookup(
-            grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
-            world_size=self._world_size,
-            fused_params=fused_params,
-        )
-
-    def create_output_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]:
-        assert device is not None
-        return InferRwPooledEmbeddingDist(
-            device=device,
-            world_size=self._world_size,
         )
