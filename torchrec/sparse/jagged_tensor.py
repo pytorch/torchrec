@@ -1019,9 +1019,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             for jt in jt_dict.values()
             if jt.weights_or_none() is not None
         )
-        kjt_length_per_key = [
-            int(torch.sum(jt.lengths()).item()) for jt in jt_dict.values()
-        ]
         # pyre-ignore[6]: Incompatible parameter type [6]:
         # In call `torch._C._VariableFunctions.concat`,
         # for 1st positional only parameter
@@ -1033,8 +1030,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             values=kjt_vals,
             weights=kjt_weights,
             lengths=kjt_lens,
-            length_per_key=kjt_length_per_key,
-        )
+        ).sync()
         return kjt
 
     def sync(self) -> "KeyedJaggedTensor":
