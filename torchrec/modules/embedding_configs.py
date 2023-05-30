@@ -12,7 +12,12 @@ from typing import Dict, List, Optional
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
-from fbgemm_gpu.split_table_batched_embeddings_ops import PoolingMode
+from fbgemm_gpu.split_table_batched_embeddings_ops import (
+    BoundsCheckMode as FbgemmBoundsCheckMode,
+    CacheAlgorithm as FbgemmCacheAlgorithm,
+    PoolingMode,
+)
+from torchrec.distributed.types import BoundsCheckMode, CacheAlgorithm, DataType
 
 
 @unique
@@ -20,26 +25,6 @@ class PoolingType(Enum):
     SUM = "SUM"
     MEAN = "MEAN"
     NONE = "NONE"
-
-
-@unique
-class DataType(Enum):
-    """
-    Our fusion implementation supports only certain types of data
-    so it makes sense to retrict in a non-fused version as well.
-    """
-
-    FP32 = "FP32"
-    FP16 = "FP16"
-    INT64 = "INT64"
-    INT32 = "INT32"
-    INT8 = "INT8"
-    UINT8 = "UINT8"
-    INT4 = "INT4"
-    INT2 = "INT2"
-
-    def __str__(self) -> str:
-        return self.value
 
 
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
@@ -50,6 +35,30 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.INT4: 4,
     DataType.INT2: 2,
 }
+
+
+def to_fbgemm_bounds_check_mode(
+    bounds_check_mode: BoundsCheckMode,
+) -> FbgemmBoundsCheckMode:
+    if bounds_check_mode == BoundsCheckMode.FATAL:
+        return FbgemmBoundsCheckMode.FATAL
+    elif bounds_check_mode == BoundsCheckMode.WARNING:
+        return FbgemmBoundsCheckMode.WARNING
+    elif bounds_check_mode == BoundsCheckMode.IGNORE:
+        return FbgemmBoundsCheckMode.IGNORE
+    elif bounds_check_mode == BoundsCheckMode.NONE:
+        return FbgemmBoundsCheckMode.NONE
+    else:
+        raise Exception(f"Invalid bounds check mode {bounds_check_mode}")
+
+
+def to_fbgemm_cache_algorithm(cache_algorithm: CacheAlgorithm) -> FbgemmCacheAlgorithm:
+    if cache_algorithm == CacheAlgorithm.LRU:
+        return FbgemmCacheAlgorithm.LRU
+    elif cache_algorithm == CacheAlgorithm.LFU:
+        return FbgemmCacheAlgorithm.LFU
+    else:
+        raise Exception(f"Invalid cache algorithm {cache_algorithm}")
 
 
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:
