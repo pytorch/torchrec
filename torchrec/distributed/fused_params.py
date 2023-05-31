@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, Optional
 
 import torch
 
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
