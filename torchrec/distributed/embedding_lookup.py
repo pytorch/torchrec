@@ -747,18 +747,21 @@ class InferGroupedPooledEmbeddingsLookup(
         grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[
             MetaInferGroupedPooledEmbeddingsLookup
         ] = []
+
+        device_type = "cuda" if device is None or device.type == "cuda" else "meta"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     # syntax for torchscript
-                    device=torch.device(f"cuda:{rank}"),
+                    device=torch.device(type=device_type, index=rank),
                     fused_params=fused_params,
                 )
             )
@@ -779,15 +782,19 @@ class InferGroupedEmbeddingsLookup(
         grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
+
+        device_type = "cuda" if device is None or device.type == "cuda" else "meta"
+
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     # syntax for torchscript
-                    device=torch.device(f"cuda:{rank}"),
+                    device=torch.device(type=device_type, index=rank),
                     fused_params=fused_params,
                 )
             )
