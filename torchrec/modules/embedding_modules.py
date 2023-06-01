@@ -151,7 +151,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
                 mode=pooling_type_to_str(embedding_config.pooling),
-                device=device,
+                device=self._device,
                 include_last_offset=True,
                 dtype=dtype,
             )
