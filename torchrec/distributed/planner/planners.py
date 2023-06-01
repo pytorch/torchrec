@@ -200,6 +200,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         start_time = perf_counter()
         best_plan = None
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
+        last_planner_error: Optional[PlannerError] = None
         best_perf_rating = MAX_SIZE
 
         storage_constraint: Topology = self._storage_reservation.reserve(
@@ -257,7 +258,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     proposer.feedback(
                         partitionable=True, plan=plan, perf_rating=perf_rating
                     )
-                except PlannerError:
+                except PlannerError as planner_error:
+                    last_planner_error = planner_error
                     current_storage = cast(
                         Storage,
                         reduce(
@@ -306,26 +308,40 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 lambda x, y: x + y,
                 [device.storage for device in storage_constraint.devices],
             )
+            storage_reservation_solution = (
+                (
+                    f"\n\t  Storage reservation percentage: {self._storage_reservation._percentage}, "
+                    f"\n\t  Storage reservation dense storage: {self._storage_reservation._dense_storage}, "
+                    f"\n\t  Storage reservation kjt storage: {self._storage_reservation._kjt_storage}, "
+                )
+                if isinstance(self._storage_reservation, HeuristicalStorageReservation)
+                else f"\n\t  Storage reservation percentage: {self._storage_reservation._percentage}, "  # pyre-ignore[16]
+            )
             no_plan_solution = (
                 f"Planner evaluated {self._num_proposals} proposals."
                 "\nPossible solutions:"
                 f"\n  1) Increase the number of devices ({self._topology.world_size})"
                 f"\n  2) Reduce the model size ("
                 f"\n\t  Global storage: {global_storage_capacity.hbm}, "
-                f"\n\t  Available for model parallel: {global_storage_constraints},"
+                f"\n\t  Hardware memory: {self._topology.devices[0].storage}, "
+                f"{storage_reservation_solution}"
+                f"\n\t  Available for model parallel: {global_storage_constraints}, "
                 f"\n\t  Requirement for model parallel: {lowest_storage})"
                 f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
+            last_planner_error_info = f"Last planner error: \n\t{last_planner_error}\n"
             if not lowest_storage.fits_in(global_storage_constraints):
                 raise PlannerError(
                     error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
                     message="Unable to find a plan for this model because of insufficient storage. \n"
-                    + no_plan_solution,
+                    + no_plan_solution
+                    + last_planner_error_info,
                 )
             else:
                 raise PlannerError(
                     error_type=PlannerErrorType.STRICT_CONSTRAINTS,
                     message="Unable to find a plan for this model because of the strict constraints. \n"
-                    + no_plan_solution,
+                    + no_plan_solution
+                    + last_planner_error_info,
                 )
