@@ -248,3 +248,25 @@ class RecMetricTest(unittest.TestCase):
                 batch_size=10,
                 tasks=[DefaultTaskInfo],
             )
+
+    def test_reset(self) -> None:
+        ne = NEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=64,
+            tasks=[DefaultTaskInfo],
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=1000,
+            fused_update_limit=0,
+        )
+        ne.update(
+            predictions=self.predictions,
+            labels=self.labels,
+            weights=self.weights,
+        )
+        ne = ne._metrics_computations[0]
+        window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
+        self.assertTrue(len(window_buffer) > 0)
+        ne.reset()
+        window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
+        self.assertEqual(len(window_buffer), 0)
