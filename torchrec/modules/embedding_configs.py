@@ -7,8 +7,9 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, unique
+from functools import partial
 from math import sqrt
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
@@ -138,6 +139,8 @@ class BaseEmbeddingConfig:
     feature_names: List[str] = field(default_factory=list)
     weight_init_max: Optional[float] = None
     weight_init_min: Optional[float] = None
+
+    init_fn: Optional[Callable[[torch.Tensor], Optional[torch.Tensor]]] = None
     # when the position_weighted feature is in this table config,
     # enable this flag to support rw_sharding
     need_pos: bool = False
@@ -156,6 +159,14 @@ class BaseEmbeddingConfig:
 
     def num_features(self) -> int:
         return len(self.feature_names)
+
+    def __post_init__(self) -> None:
+        if self.init_fn is None:
+            self.init_fn = partial(
+                torch.nn.init.uniform_,
+                a=self.get_weight_init_min(),
+                b=self.get_weight_init_max(),
+            )
 
 
 # this class will be deprecated after migration
