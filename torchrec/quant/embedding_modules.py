@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,

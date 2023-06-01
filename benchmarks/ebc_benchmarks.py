@@ -10,7 +10,7 @@ import sys
 from typing import List, Tuple
 
 import torch
-from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
 from torchrec.github.benchmarks import ebc_benchmarks_utils
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection

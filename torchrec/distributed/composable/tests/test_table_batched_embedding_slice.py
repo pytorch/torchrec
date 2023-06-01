@@ -10,7 +10,7 @@ import unittest
 
 import torch
 
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     DenseTableBatchedEmbeddingBagsCodegen,
 )
 from torchrec.distributed.composable.table_batched_embedding_slice import (
