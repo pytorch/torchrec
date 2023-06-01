@@ -7,6 +7,8 @@
 
 import copy
 import unittest
+
+from functools import partial
 from typing import Any, Dict, List, Optional
 
 import hypothesis.strategies as st
@@ -70,6 +72,7 @@ def _test_sharding(  # noqa C901
     use_apply_optimizer_in_backward: bool = False,
 ) -> None:
     trec_dist.comm_ops.set_gradient_division(False)
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
         initial_state_dict = {
@@ -292,12 +295,14 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
                 feature_names=["feature_0"],
                 embedding_dim=4,
                 num_embeddings=4,
+                init_fn=partial(torch.nn.init.normal_, mean=0.0, std=1.5),
             ),
             EmbeddingBagConfig(
                 name="table_1",
                 feature_names=["feature_1"],
                 embedding_dim=4,
                 num_embeddings=4,
+                init_fn=partial(torch.nn.init.uniform_, a=-0.036, b=0.036),
             ),
         ]
 

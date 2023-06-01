@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
+from functools import partial
 
 import torch
 import torch.fx
@@ -21,10 +22,18 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 class EmbeddingBagCollectionTest(unittest.TestCase):
     def test_unweighted(self) -> None:
         eb1_config = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1"],
+            init_fn=partial(torch.nn.init.normal_, mean=0.0, std=1.5),
         )
         eb2_config = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f2"],
+            init_fn=partial(torch.nn.init.uniform_, a=-0.036, b=0.036),
         )
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
 

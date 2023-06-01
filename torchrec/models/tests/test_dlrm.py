@@ -66,14 +66,14 @@ class SparseArchTest(unittest.TestCase):
         expected_values = torch.tensor(
             [
                 [
-                    [-0.7499, -1.2665, 1.0143],
-                    [-0.7499, -1.2665, 1.0143],
-                    [3.2276, 2.9643, -0.3816],
+                    [-0.4518, -0.0242, 0.3637],
+                    [-0.4518, -0.0242, 0.3637],
+                    [0.2940, -0.2385, -0.0074],
                 ],
                 [
-                    [0.0082, 0.6241, -0.1119],
-                    [0.0082, 0.6241, -0.1119],
-                    [2.0722, -2.2734, -1.6307],
+                    [-0.5452, -0.0231, -0.1907],
+                    [-0.5452, -0.0231, -0.1907],
+                    [-0.3530, -0.5551, -0.3342],
                 ],
             ]
         )
@@ -396,7 +396,7 @@ class DLRMTest(unittest.TestCase):
         )
         self.assertEqual(logits.size(), (B, 1))
 
-        expected_logits = torch.tensor([[0.5805], [0.5909]])
+        expected_logits = torch.tensor([[-0.2593], [-0.2487]])
         self.assertTrue(
             torch.allclose(
                 logits,
@@ -801,7 +801,7 @@ class DLRM_ProjectionTest(unittest.TestCase):
         )
         self.assertEqual(logits.size(), (B, 1))
 
-        expected_logits = torch.tensor([[-0.0036], [-0.0260]])
+        expected_logits = torch.tensor([[-0.4603], [-0.4639]])
         self.assertTrue(
             torch.allclose(
                 logits,
@@ -1097,7 +1097,7 @@ class DLRM_DCNTest(unittest.TestCase):
         )
         self.assertEqual(logits.size(), (B, 1))
 
-        expected_logits = torch.tensor([[1.5232], [0.1726]])
+        expected_logits = torch.tensor([[0.0455], [0.0408]])
         self.assertTrue(
             torch.allclose(
                 logits,
