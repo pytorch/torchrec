@@ -155,6 +155,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 include_last_offset=True,
                 dtype=dtype,
             )
+
             if not embedding_config.feature_names:
                 embedding_config.feature_names = [embedding_config.name]
             self._lengths_per_embedding.extend(
@@ -167,6 +168,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             for embedding in embeddings
         ]
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
+        self.reset_parameters()
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
@@ -205,6 +207,18 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     @property
     def device(self) -> torch.device:
         return self._device
+
+    def reset_parameters(self) -> None:
+        if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
+            isinstance(self.device, str) and self.device == "meta"
+        ):
+            return
+        # Initialize embedding bags weights with init_fn
+        for table_config in self._embedding_bag_configs:
+            assert table_config.init_fn is not None
+            param = self.embedding_bags[f"{table_config.name}"].weight
+            # pyre-ignore
+            table_config.init_fn(param)
 
 
 class EmbeddingCollectionInterface(abc.ABC, nn.Module):
@@ -330,6 +344,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 device=device,
                 dtype=dtype,
             )
+            if config.init_fn is not None:
+                config.init_fn(self.embeddings[config.name].weight)
+
             if not config.feature_names:
                 config.feature_names = [config.name]
 
@@ -383,3 +400,15 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
     @property
     def device(self) -> torch.device:
         return self._device
+
+    def reset_parameters(self) -> None:
+        if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
+            isinstance(self.device, str) and self.device == "meta"
+        ):
+            return
+        # Initialize embedding bags weights with init_fn
+        for table_config in self._embedding_configs:
+            assert table_config.init_fn is not None
+            param = self.embeddings[f"{table_config.name}"].weight
+            # pyre-ignore
+            table_config.init_fn(param)

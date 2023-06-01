@@ -224,7 +224,7 @@ class DLRMTransformerTest(unittest.TestCase):
             sparse_features=sparse_features,
         )
         self.assertEqual(logits.size(), (B, 1))
-        expected_logits = torch.tensor([[0.1659], [0.3247]])
+        expected_logits = torch.tensor([[-0.2593], [-0.1043]])
         self.assertTrue(
             torch.allclose(
                 logits,

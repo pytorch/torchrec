@@ -548,6 +548,18 @@ class ShardedEmbeddingBagCollection(
         self._register_load_state_dict_pre_hook(
             self._pre_load_state_dict_hook, with_module=True
         )
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        if self._device and self._device.type == "meta":
+            return
+
+        # Initialize embedding bags weights with init_fn
+        for table_config in self._embedding_bag_configs:
+            assert table_config.init_fn is not None
+            param = self.embedding_bags[f"{table_config.name}"].weight
+            # pyre-ignore
+            table_config.init_fn(param)
 
     def _create_input_dist(
         self,

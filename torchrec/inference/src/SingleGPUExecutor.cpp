@@ -96,7 +96,8 @@ void SingleGPUExecutor::process() {
   c10::InferenceMode inferenceModeGuard;
   std::vector<c10::cuda::CUDAStream> streams;
   for (size_t i = 0; i < numGpu_; ++i) {
-    streams.push_back(at::cuda::getStreamFromPool(i));
+    streams.push_back(at::cuda::getStreamFromPool(
+        false /* isHighPriority */, i /* device */));
   }
   at::cuda::CUDAMultiStreamGuard streamGuard(streams);
 
