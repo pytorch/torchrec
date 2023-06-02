@@ -213,7 +213,10 @@ class GreedyPerfPartitioner(Partitioner):
             if not success:
                 raise PlannerError(
                     error_type=PlannerErrorType.PARTITION,
-                    message=f"Device partition failed. Couldn't find a rank for shard {shard}, devices: {devices}",
+                    message=(
+                        f"Device partition failed. Couldn't find a rank for shard {shard} of table {sharding_option.name}, "
+                        f"largest device storage: {max(devices, key=lambda device: device.storage).storage}"
+                    ),
                 )
 
     @staticmethod
