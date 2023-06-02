@@ -11,7 +11,7 @@ from enum import Enum, unique
 from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
 
 import torch
-from fbgemm_gpu.split_table_batched_embeddings_ops import EmbeddingLocation
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
 from torch import fx, nn
 from torch.nn.modules.module import _addindent
 from torchrec.distributed.types import (

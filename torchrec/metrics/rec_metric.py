@@ -249,6 +249,17 @@ class RecMetricComputation(Metric, abc.ABC):
     def local_compute(self) -> List[MetricComputationReport]:
         return self._compute()
 
+    def reset(self) -> None:
+        super().reset()
+        if self._batch_window_buffers is not None:
+            self._batch_window_buffers = {
+                name: WindowBuffer(
+                    max_size=self._window_size,
+                    max_buffer_count=MAX_BUFFER_COUNT,
+                )
+                for name in self._batch_window_buffers
+            }
+
 
 class RecMetric(nn.Module, abc.ABC):
     r"""The main class template to implement a recommendation metric.

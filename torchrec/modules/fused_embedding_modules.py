@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 import torchrec.optim as trec_optim
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     ComputeDevice,
     EmbeddingLocation,
     SplitTableBatchedEmbeddingBagsCodegen,

@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 from fbgemm_gpu.split_embedding_configs import SparseType
-from fbgemm_gpu.split_table_batched_embeddings_ops import (
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     EmbeddingLocation,
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,
