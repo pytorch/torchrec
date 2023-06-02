@@ -268,7 +268,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for (_key, tables), emb_module in zip(
             self._key_to_tables.items(), self._emb_modules
         ):
-            for embedding_config, (weight, _) in zip(
+            for embedding_config, (weight, _, _) in zip(
                 tables, emb_module.split_embedding_weights(split_scale_shifts=False)
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()

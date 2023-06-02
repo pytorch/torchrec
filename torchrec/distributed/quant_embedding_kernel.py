@@ -207,7 +207,7 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
     def split_embedding_weights(self) -> List[torch.Tensor]:
         return [
             weight
-            for weight, _ in self.emb_module.split_embedding_weights(
+            for weight, _, _ in self.emb_module.split_embedding_weights(
                 split_scale_shifts=False
             )
         ]
