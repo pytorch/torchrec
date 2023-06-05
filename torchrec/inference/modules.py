@@ -21,6 +21,13 @@ from torchrec.modules.embedding_modules import (
 )
 
 
+def trim_torch_package_prefix_from_typename(typename: str) -> str:
+    if typename.startswith("<torch_package_"):
+        # Trim off <torch_package_x> prefix.
+        typename = ".".join(typename.split(".")[1:])
+    return typename
+
+
 def quantize_feature(
     module: torch.nn.Module, inputs: Tuple[torch.Tensor, ...]
 ) -> Tuple[torch.Tensor, ...]:
