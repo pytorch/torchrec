@@ -16,6 +16,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from torch.profiler import record_function
+from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
@@ -56,6 +57,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.WEIGHTED_AVG: WeightedAvgMetric,
     RecMetricEnum.TOWER_QPS: TowerQPSMetric,
     RecMetricEnum.RECALL_SESSION_LEVEL: RecallSessionMetric,
+    RecMetricEnum.ACCURACY: AccuracyMetric,
 }
 
 
