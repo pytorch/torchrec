@@ -164,7 +164,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         return super().apply(fn)
 
     # fmt: off
-    # pyre-ignore[2, 47]
+    # pyre-ignore
     def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs) -> None:
         r"""Infers the size and initializes the parameters according to the
         provided input batch.
@@ -255,5 +255,5 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         return result
     # fmt: on
 
-    # pyre-ignore[4]
+    # pyre-ignore
     __call__: Callable[..., Any] = _call_impl

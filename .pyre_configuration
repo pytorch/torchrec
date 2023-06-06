@@ -10,5 +10,5 @@
     {"import_root": ".", "source": "torchrec"}
   ],
   "strict": true,
-  "version": "0.0.101674562297"
+  "version": "0.0.101683630711"
 }
