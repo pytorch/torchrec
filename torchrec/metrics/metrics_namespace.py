@@ -52,6 +52,7 @@ class MetricName(MetricNameBase):
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "qps"
+    ACCURACY = "accuracy"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -68,6 +69,7 @@ class MetricNamespace(MetricNamespaceBase):
     MSE = "mse"
     AUC = "auc"
     MAE = "mae"
+    ACCURACY = "accuracy"
 
     OPTIMIZERS = "optimizers"
     MODEL_CONFIGURATOR = "model_configurator"
