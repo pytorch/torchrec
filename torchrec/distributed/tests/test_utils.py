@@ -19,8 +19,20 @@ from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ModuleSharder
-from torchrec.distributed.utils import get_unsharded_module_names, merge_fused_params
+from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheAlgorithm,
+    CacheParams,
+    DataType,
+    ModuleSharder,
+    ParameterSharding,
+)
+from torchrec.distributed.utils import (
+    add_params_from_parameter_sharding,
+    convert_to_fbgemm_types,
+    get_unsharded_module_names,
+    merge_fused_params,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.sparse.test_utils import keyed_jagged_tensor_equals
@@ -339,3 +351,77 @@ class MergeFusedParamsTest(unittest.TestCase):
         )
         self.assertFalse(configured_fused_params is None)
         self.assertEqual(configured_fused_params, {"learning_rate": 0.0})
+
+
+class AddParamsFromParameterShardingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.parameter_sharding = ParameterSharding(
+            sharding_type="data_parallel",
+            compute_kernel="dense",
+            ranks=[0, 1],
+            sharding_spec=None,
+            cache_params=CacheParams(algorithm=CacheAlgorithm.LFU, reserved_memory=1.0),
+            enforce_hbm=False,
+            stochastic_rounding=True,
+            bounds_check_mode=BoundsCheckMode.WARNING,
+        )
+
+    def test_add_params_from_parameter_sharding(self) -> None:
+        fused_params = None
+        fused_params = add_params_from_parameter_sharding(
+            fused_params, self.parameter_sharding
+        )
+        expected_fused_params = {
+            "cache_algorithm": CacheAlgorithm.LFU,
+            "cache_reserved_memory": 1.0,
+            "enforce_hbm": False,
+            "stochastic_rounding": True,
+            "bounds_check_mode": BoundsCheckMode.WARNING,
+        }
+        self.assertEqual(fused_params, expected_fused_params)
+
+    def test_add_params_from_parameter_sharding_override(self) -> None:
+        fused_params = {
+            "learning_rate": 0.1,
+            "cache_algorithm": CacheAlgorithm.LRU,
+            "stochastic_rounding": False,
+        }
+        fused_params = add_params_from_parameter_sharding(
+            fused_params, self.parameter_sharding
+        )
+        expected_fused_params = {
+            "learning_rate": 0.1,
+            "cache_algorithm": CacheAlgorithm.LFU,
+            "cache_reserved_memory": 1.0,
+            "enforce_hbm": False,
+            "stochastic_rounding": True,
+            "bounds_check_mode": BoundsCheckMode.WARNING,
+        }
+        self.assertEqual(fused_params, expected_fused_params)
+
+
+class ConvertFusedParamsTest(unittest.TestCase):
+    def test_convert_to_fbgemm_types(self) -> None:
+        per_table_fused_params = {
+            "cache_algorithm": CacheAlgorithm.LFU,
+            "cache_precision": DataType.FP32,
+            "bounds_check_mode": BoundsCheckMode.WARNING,
+        }
+        self.assertTrue(
+            isinstance(per_table_fused_params["cache_algorithm"], CacheAlgorithm)
+        )
+        self.assertTrue(isinstance(per_table_fused_params["cache_precision"], DataType))
+        self.assertTrue(
+            isinstance(per_table_fused_params["bounds_check_mode"], BoundsCheckMode)
+        )
+
+        per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
+        self.assertFalse(
+            isinstance(per_table_fused_params["cache_algorithm"], CacheAlgorithm)
+        )
+        self.assertFalse(
+            isinstance(per_table_fused_params["cache_precision"], DataType)
+        )
+        self.assertFalse(
+            isinstance(per_table_fused_params["bounds_check_mode"], BoundsCheckMode)
+        )

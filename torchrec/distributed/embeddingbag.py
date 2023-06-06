@@ -58,7 +58,9 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.distributed.utils import (
+    add_params_from_parameter_sharding,
     append_prefix,
+    convert_to_fbgemm_types,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
 )
@@ -232,7 +234,12 @@ def create_sharding_infos_by_sharding(
             optimizer_params["optimizer"] = optimizer_type_to_emb_opt_type(
                 optimizer_class
             )
-        fused_params = merge_fused_params(fused_params, optimizer_params)
+
+        per_table_fused_params = merge_fused_params(fused_params, optimizer_params)
+        per_table_fused_params = add_params_from_parameter_sharding(
+            per_table_fused_params, parameter_sharding
+        )
+        per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
 
         sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
             EmbeddingShardingInfo(
@@ -251,7 +258,7 @@ def create_sharding_infos_by_sharding(
                 ),
                 param_sharding=parameter_sharding,
                 param=param,
-                fused_params=fused_params,
+                fused_params=per_table_fused_params,
             )
         )
     return sharding_type_to_sharding_infos
