@@ -28,6 +28,7 @@ class RecMetricEnum(RecMetricEnumBase):
     RECALL_SESSION_LEVEL = "recall_session_level"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "tower_qps"
+    ACCURACY = "accuracy"
 
 
 @dataclass(unsafe_hash=True, eq=True)
