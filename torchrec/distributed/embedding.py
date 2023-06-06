@@ -403,6 +403,9 @@ class ShardedEmbeddingCollection(
                 )
         self._initialize_torch_state()
 
+        if module.device != torch.device("meta"):
+            self.load_state_dict(module.state_dict())
+
     @staticmethod
     def _pre_load_state_dict_hook(
         self: "ShardedEmbeddingCollection",
@@ -414,17 +417,45 @@ class ShardedEmbeddingCollection(
         Modify the destination state_dict for model parallel
         to transform from ShardedTensors into tensors
         """
-        for table_name in self._model_parallel_name_to_local_shards.keys():
+        for (
+            table_name,
+            model_shards,
+        ) in self._model_parallel_name_to_local_shards.items():
             key = f"{prefix}embeddings.{table_name}.weight"
-            local_shards = state_dict[key].local_shards()
-            if len(local_shards) == 0:
-                state_dict[key] = torch.empty(0)
+
+            # If state_dict[key] is already a ShardedTensor, use its local shards
+            if isinstance(state_dict[key], ShardedTensor):
+                local_shards = state_dict[key].local_shards()
+                # If no local shards, create an empty tensor
+                if len(local_shards) == 0:
+                    state_dict[key] = torch.empty(0)
+                else:
+                    dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
+                    # CW multiple shards are merged
+                    state_dict[key] = torch.cat(
+                        [shard.tensor.view(-1) for shard in local_shards], dim=0
+                    ).view(-1, dim)
             else:
-                dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
-                # CW multiple shards are merged
-                state_dict[key] = torch.cat(
-                    [s.tensor.view(-1) for s in local_shards], dim=0
-                ).view(-1, dim)
+                local_shards = []
+                for shard in model_shards:
+                    # Extract shard size and offsets for splicing
+                    shard_sizes = shard.metadata.shard_sizes
+                    shard_offsets = shard.metadata.shard_offsets
+
+                    # Prepare tensor by splicing and placing on appropriate device
+                    spliced_tensor = state_dict[key][
+                        shard_offsets[0] : shard_offsets[0] + shard_sizes[0],
+                        shard_offsets[1] : shard_offsets[1] + shard_sizes[1],
+                    ].to(shard.tensor.get_device())
+
+                    # Append spliced tensor into local shards
+                    local_shards.append(spliced_tensor)
+
+                state_dict[key] = (
+                    torch.empty(0)
+                    if not local_shards
+                    else torch.cat(local_shards, dim=0)
+                )
 
     def _initialize_torch_state(self) -> None:  # noqa
         """
