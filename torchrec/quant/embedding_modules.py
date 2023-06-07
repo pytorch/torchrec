@@ -269,6 +269,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             self._key_to_tables.items(), self._emb_modules
         ):
             for embedding_config, (weight, _) in zip(
+                # pyre-fixme[29]: `Union[nn.modules.module.Module,
+                #  torch._tensor.Tensor]` is not a function.
                 tables, emb_module.split_embedding_weights(split_scale_shifts=False)
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()

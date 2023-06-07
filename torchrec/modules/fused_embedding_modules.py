@@ -437,6 +437,8 @@ class FusedEmbeddingBagCollection(
             self._key_to_tables.items(), self._emb_modules
         ):
             for embedding_config, weight in zip(
+                # pyre-fixme[29]: `Union[nn.modules.module.Module,
+                #  torch._tensor.Tensor]` is not a function.
                 tables, emb_module.split_embedding_weights()
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()
@@ -683,6 +685,8 @@ class FusedEmbeddingCollection(EmbeddingCollectionInterface, FusedOptimizerModul
             self._key_to_tables.items(), self._emb_modules
         ):
             for embedding_config, weight in zip(
+                # pyre-fixme[29]: `Union[nn.modules.module.Module,
+                #  torch._tensor.Tensor]` is not a function.
                 tables, emb_module.split_embedding_weights()
             ):
                 self.embeddings[embedding_config.name] = torch.nn.Module()

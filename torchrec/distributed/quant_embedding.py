@@ -333,6 +333,8 @@ class ShardedQuantEmbeddingCollection(
             ctx.sharding_contexts,
         ):
             emb_per_sharding.append(odist.forward(embeddings, sharding_ctx))
+            # pyre-fixme[6]: For 1st argument expected `List[KeyedJaggedTensor]` but
+            #  got `Optional[KJTList]`.
             features_per_sharding.append(sharding_ctx.features)
 
         return output_jt_dict(

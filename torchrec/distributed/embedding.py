@@ -503,6 +503,8 @@ class ShardedEmbeddingCollection(
             for (
                 table_name,
                 tbe_slice,
+            # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has no
+            #  attribute `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embeddings[table_name].register_parameter("weight", tbe_slice)
         for (
@@ -706,6 +708,8 @@ class ShardedEmbeddingCollection(
         ):
             awaitables_per_sharding.append(odist(embeddings, sharding_ctx))
             features_before_all2all_per_sharding.append(
+                # pyre-fixme[6]: For 1st argument expected `KeyedJaggedTensor` but
+                #  got `Optional[KeyedJaggedTensor]`.
                 sharding_ctx.features_before_input_dist
             )
         return EmbeddingCollectionAwaitable(
@@ -736,6 +740,8 @@ class ShardedEmbeddingCollection(
                 odist(lookup(features).view(-1, embedding_dim), sharding_ctx)
             )
             features_before_all2all_per_sharding.append(
+                # pyre-fixme[6]: For 1st argument expected `KeyedJaggedTensor` but
+                #  got `Optional[KeyedJaggedTensor]`.
                 sharding_ctx.features_before_input_dist
             )
         return EmbeddingCollectionAwaitable(

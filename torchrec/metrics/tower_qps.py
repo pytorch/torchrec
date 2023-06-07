@@ -260,6 +260,9 @@ class TowerQPSMetric(RecMetric):
                 for task, metric_ in zip(self._tasks, self._metrics_computations):
                     if task.name not in labels:
                         continue
+                    # pyre-fixme[6]: For 1st argument expected `Union[None,
+                    #  List[typing.Any], int, slice, Tensor, typing.Tuple[typing.Any,
+                    #  ...]]` but got `str`.
                     task_labels = labels[task.name].view(1, -1)
                     if self._should_validate_update:
                         has_valid_weights = torch.ones(
@@ -268,6 +271,10 @@ class TowerQPSMetric(RecMetric):
                         if weights is not None and task.name in weights:
                             has_valid_weights = torch.gt(
                                 torch.count_nonzero(
+                                    # pyre-fixme[6]: For 1st argument expected
+                                    #  `Union[None, List[typing.Any], int, slice,
+                                    #  Tensor, typing.Tuple[typing.Any, ...]]` but got
+                                    #  `str`.
                                     weights[task.name].view(1, -1), dim=-1
                                 ),
                                 0,

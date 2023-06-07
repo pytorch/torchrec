@@ -86,13 +86,21 @@ def get_state_dict(
         # for inference there is no pg, all tensors are local
         if embedding_table.global_metadata is not None and pg is not None:
             # set additional field of sharded tensor based on local tensor properties
+            # pyre-fixme[8]: Attribute has type `dtype`; used as `Union[Module,
+            #  dtype, Tensor]`.
             embedding_table.global_metadata.tensor_properties.dtype = param.dtype
+            # pyre-fixme[8]: Attribute has type `bool`; used as `Union[bool, Module,
+            #  Tensor]`.
             embedding_table.global_metadata.tensor_properties.requires_grad = (
                 param.requires_grad
             )
             key_to_global_metadata[key] = embedding_table.global_metadata
 
             key_to_local_shards[key].append(
+                # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                #  `Union[Module, Tensor]`.
+                # pyre-fixme[6]: For 2nd argument expected `ShardMetadata` but got
+                #  `Optional[ShardMetadata]`.
                 Shard(param, embedding_table.local_metadata)
             )
         else:

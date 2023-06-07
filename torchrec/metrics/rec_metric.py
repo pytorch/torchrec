@@ -559,22 +559,49 @@ class RecMetric(nn.Module, abc.ABC):
                 for task, metric_ in zip(self._tasks, self._metrics_computations):
                     if task.name not in predictions:
                         continue
+                    # pyre-fixme[6]: For 1st argument expected `Union[None,
+                    #  List[typing.Any], int, slice, Tensor, typing.Tuple[typing.Any,
+                    #  ...]]` but got `str`.
                     if torch.numel(predictions[task.name]) == 0:
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         assert torch.numel(labels[task.name]) == 0
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         assert weights is None or torch.numel(weights[task.name]) == 0
                         continue
                     task_predictions = (
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         predictions[task.name].view(1, -1)
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         if predictions[task.name].dim() == labels[task.name].dim()
                         # predictions[task.name].dim() == labels[task.name].dim() + 1 for multiclass models
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         else predictions[task.name].view(
+                            # pyre-fixme[6]: For 1st argument expected `Union[None,
+                            #  List[typing.Any], int, slice, Tensor,
+                            #  typing.Tuple[typing.Any, ...]]` but got `str`.
                             1, -1, predictions[task.name].size()[-1]
                         )
                     )
+                    # pyre-fixme[6]: For 1st argument expected `Union[None,
+                    #  List[typing.Any], int, slice, Tensor, typing.Tuple[typing.Any,
+                    #  ...]]` but got `str`.
                     task_labels = labels[task.name].view(1, -1)
                     if weights is None:
                         task_weights = self._create_default_weights(task_predictions)
                     else:
+                        # pyre-fixme[6]: For 1st argument expected `Union[None,
+                        #  List[typing.Any], int, slice, Tensor,
+                        #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         task_weights = weights[task.name].view(1, -1)
                     if self._should_validate_update:
                         # has_valid_weights is a tensor with only 1 value corresponding to
