@@ -1012,19 +1012,20 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         """
         kjt_keys = list(jt_dict.keys())
-        kjt_vals = torch.concat(tuple(jt.values() for jt in jt_dict.values()))
-        kjt_lens = torch.concat(tuple(jt.lengths() for jt in jt_dict.values()))
-        kjt_weights = tuple(
-            jt.weights_or_none()
-            for jt in jt_dict.values()
-            if jt.weights_or_none() is not None
+        kjt_vals_list: List[torch.Tensor] = []
+        kjt_lens_list: List[torch.Tensor] = []
+        kjt_weights_list: List[torch.Tensor] = []
+        for jt in jt_dict.values():
+            kjt_vals_list.append(jt.values())
+            kjt_lens_list.append(jt.lengths())
+            weight = jt.weights_or_none()
+            if weight is not None:
+                kjt_weights_list.append(weight)
+        kjt_vals = torch.concat(kjt_vals_list)
+        kjt_lens = torch.concat(kjt_lens_list)
+        kjt_weights = (
+            torch.concat(kjt_weights_list) if len(kjt_weights_list) > 0 else None
         )
-        # pyre-ignore[6]: Incompatible parameter type [6]:
-        # In call `torch._C._VariableFunctions.concat`,
-        # for 1st positional only parameter
-        # expected `Union[List[Tensor], typing.Tuple[Tensor, ...]]`
-        # but got `typing.Tuple[Optional[Tensor], ...]`
-        kjt_weights = torch.concat(kjt_weights) if kjt_weights else None
         kjt = KeyedJaggedTensor(
             keys=kjt_keys,
             values=kjt_vals,
