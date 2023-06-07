@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import copy
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
 
@@ -26,7 +27,6 @@ from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardedModule,
-    ShardedTensor,
     ShardingEnv,
     ShardingPlan,
 )
@@ -35,6 +35,7 @@ from torchrec.distributed.utils import (
     append_prefix,
     copy_to_device,
     filter_state_dict,
+    sharded_model_copy,
 )
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
@@ -286,8 +287,15 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         `ShardedModule` for inference).
         """
         assert isinstance(device, torch.device)
-        copy_dmp = copy_to_device(self, self.device, device)
-        return cast(DistributedModelParallel, copy_dmp)
+        # dmp code deep copy
+        with sharded_model_copy(device=None):
+            copy_dmp = copy.deepcopy(self)
+        # tensor resident module deep copy
+        copy_dmp_wrapped_module = copy_to_device(
+            self._dmp_wrapped_module, self.device, device
+        )
+        copy_dmp._dmp_wrapped_module = copy_dmp_wrapped_module
+        return copy_dmp
 
     def _init_dmp(self, module: nn.Module) -> nn.Module:
         return self._shard_modules_impl(module)
