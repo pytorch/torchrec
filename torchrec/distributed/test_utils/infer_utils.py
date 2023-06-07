@@ -8,7 +8,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torchrec
@@ -38,7 +38,8 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
-    MODULE_ATTR_REGISTER_TBES_BOOL,
+    quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
+    quant_prep_enable_register_tbes,
 )
 
 
@@ -145,13 +146,18 @@ def quantize(
     inplace: bool,
     output_type: torch.dtype = torch.float,
     register_tbes: bool = False,
+    quant_state_dict_split_scale_bias: bool = False,
 ) -> torch.nn.Module:
+    module_types: List[Type[torch.nn.Module]] = [
+        torchrec.modules.embedding_modules.EmbeddingBagCollection,
+        torchrec.modules.embedding_modules.EmbeddingCollection,
+    ]
     if register_tbes:
-        for m in module.modules():
-            if isinstance(
-                m, torchrec.modules.embedding_modules.EmbeddingBagCollection
-            ) or isinstance(m, torchrec.modules.embedding_modules.EmbeddingCollection):
-                setattr(m, MODULE_ATTR_REGISTER_TBES_BOOL, True)
+        quant_prep_enable_register_tbes(module, module_types)
+    if quant_state_dict_split_scale_bias:
+        quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
+            module, module_types
+        )
 
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),

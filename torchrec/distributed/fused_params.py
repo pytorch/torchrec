@@ -15,6 +15,9 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
 
 FUSED_PARAM_REGISTER_TBE_BOOL: str = "__register_tbes_in_named_modules"
+FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
+    "__register_quant_state_dict_split_scale_bias"
+)
 
 
 class TBEToRegisterMixIn:
@@ -42,6 +45,16 @@ def is_fused_param_register_tbe(fused_params: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+def is_fused_param_quant_state_dict_split_scale_bias(
+    fused_params: Optional[Dict[str, Any]]
+) -> bool:
+    return (
+        fused_params
+        and FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS in fused_params
+        and fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]
+    )
+
+
 def tbe_fused_params(
     fused_params: Optional[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
@@ -51,5 +64,7 @@ def tbe_fused_params(
     fused_params_for_tbe = dict(fused_params)
     if FUSED_PARAM_REGISTER_TBE_BOOL in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_REGISTER_TBE_BOOL)
+    if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS)
 
     return fused_params_for_tbe

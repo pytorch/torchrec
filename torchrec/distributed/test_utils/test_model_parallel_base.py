@@ -8,7 +8,7 @@
 import os
 import unittest
 from collections import defaultdict
-from typing import Callable, cast, Dict, List, Optional, OrderedDict, Tuple
+from typing import Any, Callable, cast, Dict, List, Optional, OrderedDict, Tuple
 
 import numpy as np
 
@@ -88,6 +88,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
         tables: List[EmbeddingTableConfig],
         sharders: List[ModuleSharder[nn.Module]],
         quantize_callable: Callable[[nn.Module], nn.Module],
+        quantize_callable_kwargs: Dict[str, Any],
         dedup_features_names: Optional[List[str]] = None,
         dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
@@ -112,7 +113,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
             sparse_device=cuda_device,
             generate=generate,
         )
-        global_model = quantize_callable(global_model)
+        global_model = quantize_callable(global_model, **quantize_callable_kwargs)
         local_input = _inputs[0][1][default_rank].to(cuda_device)
 
         # Shard model.
@@ -141,7 +142,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
                 sparse_device=torch.device("meta"),
                 num_float_features=16,
             )
-        local_model = quantize_callable(local_model)
+        local_model = quantize_callable(local_model, **quantize_callable_kwargs)
 
         planner = EmbeddingShardingPlanner(
             topology=Topology(world_size, "cuda"),
@@ -151,7 +152,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
 
         # Generate a sharded model on a default rank.
         local_model = DistributedModelParallel(
-            local_model,
+            module=local_model,
             env=ShardingEnv.from_local(world_size, default_rank),
             plan=plan,
             sharders=sharders,

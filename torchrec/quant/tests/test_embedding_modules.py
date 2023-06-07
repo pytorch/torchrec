@@ -23,6 +23,7 @@ from torchrec.modules.embedding_modules import (
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
+    quant_prep_enable_quant_state_dict_split_scale_bias,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
@@ -54,8 +55,11 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         features: KeyedJaggedTensor,
         quant_type: torch.dtype = torch.qint8,
         output_type: torch.dtype = torch.float,
+        quant_state_dict_split_scale_bias: bool = False,
     ) -> None:
         ebc = EmbeddingBagCollection(tables=tables)
+        if quant_state_dict_split_scale_bias:
+            quant_prep_enable_quant_state_dict_split_scale_bias(ebc)
 
         embeddings = ebc(features)
 
@@ -78,7 +82,9 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         # test state dict
         state_dict = ebc.state_dict()
         quantized_state_dict = qebc.state_dict()
-        self.assertEqual(state_dict.keys(), quantized_state_dict.keys())
+        self.assertTrue(
+            set(state_dict.keys()).issubset(set(quantized_state_dict.keys()))
+        )
 
     # pyre-fixme[56]
     @given(
@@ -101,6 +107,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             ]
         ),
         permute_order=st.booleans(),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_ebc(
@@ -109,6 +116,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         quant_type: torch.dtype,
         output_type: torch.dtype,
         permute_order: bool,
+        quant_state_dict_split_scale_bias: bool,
     ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
@@ -137,7 +145,13 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
                 lengths=torch.as_tensor([1, 1]),
             )
         )
-        self._test_ebc([eb1_config, eb2_config], features, quant_type, output_type)
+        self._test_ebc(
+            [eb1_config, eb2_config],
+            features,
+            quant_type,
+            output_type,
+            quant_state_dict_split_scale_bias,
+        )
 
     def test_shared_tables(self) -> None:
         eb_config = EmbeddingBagConfig(
@@ -339,7 +353,9 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         test_model.ebc = QuantEmbeddingBagCollection.from_float(ebc)
 
         state_dict = test_model.state_dict()
-        self.assertEqual(state_dict.keys(), before_quant_state_dict.keys())
+        self.assertTrue(
+            set(before_quant_state_dict.keys()).issubset(set(state_dict.keys()))
+        )
         test_model.load_state_dict(state_dict)
 
     def test_trace_and_script(self) -> None:
@@ -405,8 +421,11 @@ class EmbeddingCollectionTest(unittest.TestCase):
         features: KeyedJaggedTensor,
         quant_type: torch.dtype = torch.qint8,
         output_type: torch.dtype = torch.float,
+        quant_state_dict_split_scale_bias: bool = False,
     ) -> None:
         ec = EmbeddingCollection(tables=tables)
+        if quant_state_dict_split_scale_bias:
+            quant_prep_enable_quant_state_dict_split_scale_bias(ec)
 
         embeddings = ec(features)
 
@@ -464,6 +483,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
                 torch.float,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_ec(
@@ -471,6 +491,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         data_type: DataType,
         quant_type: torch.dtype,
         output_type: torch.dtype,
+        quant_state_dict_split_scale_bias: bool,
     ) -> None:
         eb1_config = EmbeddingConfig(
             name="t1",
@@ -491,7 +512,11 @@ class EmbeddingCollectionTest(unittest.TestCase):
             values=torch.as_tensor([0, 1]),
             lengths=torch.as_tensor([1, 1]),
         )
-        self._test_ec([eb1_config, eb2_config], features)
+        self._test_ec(
+            tables=[eb1_config, eb2_config],
+            features=features,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
 
     def test_shared_tables(self) -> None:
         eb_config = EmbeddingConfig(
