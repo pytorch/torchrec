@@ -24,9 +24,6 @@ def apply_feature_processors_to_kjt(
         return features
 
     processed_weights = []
-    processed_values = []
-    processed_lengths = []
-
     features_dict = features.to_dict()
 
     for key in features.keys():
@@ -35,16 +32,13 @@ def apply_feature_processors_to_kjt(
             fp_jt = feature_processors[key](jt)
         else:
             fp_jt = jt
-
-        processed_values.append(fp_jt.values())
         processed_weights.append(fp_jt.weights())
-        processed_lengths.append(fp_jt.lengths())
 
     return KeyedJaggedTensor(
         keys=features.keys(),
-        values=torch.cat(processed_values),
+        values=features.values(),
         weights=torch.cat(processed_weights),
-        lengths=torch.cat(processed_lengths),
+        lengths=features.lengths(),
         offsets=features._offsets,
         stride=features._stride,
         length_per_key=features._length_per_key,
