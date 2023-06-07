@@ -453,3 +453,4 @@ class ModelTraceScriptTest(unittest.TestCase):
             # We need those classes not as it is, but as composable blocks in model.
             # _recursive_compile_class for that is enough
             torch.jit._script._recursive_compile_class(clz, fake_range())
+        torch.jit.script(KeyedJaggedTensor.from_jt_dict)
