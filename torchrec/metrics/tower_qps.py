@@ -275,7 +275,8 @@ class TowerQPSMetric(RecMetric):
                                     #  `Union[None, List[typing.Any], int, slice,
                                     #  Tensor, typing.Tuple[typing.Any, ...]]` but got
                                     #  `str`.
-                                    weights[task.name].view(1, -1), dim=-1
+                                    weights[task.name].view(1, -1),
+                                    dim=-1,
                                 ),
                                 0,
                             )

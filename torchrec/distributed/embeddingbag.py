@@ -503,8 +503,8 @@ class ShardedEmbeddingBagCollection(
             for (
                 table_name,
                 tbe_slice,
-            # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has no
-            #  attribute `named_parameters_by_table`.
+                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has no
+                #  attribute `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
         for (

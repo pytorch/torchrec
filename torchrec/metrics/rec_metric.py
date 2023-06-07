@@ -586,10 +586,13 @@ class RecMetric(nn.Module, abc.ABC):
                         #  List[typing.Any], int, slice, Tensor,
                         #  typing.Tuple[typing.Any, ...]]` but got `str`.
                         else predictions[task.name].view(
-                            # pyre-fixme[6]: For 1st argument expected `Union[None,
-                            #  List[typing.Any], int, slice, Tensor,
-                            #  typing.Tuple[typing.Any, ...]]` but got `str`.
-                            1, -1, predictions[task.name].size()[-1]
+                            1,
+                            -1,
+                            predictions[
+                                task.name  # pyre-fixme[6]: For 1st argument expected `Union[None,
+                                #  List[typing.Any], int, slice, Tensor,
+                                #  typing.Tuple[typing.Any, ...]]` but got `str`.
+                            ].size()[-1],
                         )
                     )
                     # pyre-fixme[6]: For 1st argument expected `Union[None,
