@@ -578,6 +578,10 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             max_feature_lengths_list if max_feature_lengths_list is not None else None,
         )
         self.over = TestOverArch(tables, weighted_tables, dense_device)
+        self.register_buffer(
+            "dummy_ones",
+            torch.ones(1, device=dense_device),
+        )
 
     def forward(
         self,
@@ -588,7 +592,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             input.idlist_features, input.idscore_features, input.float_features.size(0)
         )
         over_r = self.over(dense_r, sparse_r)
-        pred = torch.sigmoid(torch.mean(over_r, dim=1))
+        pred = torch.sigmoid(torch.mean(over_r, dim=1)) + self.dummy_ones
         if self.training:
             return (
                 torch.nn.functional.binary_cross_entropy_with_logits(pred, input.label),

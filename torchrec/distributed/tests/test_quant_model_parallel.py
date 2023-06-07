@@ -126,12 +126,15 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         module_copy: nn.Module,
         device: torch.device,
         device_copy: torch.device,
+        recurse: bool = True,
     ) -> None:
         # check all buffer/param under the module is value-identical
         # but device-different with the copied module.
         for (name, buffer), (name_copy, buffer_copy) in zip(
-            list(module.named_buffers()) + list(module.named_parameters()),
-            list(module_copy.named_buffers()) + list(module_copy.named_parameters()),
+            list(module.named_buffers(recurse=recurse))
+            + list(module.named_parameters(recurse=recurse)),
+            list(module_copy.named_buffers(recurse=recurse))
+            + list(module_copy.named_parameters(recurse=recurse)),
         ):
             self.assertEquals(name, name_copy)
             actual, expected = buffer.detach().cpu(), buffer_copy.detach().cpu()
@@ -161,6 +164,9 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 self.assertTrue(buffer.detach().is_set_to(buffer_copy.detach()))
             # don't go into named_children of ShardedModule
             return
+        self._buffer_param_check(
+            module, module_copy, device, device_copy, recurse=False
+        )
         for name_child, name_child_copy in zip(
             module.named_children(), module_copy.named_children()
         ):

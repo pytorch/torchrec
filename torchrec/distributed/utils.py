@@ -228,7 +228,18 @@ def copy_to_device(
     # if this is a sharded module, customize the copy
     if isinstance(copy_module, CopyMixIn):
         return copy_module.copy(to_device)
-
+    copied_param = {
+        name: torch.nn.Parameter(_copy_if_device_match(param.data))
+        for name, param in copy_module.named_parameters(recurse=False)
+    }
+    copied_buffer = {
+        name: _copy_if_device_match(buffer)
+        for name, buffer in copy_module.named_buffers(recurse=False)
+    }
+    for name, param in copied_param.items():
+        copy_module.register_parameter(name, param)
+    for name, buffer in copied_buffer.items():
+        copy_module.register_buffer(name, buffer)
     for child_name, child in copy_module.named_children():
         if not any([isinstance(submodule, CopyMixIn) for submodule in child.modules()]):
             child_copy = child._apply(_copy_if_device_match)
