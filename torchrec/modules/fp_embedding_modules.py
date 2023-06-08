@@ -5,12 +5,15 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict
+from typing import Dict, Union
 
 import torch
 import torch.nn as nn
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.feature_processor_ import FeatureProcessor
+from torchrec.modules.feature_processor_ import (
+    FeatureProcessor,
+    FeatureProcessorsCollection,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
@@ -83,23 +86,29 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
     def __init__(
         self,
         embedding_bag_collection: EmbeddingBagCollection,
-        feature_processors: Dict[str, FeatureProcessor],
+        feature_processors: Union[
+            Dict[str, FeatureProcessor], FeatureProcessorsCollection
+        ],
     ) -> None:
         super().__init__()
         self._embedding_bag_collection = embedding_bag_collection
-        self._feature_processors = nn.ModuleDict(feature_processors)
+        self._feature_processors: Union[nn.ModuleDict, FeatureProcessorsCollection]
 
-        assert set(
-            sum(
-                [
-                    config.feature_names
-                    for config in self._embedding_bag_collection.embedding_bag_configs()
-                ],
-                [],
-            )
-        ) == set(
-            feature_processors.keys()
-        ), "Passed in feature processors do not match feature names of embedding bag"
+        if isinstance(feature_processors, FeatureProcessorsCollection):
+            self._feature_processors = feature_processors
+        else:
+            self._feature_processors = nn.ModuleDict(feature_processors)
+            assert set(
+                sum(
+                    [
+                        config.feature_names
+                        for config in self._embedding_bag_collection.embedding_bag_configs()
+                    ],
+                    [],
+                )
+            ) == set(
+                feature_processors.keys()
+            ), "Passed in feature processors do not match feature names of embedding bag"
 
         assert (
             embedding_bag_collection.is_weighted()
@@ -117,7 +126,10 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
             KeyedTensor
         """
 
-        fp_features = apply_feature_processors_to_kjt(
-            features, self._feature_processors
-        )
+        if isinstance(self._feature_processors, FeatureProcessorsCollection):
+            fp_features = self._feature_processors(features)
+        else:
+            fp_features = apply_feature_processors_to_kjt(
+                features, self._feature_processors
+            )
         return self._embedding_bag_collection(fp_features)

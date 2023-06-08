@@ -7,6 +7,7 @@
 
 import copy
 import unittest
+from operator import xor
 from typing import List, Optional
 
 import torch
@@ -53,6 +54,7 @@ def _test_sharding(  # noqa C901
     set_gradient_division: bool,
     local_size: Optional[int] = None,
     use_dmp: bool = False,
+    use_fp_collection: bool = False,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -60,7 +62,9 @@ def _test_sharding(  # noqa C901
 
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
 
-        sparse_arch = create_module_and_freeze(tables, ctx.device)
+        sparse_arch = create_module_and_freeze(
+            tables, use_fp_collection=use_fp_collection, device=ctx.device
+        )
 
         apply_optimizer_in_backward(
             torch.optim.SGD,
@@ -164,16 +168,20 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     # pyre-ignore
-    @given(set_gradient_division=st.booleans(), use_dmp=st.booleans())
-    def test_sharding_ebc(self, set_gradient_division: bool, use_dmp: bool) -> None:
+    @given(
+        set_gradient_division=st.booleans(),
+        use_dmp=st.booleans(),
+        use_fp_collection=st.booleans(),
+    )
+    def test_sharding_ebc(
+        self, set_gradient_division: bool, use_dmp: bool, use_fp_collection: bool
+    ) -> None:
 
         import hypothesis
 
         # don't need to test entire matrix
         hypothesis.assume(not (set_gradient_division and use_dmp))
-
-        # TODO remove after landing KJT weights scaling change
-        hypothesis.assume(not set_gradient_division)
+        hypothesis.assume(not xor(use_dmp, use_fp_collection))
 
         WORLD_SIZE = 2
 
@@ -268,4 +276,5 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             else "gloo",
             set_gradient_division=set_gradient_division,
             use_dmp=use_dmp,
+            use_fp_collection=use_fp_collection,
         )
