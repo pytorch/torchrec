@@ -5,9 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, Iterator, List, Optional, Type
+from typing import Dict, Iterator, List, Optional, Type, Union
 
 import torch
+from torch import nn
 
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -28,6 +29,7 @@ from torchrec.distributed.types import (
     ShardingType,
 )
 from torchrec.distributed.utils import append_prefix
+from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
 from torchrec.modules.fp_embedding_modules import (
     apply_feature_processors_to_kjt,
     FeatureProcessedEmbeddingBagCollection,
@@ -62,9 +64,13 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             )
         )
 
-        self._feature_processors = torch.nn.ModuleDict(
-            {key: fp.to(device) for key, fp in module._feature_processors.items()}
-        )
+        self._feature_processors: Union[nn.ModuleDict, FeatureProcessorsCollection]
+        if isinstance(module._feature_processors, FeatureProcessorsCollection):
+            self._feature_processors = module._feature_processors.to(device)
+        else:
+            self._feature_processors = torch.nn.ModuleDict(
+                {key: fp.to(device) for key, fp in module._feature_processors.items()}
+            )
 
     # pyre-ignore
     def input_dist(
@@ -72,22 +78,29 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
     ) -> Awaitable[Awaitable[KJTList]]:
         return self._embedding_bag_collection.input_dist(ctx, features)
 
+    def apply_feature_processors_to_kjt_list(self, dist_input: KJTList) -> KJTList:
+        if isinstance(self._feature_processors, FeatureProcessorsCollection):
+            return KJTList(
+                [self._feature_processors(features) for features in dist_input]
+            )
+        else:
+            return KJTList(
+                [
+                    apply_feature_processors_to_kjt(
+                        features,
+                        self._feature_processors,
+                    )
+                    for features in dist_input
+                ]
+            )
+
     def compute(
         self,
         ctx: EmbeddingBagCollectionContext,
         dist_input: KJTList,
     ) -> List[torch.Tensor]:
 
-        fp_features = KJTList(
-            [
-                apply_feature_processors_to_kjt(
-                    features,
-                    self._feature_processors,
-                )
-                for features in dist_input
-            ]
-        )
-
+        fp_features = self.apply_feature_processors_to_kjt_list(dist_input)
         return self._embedding_bag_collection.compute(ctx, fp_features)
 
     def output_dist(
@@ -100,15 +113,7 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
-        fp_features = KJTList(
-            [
-                apply_feature_processors_to_kjt(
-                    features,
-                    self._feature_processors,
-                )
-                for features in input
-            ]
-        )
+        fp_features = self.apply_feature_processors_to_kjt_list(input)
         return self._embedding_bag_collection.compute_and_output_dist(ctx, fp_features)
 
     def create_context(self) -> EmbeddingBagCollectionContext:
