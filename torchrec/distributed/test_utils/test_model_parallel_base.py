@@ -643,30 +643,31 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
-            table_name = key.split(".")[-2]
-            v2 = sd1[key]
-            if isinstance(value, ShardedTensor):
-                self.assertEqual(
-                    len(value.local_shards()), num_cw_shards_per_table[table_name]
-                )
-                dst = value.local_shards()[0].tensor
-            else:
-                dst = value
-
-            if isinstance(v2, ShardedTensor):
-                self.assertEqual(
-                    len(value.local_shards()), num_cw_shards_per_table[table_name]
-                )
-
-                for src_local_shard, dst_local_shard in zip(
-                    value.local_shards(), v2.local_shards()
-                ):
-                    self.assertTrue(
-                        torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
+            if "." in key:
+                table_name = key.split(".")[-2]
+                v2 = sd1[key]
+                if isinstance(value, ShardedTensor):
+                    self.assertEqual(
+                        len(value.local_shards()), num_cw_shards_per_table[table_name]
                     )
-            else:
-                src = v2
-                self.assertTrue(torch.equal(src, dst))
+                    dst = value.local_shards()[0].tensor
+                else:
+                    dst = value
+
+                if isinstance(v2, ShardedTensor):
+                    self.assertEqual(
+                        len(value.local_shards()), num_cw_shards_per_table[table_name]
+                    )
+
+                    for src_local_shard, dst_local_shard in zip(
+                        value.local_shards(), v2.local_shards()
+                    ):
+                        self.assertTrue(
+                            torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
+                        )
+                else:
+                    src = v2
+                    self.assertTrue(torch.equal(src, dst))
 
         for param_name, dst_param_group in dst_optimizer_state_dict.items():
             src_param_group = src_optimizer_state_dict[param_name]
