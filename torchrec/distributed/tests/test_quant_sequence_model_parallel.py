@@ -15,7 +15,7 @@ from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
-from torchrec.distributed.shard import shard_modules
+from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNNBase
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     InferenceModelParallelTestBase,
@@ -26,11 +26,18 @@ from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
+    quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
 )
 from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
-def _quantize(module: nn.Module) -> nn.Module:
+def _quantize(
+    module: nn.Module, quant_state_dict_split_scale_bias: bool = False
+) -> nn.Module:
+    if quant_state_dict_split_scale_bias:
+        quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
+            module, [EmbeddingCollection]
+        )
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver,
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
@@ -80,9 +87,15 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
                 EmbeddingComputeKernel.QUANT.value,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_nccl_tw(self, sharding_type: str, kernel_type: str) -> None:
+    def test_sharding_nccl_tw(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        quant_state_dict_split_scale_bias: bool,
+    ) -> None:
         self._test_sharding(
             sharders=[
                 TestQuantECSharder(
@@ -91,6 +104,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
                 )
             ],
             backend="nccl",
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
         )
 
     @seed_and_log
@@ -119,6 +133,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
         world_size: int = 2,
         local_size: Optional[int] = None,
         model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
+        quant_state_dict_split_scale_bias: bool = False,
     ) -> None:
         self._test_sharded_forward(
             world_size=world_size,
@@ -128,6 +143,9 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
             # pyre-ignore [6]
             sharders=sharders,
             quantize_callable=_quantize,
+            quantize_callable_kwargs={
+                "quant_state_dict_split_scale_bias": quant_state_dict_split_scale_bias
+            },
         )
 
     @unittest.skipIf(
@@ -142,9 +160,12 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
                 torch.float,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
-    def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
+    def test_quant_pred_shard(
+        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+    ) -> None:
         device = torch.device("cuda:0")
 
         # wrap in sequential because _quantize only applies to submodules...
@@ -152,7 +173,7 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
 
         quant_model = _quantize(model)
 
-        sharded_quant_model = shard_modules(
+        sharded_quant_model = _shard_modules(
             module=quant_model,
             sharders=[
                 cast(

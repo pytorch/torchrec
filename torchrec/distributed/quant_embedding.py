@@ -29,6 +29,7 @@ from torchrec.distributed.embedding_types import (
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
+    FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     get_tbes_to_register_from_iterable,
     is_fused_param_register_tbe,
 )
@@ -44,6 +45,7 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
+    MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
@@ -210,20 +212,30 @@ class ShardedQuantEmbeddingCollection(
         ):
             lookup_state_dict = lookup.state_dict()
             for key in lookup_state_dict:
-                if not key.endswith(".weight"):
+                if key.endswith(".weight"):
+                    table_name = key[: -len(".weight")]
+                    # Register as buffer because this is an inference model, and can potentially use uint8 types.
+                    self.embeddings[table_name].register_buffer(
+                        "weight", lookup_state_dict[key]
+                    )
+                elif key.endswith(".weight_qscale"):
+                    table_name = key[: -len(".weight_qscale")]
+                    self.embeddings[table_name].register_buffer(
+                        "weight_qscale", lookup_state_dict[key]
+                    )
+                elif key.endswith(".weight_qbias"):
+                    table_name = key[: -len(".weight_qbias")]
+                    self.embeddings[table_name].register_buffer(
+                        "weight_qbias", lookup_state_dict[key]
+                    )
+                else:
                     continue
-                table_name = key[: -len(".weight")]
-                # Register as buffer because this is an inference model, and can potentially use uint8 types.
-                self.embeddings[table_name].register_buffer(
-                    "weight", lookup_state_dict[key]
-                )
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
             tbes: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = get_tbes_to_register_from_iterable(self._lookups)
-
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
 
     def _create_input_dist(
@@ -383,6 +395,9 @@ class QuantEmbeddingCollectionSharder(
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
+        )
+        fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+            module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
         )
         return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
 

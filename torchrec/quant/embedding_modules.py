@@ -8,7 +8,7 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
@@ -52,6 +52,46 @@ except ImportError:
     pass
 
 MODULE_ATTR_REGISTER_TBES_BOOL: str = "__register_tbes_in_named_modules"
+
+MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
+    "__quant_state_dict_split_scale_bias"
+)
+
+
+def for_each_module_of_type_do(
+    module: nn.Module,
+    module_types: List[Type[torch.nn.Module]],
+    op: Callable[[torch.nn.Module], None],
+) -> None:
+    for m in module.modules():
+        if any([isinstance(m, t) for t in module_types]):
+            op(m)
+
+
+def quant_prep_enable_quant_state_dict_split_scale_bias(module: nn.Module) -> None:
+    setattr(module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, True)
+
+
+def quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
+    module: nn.Module, module_types: List[Type[torch.nn.Module]]
+) -> None:
+
+    for_each_module_of_type_do(
+        module,
+        module_types,
+        lambda m: setattr(m, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, True),
+    )
+
+
+def quant_prep_enable_register_tbes(
+    module: nn.Module, module_types: List[Type[torch.nn.Module]]
+) -> None:
+
+    for_each_module_of_type_do(
+        module,
+        module_types,
+        lambda m: setattr(m, MODULE_ATTR_REGISTER_TBES_BOOL, True),
+    )
 
 
 def quantize_state_dict(
@@ -187,6 +227,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
         register_tbes: bool = False,
+        quant_state_dict_split_scale_bias: bool = False,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -268,8 +309,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         for (_key, tables), emb_module in zip(
             self._key_to_tables.items(), self._emb_modules
         ):
-            for embedding_config, (weight, _) in zip(
-                tables, emb_module.split_embedding_weights(split_scale_shifts=False)
+            for embedding_config, (weight, qscale, qbias) in zip(
+                tables,
+                emb_module.split_embedding_weights_with_scale_bias(
+                    split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
+                ),
             ):
                 self.embedding_bags[embedding_config.name] = torch.nn.Module()
                 # register as a buffer so it's exposed in state_dict.
@@ -279,6 +323,19 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 self.embedding_bags[embedding_config.name].register_buffer(
                     "weight", weight
                 )
+                if quant_state_dict_split_scale_bias:
+                    self.embedding_bags[embedding_config.name].register_buffer(
+                        "weight_qscale", qscale
+                    )
+                    self.embedding_bags[embedding_config.name].register_buffer(
+                        "weight_qbias", qbias
+                    )
+
+        setattr(
+            self,
+            MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+            quant_state_dict_split_scale_bias,
+        )
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
@@ -374,6 +431,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
+            quant_state_dict_split_scale_bias=getattr(
+                module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            ),
         )
 
     def embedding_bag_configs(
@@ -457,6 +517,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None,
         register_tbes: bool = False,
+        quant_state_dict_split_scale_bias: bool = False,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -514,14 +575,28 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             # TODO: register as param instead of buffer
             # however, since this is only needed for inference, we do not need to expose it as part of parameters.
             # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
-            weights_list = emb_module.split_embedding_weights(split_scale_shifts=False)
+            weights_list = emb_module.split_embedding_weights_with_scale_bias(
+                split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
+            )
             self.embeddings[config.name].register_buffer("weight", weights_list[0][0])
+            if quant_state_dict_split_scale_bias:
+                self.embeddings[config.name].register_buffer(
+                    "weight_qscale", weights_list[0][1]
+                )
+                self.embeddings[config.name].register_buffer(
+                    "weight_qbias", weights_list[0][2]
+                )
 
             if not config.feature_names:
                 config.feature_names = [config.name]
 
         self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
             tables
+        )
+        setattr(
+            self,
+            MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+            quant_state_dict_split_scale_bias,
         )
         self.register_tbes = register_tbes
         if register_tbes:
@@ -587,6 +662,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             # pyre-ignore
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
+            quant_state_dict_split_scale_bias=getattr(
+                module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            ),
         )
 
     def _get_name(self) -> str:
