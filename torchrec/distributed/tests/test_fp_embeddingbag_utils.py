@@ -7,19 +7,28 @@
 
 #!/usr/bin/env python3
 
-from typing import List, Tuple
+from typing import cast, Dict, List, Tuple
 
 import torch
 from torch import nn
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.feature_processor_ import PositionWeightedModule
+from torchrec.modules.feature_processor_ import (
+    FeatureProcessor,
+    PositionWeightedModule,
+    PositionWeightedModuleCollection,
+)
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class SparseArch(nn.Module):
-    def __init__(self, tables: List[EmbeddingBagConfig], device: torch.device) -> None:
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        use_fp_collection: bool,
+        device: torch.device,
+    ) -> None:
         super().__init__()
 
         self._fp_ebc: FeatureProcessedEmbeddingBagCollection = (
@@ -29,12 +38,24 @@ class SparseArch(nn.Module):
                     device=device,
                     is_weighted=True,
                 ),
-                {
-                    "feature_0": PositionWeightedModule(max_feature_length=10),
-                    "feature_1": PositionWeightedModule(max_feature_length=10),
-                    "feature_2": PositionWeightedModule(max_feature_length=12),
-                    "feature_3": PositionWeightedModule(max_feature_length=12),
-                },
+                cast(
+                    Dict[str, FeatureProcessor],
+                    {
+                        "feature_0": PositionWeightedModule(max_feature_length=10),
+                        "feature_1": PositionWeightedModule(max_feature_length=10),
+                        "feature_2": PositionWeightedModule(max_feature_length=12),
+                        "feature_3": PositionWeightedModule(max_feature_length=12),
+                    },
+                )
+                if not use_fp_collection
+                else PositionWeightedModuleCollection(
+                    max_feature_lengths={
+                        "feature_0": 10,
+                        "feature_1": 10,
+                        "feature_2": 12,
+                        "feature_3": 12,
+                    }
+                ),
             ).to(device)
         )
 
@@ -53,10 +74,11 @@ class SparseArch(nn.Module):
 
 def create_module_and_freeze(
     tables: List[EmbeddingBagConfig],
+    use_fp_collection: bool,
     device: torch.device,
 ) -> SparseArch:
 
-    sparse_arch = SparseArch(tables, device).to(device)
+    sparse_arch = SparseArch(tables, use_fp_collection, device)
 
     torch.manual_seed(0)
     for param in sparse_arch.parameters():

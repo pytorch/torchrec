@@ -341,6 +341,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             create_module_and_freeze(
                 tables=embedding_bag_configs,
                 device=self.device,
+                use_fp_collection=False,
             )
         )
         module_sharding_plan = construct_module_sharding_plan(

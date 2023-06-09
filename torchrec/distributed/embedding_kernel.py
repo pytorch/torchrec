@@ -8,7 +8,7 @@
 import abc
 import logging
 from collections import defaultdict, OrderedDict
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -54,6 +54,7 @@ def get_state_dict(
         nn.ModuleList,
         List[Union[nn.Module, torch.Tensor]],
         List[torch.Tensor],
+        List[Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]],
     ],
     pg: Optional[dist.ProcessGroup] = None,
     destination: Optional[Dict[str, Any]] = None,
@@ -76,27 +77,48 @@ def get_state_dict(
 
     for embedding_table, param in zip(embedding_tables, params):
         key = get_key_from_embedding_table(embedding_table)
-        assert embedding_table.local_rows == param.size(0)
-        if embedding_table.compute_kernel not in [
+        is_quant = embedding_table.compute_kernel in [
             EmbeddingComputeKernel.QUANT,
             EmbeddingComputeKernel.QUANT_UVM,
             EmbeddingComputeKernel.QUANT_UVM_CACHING,
-        ]:
-            assert embedding_table.local_cols == param.size(1)
-        # for inference there is no pg, all tensors are local
+        ]
+        qscale = None
+        qbias = None
+        if is_quant:
+            # For QUANT* param is Tuple[torch.Tensor, Optional[torch.Tensor]] where first argument is the weight table, the second is optional quantization extra information, depending on quantization type. e.g. for fbgemm rowwise quantization this is scale and shift for each row.
+            assert isinstance(param, tuple)
+            qscale = param[1]
+            qbias = param[2]
+            param = param[0]
+
+        assert embedding_table.local_rows == param.size(0)  # pyre-ignore[16]
+
+        if qscale is not None:
+            assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]
+
         if embedding_table.global_metadata is not None and pg is not None:
             # set additional field of sharded tensor based on local tensor properties
-            embedding_table.global_metadata.tensor_properties.dtype = param.dtype
+            embedding_table.global_metadata.tensor_properties.dtype = (
+                param.dtype  # pyre-ignore[16]
+            )
             embedding_table.global_metadata.tensor_properties.requires_grad = (
-                param.requires_grad
+                param.requires_grad  # pyre-ignore[16]
             )
             key_to_global_metadata[key] = embedding_table.global_metadata
 
             key_to_local_shards[key].append(
+                # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                #  `Union[Module, Tensor]`.
+                # pyre-fixme[6]: For 2nd argument expected `ShardMetadata` but got
+                #  `Optional[ShardMetadata]`.
                 Shard(param, embedding_table.local_metadata)
             )
         else:
             destination[key] = param
+            if qscale is not None:
+                destination[f"{key}_qscale"] = qscale
+            if qbias is not None:
+                destination[f"{key}_qbias"] = qbias
 
     if pg is not None:
         # Populate the remaining destinations that have a global metadata

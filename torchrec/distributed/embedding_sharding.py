@@ -362,22 +362,52 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         tensors_awaitables = []
         for splits, awaitable in zip(splits_per_awaitable, self._awaitables):
             if not splits:  # NoWait
+                # pyre-fixme[16]: Item `KJTSplitsAllToAllMeta` of
+                #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                #  KJTSplitsAllToAllMeta]` has no attribute `wait`.
                 tensors_awaitables.append(awaitable.wait())
                 continue
             output_splits = splits[:-1]
             batch_size_per_rank = splits[-1]
             tensors_awaitables.append(
                 KJTAllToAllTensorsAwaitable(
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `pg`.
                     pg=awaitable.pg,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `input`.
                     input=awaitable.input,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `splits`.
                     splits=awaitable.splits,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `input_splits`.
                     input_splits=awaitable.input_splits,
                     output_splits=output_splits,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `input_tensors`.
                     input_tensors=awaitable.input_tensors,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `labels`.
                     labels=awaitable.labels,
                     batch_size_per_rank=batch_size_per_rank,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `keys`.
                     keys=awaitable.keys,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `device`.
                     device=awaitable.device,
+                    # pyre-fixme[16]: Item `Awaitable` of
+                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
+                    #  KJTSplitsAllToAllMeta]` has no attribute `stagger`.
                     stagger=awaitable.stagger,
                 )
             )

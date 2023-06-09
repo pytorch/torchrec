@@ -21,7 +21,7 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
-from torchrec.distributed.shard import shard_modules
+from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     ModelInput,
@@ -33,6 +33,7 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
 )
 from torchrec.types import CopyMixIn
 
@@ -59,8 +60,15 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
 
 
 def _quantize(
-    module: nn.Module, inplace: bool, output_type: torch.dtype = torch.float
+    module: nn.Module,
+    inplace: bool,
+    output_type: torch.dtype = torch.float,
+    quant_state_dict_split_scale_bias: bool = False,
 ) -> nn.Module:
+    if quant_state_dict_split_scale_bias:
+        quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
+            module, [EmbeddingBagCollection]
+        )
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
@@ -193,9 +201,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_quant_pred(self, output_type: torch.dtype) -> None:
+    def test_quant_pred(
+        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+    ) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -205,7 +216,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True, output_type=output_type)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            output_type=output_type,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         dmp = DistributedModelParallel(
             quant_model,
             sharders=[
@@ -236,9 +252,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_quant_pred_state_dict(self, output_type: torch.dtype) -> None:
+    def test_quant_pred_state_dict(
+        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+    ) -> None:
         device = torch.device("cuda:0")
 
         model = TestSparseNN(
@@ -248,7 +267,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True, output_type=output_type)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            output_type=output_type,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         model.training = False
 
         dmp = DistributedModelParallel(
@@ -310,9 +334,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
+        quant_state_dict_split_scale_bias=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_quant_pred_shard(self, output_type: torch.dtype) -> None:
+    def test_quant_pred_shard(
+        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+    ) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -322,9 +349,14 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True, output_type=output_type)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            output_type=output_type,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
 
-        sharded_model = shard_modules(
+        sharded_model = _shard_modules(
             module=quant_model,
             sharders=[
                 cast(

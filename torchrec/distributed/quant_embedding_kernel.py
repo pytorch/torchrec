@@ -30,6 +30,7 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
 )
 from torchrec.distributed.fused_params import (
+    is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
     tbe_fused_params,
     TBEToRegisterMixIn,
@@ -113,7 +114,12 @@ def _quantize_weight(
     return quant_weight_list
 
 
-class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
+class QuantBatchedEmbeddingBag(
+    BaseBatchedEmbeddingBag[
+        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
+    ],
+    TBEToRegisterMixIn,
+):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -133,21 +139,22 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
+        self._quant_state_dict_split_scale_bias: bool = (
+            is_fused_param_quant_state_dict_split_scale_bias(fused_params)
+        )
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
                     table.name,
                     local_rows,
-                    # TODO(ivankobzarev):
-                    # _copy_config makes local_cols be aligned with TBE specific alignment and local_cols become not equal to table.embedding_dim, while logical size is table.embedding_dim.
-                    # Using logical size table.embedding_dim here for now.
-                    # This Needed to be changed to local_cols to support CW sharding in future when logical cols number != table.embedding_dim.
-                    table.embedding_dim,
+                    local_cols
+                    if self._quant_state_dict_split_scale_bias
+                    else table.embedding_dim,
                     data_type_to_sparse_type(config.data_type),
                     location,
                 )
-                for local_rows, table, location in zip(
-                    self._local_rows, config.embedding_tables, managed
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows, self._local_cols, config.embedding_tables, managed
                 )
             ],
             device=device,
@@ -198,17 +205,30 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
-        for config, weight in zip(
+        for config, (weight, weight_qscale, weight_qbias) in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
+            self.emb_module.split_embedding_weights_with_scale_bias(
+                split_scale_bias_mode=2
+                if self._quant_state_dict_split_scale_bias
+                else 0
+            ),
         ):
-            yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
+            yield append_prefix(prefix, f"{config.name}.weight"), weight
+            if self._quant_state_dict_split_scale_bias:
+                yield append_prefix(
+                    prefix, f"{config.name}.weight_qscale"
+                ), weight_qscale
+                yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
-    def split_embedding_weights(self) -> List[torch.Tensor]:
+    def split_embedding_weights(
+        self,
+    ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]]:
         return [
-            weight
-            for weight, _ in self.emb_module.split_embedding_weights(
-                split_scale_shifts=False
+            (weight, qscale, qbias)
+            for weight, qscale, qbias in self.emb_module.split_embedding_weights_with_scale_bias(
+                split_scale_bias_mode=2
+                if self._quant_state_dict_split_scale_bias
+                else 0
             )
         ]
 
@@ -240,7 +260,12 @@ class QuantBatchedEmbeddingBag(BaseBatchedEmbeddingBag, TBEToRegisterMixIn):
         return ret
 
 
-class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
+class QuantBatchedEmbedding(
+    BaseBatchedEmbedding[
+        Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
+    ],
+    TBEToRegisterMixIn,
+):
     def __init__(
         self,
         config: GroupedEmbeddingConfig,
@@ -260,17 +285,22 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
+        self._quant_state_dict_split_scale_bias: bool = (
+            is_fused_param_quant_state_dict_split_scale_bias(fused_params)
+        )
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
                     table.name,
                     local_rows,
-                    table.embedding_dim,
+                    local_cols
+                    if self._quant_state_dict_split_scale_bias
+                    else table.embedding_dim,
                     data_type_to_sparse_type(config.data_type),
                     location,
                 )
-                for local_rows, table, location in zip(
-                    self._local_rows, config.embedding_tables, managed
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows, self._local_cols, config.embedding_tables, managed
                 )
             ],
             device=device,
@@ -294,11 +324,15 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return {self._emb_module: self._config}
 
-    def split_embedding_weights(self) -> List[torch.Tensor]:
+    def split_embedding_weights(
+        self,
+    ) -> List[Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]]:
         return [
-            weight
-            for weight, _ in self.emb_module.split_embedding_weights(
-                split_scale_shifts=False
+            (weight, qscale, qbias)
+            for weight, qscale, qbias in self.emb_module.split_embedding_weights_with_scale_bias(
+                split_scale_bias_mode=2
+                if self._quant_state_dict_split_scale_bias
+                else 0
             )
         ]
 
@@ -317,11 +351,20 @@ class QuantBatchedEmbedding(BaseBatchedEmbedding, TBEToRegisterMixIn):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        for config, weight in zip(
+        for config, (weight, weight_qscale, weight_qbias) in zip(
             self._config.embedding_tables,
-            self.emb_module.split_embedding_weights(),
+            self.emb_module.split_embedding_weights_with_scale_bias(
+                split_scale_bias_mode=2
+                if self._quant_state_dict_split_scale_bias
+                else 0
+            ),
         ):
-            yield append_prefix(prefix, f"{config.name}.weight"), weight[0]
+            yield append_prefix(prefix, f"{config.name}.weight"), weight
+            if self._quant_state_dict_split_scale_bias:
+                yield append_prefix(
+                    prefix, f"{config.name}.weight_qscale"
+                ), weight_qscale
+                yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     @classmethod
     def from_float(cls, module: BaseEmbedding) -> "QuantBatchedEmbedding":
