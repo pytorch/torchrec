@@ -311,7 +311,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         ):
             for embedding_config, (weight, qscale, qbias) in zip(
                 tables,
-                emb_module.split_embedding_weights_with_scale_bias(
+                emb_module.split_embedding_weights_with_scale_bias(  # pyre-ignore[29]
                     split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
                 ),
             ):

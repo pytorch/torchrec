@@ -220,6 +220,8 @@ class GridSearchProposer(Proposer):
             range(len(sharding_options))
             for sharding_options in self._sharding_options_by_fqn.values()
         ]
+        # pyre-fixme[8]: Attribute has type `List[List[int]]`; used as
+        #  `List[Tuple[int]]`.
         self._proposals = list(itertools.product(*sharding_options_by_fqn_indices))
 
     def _reset(self) -> None:

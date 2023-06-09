@@ -483,8 +483,8 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
             self._weight_init_maxs,
             self.split_embedding_weights(),
         ):
-            assert param.shape == (rows, emb_dim)
-            param.data.uniform_(
+            assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
+            param.data.uniform_(  # pyre-ignore[16]
                 weight_init_min,
                 weight_init_max,
             )
@@ -745,8 +745,8 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             self._weight_init_maxs,
             self.split_embedding_weights(),
         ):
-            assert param.shape == (rows, emb_dim)
-            param.data.uniform_(
+            assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
+            param.data.uniform_(  # pyre-ignore[16]
                 weight_init_min,
                 weight_init_max,
             )
