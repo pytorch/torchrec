@@ -55,6 +55,46 @@ from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
 
 
+@unique
+class BoundsCheckMode(Enum):
+    # Raise an exception (CPU) or device-side assert (CUDA)
+    FATAL = 0
+    # Log the first out-of-bounds instance per kernel, and set to zero.
+    WARNING = 1
+    # Set to zero.
+    IGNORE = 2
+    # No bounds checks.
+    NONE = 3
+
+
+@unique
+class CacheAlgorithm(Enum):
+    LRU = 0
+    LFU = 1
+
+
+# moved DataType here to avoid circular import
+# TODO: organize types and dependencies
+@unique
+class DataType(Enum):
+    """
+    Our fusion implementation supports only certain types of data
+    so it makes sense to retrict in a non-fused version as well.
+    """
+
+    FP32 = "FP32"
+    FP16 = "FP16"
+    INT64 = "INT64"
+    INT32 = "INT32"
+    INT8 = "INT8"
+    UINT8 = "UINT8"
+    INT4 = "INT4"
+    INT2 = "INT2"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class ShardingType(Enum):
     """
     Well-known sharding types, used by inter-module optimizations.
