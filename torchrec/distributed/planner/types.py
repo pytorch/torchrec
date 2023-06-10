@@ -375,6 +375,10 @@ class ParameterConstraints:
     num_poolings: Optional[List[float]] = None  # number of poolings per sample in batch
     batch_sizes: Optional[List[int]] = None  # batch size per input feature
     is_weighted: bool = False
+    cache_params: Optional[CacheParams] = None
+    enforce_hbm: Optional[bool] = None
+    stochastic_rounding: Optional[bool] = None
+    bounds_check_mode: Optional[BoundsCheckMode] = None
 
 
 class PlannerErrorType(Enum):

@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -26,7 +26,12 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.planner.utils import sharder_name
 from torchrec.distributed.sharding_plan import calculate_shard_sizes_and_offsets
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheParams,
+    ModuleSharder,
+    ShardingType,
+)
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 
 
@@ -103,6 +108,15 @@ class EmbeddingEnumerator(Enumerator):
                 continue
 
             for name, param in sharder.shardable_parameters(child_module).items():
+                (
+                    input_lengths,
+                    col_wise_shard_dim,
+                    cache_params,
+                    enforce_hbm,
+                    stochastic_rounding,
+                    bounds_check_mode,
+                ) = _extract_constraints_for_param(self._constraints, name)
+
                 for sharding_type in self._filter_sharding_types(
                     name, sharder.sharding_types(self._compute_device)
                 ):
@@ -110,17 +124,6 @@ class EmbeddingEnumerator(Enumerator):
                         name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
                     ):
-
-                        input_lengths = (
-                            self._constraints[name].pooling_factors
-                            if self._constraints and self._constraints.get(name)
-                            else [POOLING_FACTOR]
-                        )
-                        col_wise_shard_dim = (
-                            self._constraints[name].min_partition
-                            if self._constraints and self._constraints.get(name)
-                            else None
-                        )
                         (
                             shard_sizes,
                             shard_offsets,
@@ -151,6 +154,10 @@ class EmbeddingEnumerator(Enumerator):
                                     Shard(size=size, offset=offset)
                                     for size, offset in zip(shard_sizes, shard_offsets)
                                 ],
+                                cache_params=cache_params,
+                                enforce_hbm=enforce_hbm,
+                                stochastic_rounding=stochastic_rounding,
+                                bounds_check_mode=bounds_check_mode,
                                 dependency=dependency,
                             )
                         )
@@ -210,6 +217,41 @@ class EmbeddingEnumerator(Enumerator):
                 f"No available compute kernels after applying user provided constraints for {name}"
             )
         return filtered_compute_kernels
+
+
+def _extract_constraints_for_param(
+    constraints: Optional[Dict[str, ParameterConstraints]], name: str
+) -> Tuple[
+    List[float],
+    Optional[int],
+    Optional[CacheParams],
+    Optional[bool],
+    Optional[bool],
+    Optional[BoundsCheckMode],
+]:
+    input_lengths = [POOLING_FACTOR]
+    col_wise_shard_dim = None
+    cache_params = None
+    enforce_hbm = None
+    stochastic_rounding = None
+    bounds_check_mode = None
+
+    if constraints and constraints.get(name):
+        input_lengths = constraints[name].pooling_factors
+        col_wise_shard_dim = constraints[name].min_partition
+        cache_params = constraints[name].cache_params
+        enforce_hbm = constraints[name].enforce_hbm
+        stochastic_rounding = constraints[name].stochastic_rounding
+        bounds_check_mode = constraints[name].bounds_check_mode
+
+    return (
+        input_lengths,
+        col_wise_shard_dim,
+        cache_params,
+        enforce_hbm,
+        stochastic_rounding,
+        bounds_check_mode,
+    )
 
 
 def get_partition_by_type(sharding_type: str) -> str:

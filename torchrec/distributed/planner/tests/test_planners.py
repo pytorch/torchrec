@@ -12,10 +12,16 @@ import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
 from torchrec.distributed.planner.types import PlannerError, PlannerErrorType, Topology
+from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheAlgorithm,
+    CacheParams,
+    DataType,
     EmbeddingModuleShardingPlan,
     ModuleSharder,
     ShardingPlan,
@@ -159,3 +165,90 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         sharding_plan = self.planner.plan(module=model, sharders=[])
 
         self.assertEqual(sharding_plan, ShardingPlan({}))
+
+
+class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
+    def setUp(self) -> None:
+        compute_device = "cuda"
+        self.topology = Topology(
+            world_size=2, hbm_cap=1024 * 1024 * 2, compute_device=compute_device
+        )
+        self.constraints = {
+            "table_0": ParameterConstraints(
+                enforce_hbm=True,
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                ),
+            ),
+            "table_1": ParameterConstraints(
+                enforce_hbm=False,
+                stochastic_rounding=True,
+            ),
+            "table_2": ParameterConstraints(bounds_check_mode=BoundsCheckMode.FATAL),
+            "table_3": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.1,
+                    reserved_memory=1.0,
+                    precision=DataType.FP16,
+                ),
+            ),
+        }
+        self.planner = EmbeddingShardingPlanner(
+            topology=self.topology, constraints=self.constraints
+        )
+
+    def test_fused_paramters_from_constraints(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        sharding_plan = self.planner.plan(module=model, sharders=get_default_sharders())
+
+        expected_fused_params = {
+            "table_0": (
+                CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=None,
+                    reserved_memory=None,
+                    precision=None,
+                ),
+                True,
+                None,
+                None,
+            ),
+            "table_1": (None, False, True, None),
+            "table_2": (None, None, None, BoundsCheckMode.FATAL),
+            "table_3": (
+                CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.1,
+                    reserved_memory=1.0,
+                    precision=DataType.FP16,
+                ),
+                None,
+                None,
+                None,
+            ),
+        }
+
+        table_names = ["table_" + str(i) for i in range(4)]
+        for table in table_names:
+            parameter_sharding = cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            )[table]
+            self.assertEqual(
+                (
+                    parameter_sharding.cache_params,
+                    parameter_sharding.enforce_hbm,
+                    parameter_sharding.stochastic_rounding,
+                    parameter_sharding.bounds_check_mode,
+                ),
+                expected_fused_params[table],
+            )
