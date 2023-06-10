@@ -66,11 +66,24 @@ class EmbeddingPerfEstimator(ShardEstimator):
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
+
             caching_ratio = (
-                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
-                if hasattr(sharder, "fused_params") and sharder.fused_params
+                self._constraints[  # pyre-ignore[16]
+                    sharding_option.name
+                ].cache_params.load_factor
+                if self._constraints
+                and self._constraints.get(sharding_option.name)
+                and self._constraints[sharding_option.name].cache_params
                 else None
             )
+            # TODO: remove after deprecating fused_params in sharder
+            if caching_ratio is None:
+                caching_ratio = (
+                    sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                    if hasattr(sharder, "fused_params") and sharder.fused_params
+                    else None
+                )
+
             num_poolings = (
                 cast(List[float], self._constraints[sharding_option.name].num_poolings)
                 if self._constraints
@@ -711,11 +724,24 @@ class EmbeddingStorageEstimator(ShardEstimator):
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
+
             caching_ratio = (
-                sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
-                if hasattr(sharder, "fused_params") and sharder.fused_params
+                self._constraints[  # pyre-ignore[16]
+                    sharding_option.name
+                ].cache_params.load_factor
+                if self._constraints
+                and self._constraints.get(sharding_option.name)
+                and self._constraints[sharding_option.name].cache_params
                 else None
             )
+            # TODO: remove after deprecating fused_params in sharder
+            if caching_ratio is None:
+                caching_ratio = (
+                    sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                    if hasattr(sharder, "fused_params") and sharder.fused_params
+                    else None
+                )
+
             num_poolings = (
                 cast(List[float], self._constraints[sharding_option.name].num_poolings)
                 if self._constraints
