@@ -14,12 +14,14 @@ from typing import Any, Dict, List, Optional
 import hypothesis.strategies as st
 import torch
 import torch.nn as nn
+
 from hypothesis import assume, given, settings, Verbosity
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
 from torchrec import distributed as trec_dist
 from torchrec.distributed.embeddingbag import (
+    create_sharding_infos_by_sharding,
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
@@ -36,6 +38,10 @@ from torchrec.distributed.test_utils.multi_process import (
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheAlgorithm,
+    CacheParams,
+    DataType,
     ModuleSharder,
     QuantizedCommCodecs,
     ShardingEnv,
@@ -306,6 +312,31 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             ),
         ]
 
+        constraints = {
+            "table_0": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LRU,
+                    load_factor=0.1,
+                    reserved_memory=8.0,
+                    precision=DataType.FP16,
+                ),
+                enforce_hbm=True,
+                stochastic_rounding=False,
+                bounds_check_mode=BoundsCheckMode.IGNORE,
+            ),
+            "table_1": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.2,
+                    reserved_memory=0.0,
+                    precision=DataType.FP16,
+                ),
+                enforce_hbm=False,
+                stochastic_rounding=True,
+                bounds_check_mode=BoundsCheckMode.NONE,
+            ),
+        }
+
         # Rank 0
         #             instance 0   instance 1  instance 2
         # "feature_0"   [0, 1]       None        [2]
@@ -356,6 +387,149 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             backend="nccl"
             if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
             else "gloo",
+            constraints=constraints,
             is_data_parallel=(sharding_type == ShardingType.DATA_PARALLEL.value),
             use_apply_optimizer_in_backward=use_apply_optimizer_in_backward,
         )
+
+
+class CreateShardingInfoTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tables = [
+            EmbeddingBagConfig(
+                name="table_0",
+                feature_names=["feature_0"],
+                embedding_dim=4,
+                num_embeddings=4,
+            ),
+            EmbeddingBagConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=4,
+                num_embeddings=4,
+            ),
+        ]
+
+        self.constraints = {
+            "table_0": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LRU,
+                    load_factor=0.1,
+                    reserved_memory=8.0,
+                    precision=DataType.FP16,
+                ),
+                enforce_hbm=True,
+                stochastic_rounding=False,
+                bounds_check_mode=BoundsCheckMode.IGNORE,
+            ),
+            "table_1": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.2,
+                    reserved_memory=0.0,
+                    precision=DataType.FP16,
+                ),
+                enforce_hbm=True,
+                stochastic_rounding=False,
+                bounds_check_mode=BoundsCheckMode.NONE,
+            ),
+        }
+
+        self.model = EmbeddingBagCollection(tables=self.tables)
+        self.sharder = EmbeddingBagCollectionSharder()
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(world_size=1, compute_device="cpu"),
+            constraints=self.constraints,
+        )
+        self.expected_plan = planner.plan(self.model, [self.sharder])  # pyre-ignore[6]
+
+        self.expected_sharding_infos = create_sharding_infos_by_sharding(
+            self.model,
+            self.expected_plan.get_plan_for_module(""),  # pyre-ignore[6]
+            prefix="embedding_bags.",
+            fused_params=None,
+        )
+
+    def test_create_sharding_infos_by_sharding_override(self) -> None:
+        """
+        Test that fused_params from sharders get overridden.
+        """
+
+        # with sharder fused params that will get overridden
+        sharder_fused_params = {"enforce_hbm": False}
+        overriden_sharding_infos = create_sharding_infos_by_sharding(
+            self.model,
+            self.expected_plan.get_plan_for_module(""),
+            prefix="embedding_bags.",
+            fused_params=sharder_fused_params,
+        )
+        for sharding_type, overriden_sharding_info in overriden_sharding_infos.items():
+            expected_sharding_info = self.expected_sharding_infos[sharding_type]
+            for a, b in zip(expected_sharding_info, overriden_sharding_info):
+                self.assertEqual(a.fused_params, b.fused_params)
+
+        # with sharder fused params that won't get overridden
+        sharder_fused_params = {"ABC": True}
+        not_overriden_sharding_infos = create_sharding_infos_by_sharding(
+            self.model,
+            self.expected_plan.get_plan_for_module(""),
+            prefix="embedding_bags.",
+            fused_params=sharder_fused_params,
+        )
+        for (
+            sharding_type,
+            not_overriden_sharding_info,
+        ) in not_overriden_sharding_infos.items():
+            expected_sharding_info = self.expected_sharding_infos[sharding_type]
+            for a, b in zip(expected_sharding_info, not_overriden_sharding_info):
+                self.assertNotEqual(a.fused_params, b.fused_params)
+
+    def test_create_sharding_infos_by_sharding_combine(self) -> None:
+        """
+        Test that fused_params can get info from both sharder and constraints.
+        """
+
+        new_constraints = copy.deepcopy(self.constraints)
+
+        # remove two fused_params from constraints
+        for _, parameter_constraints in new_constraints.items():
+            parameter_constraints.enforce_hbm = None
+            parameter_constraints.stochastic_rounding = None
+
+        new_planner = EmbeddingShardingPlanner(
+            topology=Topology(world_size=1, compute_device="cpu"),
+            constraints=new_constraints,
+        )
+        new_plan = new_planner.plan(self.model, [self.sharder])  # pyre-ignore[6]
+
+        # provide that two fused params from sharder
+        sharder_fused_params = {"enforce_hbm": True, "stochastic_rounding": False}
+
+        combined_sharding_infos = create_sharding_infos_by_sharding(
+            self.model,
+            new_plan.get_plan_for_module(""),  # pyre-ignore[6]
+            prefix="embedding_bags.",
+            fused_params=sharder_fused_params,
+        )
+
+        # directly assertion won't work, since sharding_infos also have parameter_sharding
+        for sharding_type, combined_sharding_info in combined_sharding_infos.items():
+            expected_sharding_info = self.expected_sharding_infos[sharding_type]
+            for a, b in zip(expected_sharding_info, combined_sharding_info):
+                self.assertEqual(a.fused_params, b.fused_params)
+
+        # provide that two fused params from sharder wrongly
+        sharder_fused_params = {"enforce_hbm": True, "stochastic_rounding": True}
+        wrong_combined_sharding_infos = create_sharding_infos_by_sharding(
+            self.model,
+            new_plan.get_plan_for_module(""),  # pyre-ignore[6]
+            prefix="embedding_bags.",
+            fused_params=sharder_fused_params,
+        )
+        for (
+            sharding_type,
+            wrong_combined_sharding_info,
+        ) in wrong_combined_sharding_infos.items():
+            expected_sharding_info = self.expected_sharding_infos[sharding_type]
+            for a, b in zip(expected_sharding_info, wrong_combined_sharding_info):
+                self.assertNotEqual(a.fused_params, b.fused_params)
