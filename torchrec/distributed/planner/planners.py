@@ -94,6 +94,10 @@ def _to_sharding_plan(
             sharding_type=sharding_type,
             compute_kernel=sharding_option.compute_kernel,
             ranks=[cast(int, shard.rank) for shard in shards],
+            cache_params=sharding_option.cache_params,
+            enforce_hbm=sharding_option.enforce_hbm,
+            stochastic_rounding=sharding_option.stochastic_rounding,
+            bounds_check_mode=sharding_option.bounds_check_mode,
         )
         plan[sharding_option.path] = module_plan
     return ShardingPlan(plan)

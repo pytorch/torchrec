@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import logging
 
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
@@ -14,10 +15,23 @@ import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
 from torchrec import optim as trec_optim
-from torchrec.distributed.types import ShardedModule
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.types import (
+    BoundsCheckMode,
+    CacheAlgorithm,
+    DataType,
+    ParameterSharding,
+    ShardedModule,
+    ShardingType,
+)
+from torchrec.modules.embedding_configs import (
+    data_type_to_sparse_type,
+    to_fbgemm_bounds_check_mode,
+    to_fbgemm_cache_algorithm,
+)
 from torchrec.types import CopyMixIn
 
-
+logger: logging.Logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 
 
@@ -332,6 +346,87 @@ def merge_fused_params(
     _fused_params = copy.deepcopy(fused_params)
     _fused_params.update(param_fused_params)
     return _fused_params
+
+
+def add_params_from_parameter_sharding(
+    fused_params: Optional[Dict[str, Any]],
+    parameter_sharding: ParameterSharding,
+) -> Dict[str, Any]:
+    """
+    Extract params from parameter sharding and then add them to fused_params.
+
+    Params from parameter sharding will override the ones in fused_params if they
+    exist already.
+
+    Args:
+        fused_params (Optional[Dict[str, Any]]): the existing fused_params
+        parameter_sharding (ParameterSharding): the parameter sharding to use
+
+    Returns:
+        [Dict[str, Any]]: the fused_params dictionary with params from parameter
+        sharding added.
+
+    """
+    if fused_params is None:
+        fused_params = {}
+
+    # update fused_params using params from parameter_sharding
+    # this will take precidence over the fused_params provided from sharders
+    if parameter_sharding.cache_params is not None:
+        cache_params = parameter_sharding.cache_params
+        if cache_params.algorithm is not None:
+            fused_params["cache_algorithm"] = cache_params.algorithm
+        if cache_params.load_factor is not None:
+            fused_params["cache_load_factor"] = cache_params.load_factor
+        if cache_params.reserved_memory is not None:
+            fused_params["cache_reserved_memory"] = cache_params.reserved_memory
+        if cache_params.precision is not None:
+            fused_params["cache_precision"] = cache_params.precision
+
+    if parameter_sharding.enforce_hbm is not None:
+        fused_params["enforce_hbm"] = parameter_sharding.enforce_hbm
+
+    if parameter_sharding.stochastic_rounding is not None:
+        fused_params["stochastic_rounding"] = parameter_sharding.stochastic_rounding
+
+    if parameter_sharding.bounds_check_mode is not None:
+        fused_params["bounds_check_mode"] = parameter_sharding.bounds_check_mode
+
+    # print warning if sharding_type is data_parallel or kernel is dense
+    if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
+        logger.warning(
+            f"Sharding Type is {parameter_sharding.sharding_type}, "
+            "caching params will be ignored"
+        )
+    elif parameter_sharding.compute_kernel == EmbeddingComputeKernel.DENSE.value:
+        logger.warning(
+            f"Compute Kernel is {parameter_sharding.compute_kernel}, "
+            "caching params will be ignored"
+        )
+
+    return fused_params
+
+
+def convert_to_fbgemm_types(fused_params: Dict[str, Any]) -> Dict[str, Any]:
+    if "cache_precision" in fused_params:
+        if isinstance(fused_params["cache_precision"], DataType):
+            fused_params["cache_precision"] = data_type_to_sparse_type(
+                fused_params["cache_precision"]
+            )
+
+    if "cache_algorithm" in fused_params:
+        if isinstance(fused_params["cache_algorithm"], CacheAlgorithm):
+            fused_params["cache_algorithm"] = to_fbgemm_cache_algorithm(
+                fused_params["cache_algorithm"]
+            )
+
+    if "bounds_check_mode" in fused_params:
+        if isinstance(fused_params["bounds_check_mode"], BoundsCheckMode):
+            fused_params["bounds_check_mode"] = to_fbgemm_bounds_check_mode(
+                fused_params["bounds_check_mode"]
+            )
+
+    return fused_params
 
 
 def init_parameters(module: nn.Module, device: torch.device) -> None:

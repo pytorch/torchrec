@@ -55,6 +55,46 @@ from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
 
 
+@unique
+class BoundsCheckMode(Enum):
+    # Raise an exception (CPU) or device-side assert (CUDA)
+    FATAL = 0
+    # Log the first out-of-bounds instance per kernel, and set to zero.
+    WARNING = 1
+    # Set to zero.
+    IGNORE = 2
+    # No bounds checks.
+    NONE = 3
+
+
+@unique
+class CacheAlgorithm(Enum):
+    LRU = 0
+    LFU = 1
+
+
+# moved DataType here to avoid circular import
+# TODO: organize types and dependencies
+@unique
+class DataType(Enum):
+    """
+    Our fusion implementation supports only certain types of data
+    so it makes sense to retrict in a non-fused version as well.
+    """
+
+    FP32 = "FP32"
+    FP16 = "FP16"
+    INT64 = "INT64"
+    INT32 = "INT32"
+    INT8 = "INT8"
+    UINT8 = "UINT8"
+    INT4 = "INT4"
+    INT2 = "INT2"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class ShardingType(Enum):
     """
     Well-known sharding types, used by inter-module optimizations.
@@ -399,6 +439,14 @@ class ModuleShardingPlan:
 
 
 @dataclass
+class CacheParams:
+    algorithm: Optional[CacheAlgorithm] = None
+    load_factor: Optional[float] = None
+    reserved_memory: Optional[float] = None
+    precision: Optional[DataType] = None
+
+
+@dataclass
 class ParameterSharding:
     """
         Describes the sharding of the parameter.
@@ -408,6 +456,10 @@ class ParameterSharding:
         compute_kernel (str): compute kernel to be used by this parameter.
         ranks (Optional[List[int]]): rank of each shard.
         sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
+        cache_params (Optional[CacheParams]): cache params for embedding lookup.
+        enforce_hbm (Optional[bool]): whether to use HBM.
+        stochastic_rounding (Optional[bool]): whether to use stochastic rounding.
+        bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode.
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
@@ -422,6 +474,10 @@ class ParameterSharding:
     compute_kernel: str
     ranks: Optional[List[int]] = None
     sharding_spec: Optional[ShardingSpec] = None
+    cache_params: Optional[CacheParams] = None
+    enforce_hbm: Optional[bool] = None
+    stochastic_rounding: Optional[bool] = None
+    bounds_check_mode: Optional[BoundsCheckMode] = None
 
 
 class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):
