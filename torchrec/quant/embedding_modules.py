@@ -244,7 +244,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None
-        self._alignment = 1 if self._device == torch.device("cpu") else 16
+
         table_names = set()
         for table in self._embedding_bag_configs:
             if table.name in table_names:
@@ -292,7 +292,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
-                row_alignment=self._alignment,
+                row_alignment=16,
                 feature_table_map=feature_table_map,
             )
             if device != torch.device("meta") and weight_lists is None:
@@ -528,7 +528,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._need_indices: bool = need_indices
         self._output_dtype = output_dtype
         self._device = device
-        self._alignment = 1 if self._device == torch.device("cpu") else 16
 
         table_names = set()
         for config in tables:
@@ -565,7 +564,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
-                row_alignment=self._alignment,
+                row_alignment=16,
             )
             if device != torch.device("meta") and weight_lists is None:
                 emb_module.initialize_weights()
