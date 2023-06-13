@@ -114,6 +114,13 @@ def _quantize_weight(
     return quant_weight_list
 
 
+@torch.fx.wrap
+def _unwrap_kjt(
+    features: KeyedJaggedTensor,
+) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    return features.values().int(), features.offsets().int(), features.weights_or_none()
+
+
 class QuantBatchedEmbeddingBag(
     BaseBatchedEmbeddingBag[
         Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
@@ -182,21 +189,22 @@ class QuantBatchedEmbeddingBag(
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        indices, offsets, per_sample_weights = _unwrap_kjt(features)
         # Conditional call of .forward function for FX:
         # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
         # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
         # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
         if self._emb_module_registered:
             return self.emb_module(
-                indices=features.values().int(),
-                offsets=features.offsets().int(),
-                per_sample_weights=features.weights_or_none(),
+                indices=indices,
+                offsets=offsets,
+                per_sample_weights=per_sample_weights,
             )
         else:
             return self.emb_module.forward(
-                indices=features.values().int(),
-                offsets=features.offsets().int(),
-                per_sample_weights=features.weights_or_none(),
+                indices=indices,
+                offsets=offsets,
+                per_sample_weights=per_sample_weights,
             )
 
     def named_buffers(
@@ -337,15 +345,16 @@ class QuantBatchedEmbedding(
         ]
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        values, offsets, _ = _unwrap_kjt(features)
         if self._emb_module_registered:
             return self.emb_module(
-                indices=features.values().int(),
-                offsets=features.offsets().int(),
+                indices=values,
+                offsets=offsets,
             )
         else:
             return self.emb_module.forward(
-                indices=features.values().int(),
-                offsets=features.offsets().int(),
+                indices=values,
+                offsets=offsets,
             )
 
     def named_buffers(
