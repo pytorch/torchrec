@@ -169,6 +169,7 @@ class QuantBatchedEmbeddingBag(
             feature_table_map=self._feature_table_map,
             row_alignment=16,
             uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            only_weights_on_meta=True,  # When we use meta device, we still want buffers other than weights to be on cpu
             **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None:
@@ -316,6 +317,7 @@ class QuantBatchedEmbedding(
             feature_table_map=self._feature_table_map,
             row_alignment=16,
             uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            only_weights_on_meta=True,  # When we use meta device, we still want buffers other than weights to be on cpu
             **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None:
