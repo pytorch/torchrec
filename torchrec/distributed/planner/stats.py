@@ -235,6 +235,7 @@ class EmbeddingStats(Stats):
                     "Pooling Factor",
                     "Num Poolings",
                     "Output",
+                    "Weighing",
                     "Features",
                     "Emb Dim",
                     "Hash Size",
@@ -248,6 +249,7 @@ class EmbeddingStats(Stats):
                     "----------------",
                     "--------------",
                     "--------",
+                    "----------",
                     "----------",
                     "---------",
                     "-----------",
@@ -283,6 +285,7 @@ class EmbeddingStats(Stats):
                 )
                 num_poolings = str(round(sum(num_poolings), 3))
                 output = "pooled" if so.is_pooled else "sequence"
+                weighing = "weighted" if so.is_weighted else "unweighted"
                 num_features = len(so.input_lengths)
                 embedding_dim = so.tensor.shape[1]
                 hash_size = so.tensor.shape[0]
@@ -295,6 +298,7 @@ class EmbeddingStats(Stats):
                         pooling_factor,
                         num_poolings,
                         output,
+                        weighing,
                         num_features,
                         embedding_dim,
                         hash_size,

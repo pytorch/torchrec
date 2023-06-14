@@ -272,6 +272,7 @@ class ShardingOption:
         self.bounds_check_mode = bounds_check_mode
         self.dependency = dependency
         self._is_pooled: Optional[bool] = None
+        self.is_weighted: Optional[bool] = None
 
     @property
     def tensor(self) -> torch.Tensor:
