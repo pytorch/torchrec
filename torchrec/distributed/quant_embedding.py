@@ -401,7 +401,9 @@ class QuantEmbeddingCollectionSharder(
         fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
             module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
         )
-        return ShardedQuantEmbeddingCollection(module, params, env, fused_params)
+        return ShardedQuantEmbeddingCollection(
+            module, params, env, fused_params, device=device
+        )
 
     @property
     def module_type(self) -> Type[QuantEmbeddingCollection]:
