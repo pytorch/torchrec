@@ -17,7 +17,6 @@ from torch.fx._symbolic_trace import is_fx_tracing
 
 # pyre-ignore
 def fake_range():
-    # pyre-ignore
     return torch._C._jit_tree_views.SourceRangeFactory("", None, 0, 0).make_raw_range(
         0, 1
     )
