@@ -123,6 +123,9 @@ class EmbeddingPerfEstimator(ShardEstimator):
             else:
                 is_weighted = False
 
+            # TODO remove this once migrate away from PEA
+            sharding_option.is_weighted = is_weighted or has_feature_processor
+
             table_data_type_size = sharding_option.tensor.element_size()
             (
                 fwd_a2a_comm_data_type_size,
