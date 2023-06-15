@@ -98,14 +98,12 @@ class SparseArch(nn.Module):
 
         sparse_features: KeyedTensor = self.embedding_bag_collection(features)
 
-        B: int = features.stride()
-
         sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
         sparse_values: List[torch.Tensor] = []
         for name in self.sparse_feature_names:
             sparse_values.append(sparse[name])
 
-        return torch.cat(sparse_values, dim=1).reshape(B, self.F, self.D)
+        return torch.cat(sparse_values, dim=1).reshape(-1, self.F, self.D)
 
     @property
     def sparse_feature_names(self) -> List[str]:
