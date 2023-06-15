@@ -124,7 +124,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 is_weighted = False
 
             # TODO remove this once migrate away from PEA
-            sharding_option.is_weighted = is_weighted or has_feature_processor
+            is_weighted = is_weighted or has_feature_processor
+            sharding_option.is_weighted = is_weighted
 
             table_data_type_size = sharding_option.tensor.element_size()
             (
@@ -157,7 +158,6 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 is_pooled=sharding_option.is_pooled,
                 is_weighted=is_weighted,
                 is_inference=self._is_inference,
-                has_feature_processor=has_feature_processor,
                 caching_ratio=caching_ratio,
             )
 
@@ -187,7 +187,6 @@ def perf_func_emb_wall_time(
     inter_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
-    has_feature_processor: bool = False,
     caching_ratio: Optional[float] = None,
     is_inference: bool = False,
 ) -> List[Perf]:
@@ -222,7 +221,6 @@ def perf_func_emb_wall_time(
         is_weighted (bool = False): if the module is an EBC and is weighted, typically
             signifying an id score list feature.
         is_inference (bool = False): if planning for inference.
-        has_feature_processor (bool = False): if the module has a feature processor.
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
             of device.
 
@@ -262,7 +260,6 @@ def perf_func_emb_wall_time(
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 is_inference=is_inference,
-                has_feature_processor=has_feature_processor,
             )
         elif sharding_type == ShardingType.ROW_WISE.value:
             shard_perf = _get_rw_sharding_perf(
@@ -283,7 +280,6 @@ def perf_func_emb_wall_time(
                 intra_host_bw=intra_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
-                has_feature_processor=has_feature_processor,
             )
         elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
             shard_perf = _get_twrw_sharding_perf(
@@ -304,7 +300,6 @@ def perf_func_emb_wall_time(
                 intra_host_bw=intra_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
-                has_feature_processor=has_feature_processor,
             )
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
             shard_perf = _get_dp_sharding_perf(
@@ -321,7 +316,6 @@ def perf_func_emb_wall_time(
                 inter_host_bw=inter_host_bw,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
-                has_feature_processor=has_feature_processor,
             )
         else:
             raise ValueError(
@@ -349,7 +343,6 @@ def _get_tw_sharding_perf(
     is_pooled: bool,
     is_weighted: bool = False,
     is_inference: bool = False,
-    has_feature_processor: bool = False,
 ) -> Perf:
     batch_inputs = sum(
         [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
@@ -361,7 +354,7 @@ def _get_tw_sharding_perf(
     )
 
     input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted or has_feature_processor:
+    if is_weighted:
         input_read_size *= 2
 
     # minimum embedding dim is set to 32 due to kernel usage
@@ -401,9 +394,7 @@ def _get_tw_sharding_perf(
     bwd_comms = bwd_output_write_size / comms_bw
 
     bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
-        if is_weighted or has_feature_processor
-        else 0
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
     # includes fused optimizers
@@ -437,7 +428,6 @@ def _get_rw_sharding_perf(
     intra_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
-    has_feature_processor: bool = False,
 ) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
@@ -450,7 +440,7 @@ def _get_rw_sharding_perf(
     )
 
     input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted or has_feature_processor:
+    if is_weighted:
         input_read_size *= 2
 
     embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
@@ -478,9 +468,7 @@ def _get_rw_sharding_perf(
     bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
 
     bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
-        if is_weighted or has_feature_processor
-        else 0
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
     bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
@@ -511,7 +499,6 @@ def _get_twrw_sharding_perf(
     intra_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
-    has_feature_processor: bool = False,
 ) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
@@ -524,7 +511,7 @@ def _get_twrw_sharding_perf(
     )
 
     input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted or has_feature_processor:
+    if is_weighted:
         input_read_size *= 2
 
     embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
@@ -557,9 +544,7 @@ def _get_twrw_sharding_perf(
     bwd_comms = bwd_output_write_size / intra_host_bw
 
     bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
-        if is_weighted or has_feature_processor
-        else 0
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
     bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
@@ -588,7 +573,6 @@ def _get_dp_sharding_perf(
     inter_host_bw: float,
     is_pooled: bool,
     is_weighted: bool = False,
-    has_feature_processor: bool = False,
 ) -> Perf:
     batch_inputs = sum(
         [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
@@ -600,7 +584,7 @@ def _get_dp_sharding_perf(
     )
 
     input_read_size = math.ceil(batch_inputs * input_data_type_size)
-    if is_weighted or has_feature_processor:
+    if is_weighted:
         input_read_size *= 2
 
     embedding_lookup_size = batch_inputs * emb_dim * table_data_type_size
@@ -631,9 +615,7 @@ def _get_dp_sharding_perf(
     bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
 
     bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER
-        if is_weighted or has_feature_processor
-        else 0
+        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
     return Perf(
