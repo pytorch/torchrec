@@ -758,7 +758,7 @@ class InferGroupedPooledEmbeddingsLookup(
             MetaInferGroupedPooledEmbeddingsLookup
         ] = []
 
-        device_type = "cuda" if device is None or device.type == "cuda" else "meta"
+        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
@@ -791,8 +791,7 @@ class InferGroupedEmbeddingsLookup(
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
 
-        device_type = "cuda" if device is None or device.type == "cuda" else "meta"
-
+        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
