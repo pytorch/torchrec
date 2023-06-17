@@ -745,6 +745,15 @@ def _rewrite_model(  # noqa C901
             if total_num_args == 0:
                 continue
             arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
+            if hasattr(model, "_fx_trace_sparse_arg_info"):
+                # the model already provide the arg info, use that to avoid the graph
+                # input already flattened so cannot extract that information
+                # pyre-ignore
+                arg_info_list: List[ArgInfo] = model._fx_trace_sparse_arg_info
+                assert num_found == len(
+                    arg_info_list
+                ), "the number of args doesn't match the fx trace arg info provided in the model"
+
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
                 child = sharded_modules[node.target]
