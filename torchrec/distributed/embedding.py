@@ -439,9 +439,12 @@ class ShardedEmbeddingCollection(
                 else:
                     dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
                     # CW multiple shards are merged
-                    state_dict[key] = torch.cat(
-                        [shard.tensor.view(-1) for shard in local_shards], dim=0
-                    ).view(-1, dim)
+                    if len(local_shards) > 1:
+                        state_dict[key] = torch.cat(
+                            [s.tensor.view(-1) for s in local_shards], dim=0
+                        ).view(-1, dim)
+                    else:
+                        state_dict[key] = local_shards[0].tensor.view(-1, dim)
             else:
                 local_shards = []
                 for shard in model_shards:
