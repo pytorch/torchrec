@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import Any, cast, Dict, List, Optional
+from typing import Any, cast, Dict, List, Optional, Tuple
 
 import hypothesis.strategies as st
 import torch
@@ -201,12 +201,23 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        quant_state_dict_split_scale_bias=st.booleans(),
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred(
-        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+        self, output_type: torch.dtype, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -228,7 +239,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 cast(
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
+                        sharding_type=sharding_type,
                         kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
@@ -252,12 +263,23 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        quant_state_dict_split_scale_bias=st.booleans(),
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_state_dict(
-        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+        self, output_type: torch.dtype, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
 
         model = TestSparseNN(
@@ -281,7 +303,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 cast(
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
+                        sharding_type=sharding_type,
                         kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
@@ -297,7 +319,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 cast(
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
+                        sharding_type=sharding_type,
                         kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
@@ -334,12 +356,23 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 torch.float,
             ]
         ),
-        quant_state_dict_split_scale_bias=st.booleans(),
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_quant_pred_shard(
-        self, output_type: torch.dtype, quant_state_dict_split_scale_bias: bool
+        self, output_type: torch.dtype, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
         model = TestSparseNN(
@@ -362,7 +395,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 cast(
                     ModuleSharder[torch.nn.Module],
                     TestQuantEBCSharder(
-                        sharding_type=ShardingType.TABLE_WISE.value,
+                        sharding_type=sharding_type,
                         kernel_type=EmbeddingComputeKernel.QUANT.value,
                     ),
                 )
@@ -392,7 +425,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             sharded_model_copy(local_batch[0].to(device_1)).cpu(),
         )
 
-    # pyre-fixme[56]
+    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
@@ -459,12 +492,28 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             for i in range(num_weighted_features)
         ]
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
         "Not enough GPUs available",
     )
-    def test_shard_one_ebc_cuda(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
+    )
+    def test_shard_one_ebc_cuda(
+        self, sharding_type_qsplitscalebias: Tuple[str, bool]
+    ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         model = TestSparseNN(
             tables=self.tables,
@@ -473,12 +522,16 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                     shardable_params=[table.name for table in self.tables],
                 ),
@@ -520,12 +573,28 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             )
         )
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
         "Not enough GPUs available",
     )
-    def test_shard_one_ebc_meta(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
+    )
+    def test_shard_one_ebc_meta(
+        self, sharding_type_qsplitscalebias: Tuple[str, bool]
+    ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         model = TestSparseNN(
             tables=self.tables,
@@ -534,12 +603,16 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                     shardable_params=[table.name for table in self.tables],
                 ),
@@ -582,12 +655,28 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             )
         )
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
         "Not enough GPUs available",
     )
-    def test_shard_all_ebcs(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
+    )
+    def test_shard_all_ebcs(
+        self, sharding_type_qsplitscalebias: Tuple[str, bool]
+    ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         model = TestSparseNN(
             tables=self.tables,
@@ -596,12 +685,16 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                 ),
             )
@@ -642,12 +735,28 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             )
         )
 
-    # pyre-fixme[56]
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
         "Not enough GPUs available",
     )
-    def test_sharder_bad_param_config(self) -> None:
+    # pyre-fixme[56]
+    @given(
+        sharding_type_qsplitscalebias=st.sampled_from(
+            [
+                (ShardingType.TABLE_WISE.value, False),
+                (ShardingType.TABLE_WISE.value, True),
+                (ShardingType.ROW_WISE.value, True),
+            ]
+        ),
+    )
+    def test_sharder_bad_param_config(
+        self, sharding_type_qsplitscalebias: Tuple[str, bool]
+    ) -> None:
+        (
+            sharding_type,
+            quant_state_dict_split_scale_bias,
+        ) = sharding_type_qsplitscalebias
+
         device = torch.device("cuda:0")
         model = TestSparseNN(
             tables=self.tables,
@@ -656,12 +765,16 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(model, inplace=True)
+        quant_model = _quantize(
+            model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
         sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                     shardable_params=[
                         table.name for table in self.tables[:-1]

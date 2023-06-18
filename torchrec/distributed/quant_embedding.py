@@ -25,14 +25,15 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     KJTList,
     ListOfKJTList,
-    ShardedEmbeddingModule,
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     get_tbes_to_register_from_iterable,
+    is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
 )
+from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
@@ -141,7 +142,7 @@ def output_jt_dict(
 
 
 class ShardedQuantEmbeddingCollection(
-    ShardedEmbeddingModule[
+    ShardedQuantEmbeddingModuleState[
         ListOfKJTList,
         List[List[torch.Tensor]],
         Dict[str, JaggedTensor],
@@ -199,44 +200,49 @@ class ShardedQuantEmbeddingCollection(
 
         self._fused_params = fused_params
 
-        # This provides consistency between this class and the EmbeddingBagCollection's
-        # nn.Module API calls (state_dict, named_modules, etc)
-        # Currently, Sharded Quant EC only uses TW sharding, and returns non-sharded tensors as part of state dict
-        # TODO - revisit if we state_dict can be represented as sharded tensor
-        self.embeddings: nn.ModuleDict = nn.ModuleDict()
-        for table in self._embedding_configs:
-            self.embeddings[table.name] = torch.nn.Module()
-
-        for _sharding_type, lookup in zip(
-            self._sharding_type_to_sharding.keys(), self._lookups
-        ):
-            lookup_state_dict = lookup.state_dict()
-            for key in lookup_state_dict:
-                if key.endswith(".weight"):
-                    table_name = key[: -len(".weight")]
-                    # Register as buffer because this is an inference model, and can potentially use uint8 types.
-                    self.embeddings[table_name].register_buffer(
-                        "weight", lookup_state_dict[key]
-                    )
-                elif key.endswith(".weight_qscale"):
-                    table_name = key[: -len(".weight_qscale")]
-                    self.embeddings[table_name].register_buffer(
-                        "weight_qscale", lookup_state_dict[key]
-                    )
-                elif key.endswith(".weight_qbias"):
-                    table_name = key[: -len(".weight_qbias")]
-                    self.embeddings[table_name].register_buffer(
-                        "weight_qbias", lookup_state_dict[key]
-                    )
-                else:
-                    continue
+        tbes: Dict[
+            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+        ] = get_tbes_to_register_from_iterable(self._lookups)
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
-            tbes: Dict[
-                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
-            ] = get_tbes_to_register_from_iterable(self._lookups)
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
+
+        quant_state_dict_split_scale_bias = (
+            is_fused_param_quant_state_dict_split_scale_bias(fused_params)
+        )
+
+        if quant_state_dict_split_scale_bias:
+            self._initialize_torch_state(
+                tbes=tbes,
+                table_name_to_parameter_sharding=table_name_to_parameter_sharding,
+                tables_weights_prefix="embeddings",
+            )
+        else:
+            table_wise_sharded_only: bool = all(
+                [
+                    sharding_type == ShardingType.TABLE_WISE.value
+                    for sharding_type in self._sharding_type_to_sharding.keys()
+                ]
+            )
+            assert (
+                table_wise_sharded_only
+            ), "ROW_WISE,COLUMN_WISE shardings can be used only in 'quant_state_dict_split_scale_bias' mode, specify fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]=True to __init__ argument"
+
+            self.embeddings: nn.ModuleDict = nn.ModuleDict()
+            for table in self._embedding_configs:
+                self.embeddings[table.name] = torch.nn.Module()
+
+            for _sharding_type, lookup in zip(
+                self._sharding_type_to_sharding.keys(), self._lookups
+            ):
+                lookup_state_dict = lookup.state_dict()
+                for key in lookup_state_dict:
+                    if key.endswith(".weight"):
+                        table_name = key[: -len(".weight")]
+                        self.embeddings[table_name].register_buffer(
+                            "weight", lookup_state_dict[key]
+                        )
 
     def _create_input_dist(
         self,
