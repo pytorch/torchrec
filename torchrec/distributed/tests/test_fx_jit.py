@@ -63,7 +63,9 @@ class Context:
 
 
 class ModelTraceScriptTest(unittest.TestCase):
-    def _set_up_qebc(self) -> TestModelInfo:
+    def _set_up_qebc(
+        self, sharding_type: str, quant_state_dict_split_scale_bias: bool
+    ) -> TestModelInfo:
         local_device = torch.device("cuda:0")
         model_info = TestModelInfo(
             sparse_device=local_device,
@@ -103,14 +105,16 @@ class ModelTraceScriptTest(unittest.TestCase):
 
         model_info.model.training = False
         model_info.quant_model = quantize(
-            model_info.model, inplace=True, register_tbes=True
+            model_info.model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
         )
 
         model_info.sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantEBCSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                     shardable_params=[table.name for table in model_info.tables],
                 ),
@@ -120,53 +124,9 @@ class ModelTraceScriptTest(unittest.TestCase):
 
         return model_info
 
-    def _set_up_qebc_cw(self) -> TestModelInfo:
-        local_device = torch.device("cuda:0")
-        model_info = TestModelInfo(
-            sparse_device=local_device,
-            dense_device=local_device,
-            num_features=1,
-            num_float_features=1,
-            num_weighted_features=0,
-        )
-
-        model_info.tables = [
-            EmbeddingBagConfig(
-                num_embeddings=1024,
-                embedding_dim=128,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(model_info.num_features)
-        ]
-        model_info.weighted_tables = []
-        model_info.model = TorchTypesModelInputWrapper(
-            TestSparseNN(
-                tables=model_info.tables,
-                weighted_tables=model_info.weighted_tables,
-                num_float_features=model_info.num_float_features,
-                dense_device=model_info.dense_device,
-                sparse_device=model_info.sparse_device,
-            )
-        )
-
-        model_info.model.training = False
-        model_info.quant_model = quantize(model_info.model, inplace=True)
-
-        model_info.sharders = [
-            cast(
-                ModuleSharder[torch.nn.Module],
-                TestQuantEBCSharder(
-                    sharding_type=ShardingType.COLUMN_WISE.value,
-                    kernel_type=EmbeddingComputeKernel.QUANT.value,
-                    shardable_params=[table.name for table in model_info.tables],
-                ),
-            ),
-        ]
-
-        return model_info
-
-    def _set_up_qec(self) -> TestModelInfo:
+    def _set_up_qec(
+        self, sharding_type: str, quant_state_dict_split_scale_bias: bool
+    ) -> TestModelInfo:
         local_device = torch.device("cuda:0")
         model_info = TestModelInfo(
             sparse_device=local_device,
@@ -195,13 +155,17 @@ class ModelTraceScriptTest(unittest.TestCase):
         )
 
         model_info.model.training = False
-        model_info.quant_model = quantize(model_info.model, inplace=True)
+        model_info.quant_model = quantize(
+            model_info.model,
+            inplace=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
 
         model_info.sharders = [
             cast(
                 ModuleSharder[torch.nn.Module],
                 TestQuantECSharder(
-                    sharding_type=ShardingType.TABLE_WISE.value,
+                    sharding_type=sharding_type,
                     kernel_type=EmbeddingComputeKernel.QUANT.value,
                 ),
             )
@@ -211,10 +175,12 @@ class ModelTraceScriptTest(unittest.TestCase):
 
     def shard_modules_QEBC(
         self,
-        world_size: int
+        world_size: int,
+        sharding_type: str,
+        quant_state_dict_split_scale_bias: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
-        model_info = self._set_up_qebc()
+        model_info = self._set_up_qebc(sharding_type, quant_state_dict_split_scale_bias)
         sharded_model = _shard_modules(
             module=model_info.quant_model,
             sharders=model_info.sharders,
@@ -235,10 +201,12 @@ class ModelTraceScriptTest(unittest.TestCase):
 
     def shard_modules_QEC(
         self,
-        world_size: int
+        world_size: int,
+        sharding_type: str,
+        quant_state_dict_split_scale_bias: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
-        model_info = self._set_up_qec()
+        model_info = self._set_up_qec(sharding_type, quant_state_dict_split_scale_bias)
         sharded_model = _shard_modules(
             module=model_info.quant_model,
             sharders=model_info.sharders,
@@ -260,10 +228,12 @@ class ModelTraceScriptTest(unittest.TestCase):
     def DMP_QEBC(
         self,
         world_size: int,
+        sharding_type: str,
+        quant_state_dict_split_scale_bias: bool,
         unwrap_dmp: bool
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
-        model_info = self._set_up_qebc()
+        model_info = self._set_up_qebc(sharding_type, quant_state_dict_split_scale_bias)
         topology = Topology(world_size=world_size, compute_device="cuda")
         plan = EmbeddingShardingPlanner(
             topology=topology,
@@ -304,10 +274,12 @@ class ModelTraceScriptTest(unittest.TestCase):
     def DMP_QEC(
         self,
         world_size: int,
+        sharding_type: str,
+        quant_state_dict_split_scale_bias: bool,
         sharding_enabled: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
-        model_info = self._set_up_qec()
+        model_info = self._set_up_qec(sharding_type, quant_state_dict_split_scale_bias)
 
         if sharding_enabled:
             topology = Topology(world_size=world_size, compute_device="cuda")
@@ -358,30 +330,97 @@ class ModelTraceScriptTest(unittest.TestCase):
                 (
                     lambda world_size: self.DMP_QEBC(
                         world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
                         unwrap_dmp=True,  # preferred usage is to provide fx trace with unwrapped dmp
                     ),
                     FxJitTestType.FX_JIT,
                 ),
                 (
                     lambda world_size: self.DMP_QEBC(
-                        world_size=world_size, unwrap_dmp=False
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
+                        unwrap_dmp=False,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.DMP_QEBC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.ROW_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                        unwrap_dmp=False,
                     ),
                     FxJitTestType.FX_JIT,
                 ),
                 (
                     lambda world_size: self.DMP_QEC(
-                        world_size=world_size, sharding_enabled=True
-                    ),
-                    FxJitTestType.CREATE_ONLY,  # waiting for torch.Await support
-                ),
-                (
-                    lambda world_size: self.DMP_QEC(
-                        world_size=world_size, sharding_enabled=False
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
+                        sharding_enabled=True,
                     ),
                     FxJitTestType.FX_JIT,
                 ),
-                (self.shard_modules_QEBC, FxJitTestType.FX_JIT),
-                (self.shard_modules_QEC, FxJitTestType.FX_JIT),
+                (
+                    lambda world_size: self.DMP_QEC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                        sharding_enabled=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.DMP_QEC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
+                        sharding_enabled=False,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEBC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEBC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEBC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.ROW_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=False,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.TABLE_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
             ]
         ]
 
@@ -407,7 +446,6 @@ class ModelTraceScriptTest(unittest.TestCase):
 
             tracer = TorchrecFxTracer()
             graph = tracer.trace(model)
-            print(f"This is model type: {type(model)}")
 
             # pyre-ignore
             gm = torch.fx.GraphModule(tracer.root, graph)
