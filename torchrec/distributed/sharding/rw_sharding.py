@@ -45,6 +45,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.fx.utils import assert_fx_safe
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -353,7 +354,7 @@ class InferRwPooledEmbeddingDist(
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
 
-        return self._dist(
+        return self._dist.forward(
             local_embs,
         )
 
@@ -440,8 +441,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features], world_size=world_size
         )
-        if is_sequence:
-            raise NotImplementedError()
+        assert_fx_safe(not is_sequence, "Not implemented")
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
@@ -465,7 +465,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             else self._need_pos,
         )
         # TODO(ivankobzarev): Store self.unbucketize_permute_tensor in Context for is_sequence
-        return self._dist(bucketized_features)
+        return self._dist.forward(bucketized_features)
 
 
 class InferRwPooledEmbeddingSharding(
