@@ -34,6 +34,7 @@ from torchrec.distributed.fused_params import (
     is_fused_param_register_tbe,
 )
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
+from torchrec.distributed.sharding.cw_sharding import InferCwPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import InferRwPooledEmbeddingSharding
 from torchrec.distributed.sharding.tw_sharding import InferTwEmbeddingSharding
 from torchrec.distributed.types import (
@@ -67,6 +68,10 @@ def create_infer_embedding_bag_sharding(
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     elif sharding_type == ShardingType.ROW_WISE.value:
         return InferRwPooledEmbeddingSharding(sharding_infos, env, device=None)
+    elif sharding_type == ShardingType.COLUMN_WISE.value:
+        return InferCwPooledEmbeddingSharding(
+            sharding_infos, env, device=None, permute_embeddings=True
+        )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 

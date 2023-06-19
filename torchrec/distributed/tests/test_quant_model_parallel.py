@@ -206,6 +206,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -268,6 +269,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -361,6 +363,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -503,6 +506,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -584,6 +588,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -666,6 +671,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
@@ -746,6 +752,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
                 (ShardingType.TABLE_WISE.value, False),
                 (ShardingType.TABLE_WISE.value, True),
                 (ShardingType.ROW_WISE.value, True),
+                (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
     )
