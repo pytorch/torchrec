@@ -142,3 +142,9 @@ def is_marker_node(node: torch.fx.Node, marker_name: str) -> bool:
         and isinstance(node.args[0], str)
         and node.args[0] == marker_name
     )
+
+
+@torch.jit.ignore
+def assert_fx_safe(condition: bool, message: str) -> None:
+    if not is_fx_tracing():
+        assert condition, message

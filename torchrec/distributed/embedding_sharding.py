@@ -31,6 +31,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardMetadata,
 )
+from torchrec.fx.utils import assert_fx_safe
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingTableConfig,
@@ -38,6 +39,16 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
+
+torch.fx.wrap("len")
+
+
+# torch.Tensor.to can not be fx symbolic traced as it does not go through __torch_dispatch__ => fx.wrap it
+@torch.fx.wrap
+def _fx_wrap_tensor_to_device_dtype(
+    t: torch.Tensor, tensor_device_dtype: torch.Tensor
+) -> torch.Tensor:
+    return t.to(device=tensor_device_dtype.device, dtype=tensor_device_dtype.dtype)
 
 
 def bucketize_kjt_before_all2all(
@@ -67,12 +78,11 @@ def bucketize_kjt_before_all2all(
     """
 
     num_features = len(kjt.keys())
-    assert (
-        block_sizes.numel() == num_features
-    ), f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received."
-
-    # kernel expects them to be same type, cast to avoid type mismatch
-    block_sizes_new_type = block_sizes.type(kjt.values().type())
+    assert_fx_safe(
+        block_sizes.numel() == num_features,
+        f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
+    )
+    block_sizes_new_type = _fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values())
     (
         bucketized_lengths,
         bucketized_indices,

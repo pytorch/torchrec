@@ -15,7 +15,10 @@ import torchrec
 from torch import quantization as quant
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
 from torchrec.distributed.embedding_types import ModuleSharder
-from torchrec.distributed.fused_params import FUSED_PARAM_REGISTER_TBE_BOOL
+from torchrec.distributed.fused_params import (
+    FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+    FUSED_PARAM_REGISTER_TBE_BOOL,
+)
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.quant_embedding import (
     QuantEmbeddingCollectionSharder,
@@ -38,6 +41,8 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
+    MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+    MODULE_ATTR_REGISTER_TBES_BOOL,
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
     quant_prep_enable_register_tbes,
 )
@@ -208,7 +213,12 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
         )
-        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+            module, MODULE_ATTR_REGISTER_TBES_BOOL, False
+        )
+        fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+            module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+        )
         return ShardedQuantEmbeddingBagCollection(
             module=module,
             table_name_to_parameter_sharding=params,
@@ -247,7 +257,12 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
         )
-        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = True
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+            module, MODULE_ATTR_REGISTER_TBES_BOOL, False
+        )
+        fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+            module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+        )
         return ShardedQuantEmbeddingCollection(
             module, params, env, fused_params, device
         )
