@@ -261,3 +261,8 @@ class InferShardingsTest(unittest.TestCase):
         sharded_output = sharded_model(*inputs[0])
         non_sharded_output = non_sharded_model(*inputs[0])
         assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
