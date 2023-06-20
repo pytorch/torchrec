@@ -67,6 +67,8 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.FP32
     elif dtype == torch.float16 or dtype == torch.half:
         return DataType.FP16
+    elif dtype == torch.bfloat16:
+        return DataType.BF16
     elif dtype in {torch.int, torch.int32}:
         return DataType.INT32
     elif dtype in {torch.long, torch.int64}:
