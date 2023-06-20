@@ -235,19 +235,25 @@ class InferenceStorageReservation(StorageReservation):
     """
     Reserves storage for model to be sharded for inference. The storage reservation
     is comprised of dense tensor storage, KJT storage, and an extra percentage of total
-    storage.
+    storage. Note that when estimating for storage, dense modules are assumed to be on
+    GPUs and replicated across ranks. If this is not the case, please override the
+    estimates with dense_tensor_estimate.
 
     Args:
         percentage (float): extra storage percentage to reserve that acts as a margin of
             error beyond storage calculation.
+        dense_tensor_estimate (Optional[int]): storage estimate for dense tensors, use
+            default heuristic estimate if not provided.
     """
 
     def __init__(
         self,
         percentage: float,
+        dense_tensor_estimate: Optional[int] = None,
     ) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
+        self._dense_tensor_estimate = dense_tensor_estimate
 
         self._dense_storage: Optional[Storage] = None
         self._kjt_storage: Optional[Storage] = None
@@ -273,6 +279,7 @@ class InferenceStorageReservation(StorageReservation):
             module=module,
             shardable_modules=shardable_modules,
             multiplier=1,
+            dense_tensor_estimate=self._dense_tensor_estimate,
         )
 
         self._kjt_storage = _reserve_kjt_storage(
