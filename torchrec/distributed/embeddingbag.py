@@ -441,12 +441,9 @@ class ShardedEmbeddingBagCollection(
                 )
         self._initialize_torch_state()
 
-        # TODO[zainhuda]: support module device coming from CPU
         if module.device not in [
             torch.device("meta"),
-            torch.device("cpu"),
             "meta",
-            "cpu",
         ]:
             self.load_state_dict(module.state_dict(), strict=False)
 
