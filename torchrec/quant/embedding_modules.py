@@ -336,6 +336,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
             quant_state_dict_split_scale_bias,
         )
+        setattr(self, MODULE_ATTR_REGISTER_TBES_BOOL, register_tbes)
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
@@ -598,6 +599,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
             quant_state_dict_split_scale_bias,
         )
+        setattr(self, MODULE_ATTR_REGISTER_TBES_BOOL, register_tbes)
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
