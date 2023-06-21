@@ -911,15 +911,13 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
     ) -> None:
         super().__init__()
         self._tensor_awaitable = tensor_awaitable
-        self._unbucketize_permute_tensor = unbucketize_permute_tensor
-        self._embedding_dim = embedding_dim
 
-        if self._unbucketize_permute_tensor is not None:
+        if unbucketize_permute_tensor is not None:
             self.callbacks.append(
                 lambda ret: torch.index_select(
-                    ret.view(-1, self._embedding_dim),
+                    ret.view(-1, embedding_dim),
                     0,
-                    self._unbucketize_permute_tensor,
+                    unbucketize_permute_tensor,
                 )
             )
 
