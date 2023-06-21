@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.7
+           python-version: 3.8
     steps:
     - name: Check ldd --version
       run: ldd --version
@@ -52,10 +52,12 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        conda run -n build_binary python -m pip install --pre torch -f https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        conda install -n build_binary -y -c pytorch-nightly "pytorch-nightly"::pytorch[build="*cpu*"]
     - name: Install TorchRec
       run: |
-        conda run -n build_binary python -m pip install --pre torchrec_nightly_cpu -f https://download.pytorch.org/whl/nightly/torchrec_nightly_cpu/index.html
+        conda run -n build_binary python -m pip install torchrec_nightly
+        conda run -n build_binary python -m pip uninstall fbgemm-gpu-nightly -y
+        conda run -n build_binary python -m pip install fbgemm-gpu-nightly-cpu
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
@@ -72,7 +74,7 @@ jobs:
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
-      uses: JamesIves/github-pages-deploy-action@releases/v3
+      uses: JamesIves/github-pages-deploy-action@releases/v4
       with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.

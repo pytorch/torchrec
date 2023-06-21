@@ -1,4 +1,4 @@
-sphinx
+sphinx==5.0.0
 # torch
 # PyTorch Theme
 -e git+https://github.com/pytorch/pytorch_sphinx_theme.git#egg=pytorch_sphinx_theme
