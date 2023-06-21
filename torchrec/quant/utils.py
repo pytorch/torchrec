@@ -88,6 +88,8 @@ def _meta_to_cpu_placement(
             is_weighted=module.is_weighted(),
             device=torch.device("cpu"),
             output_dtype=module.output_dtype(),
+            register_tbes=module.register_tbes,
+            row_alignment=module.row_alignment,
         )
         setattr(root_module, name, qebc_cpu)
     elif (
@@ -100,6 +102,8 @@ def _meta_to_cpu_placement(
             device=torch.device("cpu"),
             need_indices=module.need_indices(),
             output_dtype=module.output_dtype(),
+            register_tbes=module.register_tbes,
+            row_alignment=module.row_alignment,
         )
         setattr(root_module, name, qec_cpu)
     else:
