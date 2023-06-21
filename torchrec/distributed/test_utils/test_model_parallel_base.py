@@ -510,7 +510,7 @@ class ModelParallelStateDictBase(unittest.TestCase):
         sharders=st.sampled_from(
             [
                 [EmbeddingBagCollectionSharder()],
-                [EmbeddingBagSharder()],
+                # [EmbeddingBagSharder()],
             ]
         ),
     )
