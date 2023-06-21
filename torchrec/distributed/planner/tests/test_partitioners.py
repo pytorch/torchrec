@@ -385,10 +385,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
             ),
             "table_1": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=4
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=8
             ),
             "table_2": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=7
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=10
             ),
             "table_3": ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
@@ -427,10 +427,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             storage_constraint=self.topology,
         )
         expected_ranks = {
-            "table_0": [8, 9, 10, 11, 12, 13, 14, 15],
-            "table_1": [0, 1, 2, 3, 4, 5, 6, 7, 0, 1],
-            "table_2": [8, 9, 10, 11, 12, 13, 14, 15],
-            "table_3": [0, 1, 2, 3, 4, 5, 6, 7],
+            "table_0": [0, 1, 2, 3, 4, 5, 6, 7],
+            "table_1": [8, 9, 10, 11, 12],
+            "table_2": [0, 1, 2, 3, 4, 5],
+            "table_3": [8, 9, 10, 11, 12, 13, 14, 15],
         }
 
         ranks = {
@@ -449,10 +449,10 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
             ),
             "table_1": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=4
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=8
             ),
             "table_2": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=7
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=10
             ),
             "table_3": ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
@@ -494,8 +494,8 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         )
         expected_ranks = {
             "table_0": [0, 1, 2, 3, 4, 5, 6, 7],
-            "table_1": [0, 1, 2, 3, 4, 5, 6, 7, 0, 1],
-            "table_2": [2, 3, 4, 5, 6, 7, 0, 1],
+            "table_1": [0, 1, 2, 3, 4],
+            "table_2": [5, 6, 7, 0, 1, 2],
             "table_3": [8, 9, 10, 11, 12, 13, 14, 15],
         }
 

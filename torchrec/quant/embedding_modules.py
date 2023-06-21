@@ -57,6 +57,10 @@ MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
     "__quant_state_dict_split_scale_bias"
 )
 
+MODULE_ATTR_ROW_ALIGNMENT_INT: str = "__register_row_alignment_in_named_modules"
+
+DEFAULT_ROW_ALIGNMENT = 16
+
 
 def for_each_module_of_type_do(
     module: nn.Module,
@@ -75,7 +79,6 @@ def quant_prep_enable_quant_state_dict_split_scale_bias(module: nn.Module) -> No
 def quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
     module: nn.Module, module_types: List[Type[torch.nn.Module]]
 ) -> None:
-
     for_each_module_of_type_do(
         module,
         module_types,
@@ -86,11 +89,20 @@ def quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
 def quant_prep_enable_register_tbes(
     module: nn.Module, module_types: List[Type[torch.nn.Module]]
 ) -> None:
-
     for_each_module_of_type_do(
         module,
         module_types,
         lambda m: setattr(m, MODULE_ATTR_REGISTER_TBES_BOOL, True),
+    )
+
+
+def quant_prep_customize_row_alignment(
+    module: nn.Module, module_types: List[Type[torch.nn.Module]], row_alignment: int
+) -> None:
+    for_each_module_of_type_do(
+        module,
+        module_types,
+        lambda m: setattr(m, MODULE_ATTR_ROW_ALIGNMENT_INT, row_alignment),
     )
 
 
@@ -228,6 +240,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         ] = None,
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
+        row_alignment: int = DEFAULT_ROW_ALIGNMENT,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -244,6 +257,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None
+        self.row_alignment = row_alignment
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -292,7 +306,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
-                row_alignment=16,
+                row_alignment=row_alignment,
                 feature_table_map=feature_table_map,
             )
             if device != torch.device("meta") and weight_lists is None:
@@ -336,6 +350,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
             quant_state_dict_split_scale_bias,
         )
+        setattr(self, MODULE_ATTR_REGISTER_TBES_BOOL, register_tbes)
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
@@ -434,6 +449,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             quant_state_dict_split_scale_bias=getattr(
                 module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
             ),
+            row_alignment=getattr(
+                module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
+            ),
         )
 
     def embedding_bag_configs(
@@ -518,6 +536,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         ] = None,
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
+        row_alignment: int = DEFAULT_ROW_ALIGNMENT,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -528,6 +547,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._need_indices: bool = need_indices
         self._output_dtype = output_dtype
         self._device = device
+        self.row_alignment = row_alignment
 
         table_names = set()
         for config in tables:
@@ -551,7 +571,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
                     (
-                        "",
+                        config.name,
                         config.num_embeddings,
                         config.embedding_dim,
                         data_type_to_sparse_type(config.data_type),
@@ -564,7 +584,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
-                row_alignment=16,
+                row_alignment=row_alignment,
             )
             if device != torch.device("meta") and weight_lists is None:
                 emb_module.initialize_weights()
@@ -598,6 +618,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
             quant_state_dict_split_scale_bias,
         )
+        setattr(self, MODULE_ATTR_REGISTER_TBES_BOOL, register_tbes)
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
@@ -654,7 +675,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(module, table_name_to_quantized_weights, data_type)
-
         return cls(
             tables,
             device=device,
@@ -662,8 +682,12 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             # pyre-ignore
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
+            register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
             quant_state_dict_split_scale_bias=getattr(
                 module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            ),
+            row_alignment=getattr(
+                module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
             ),
         )
 

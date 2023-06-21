@@ -8,6 +8,7 @@
 #!/usr/bin/env python3
 
 import math
+import warnings
 from typing import Callable, cast, Dict, List, Optional, Tuple, Type
 
 import torch
@@ -151,11 +152,17 @@ def _calculate_cw_shard_sizes_and_offsets(
     block_size: int = min(
         col_wise_shard_dim if col_wise_shard_dim else MIN_CW_DIM, columns
     )
-    num_col_wise_shards, residual = divmod(columns, block_size)
 
-    shard_sizes: List[List[int]] = [[rows, block_size]] * (num_col_wise_shards - 1)
-    shard_sizes.append([rows, block_size + residual])
+    if columns % block_size != 0:
+        warnings.warn(
+            f"Dim of {columns} cannot be evenly divided with column wise shard dim {col_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
+            UserWarning,
+        )
+        block_size = columns
 
+    num_col_wise_shards, _residual = divmod(columns, block_size)
+
+    shard_sizes: List[List[int]] = [[rows, block_size]] * num_col_wise_shards
     shard_offsets: List[List[int]] = [
         [0, block_size * rank] for rank in range(num_col_wise_shards)
     ]

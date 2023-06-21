@@ -178,30 +178,29 @@ EXPECTED_TWRW_SHARD_STORAGE = [
 
 EXPECTED_CW_SHARD_SIZES = [
     [[100, 10]],
-    [[110, 8], [110, 12]],
-    [[120, 9], [120, 9], [120, 12]],
-    [[130, 12], [130, 12], [130, 16]],
+    [[110, 10], [110, 10]],
+    [[120, 10], [120, 10], [120, 10]],
+    [[130, 20], [130, 20]],
 ]
 
 EXPECTED_CW_SHARD_OFFSETS = [
     [[0, 0]],
-    [[0, 0], [0, 8]],
-    [[0, 0], [0, 9], [0, 18]],
-    [[0, 0], [0, 12], [0, 24]],
+    [[0, 0], [0, 10]],
+    [[0, 0], [0, 10], [0, 20]],
+    [[0, 0], [0, 20]],
 ]
 
 EXPECTED_CW_SHARD_STORAGE = [
     [Storage(hbm=102304, ddr=0)],
-    [Storage(hbm=347584, ddr=0), Storage(hbm=447648, ddr=0)],
+    [Storage(hbm=397616, ddr=0), Storage(hbm=397616, ddr=0)],
     [
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=366208, ddr=0),
+        Storage(hbm=332480, ddr=0),
+        Storage(hbm=332480, ddr=0),
+        Storage(hbm=332480, ddr=0),
     ],
     [
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=745600, ddr=0),
+        Storage(hbm=878752, ddr=0),
+        Storage(hbm=878752, ddr=0),
     ],
 ]
 
@@ -211,16 +210,15 @@ EXPECTED_TWCW_SHARD_OFFSETS: List[List[List[int]]] = EXPECTED_CW_SHARD_OFFSETS
 
 EXPECTED_TWCW_SHARD_STORAGE = [
     [Storage(hbm=102304, ddr=0)],
-    [Storage(hbm=347584, ddr=0), Storage(hbm=447648, ddr=0)],
+    [Storage(hbm=397616, ddr=0), Storage(hbm=397616, ddr=0)],
     [
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=315616, ddr=0),
-        Storage(hbm=366208, ddr=0),
+        Storage(hbm=332480, ddr=0),
+        Storage(hbm=332480, ddr=0),
+        Storage(hbm=332480, ddr=0),
     ],
     [
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=612448, ddr=0),
-        Storage(hbm=745600, ddr=0),
+        Storage(hbm=878752, ddr=0),
+        Storage(hbm=878752, ddr=0),
     ],
 ]
 
@@ -345,11 +343,13 @@ class TestEnumerators(unittest.TestCase):
         self.world_size = 8
         self.local_world_size = 4
         self.constraints = {
-            "table_0": ParameterConstraints(min_partition=20),
-            "table_1": ParameterConstraints(min_partition=8, pooling_factors=[1, 3, 5]),
-            "table_2": ParameterConstraints(min_partition=9, pooling_factors=[8, 2]),
+            "table_0": ParameterConstraints(min_partition=10),
+            "table_1": ParameterConstraints(
+                min_partition=10, pooling_factors=[1, 3, 5]
+            ),
+            "table_2": ParameterConstraints(min_partition=10, pooling_factors=[8, 2]),
             "table_3": ParameterConstraints(
-                min_partition=12, pooling_factors=[2, 1, 3, 7]
+                min_partition=20, pooling_factors=[2, 1, 3, 7]
             ),
         }
         self.num_tables = 4
