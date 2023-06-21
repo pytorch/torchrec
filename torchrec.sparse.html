@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -33,9 +33,13 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="prev" title="torchrec.quant" href="torchrec.quant.html" />
-  <!-- Google Analytics -->
-  
-  <!-- End Google Analytics -->
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','');</script>
+    <!-- End Google Tag Manager -->
   
 
   
@@ -317,6 +321,10 @@
         <div class="pytorch-content-left">
 
         
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id="
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
@@ -345,7 +353,7 @@ example and further information.</p>
 <span id="torchrec-sparse-jagged-tensor"></span><h2>torchrec.sparse.jagged_tensor<a class="headerlink" href="#module-torchrec.sparse.jagged_tensor" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.ComputeKJTToJTDict">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">ComputeKJTToJTDict</span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">ComputeKJTToJTDict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
 <p>Converts a KeyedJaggedTensor to a dict of JaggedTensors.</p>
 <p>Args:</p>
@@ -502,7 +510,7 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_dense">
 <span class="sig-name descname"><span class="pre">to_dense</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_dense" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructs dense-reprensentation tensor from JT.</p>
+<dd><p>Constructs a dense-representation of the JT’s values.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>list of tensors.</p>
@@ -516,9 +524,9 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 <span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">IntTensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">])</span>
 <span class="n">jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="n">offsets</span><span class="p">)</span>
 
-<span class="n">torch_list</span> <span class="o">=</span> <span class="n">jt</span><span class="o">.</span><span class="n">to_dense</span><span class="p">()</span>
+<span class="n">values_list</span> <span class="o">=</span> <span class="n">jt</span><span class="o">.</span><span class="n">to_dense</span><span class="p">()</span>
 
-<span class="c1"># torch_list = [</span>
+<span class="c1"># values_list = [</span>
 <span class="c1">#     torch.tensor([1.0, 2.0]),</span>
 <span class="c1">#     torch.tensor([]),</span>
 <span class="c1">#     torch.tensor([3.0]),</span>
@@ -531,9 +539,41 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_dense_weights">
+<span class="sig-name descname"><span class="pre">to_dense_weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_dense_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs a dense-representation of the JT’s weights.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list of tensors, <cite>None</cite> if no weights.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[torch.Tensor]]</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+<span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">])</span>
+<span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">IntTensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">])</span>
+<span class="n">jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="n">offsets</span><span class="p">)</span>
+
+<span class="n">weights_list</span> <span class="o">=</span> <span class="n">jt</span><span class="o">.</span><span class="n">to_dense_weights</span><span class="p">()</span>
+
+<span class="c1"># weights_list = [</span>
+<span class="c1">#     torch.tensor([0.1, 0.2]),</span>
+<span class="c1">#     torch.tensor([]),</span>
+<span class="c1">#     torch.tensor([0.3]),</span>
+<span class="c1">#     torch.tensor([0.4]),</span>
+<span class="c1">#     torch.tensor([0.5]),</span>
+<span class="c1">#     torch.tensor([0.6, 0.7, 0.8]),</span>
+<span class="c1"># ]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense">
 <span class="sig-name descname"><span class="pre">to_padded_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">desired_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructs 2D dense Tensor from JT to shape (B, N,).</p>
+<dd><p>Constructs a 2D dense tensor from the JT’s values of shape (B, N,).</p>
 <p>Note that <cite>B</cite> is the length of self.lengths() and <cite>N</cite> is the longest feature
 length or <cite>desired_length</cite>.</p>
 <p>If <cite>desired_length</cite> &gt; <cite>length</cite> we will pad with <cite>padding_value</cite>, otherwise we
@@ -568,7 +608,52 @@ will select the last value at <cite>desired_length</cite>.</p>
 <span class="c1">#     [3.0, 10.0],</span>
 <span class="c1">#     [4.0, 10.0],</span>
 <span class="c1">#     [5.0, 10.0],</span>
-<span class="c1">#     [7.0, 8.0],</span>
+<span class="c1">#     [6.0, 7.0],</span>
+<span class="c1"># ]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense_weights">
+<span class="sig-name descname"><span class="pre">to_padded_dense_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">desired_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense_weights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs a 2D dense tensor from the JT’s weights of shape (B, N,).</p>
+<p>Note that <cite>B</cite> is the length of self.lengths() and <cite>N</cite> is the longest feature
+length or <cite>desired_length</cite>.</p>
+<p>If <cite>desired_length</cite> &gt; <cite>length</cite> we will pad with <cite>padding_value</cite>, otherwise we
+will select the last value at <cite>desired_length</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>desired_length</strong> (<em>int</em>) – the length of the tensor.</p></li>
+<li><p><strong>padding_value</strong> (<em>float</em>) – padding value if we need to pad.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>2d dense tensor, <cite>None</cite> if no weights.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[torch.Tensor]</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+<span class="n">weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">])</span>
+<span class="n">offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">IntTensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">])</span>
+<span class="n">jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="n">offsets</span><span class="p">)</span>
+
+<span class="n">d_wt</span> <span class="o">=</span> <span class="n">jt</span><span class="o">.</span><span class="n">to_padded_dense_weights</span><span class="p">(</span>
+    <span class="n">desired_length</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">padding_value</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># d_wt = [</span>
+<span class="c1">#     [0.1, 0.2],</span>
+<span class="c1">#     [1.0, 1.0],</span>
+<span class="c1">#     [0.3, 1.0],</span>
+<span class="c1">#     [0.4, 1.0],</span>
+<span class="c1">#     [0.5, 1.0],</span>
+<span class="c1">#     [0.6, 0.7],</span>
 <span class="c1"># ]</span>
 </pre></div>
 </div>
@@ -1023,80 +1108,7 @@ example and further information.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.sparse</a><ul>
-<li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a><ul>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.forward"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict.forward()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.training"><code class="docutils literal notranslate"><span class="pre">ComputeKJTToJTDict.training</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor"><code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.empty()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.from_dense()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.from_dense_lengths()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.lengths()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.lengths_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.offsets()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.offsets_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.record_stream()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to_dense()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.to_padded_dense()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.values"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.values()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.weights()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights_or_none"><code class="docutils literal notranslate"><span class="pre">JaggedTensor.weights_or_none()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensorMeta"><code class="docutils literal notranslate"><span class="pre">JaggedTensorMeta</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.concat()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.device()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_init"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.dist_init()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_labels"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.dist_labels()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_splits"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.dist_splits()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_tensors"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.dist_tensors()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty_like"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.empty_like()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_jt_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_lengths_sync()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_offsets_sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.from_offsets_sync()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.keys()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.length_per_key()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.length_per_key_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.lengths()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.lengths_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offset_per_key()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offset_per_key_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offsets()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.offsets_or_none()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.permute"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.permute()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.pin_memory()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.record_stream()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.split()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.stride()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.sync()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.to()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to_dict"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.to_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.values"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.values()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.weights()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights_or_none"><code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor.weights_or_none()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor"><code class="docutils literal notranslate"><span class="pre">KeyedTensor</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.from_tensor_list"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.from_tensor_list()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.key_dim"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.key_dim()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.keys"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.keys()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.length_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.length_per_key()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.offset_per_key"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.offset_per_key()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.record_stream"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.record_stream()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.regroup()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.regroup_as_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.to()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to_dict"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.to_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor.values"><code class="docutils literal notranslate"><span class="pre">KeyedTensor.values()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
+<li><a class="reference internal" href="#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a></li>
 <li><a class="reference internal" href="#module-0">Module contents</a></li>
 </ul>
 </li>
@@ -1120,7 +1132,6 @@ example and further information.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
-         <script src="_static/sphinx_highlight.js"></script>
      
 
   

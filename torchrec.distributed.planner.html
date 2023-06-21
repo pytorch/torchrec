@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -34,9 +34,13 @@
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="torchrec.distributed.sharding" href="torchrec.distributed.sharding.html" />
     <link rel="prev" title="torchrec.distributed" href="torchrec.distributed.html" />
-  <!-- Google Analytics -->
-  
-  <!-- End Google Analytics -->
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','');</script>
+    <!-- End Google Tag Manager -->
   
 
   
@@ -318,6 +322,10 @@
         <div class="pytorch-content-left">
 
         
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id="
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
@@ -481,15 +489,15 @@ The topology, storage, and perfs are updated at the end of the placement.</p>
 <span class="c1"># First [sharding_options[0] and sharding_options[1]] will be placed on the</span>
 <span class="c1"># topology with the uniform strategy, resulting in</span>
 
-<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
-<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
 
 <span class="c1"># Finally sharding_options[2] and sharding_options[3]] will be placed on the</span>
 <span class="c1"># topology with the device strategy (see docstring of `partition_by_device` for</span>
 <span class="c1"># more details).</span>
 
-<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
-<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">topology</span><span class="o">.</span><span class="n">devices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">perf</span><span class="o">.</span><span class="n">total</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
 
 <span class="c1"># The topology updates are done after the end of all the placements (the other</span>
 <span class="c1"># in the example is just for clarity).</span>
@@ -581,7 +589,8 @@ next sharding option.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>use_depth</strong> (<em>bool</em>) – When enabled, sharding_options of a fqn are sorted based on
-<cite>max(shard.perf)</cite>, otherwise sharding_options are sorted by <cite>sum(shard.perf)</cite>.</p></li>
+<cite>max(shard.perf.total)</cite>, otherwise sharding_options are sorted by
+<cite>sum(shard.perf.total)</cite>.</p></li>
 <li><p><strong>threshold</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – Threshold for early stopping. When specified, the
 proposer stops proposing when the proposals have consecutive worse perf_rating
 than best_perf_rating.</p></li>
@@ -719,7 +728,7 @@ if unpooled/sequential (ie. <cite>Embedding</cite>).</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.perf_func_emb_wall_time">
-<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.shard_estimators.</span></span><span class="sig-name descname"><span class="pre">perf_func_emb_wall_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shard_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_poolings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hbm_mem_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ddr_mem_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_host_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inter_host_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_pooled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_feature_processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">caching_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_inference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.perf_func_emb_wall_time" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.shard_estimators.</span></span><span class="sig-name descname"><span class="pre">perf_func_emb_wall_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shard_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fwd_a2a_comm_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bwd_a2a_comm_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fwd_sr_comm_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bwd_sr_comm_data_type_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_poolings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hbm_mem_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ddr_mem_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_host_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inter_host_bw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_pooled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">caching_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_inference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Perf" title="torchrec.distributed.planner.types.Perf"><span class="pre">Perf</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.perf_func_emb_wall_time" title="Permalink to this definition">¶</a></dt>
 <dd><p>Attempts to model perfs as a function of relative wall times.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -736,8 +745,11 @@ shard.</p></li>
 input query feature.</p></li>
 <li><p><strong>input_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
 data_parallel input.</p></li>
-<li><p><strong>output_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
-data_parallel output.</p></li>
+<li><p><strong>table_data_type_size</strong> (<em>float</em>) – the data type size of the table.</p></li>
+<li><p><strong>fwd_comm_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
+data_parallel input during forward communication.</p></li>
+<li><p><strong>bwd_comm_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
+data_parallel input during backward communication.</p></li>
 <li><p><strong>num_poolings</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – number of poolings per sample, typically 1.0.</p></li>
 <li><p><strong>hbm_mem_bw</strong> (<em>float</em>) – the bandwidth of the device HBM.</p></li>
 <li><p><strong>ddr_mem_bw</strong> (<em>float</em>) – the bandwidth of the system DDR memory.</p></li>
@@ -748,7 +760,6 @@ if unpooled/sequential (ie. <cite>Embedding</cite>).</p></li>
 <li><p><strong>is_weighted</strong> (<em>bool = False</em>) – if the module is an EBC and is weighted, typically
 signifying an id score list feature.</p></li>
 <li><p><strong>is_inference</strong> (<em>bool = False</em>) – if planning for inference.</p></li>
-<li><p><strong>has_feature_processor</strong> (<em>bool = False</em>) – if the module has a feature processor.</p></li>
 <li><p><strong>caching_ratio</strong> (<em>Optional</em><em>[</em><em>float</em><em>] </em><em>= None</em>) – cache ratio to determine the bandwidth
 of device.</p></li>
 </ul>
@@ -798,6 +809,11 @@ names to provided ParameterConstraints.</p></li>
 
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.stats.round_to_one_sigfig">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.stats.</span></span><span class="sig-name descname"><span class="pre">round_to_one_sigfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.stats.round_to_one_sigfig" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </section>
 <section id="module-torchrec.distributed.planner.storage_reservations">
 <span id="torchrec-distributed-planner-storage-reservations"></span><h2>torchrec.distributed.planner.storage_reservations<a class="headerlink" href="#module-torchrec.distributed.planner.storage_reservations" title="Permalink to this heading">¶</a></h2>
@@ -839,15 +855,21 @@ default heuristic estimate if not provided.</p></li>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.storage_reservations.InferenceStorageReservation">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.storage_reservations.</span></span><span class="sig-name descname"><span class="pre">InferenceStorageReservation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.storage_reservations.</span></span><span class="sig-name descname"><span class="pre">InferenceStorageReservation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">percentage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_tensor_estimate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation" title="torchrec.distributed.planner.types.StorageReservation"><code class="xref py py-class docutils literal notranslate"><span class="pre">StorageReservation</span></code></a></p>
 <p>Reserves storage for model to be sharded for inference. The storage reservation
 is comprised of dense tensor storage, KJT storage, and an extra percentage of total
-storage.</p>
+storage. Note that when estimating for storage, dense modules are assumed to be on
+GPUs and replicated across ranks. If this is not the case, please override the
+estimates with dense_tensor_estimate.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>percentage</strong> (<em>float</em>) – extra storage percentage to reserve that acts as a margin of
-error beyond storage calculation.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>percentage</strong> (<em>float</em>) – extra storage percentage to reserve that acts as a margin of
+error beyond storage calculation.</p></li>
+<li><p><strong>dense_tensor_estimate</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – storage estimate for dense tensors, use
+default heuristic estimate if not provided.</p></li>
+</ul>
 </dd>
 </dl>
 <dl class="py method">
@@ -862,13 +884,13 @@ error beyond storage calculation.</p>
 <span id="torchrec-distributed-planner-types"></span><h2>torchrec.distributed.planner.types<a class="headerlink" href="#module-torchrec.distributed.planner.types" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.DeviceHardware">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">DeviceHardware</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.DeviceHardware" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">DeviceHardware</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Perf" title="torchrec.distributed.planner.types.Perf"><span class="pre">Perf</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.DeviceHardware" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Representation of a device in a process group. ‘perf’ is an estimation of network,
 CPU, and storage usages.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.DeviceHardware.perf">
-<span class="sig-name descname"><span class="pre">perf</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.DeviceHardware.perf" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">perf</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.planner.types.Perf" title="torchrec.distributed.planner.types.Perf"><span class="pre">Perf</span></a></em><a class="headerlink" href="#torchrec.distributed.planner.types.DeviceHardware.perf" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -899,7 +921,7 @@ and sharders.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ParameterConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_types:</span> <span class="pre">~typing.Optional[~typing.List[str]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernels:</span> <span class="pre">~typing.Optional[~typing.List[str]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_partition:</span> <span class="pre">~typing.Optional[int]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pooling_factors:</span> <span class="pre">~typing.List[float]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_poolings:</span> <span class="pre">~typing.Optional[~typing.List[float]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_sizes:</span> <span class="pre">~typing.Optional[~typing.List[int]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ParameterConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_types:</span> <span class="pre">~typing.Optional[~typing.List[str]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernels:</span> <span class="pre">~typing.Optional[~typing.List[str]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_partition:</span> <span class="pre">~typing.Optional[int]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pooling_factors:</span> <span class="pre">~typing.List[float]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_poolings:</span> <span class="pre">~typing.Optional[~typing.List[float]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_sizes:</span> <span class="pre">~typing.Optional[~typing.List[int]]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_weighted:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_params:</span> <span class="pre">~typing.Optional[~torchrec.distributed.types.CacheParams]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_hbm:</span> <span class="pre">~typing.Optional[bool]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stochastic_rounding:</span> <span class="pre">~typing.Optional[bool]</span> <span class="pre">=</span> <span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds_check_mode:</span> <span class="pre">~typing.Optional[~torchrec.distributed.types.BoundsCheckMode]</span> <span class="pre">=</span> <span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Stores user provided constraints around the sharding plan.</p>
 <p>If provided, <cite>pooling_factors</cite>, <cite>num_poolings</cite>, and <cite>batch_sizes</cite> must match in
@@ -910,8 +932,23 @@ length, as per sample.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode">
+<span class="sig-name descname"><span class="pre">bounds_check_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.BoundsCheckMode" title="torchrec.distributed.types.BoundsCheckMode"><span class="pre">BoundsCheckMode</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.cache_params">
+<span class="sig-name descname"><span class="pre">cache_params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams"><span class="pre">CacheParams</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.cache_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.compute_kernels">
 <span class="sig-name descname"><span class="pre">compute_kernels</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm">
+<span class="sig-name descname"><span class="pre">enforce_hbm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -937,6 +974,11 @@ length, as per sample.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.sharding_types">
 <span class="sig-name descname"><span class="pre">sharding_types</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.sharding_types" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.stochastic_rounding">
+<span class="sig-name descname"><span class="pre">stochastic_rounding</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.stochastic_rounding" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -972,6 +1014,39 @@ length, as per sample.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Partitioner.partition">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">partition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">proposal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.types.Partitioner.partition" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">Perf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fwd_compute</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fwd_comms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bwd_compute</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bwd_comms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.Perf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Representation of the breakdown of the perf estimate a single shard of an
+embedding table.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf.bwd_comms">
+<span class="sig-name descname"><span class="pre">bwd_comms</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Perf.bwd_comms" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf.bwd_compute">
+<span class="sig-name descname"><span class="pre">bwd_compute</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Perf.bwd_compute" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf.fwd_comms">
+<span class="sig-name descname"><span class="pre">fwd_comms</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Perf.fwd_comms" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf.fwd_compute">
+<span class="sig-name descname"><span class="pre">fwd_compute</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Perf.fwd_compute" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.Perf.total">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">total</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Perf.total" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1045,7 +1120,7 @@ plan.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Shard">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">Shard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.Shard" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">Shard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Perf" title="torchrec.distributed.planner.types.Perf"><span class="pre">Perf</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.Shard" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Representation of a subset of an embedding table. ‘size’ and ‘offset’ fully
 determine the tensors in the shard. ‘storage’ is an estimation of how much it takes
@@ -1057,7 +1132,7 @@ to store the shard with an estimation ‘perf’.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Shard.perf">
-<span class="sig-name descname"><span class="pre">perf</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Shard.perf" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">perf</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Perf" title="torchrec.distributed.planner.types.Perf"><span class="pre">Perf</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.Shard.perf" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -1091,7 +1166,7 @@ to store the shard with an estimation ‘perf’.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ShardingOption</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">partition_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard"><span class="pre">Shard</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ShardingOption</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">partition_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard"><span class="pre">Shard</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams"><span class="pre">CacheParams</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_hbm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stochastic_rounding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds_check_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.BoundsCheckMode" title="torchrec.distributed.types.BoundsCheckMode"><span class="pre">BoundsCheckMode</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>One way of sharding an embedding table.</p>
 <dl class="py property">
@@ -1310,210 +1385,17 @@ to store the shard with an estimation ‘perf’.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.distributed.planner</a><ul>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.constants">torchrec.distributed.planner.constants</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.constants.kernel_bw_lookup"><code class="docutils literal notranslate"><span class="pre">kernel_bw_lookup()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.enumerators">torchrec.distributed.planner.enumerators</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.EmbeddingEnumerator"><code class="docutils literal notranslate"><span class="pre">EmbeddingEnumerator</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.EmbeddingEnumerator.enumerate"><code class="docutils literal notranslate"><span class="pre">EmbeddingEnumerator.enumerate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.enumerators.get_partition_by_type"><code class="docutils literal notranslate"><span class="pre">get_partition_by_type()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.partitioners">torchrec.distributed.planner.partitioners</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner"><code class="docutils literal notranslate"><span class="pre">GreedyPerfPartitioner</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner.partition"><code class="docutils literal notranslate"><span class="pre">GreedyPerfPartitioner.partition()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.sharding_options"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup.sharding_options</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.storage_sum"><code class="docutils literal notranslate"><span class="pre">ShardingOptionGroup.storage_sum</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.perf_models">torchrec.distributed.planner.perf_models</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.perf_models.NoopPerfModel"><code class="docutils literal notranslate"><span class="pre">NoopPerfModel</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.perf_models.NoopPerfModel.rate"><code class="docutils literal notranslate"><span class="pre">NoopPerfModel.rate()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.planners">torchrec.distributed.planner.planners</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.collective_plan"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner.collective_plan()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan"><code class="docutils literal notranslate"><span class="pre">EmbeddingShardingPlanner.plan()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.proposers">torchrec.distributed.planner.proposers</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer"><code class="docutils literal notranslate"><span class="pre">GreedyProposer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.feedback"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.feedback()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.load"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.load()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GreedyProposer.propose"><code class="docutils literal notranslate"><span class="pre">GreedyProposer.propose()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.feedback"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.feedback()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.load"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.load()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.GridSearchProposer.propose"><code class="docutils literal notranslate"><span class="pre">GridSearchProposer.propose()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer"><code class="docutils literal notranslate"><span class="pre">UniformProposer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.feedback"><code class="docutils literal notranslate"><span class="pre">UniformProposer.feedback()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.load"><code class="docutils literal notranslate"><span class="pre">UniformProposer.load()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.UniformProposer.propose"><code class="docutils literal notranslate"><span class="pre">UniformProposer.propose()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.proposers.proposers_to_proposals_list"><code class="docutils literal notranslate"><span class="pre">proposers_to_proposals_list()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.shard_estimators">torchrec.distributed.planner.shard_estimators</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator"><code class="docutils literal notranslate"><span class="pre">EmbeddingPerfEstimator</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">EmbeddingPerfEstimator.estimate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator"><code class="docutils literal notranslate"><span class="pre">EmbeddingStorageEstimator</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">EmbeddingStorageEstimator.estimate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.calculate_shard_storages"><code class="docutils literal notranslate"><span class="pre">calculate_shard_storages()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.shard_estimators.perf_func_emb_wall_time"><code class="docutils literal notranslate"><span class="pre">perf_func_emb_wall_time()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.stats">torchrec.distributed.planner.stats</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.stats.EmbeddingStats"><code class="docutils literal notranslate"><span class="pre">EmbeddingStats</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.stats.EmbeddingStats.log"><code class="docutils literal notranslate"><span class="pre">EmbeddingStats.log()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.storage_reservations">torchrec.distributed.planner.storage_reservations</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.FixedPercentageStorageReservation"><code class="docutils literal notranslate"><span class="pre">FixedPercentageStorageReservation</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.FixedPercentageStorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">FixedPercentageStorageReservation.reserve()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.HeuristicalStorageReservation"><code class="docutils literal notranslate"><span class="pre">HeuristicalStorageReservation</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.HeuristicalStorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">HeuristicalStorageReservation.reserve()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation"><code class="docutils literal notranslate"><span class="pre">InferenceStorageReservation</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.storage_reservations.InferenceStorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">InferenceStorageReservation.reserve()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.types">torchrec.distributed.planner.types</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware"><code class="docutils literal notranslate"><span class="pre">DeviceHardware</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.perf"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.perf</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.rank"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.rank</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.DeviceHardware.storage"><code class="docutils literal notranslate"><span class="pre">DeviceHardware.storage</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator"><code class="docutils literal notranslate"><span class="pre">Enumerator</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator.enumerate"><code class="docutils literal notranslate"><span class="pre">Enumerator.enumerate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.batch_sizes"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.batch_sizes</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.compute_kernels</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.is_weighted"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.is_weighted</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.min_partition"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.min_partition</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.num_poolings"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.num_poolings</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.pooling_factors"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.pooling_factors</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints.sharding_types"><code class="docutils literal notranslate"><span class="pre">ParameterConstraints.sharding_types</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType"><code class="docutils literal notranslate"><span class="pre">PartitionByType</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.DEVICE"><code class="docutils literal notranslate"><span class="pre">PartitionByType.DEVICE</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.HOST"><code class="docutils literal notranslate"><span class="pre">PartitionByType.HOST</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PartitionByType.UNIFORM"><code class="docutils literal notranslate"><span class="pre">PartitionByType.UNIFORM</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner"><code class="docutils literal notranslate"><span class="pre">Partitioner</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner.partition"><code class="docutils literal notranslate"><span class="pre">Partitioner.partition()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PerfModel"><code class="docutils literal notranslate"><span class="pre">PerfModel</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PerfModel.rate"><code class="docutils literal notranslate"><span class="pre">PerfModel.rate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerError"><code class="docutils literal notranslate"><span class="pre">PlannerError</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.INSUFFICIENT_STORAGE</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.OTHER"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.OTHER</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.PARTITION"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.PARTITION</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.PlannerErrorType.STRICT_CONSTRAINTS"><code class="docutils literal notranslate"><span class="pre">PlannerErrorType.STRICT_CONSTRAINTS</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer"><code class="docutils literal notranslate"><span class="pre">Proposer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.feedback"><code class="docutils literal notranslate"><span class="pre">Proposer.feedback()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.load"><code class="docutils literal notranslate"><span class="pre">Proposer.load()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer.propose"><code class="docutils literal notranslate"><span class="pre">Proposer.propose()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard"><code class="docutils literal notranslate"><span class="pre">Shard</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.offset"><code class="docutils literal notranslate"><span class="pre">Shard.offset</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.perf"><code class="docutils literal notranslate"><span class="pre">Shard.perf</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.rank"><code class="docutils literal notranslate"><span class="pre">Shard.rank</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.size"><code class="docutils literal notranslate"><span class="pre">Shard.size</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Shard.storage"><code class="docutils literal notranslate"><span class="pre">Shard.storage</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator"><code class="docutils literal notranslate"><span class="pre">ShardEstimator</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator.estimate"><code class="docutils literal notranslate"><span class="pre">ShardEstimator.estimate()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption"><code class="docutils literal notranslate"><span class="pre">ShardingOption</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.fqn"><code class="docutils literal notranslate"><span class="pre">ShardingOption.fqn</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled"><code class="docutils literal notranslate"><span class="pre">ShardingOption.is_pooled</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.module"><code class="docutils literal notranslate"><span class="pre">ShardingOption.module</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_inputs"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_inputs</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.num_shards"><code class="docutils literal notranslate"><span class="pre">ShardingOption.num_shards</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.path"><code class="docutils literal notranslate"><span class="pre">ShardingOption.path</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.tensor"><code class="docutils literal notranslate"><span class="pre">ShardingOption.tensor</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption.total_storage"><code class="docutils literal notranslate"><span class="pre">ShardingOption.total_storage</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Stats"><code class="docutils literal notranslate"><span class="pre">Stats</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Stats.log"><code class="docutils literal notranslate"><span class="pre">Stats.log()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage"><code class="docutils literal notranslate"><span class="pre">Storage</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.ddr"><code class="docutils literal notranslate"><span class="pre">Storage.ddr</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.fits_in"><code class="docutils literal notranslate"><span class="pre">Storage.fits_in()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Storage.hbm"><code class="docutils literal notranslate"><span class="pre">Storage.hbm</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation"><code class="docutils literal notranslate"><span class="pre">StorageReservation</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation.reserve"><code class="docutils literal notranslate"><span class="pre">StorageReservation.reserve()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology"><code class="docutils literal notranslate"><span class="pre">Topology</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.compute_device"><code class="docutils literal notranslate"><span class="pre">Topology.compute_device</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.ddr_mem_bw"><code class="docutils literal notranslate"><span class="pre">Topology.ddr_mem_bw</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.devices"><code class="docutils literal notranslate"><span class="pre">Topology.devices</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.hbm_mem_bw"><code class="docutils literal notranslate"><span class="pre">Topology.hbm_mem_bw</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.inter_host_bw"><code class="docutils literal notranslate"><span class="pre">Topology.inter_host_bw</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.intra_host_bw"><code class="docutils literal notranslate"><span class="pre">Topology.intra_host_bw</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.local_world_size"><code class="docutils literal notranslate"><span class="pre">Topology.local_world_size</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.types.Topology.world_size"><code class="docutils literal notranslate"><span class="pre">Topology.world_size</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.distributed.planner.utils">torchrec.distributed.planner.utils</a><ul>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_gb"><code class="docutils literal notranslate"><span class="pre">bytes_to_gb()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.bytes_to_mb"><code class="docutils literal notranslate"><span class="pre">bytes_to_mb()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.gb_to_bytes"><code class="docutils literal notranslate"><span class="pre">gb_to_bytes()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.placement"><code class="docutils literal notranslate"><span class="pre">placement()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.prod"><code class="docutils literal notranslate"><span class="pre">prod()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.distributed.planner.utils.sharder_name"><code class="docutils literal notranslate"><span class="pre">sharder_name()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.constants">torchrec.distributed.planner.constants</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.enumerators">torchrec.distributed.planner.enumerators</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.partitioners">torchrec.distributed.planner.partitioners</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.perf_models">torchrec.distributed.planner.perf_models</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.planners">torchrec.distributed.planner.planners</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.proposers">torchrec.distributed.planner.proposers</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.shard_estimators">torchrec.distributed.planner.shard_estimators</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.stats">torchrec.distributed.planner.stats</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.storage_reservations">torchrec.distributed.planner.storage_reservations</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.types">torchrec.distributed.planner.types</a></li>
+<li><a class="reference internal" href="#module-torchrec.distributed.planner.utils">torchrec.distributed.planner.utils</a></li>
 </ul>
 </li>
 </ul>
@@ -1536,7 +1418,6 @@ to store the shard with an estimation ‘perf’.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
-         <script src="_static/sphinx_highlight.js"></script>
      
 
   

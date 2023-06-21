@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -34,9 +34,13 @@
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="torchrec.quant" href="torchrec.quant.html" />
     <link rel="prev" title="torchrec.modules" href="torchrec.modules.html" />
-  <!-- Google Analytics -->
-  
-  <!-- End Google Analytics -->
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','');</script>
+    <!-- End Google Tag Manager -->
   
 
   
@@ -318,6 +322,10 @@
         <div class="pytorch-content-left">
 
         
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id="
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
@@ -417,7 +425,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.optim.fused.EmptyFusedOptimizer.zero_grad">
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.EmptyFusedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dd><p>Resets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
@@ -462,7 +470,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.optim.fused.FusedOptimizer.zero_grad">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.fused.FusedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dd><p>Resets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
@@ -557,7 +565,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.CombinedOptimizer.zero_grad">
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.CombinedOptimizer.zero_grad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dd><p>Resets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
@@ -679,7 +687,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.KeyedOptimizerWrapper.zero_grad">
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.zero_grad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dd><p>Resets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
@@ -777,7 +785,7 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.optim.keyed.OptimizerWrapper.zero_grad">
 <span class="sig-name descname"><span class="pre">zero_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">set_to_none</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.optim.keyed.OptimizerWrapper.zero_grad" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s to zero.</p>
+<dd><p>Resets the gradients of all optimized <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code> s.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>set_to_none</strong> (<em>bool</em>) – instead of setting to zero, set the grads to None.
@@ -963,100 +971,10 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.optim</a><ul>
-<li><a class="reference internal" href="#module-torchrec.optim.clipping">torchrec.optim.clipping</a><ul>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping"><code class="docutils literal notranslate"><span class="pre">GradientClipping</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.NONE"><code class="docutils literal notranslate"><span class="pre">GradientClipping.NONE</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.NORM"><code class="docutils literal notranslate"><span class="pre">GradientClipping.NORM</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClipping.VALUE"><code class="docutils literal notranslate"><span class="pre">GradientClipping.VALUE</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClippingOptimizer"><code class="docutils literal notranslate"><span class="pre">GradientClippingOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.clipping.GradientClippingOptimizer.step"><code class="docutils literal notranslate"><span class="pre">GradientClippingOptimizer.step()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.optim.fused">torchrec.optim.fused</a><ul>
-<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer.step()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.fused.EmptyFusedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">EmptyFusedOptimizer.zero_grad()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.step()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">FusedOptimizer.zero_grad()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizerModule"><code class="docutils literal notranslate"><span class="pre">FusedOptimizerModule</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.fused.FusedOptimizerModule.fused_optimizer"><code class="docutils literal notranslate"><span class="pre">FusedOptimizerModule.fused_optimizer</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.optim.keyed">torchrec.optim.keyed</a><ul>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.optimizers"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.optimizers</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.param_groups"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.param_groups</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.params"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.params</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.post_load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.prepend_opt_key"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.prepend_opt_key()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.save_param_groups"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.save_param_groups()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.state"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.state</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.step"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.step()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.CombinedOptimizer.zero_grad"><code class="docutils literal notranslate"><span class="pre">CombinedOptimizer.zero_grad()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.add_param_group"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.add_param_group()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.init_state"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.init_state()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.load_state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.post_load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.save_param_groups"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.save_param_groups()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizer.state_dict"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizer.state_dict()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.step"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper.step()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.KeyedOptimizerWrapper.zero_grad"><code class="docutils literal notranslate"><span class="pre">KeyedOptimizerWrapper.zero_grad()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.add_param_group"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.add_param_group()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.load_state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.post_load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.save_param_groups"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.save_param_groups()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.state_dict"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.step"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.step()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.keyed.OptimizerWrapper.zero_grad"><code class="docutils literal notranslate"><span class="pre">OptimizerWrapper.zero_grad()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.optim.warmup">torchrec.optim.warmup</a><ul>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer.post_load_state_dict"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer.post_load_state_dict()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupOptimizer.step"><code class="docutils literal notranslate"><span class="pre">WarmupOptimizer.step()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.CONSTANT"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.CONSTANT</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.INVSQRT"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.INVSQRT</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.LINEAR"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.LINEAR</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.NONE"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.NONE</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.POLY"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.POLY</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy.STEP"><code class="docutils literal notranslate"><span class="pre">WarmupPolicy.STEP</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage"><code class="docutils literal notranslate"><span class="pre">WarmupStage</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.decay_iters"><code class="docutils literal notranslate"><span class="pre">WarmupStage.decay_iters</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.lr_scale"><code class="docutils literal notranslate"><span class="pre">WarmupStage.lr_scale</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.max_iters"><code class="docutils literal notranslate"><span class="pre">WarmupStage.max_iters</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.policy"><code class="docutils literal notranslate"><span class="pre">WarmupStage.policy</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.optim.warmup.WarmupStage.value"><code class="docutils literal notranslate"><span class="pre">WarmupStage.value</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
+<li><a class="reference internal" href="#module-torchrec.optim.clipping">torchrec.optim.clipping</a></li>
+<li><a class="reference internal" href="#module-torchrec.optim.fused">torchrec.optim.fused</a></li>
+<li><a class="reference internal" href="#module-torchrec.optim.keyed">torchrec.optim.keyed</a></li>
+<li><a class="reference internal" href="#module-torchrec.optim.warmup">torchrec.optim.warmup</a></li>
 <li><a class="reference internal" href="#module-0">Module contents</a></li>
 </ul>
 </li>
@@ -1080,7 +998,6 @@ torch.tensor and <a class="reference external" href="https://github.com/pytorch/
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
-         <script src="_static/sphinx_highlight.js"></script>
      
 
   

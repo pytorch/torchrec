@@ -6,7 +6,7 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
@@ -34,9 +34,13 @@
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="torchrec.datasets.scripts" href="torchrec.datasets.scripts.html" />
     <link rel="prev" title="Welcome to the TorchRec documentation!" href="index.html" />
-  <!-- Google Analytics -->
-  
-  <!-- End Google Analytics -->
+  <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','');</script>
+    <!-- End Google Tag Manager -->
   
 
   
@@ -318,571 +322,29 @@
         <div class="pytorch-content-left">
 
         
+          <!-- Google Tag Manager (noscript) -->
+          <noscript><iframe src="https://www.googletagmanager.com/ns.html?id="
+          height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+          <!-- End Google Tag Manager (noscript) -->
           
           <div class="rst-content">
           
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.datasets">
-<span id="torchrec-datasets"></span><h1>torchrec.datasets<a class="headerlink" href="#module-torchrec.datasets" title="Permalink to this heading">¶</a></h1>
-<p>Torchrec Datasets</p>
-<p>Torchrec contains two popular recys datasets, the <a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">Kaggle/Criteo Display Advertising</a> Dataset
-and the <a class="reference external" href="https://grouplens.org/datasets/movielens/20m/">MovieLens 20M</a> Dataset.</p>
-<p>Additionally, it contains a RandomDataset, which is useful to generate random data in the same format as the above.</p>
-<p>Lastly, it contains scripts and utilities for pre-processing, loading, etc.</p>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrec.datasets.criteo</span> <span class="kn">import</span> <span class="n">criteo_kaggle</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-<section id="module-torchrec.datasets.criteo">
-<span id="torchrec-datasets-criteo"></span><h2>torchrec.datasets.criteo<a class="headerlink" href="#module-torchrec.datasets.criteo" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">BinaryCriteoUtils</span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Utility functions used to preprocess, save, load, partition, etc. the Criteo
-dataset in a binary (numpy) format.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.get_file_row_ranges_and_remainder">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_file_row_ranges_and_remainder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_file_row_ranges_and_remainder" title="Permalink to this definition">¶</a></dt>
-<dd><p>Given a rank, world_size, and the lengths (number of rows) for a list of files,
-return which files and which portions of those files (represented as row ranges
-- all range indices are inclusive) should be handled by the rank. Each rank
-will be assigned the same number of rows.</p>
-<p>The ranges are determined in such a way that each rank deals with large
-continuous ranges of files. This enables each rank to reduce the amount of data
-it needs to read while avoiding seeks.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>lengths</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – A list of row counts for each file.</p></li>
-<li><p><strong>rank</strong> (<em>int</em>) – rank.</p></li>
-<li><p><strong>world_size</strong> (<em>int</em>) – world size.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>First item is a mapping of files
-to the range in those files to be handled by the rank. The keys of this dict are indices.
-The second item is the remainder of dataset length / world size.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>output (Tuple[Dict[int, Tuple[int, int]], int])</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.get_shape_from_npy">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_shape_from_npy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_shape_from_npy" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns the shape of an npy file using only its header.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<em>str</em>) – Input npy file path.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different
-filesystems.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Shape tuple.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>shape (Tuple[int, …])</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_npy_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fname</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmap_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range" title="Permalink to this definition">¶</a></dt>
-<dd><p>Load part of an npy file.</p>
-<p>NOTE: Assumes npy represents a numpy array of ndim 2.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>fname</strong> (<em>str</em>) – path string to npy file.</p></li>
-<li><p><strong>start_row</strong> (<em>int</em>) – starting row from the npy file.</p></li>
-<li><p><strong>num_rows</strong> (<em>int</em>) – number of rows to get from the npy file.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different
-filesystems.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><dl class="simple">
-<dt>numpy array with the desired range of data from the</dt><dd><p>supplied npy file.</p>
-</dd>
-</dl>
-</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>output (np.ndarray)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.shuffle">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">shuffle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dir_labels_and_dense</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_dir_sparse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir_shuffled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows_per_day</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir_full_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">days</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">24</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">int_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">13</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">26</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle" title="Permalink to this definition">¶</a></dt>
-<dd><p>Shuffle the dataset. Expects the files to be in .npy format and the data
-to be split by day and by dense, sparse and label data.
-Dense data must be in: day_x_dense.npy
-Sparse data must be in: day_x_sparse.npy
-Labels data must be in: day_x_labels.npy</p>
-<p>The dataset will be reconstructed, shuffled and then split back into
-separate dense, sparse and labels files.</p>
-<p>This will only shuffle the first DAYS-1 days as the training set. The final day will remain
-untouched as the validation, and training set.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_dir_labels_and_dense</strong> (<em>str</em>) – Input directory of labels and dense npy files.</p></li>
-<li><p><strong>input_dir_sparse</strong> (<em>str</em>) – Input directory of sparse npy files.</p></li>
-<li><p><strong>output_dir_shuffled</strong> (<em>str</em>) – Output directory for shuffled labels, dense and sparse npy files.</p></li>
-<li><p><strong>Dict</strong><strong>[</strong><strong>int</strong> (<em>rows_per_day</em>) – Number of rows in each file.</p></li>
-<li><p><strong>int</strong><strong>]</strong> – Number of rows in each file.</p></li>
-<li><p><strong>output_dir_full_set</strong> (<em>str</em>) – Output directory of the full dataset, if desired.</p></li>
-<li><p><strong>days</strong> (<em>int</em>) – Number of day files.</p></li>
-<li><p><strong>int_columns</strong> (<em>int</em>) – Number of columns with dense features.</p></li>
-<li><p><strong>sparse_columns</strong> (<em>int</em>) – Total number of categorical columns.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different filesystems.</p></li>
-<li><p><strong>random_seed</strong> (<em>int</em>) – Random seed used for the random.shuffle operator.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sparse_to_contiguous</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_files</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frequency_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">26</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_file_suffix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'_contig_freq.npy'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous" title="Permalink to this definition">¶</a></dt>
-<dd><p>Convert all sparse .npy files to have contiguous integers. Store in a separate
-.npy file. All input files must be processed together because columns
-can have matching IDs between files. Hence, they must be transformed
-together. Also, the transformed IDs are not unique between columns. IDs
-that appear less than frequency_threshold amount of times will be remapped
-to have a value of 1.</p>
-<p>Example transformation, frequency_threshold of 2:
-day_0_sparse.npy
-| col_0 | col_1 |
-—————–
-| abc   | xyz   |
-| iop   | xyz   |</p>
-<p>day_1_sparse.npy
-| col_0 | col_1 |
-—————–
-| iop   | tuv   |
-| lkj   | xyz   |</p>
-<p>day_0_sparse_contig.npy
-| col_0 | col_1 |
-—————–
-| 1     | 2     |
-| 2     | 2     |</p>
-<p>day_1_sparse_contig.npy
-| col_0 | col_1 |
-—————–
-| 2     | 1     |
-| 1     | 2     |</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>List</strong><strong>[</strong><strong>str</strong><strong>]</strong> (<em>in_files</em>) – Input directory of npy files.</p></li>
-<li><p><strong>output_dir</strong> (<em>str</em>) – Output directory of processed npy files.</p></li>
-<li><p><strong>frequency_threshold</strong> – IDs occurring less than this frequency will be remapped to a value of 1.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different filesystems.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.BinaryCriteoUtils.tsv_to_npys">
-<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tsv_to_npys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_dense_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_sparse_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_labels_file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'criteo_1tb'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.BinaryCriteoUtils.tsv_to_npys" title="Permalink to this definition">¶</a></dt>
-<dd><p>Convert one Criteo tsv file to three npy files: one for dense (np.float32), one
-for sparse (np.int32), and one for labels (np.int32).</p>
-<p>The tsv file is expected to be part of the Criteo 1TB Click Logs Dataset (“criteo_1tb”)
-or the Criteo Kaggle Display Advertising Challenge dataset (“criteo_kaggle”).</p>
-<p>For the “criteo_kaggle” test set, we set the labels to -1 representing filler data,
-because label data is not included in the “criteo_kaggle” test set.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>in_file</strong> (<em>str</em>) – Input tsv file path.</p></li>
-<li><p><strong>out_dense_file</strong> (<em>str</em>) – Output dense npy file path.</p></li>
-<li><p><strong>out_sparse_file</strong> (<em>str</em>) – Output sparse npy file path.</p></li>
-<li><p><strong>out_labels_file</strong> (<em>str</em>) – Output labels npy file path.</p></li>
-<li><p><strong>dataset_name</strong> (<em>str</em>) – The dataset name. “criteo_1tb” or “criteo_kaggle” is expected.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different
-filesystems.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.CriteoIterDataPipe">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">CriteoIterDataPipe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">paths:</span> <span class="pre">~typing.Iterable[str],</span> <span class="pre">*,</span> <span class="pre">row_mapper:</span> <span class="pre">~typing.Optional[~typing.Callable[[~typing.List[str]],</span> <span class="pre">~typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.criteo.CriteoIterDataPipe" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterDataPipe</span></code></p>
-<p>IterDataPipe that can be used to stream either the Criteo 1TB Click Logs Dataset
-(<a class="reference external" href="https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/">https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/</a>) or the
-Kaggle/Criteo Display Advertising Dataset
-(<a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">https://www.kaggle.com/c/criteo-display-ad-challenge/</a>) from the source TSV
-files.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>paths</strong> (<em>Iterable</em><em>[</em><em>str</em><em>]</em>) – local paths to TSV files that constitute the Criteo
-dataset.</p></li>
-<li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each
-split TSV line.</p></li>
-<li><p><strong>open_kw</strong> – options to pass to underlying invocation of
-iopath.common.file_io.PathManager.open.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">CriteoIterDataPipe</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.InMemoryBinaryCriteoIterDataPipe">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">InMemoryBinaryCriteoIterDataPipe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_paths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_paths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels_paths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop_last</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_batches</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_training_set</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle_training_set_random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mmap_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hashes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.criteo.InMemoryBinaryCriteoIterDataPipe" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterableDataset</span></code></p>
-<p>Datapipe designed to operate over binary (npy) versions of Criteo datasets. Loads
-the entire dataset into memory to prevent disk speed from affecting throughout. Each
-rank reads only the data for the portion of the dataset it is responsible for.</p>
-<p>The torchrec/datasets/scripts/npy_preproc_criteo.py script can be used to convert
-the Criteo tsv files to the npy files expected by this dataset.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stage</strong> (<em>str</em>) – “train”, “val”, or “test”.</p></li>
-<li><p><strong>dense_paths</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – List of path strings to dense npy files.</p></li>
-<li><p><strong>sparse_paths</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – List of path strings to sparse npy files.</p></li>
-<li><p><strong>labels_paths</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – List of path strings to labels npy files.</p></li>
-<li><p><strong>batch_size</strong> (<em>int</em>) – batch size.</p></li>
-<li><p><strong>rank</strong> (<em>int</em>) – rank.</p></li>
-<li><p><strong>world_size</strong> (<em>int</em>) – world size.</p></li>
-<li><p><strong>shuffle_batches</strong> (<em>bool</em>) – Whether to shuffle batches</p></li>
-<li><p><strong>hashes</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – List of max categorical feature value for each feature.
-Length of this list should be CAT_FEATURE_COUNT.</p></li>
-<li><p><strong>path_manager_key</strong> (<em>str</em>) – Path manager key used to load from different
-filesystems.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">template</span> <span class="o">=</span> <span class="s2">&quot;/home/datasets/criteo/1tb_binary/day_</span><span class="si">{}</span><span class="s2">_</span><span class="si">{}</span><span class="s2">.npy&quot;</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">InMemoryBinaryCriteoIterDataPipe</span><span class="p">(</span>
-    <span class="n">dense_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;dense&quot;</span><span class="p">)],</span>
-    <span class="n">sparse_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;sparse&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;sparse&quot;</span><span class="p">)],</span>
-    <span class="n">labels_paths</span><span class="o">=</span><span class="p">[</span><span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">),</span> <span class="n">template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)],</span>
-    <span class="n">batch_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
-    <span class="n">rank</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">get_rank</span><span class="p">(),</span>
-    <span class="n">world_size</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">distributed</span><span class="o">.</span><span class="n">get_world_size</span><span class="p">(),</span>
-<span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.criteo_kaggle">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">criteo_kaggle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">path:</span> <span class="pre">str,</span> <span class="pre">*,</span> <span class="pre">row_mapper:</span> <span class="pre">~typing.Optional[~typing.Callable[[~typing.List[str]],</span> <span class="pre">~typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.criteo_kaggle" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://www.kaggle.com/c/criteo-display-ad-challenge/">Kaggle/Criteo Display Advertising</a> Dataset</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<em>str</em>) – local path to train or test dataset file.</p></li>
-<li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each split TSV line.</p></li>
-<li><p><strong>open_kw</strong> – options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">train_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
-    <span class="s2">&quot;/home/datasets/criteo_kaggle/train.txt&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
-<span class="n">test_datapipe</span> <span class="o">=</span> <span class="n">criteo_kaggle</span><span class="p">(</span>
-    <span class="s2">&quot;/home/datasets/criteo_kaggle/test.txt&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">test_datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.criteo.criteo_terabyte">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.criteo.</span></span><span class="sig-name descname"><span class="pre">criteo_terabyte</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">paths:</span> <span class="pre">~typing.Iterable[str],</span> <span class="pre">*,</span> <span class="pre">row_mapper:</span> <span class="pre">~typing.Optional[~typing.Callable[[~typing.List[str]],</span> <span class="pre">~typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.criteo.criteo_terabyte" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://ailab.criteo.com/download-criteo-1tb-click-logs-dataset/">Criteo 1TB Click Logs</a> Dataset</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>paths</strong> (<em>Iterable</em><em>[</em><em>str</em><em>]</em>) – local paths to TSV files that constitute the Criteo 1TB
-dataset.</p></li>
-<li><p><strong>row_mapper</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – function to apply to each
-split TSV line.</p></li>
-<li><p><strong>open_kw</strong> – options to pass to underlying invocation of
-iopath.common.file_io.PathManager.open.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batcher</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collator</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
+  <section id="torchrec-datasets">
+<h1>torchrec.datasets<a class="headerlink" href="#torchrec-datasets" title="Permalink to this heading">¶</a></h1>
+<section id="torchrec-datasets-criteo">
+<h2>torchrec.datasets.criteo<a class="headerlink" href="#torchrec-datasets-criteo" title="Permalink to this heading">¶</a></h2>
 </section>
-<section id="module-torchrec.datasets.movielens">
-<span id="torchrec-datasets-movielens"></span><h2>torchrec.datasets.movielens<a class="headerlink" href="#module-torchrec.datasets.movielens" title="Permalink to this heading">¶</a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.movielens.movielens_20m">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.movielens.</span></span><span class="sig-name descname"><span class="pre">movielens_20m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">root:</span> <span class="pre">str,</span> <span class="pre">*,</span> <span class="pre">include_movies_data:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">row_mapper:</span> <span class="pre">~typing.Optional[~typing.Callable[[~typing.List[str]],</span> <span class="pre">~typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.movielens.movielens_20m" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://grouplens.org/datasets/movielens/20m/">MovieLens 20M</a> Dataset
-:param root: local path to root directory containing MovieLens 20M dataset files.
-:type root: str
-:param include_movies_data: if True, adds movies data to each line.
-:type include_movies_data: bool
-:param row_mapper: function to apply to each split line.
-:type row_mapper: Optional[Callable[[List[str]], Any]]
-:param open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_20m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-20&quot;</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.movielens.movielens_25m">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.movielens.</span></span><span class="sig-name descname"><span class="pre">movielens_25m</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">root:</span> <span class="pre">str,</span> <span class="pre">*,</span> <span class="pre">include_movies_data:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">row_mapper:</span> <span class="pre">~typing.Optional[~typing.Callable[[~typing.List[str]],</span> <span class="pre">~typing.Any]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_row_mapper&gt;,</span> <span class="pre">**open_kw</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">IterDataPipe</span></span></span><a class="headerlink" href="#torchrec.datasets.movielens.movielens_25m" title="Permalink to this definition">¶</a></dt>
-<dd><p><a class="reference external" href="https://grouplens.org/datasets/movielens/25m/">MovieLens 25M</a> Dataset
-:param root: local path to root directory containing MovieLens 25M dataset files.
-:type root: str
-:param include_movies_data: if True, adds movies data to each line.
-:type include_movies_data: bool
-:param row_mapper: function to apply to each split line.
-:type row_mapper: Optional[Callable[[List[str]], Any]]
-:param open_kw: options to pass to underlying invocation of iopath.common.file_io.PathManager.open.</p>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">movielens_25m</span><span class="p">(</span><span class="s2">&quot;/home/datasets/ml-25&quot;</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Batch</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-<span class="n">datapipe</span> <span class="o">=</span> <span class="n">dp</span><span class="o">.</span><span class="n">iter</span><span class="o">.</span><span class="n">Collate</span><span class="p">(</span><span class="n">datapipe</span><span class="p">)</span>
-<span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
+<section id="torchrec-datasets-movielens">
+<h2>torchrec.datasets.movielens<a class="headerlink" href="#torchrec-datasets-movielens" title="Permalink to this heading">¶</a></h2>
 </section>
-<section id="module-torchrec.datasets.random">
-<span id="torchrec-datasets-random"></span><h2>torchrec.datasets.random<a class="headerlink" href="#module-torchrec.datasets.random" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.random.RandomRecDataset">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.random.</span></span><span class="sig-name descname"><span class="pre">RandomRecDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hash_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids_per_feature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids_per_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_dense</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">manual_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_batches</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_generated_batches</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.random.RandomRecDataset" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterableDataset</span></code>[<a class="reference internal" href="#torchrec.datasets.utils.Batch" title="torchrec.datasets.utils.Batch"><code class="xref py py-class docutils literal notranslate"><span class="pre">Batch</span></code></a>]</p>
-<p>Random iterable dataset used to generate batches for recommender systems
-(RecSys). Currently produces unweighted sparse features only. TODO: Add
-weighted sparse features.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – List of feature names for sparse features.</p></li>
-<li><p><strong>batch_size</strong> (<em>int</em>) – batch size.</p></li>
-<li><p><strong>hash_size</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – Max sparse id value. All sparse IDs will be taken
-modulo this value.</p></li>
-<li><p><strong>hash_sizes</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – Max sparse id value per feature in keys. Each
-sparse ID will be taken modulo the corresponding value from this argument. Note, if this is used, hash_size will be ignored.</p></li>
-<li><p><strong>ids_per_feature</strong> (<em>int</em>) – Number of IDs per sparse feature.</p></li>
-<li><p><strong>ids_per_features</strong> (<em>int</em>) – Number of IDs per sparse feature in each key. Note, if this is used, ids_per_feature will be ignored.</p></li>
-<li><p><strong>num_dense</strong> (<em>int</em>) – Number of dense features.</p></li>
-<li><p><strong>manual_seed</strong> (<em>int</em>) – Seed for deterministic behavior.</p></li>
-<li><p><strong>num_batches</strong> – (Optional[int]): Num batches to generate before raising StopIteration</p></li>
-<li><p><strong>int</strong> (<em>num_generated_batches</em>) – Num batches to cache. If num_batches &gt; num_generated batches, then we will cycle to the first generated batch.
-If this value is negative, batches will be generated on the fly.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">RandomRecDataset</span><span class="p">(</span>
-    <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;feat1&quot;</span><span class="p">,</span> <span class="s2">&quot;feat2&quot;</span><span class="p">],</span>
-    <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-    <span class="n">hash_size</span><span class="o">=</span><span class="mi">100_000</span><span class="p">,</span>
-    <span class="n">ids_per_feature</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="n">num_dense</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span>
-<span class="p">),</span>
-<span class="n">example</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
+<section id="torchrec-datasets-random">
+<h2>torchrec.datasets.random<a class="headerlink" href="#torchrec-datasets-random" title="Permalink to this heading">¶</a></h2>
 </section>
-<section id="module-torchrec.datasets.utils">
-<span id="torchrec-datasets-utils"></span><h2>torchrec.datasets.utils<a class="headerlink" href="#module-torchrec.datasets.utils" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">Batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dense_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sparse_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">torchrec.sparse.jagged_tensor.KeyedJaggedTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.utils.Batch" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Pipelineable</span></code></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.dense_features">
-<span class="sig-name descname"><span class="pre">dense_features</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.datasets.utils.Batch.dense_features" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.labels">
-<span class="sig-name descname"><span class="pre">labels</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.datasets.utils.Batch.labels" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.pin_memory">
-<span class="sig-name descname"><span class="pre">pin_memory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.datasets.utils.Batch" title="torchrec.datasets.utils.Batch"><span class="pre">Batch</span></a></span></span><a class="headerlink" href="#torchrec.datasets.utils.Batch.pin_memory" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.record_stream">
-<span class="sig-name descname"><span class="pre">record_stream</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Stream</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.utils.Batch.record_stream" title="Permalink to this definition">¶</a></dt>
-<dd><p>See <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html">https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html</a></p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.sparse_features">
-<span class="sig-name descname"><span class="pre">sparse_features</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></em><a class="headerlink" href="#torchrec.datasets.utils.Batch.sparse_features" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Batch.to">
-<span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.datasets.utils.Batch" title="torchrec.datasets.utils.Batch"><span class="pre">Batch</span></a></span></span><a class="headerlink" href="#torchrec.datasets.utils.Batch.to" title="Permalink to this definition">¶</a></dt>
-<dd><p>Please be aware that according to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
-<cite>to</cite> might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
-for example, <cite>in = in.to(new_device)</cite>.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.Limit">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">Limit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datapipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IterDataPipe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.utils.Limit" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterDataPipe</span></code></p>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.LoadFiles">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">LoadFiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datapipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'b'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path_manager_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'torchrec'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">open_kw</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.utils.LoadFiles" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterDataPipe</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">IOBase</span></code>]]</p>
-<p>Taken and adapted from torch.utils.data.datapipes.iter.LoadFilesFromDisk</p>
-<p>TODO:
-Merge this back or replace this with something in core Datapipes lib</p>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.ParallelReadConcat">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">ParallelReadConcat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">*datapipes:</span> <span class="pre">~torch.utils.data.datapipes.datapipe.IterDataPipe,</span> <span class="pre">dp_selector:</span> <span class="pre">~typing.Callable[[~typing.Sequence[~torch.utils.data.datapipes.datapipe.IterDataPipe]],</span> <span class="pre">~typing.Sequence[~torch.utils.data.datapipes.datapipe.IterDataPipe]]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_dp_selector&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.utils.ParallelReadConcat" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterDataPipe</span></code></p>
-<p><a class="reference internal" href="#torchrec.datasets.utils.ParallelReadConcat" title="torchrec.datasets.utils.ParallelReadConcat"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelReadConcat</span></code></a>.</p>
-<p>Iterable DataPipe that concatenates multiple Iterable DataPipes.
-When used with a DataLoader, assigns a subset of datapipes to each DataLoader worker
-to allow for parallel reading.
-:param datapipes: IterDataPipe instances to read from.
-:param dp_selector: function that each DataLoader worker would use to determine the subset of datapipes
-:param to read from.:</p>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipes</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">criteo_terabyte</span><span class="p">(</span>
-        <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/home/local/datasets/criteo/shard_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">.tsv&quot;</span><span class="p">,),</span>
-    <span class="p">)</span>
-    <span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="mi">100</span><span class="p">)</span>
-    <span class="o">.</span><span class="n">collate</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
-<span class="p">]</span>
-<span class="n">dataloader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>
-    <span class="n">ParallelReadConcat</span><span class="p">(</span><span class="o">*</span><span class="n">datapipes</span><span class="p">),</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.ReadLinesFromCSV">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">ReadLinesFromCSV</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datapipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IterDataPipe</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">IOBase</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_first_line</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kw</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.datasets.utils.ReadLinesFromCSV" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">IterDataPipe</span></code></p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.idx_split_train_val">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">idx_split_train_val</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">datapipe:</span> <span class="pre">~torch.utils.data.datapipes.datapipe.IterDataPipe,</span> <span class="pre">train_perc:</span> <span class="pre">float,</span> <span class="pre">decimal_places:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">2,</span> <span class="pre">key_fn:</span> <span class="pre">~typing.Callable[[int],</span> <span class="pre">int]</span> <span class="pre">=</span> <span class="pre">&lt;function</span> <span class="pre">_default_key_fn&gt;</span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">IterDataPipe</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">IterDataPipe</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.datasets.utils.idx_split_train_val" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.rand_split_train_val">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">rand_split_train_val</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datapipe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IterDataPipe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_perc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">IterDataPipe</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">IterDataPipe</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.datasets.utils.rand_split_train_val" title="Permalink to this definition">¶</a></dt>
-<dd><p>Via uniform random sampling, generates two IterDataPipe instances representing
-disjoint train and val splits of the given IterDataPipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>datapipe</strong> (<em>IterDataPipe</em>) – datapipe to split.</p></li>
-<li><p><strong>train_perc</strong> (<em>float</em>) – value in range (0.0, 1.0) specifying target proportion of
-datapipe samples to include in train split. Note that the actual proportion
-is not guaranteed to match train_perc exactly.</p></li>
-<li><p><strong>random_seed</strong> (<em>int</em>) – determines split membership for a given sample
-and train_perc. Use the same value across calls to generate consistent splits.</p></li>
-</ul>
-</dd>
-</dl>
-<p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">datapipe</span> <span class="o">=</span> <span class="n">criteo_terabyte</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">&quot;/home/datasets/criteo/day_0.tsv&quot;</span><span class="p">,</span> <span class="s2">&quot;/home/datasets/criteo/day_1.tsv&quot;</span><span class="p">)</span>
-<span class="p">)</span>
-<span class="n">train_datapipe</span><span class="p">,</span> <span class="n">val_datapipe</span> <span class="o">=</span> <span class="n">rand_split_train_val</span><span class="p">(</span><span class="n">datapipe</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">)</span>
-<span class="n">train_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">train_datapipe</span><span class="p">))</span>
-<span class="n">val_batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">val_datapipe</span><span class="p">))</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.safe_cast">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">safe_cast</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">T</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">T</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#torchrec.datasets.utils.safe_cast" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.train_filter">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">train_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_perc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimal_places</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.datasets.utils.train_filter" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.utils.val_filter">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.utils.</span></span><span class="sig-name descname"><span class="pre">val_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_fn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_perc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decimal_places</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.datasets.utils.val_filter" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+<section id="torchrec-datasets-utils">
+<h2>torchrec.datasets.utils<a class="headerlink" href="#torchrec-datasets-utils" title="Permalink to this heading">¶</a></h2>
 </section>
 </section>
 
@@ -930,52 +392,10 @@ and train_perc. Use the same value across calls to generate consistent splits.</
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">torchrec.datasets</a><ul>
-<li><a class="reference internal" href="#module-torchrec.datasets.criteo">torchrec.datasets.criteo</a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_file_row_ranges_and_remainder"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.get_file_row_ranges_and_remainder()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.get_shape_from_npy"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.get_shape_from_npy()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.load_npy_range()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.shuffle()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.sparse_to_contiguous()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.BinaryCriteoUtils.tsv_to_npys"><code class="docutils literal notranslate"><span class="pre">BinaryCriteoUtils.tsv_to_npys()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.CriteoIterDataPipe"><code class="docutils literal notranslate"><span class="pre">CriteoIterDataPipe</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.InMemoryBinaryCriteoIterDataPipe"><code class="docutils literal notranslate"><span class="pre">InMemoryBinaryCriteoIterDataPipe</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.criteo_kaggle"><code class="docutils literal notranslate"><span class="pre">criteo_kaggle()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.criteo.criteo_terabyte"><code class="docutils literal notranslate"><span class="pre">criteo_terabyte()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.movielens.movielens_20m"><code class="docutils literal notranslate"><span class="pre">movielens_20m()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.movielens.movielens_25m"><code class="docutils literal notranslate"><span class="pre">movielens_25m()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.datasets.random">torchrec.datasets.random</a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.random.RandomRecDataset"><code class="docutils literal notranslate"><span class="pre">RandomRecDataset</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#module-torchrec.datasets.utils">torchrec.datasets.utils</a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch"><code class="docutils literal notranslate"><span class="pre">Batch</span></code></a><ul>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.dense_features"><code class="docutils literal notranslate"><span class="pre">Batch.dense_features</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.labels"><code class="docutils literal notranslate"><span class="pre">Batch.labels</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.pin_memory"><code class="docutils literal notranslate"><span class="pre">Batch.pin_memory()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.record_stream"><code class="docutils literal notranslate"><span class="pre">Batch.record_stream()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.sparse_features"><code class="docutils literal notranslate"><span class="pre">Batch.sparse_features</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Batch.to"><code class="docutils literal notranslate"><span class="pre">Batch.to()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.Limit"><code class="docutils literal notranslate"><span class="pre">Limit</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.LoadFiles"><code class="docutils literal notranslate"><span class="pre">LoadFiles</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.ParallelReadConcat"><code class="docutils literal notranslate"><span class="pre">ParallelReadConcat</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.ReadLinesFromCSV"><code class="docutils literal notranslate"><span class="pre">ReadLinesFromCSV</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.idx_split_train_val"><code class="docutils literal notranslate"><span class="pre">idx_split_train_val()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.rand_split_train_val"><code class="docutils literal notranslate"><span class="pre">rand_split_train_val()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.safe_cast"><code class="docutils literal notranslate"><span class="pre">safe_cast()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.train_filter"><code class="docutils literal notranslate"><span class="pre">train_filter()</span></code></a></li>
-<li><a class="reference internal" href="#torchrec.datasets.utils.val_filter"><code class="docutils literal notranslate"><span class="pre">val_filter()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#torchrec-datasets-criteo">torchrec.datasets.criteo</a></li>
+<li><a class="reference internal" href="#torchrec-datasets-movielens">torchrec.datasets.movielens</a></li>
+<li><a class="reference internal" href="#torchrec-datasets-random">torchrec.datasets.random</a></li>
+<li><a class="reference internal" href="#torchrec-datasets-utils">torchrec.datasets.utils</a></li>
 </ul>
 </li>
 </ul>
@@ -998,7 +418,6 @@ and train_perc. Use the same value across calls to generate consistent splits.</
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
-         <script src="_static/sphinx_highlight.js"></script>
      
 
   
