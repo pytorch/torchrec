@@ -354,6 +354,9 @@ class FusedEmbeddingBagCollection(
 
         self._optimizer_type = optimizer_type
         self._optimizer_kwargs = optimizer_kwargs
+        self._device: torch.device = (
+            device if device is not None else torch.device("cpu")
+        )
 
         emb_optim_and_kwargs = convert_optimizer_type_and_kwargs(
             optimizer_type, optimizer_kwargs
@@ -499,6 +502,10 @@ class FusedEmbeddingBagCollection(
 
     def _get_name(self) -> str:
         return "FusedEmbeddingBagCollection"
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs

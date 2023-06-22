@@ -232,7 +232,6 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             else:
                 plan = planner.plan(module, sharders)
         self._plan: ShardingPlan = plan
-
         self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
         self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
 

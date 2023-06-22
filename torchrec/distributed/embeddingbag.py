@@ -407,19 +407,18 @@ class ShardedEmbeddingBagCollection(
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
         self._has_features_permute: bool = True
-
         # Get all fused optimizers and combine them.
         optims = []
         for lookup in self._lookups:
-            for _, module in lookup.named_modules():
-                if isinstance(module, FusedOptimizerModule):
+            for _, tbe_module in lookup.named_modules():
+                if isinstance(tbe_module, FusedOptimizerModule):
                     # modify param keys to match EmbeddingBagCollection
                     params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
-                    for param_key, weight in module.fused_optimizer.params.items():
-                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`.
+                    for param_key, weight in tbe_module.fused_optimizer.params.items():
+                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`
                         params["embedding_bags." + param_key] = weight
-                    module.fused_optimizer.params = params
-                    optims.append(("", module.fused_optimizer))
+                    tbe_module.fused_optimizer.params = params
+                    optims.append(("", tbe_module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
         for index, (sharding, lookup) in enumerate(
@@ -442,6 +441,15 @@ class ShardedEmbeddingBagCollection(
                 )
         self._initialize_torch_state()
 
+        # TODO[zainhuda]: support module device coming from CPU
+        if module.device not in [
+            torch.device("meta"),
+            torch.device("cpu"),
+            "meta",
+            "cpu",
+        ]:
+            self.load_state_dict(module.state_dict(), strict=False)
+
     @staticmethod
     def _pre_load_state_dict_hook(
         self: "ShardedEmbeddingBagCollection",
@@ -453,20 +461,50 @@ class ShardedEmbeddingBagCollection(
         Modify the destination state_dict for model parallel
         to transform from ShardedTensors into tensors
         """
-        for table_name in self._model_parallel_name_to_local_shards.keys():
+        for (
+            table_name,
+            model_shards,
+        ) in self._model_parallel_name_to_local_shards.items():
             key = f"{prefix}embedding_bags.{table_name}.weight"
-            local_shards = state_dict[key].local_shards()
-            if len(local_shards) == 0:
-                state_dict[key] = torch.empty(0)
-            else:
-                dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
-                # CW multiple shards are merged
-                if len(local_shards) > 1:
-                    state_dict[key] = torch.cat(
-                        [s.tensor.view(-1) for s in local_shards], dim=0
-                    ).view(-1, dim)
+
+            # If state_dict[key] is already a ShardedTensor, use its local shards
+            if isinstance(state_dict[key], ShardedTensor):
+                local_shards = state_dict[key].local_shards()
+                if len(local_shards) == 0:
+                    state_dict[key] = torch.empty(0)
                 else:
-                    state_dict[key] = local_shards[0].tensor.view(-1, dim)
+                    dim = state_dict[key].metadata().shards_metadata[0].shard_sizes[1]
+                    # CW multiple shards are merged
+                    if len(local_shards) > 1:
+                        state_dict[key] = torch.cat(
+                            [s.tensor.view(-1) for s in local_shards], dim=0
+                        ).view(-1, dim)
+                    else:
+                        state_dict[key] = local_shards[0].tensor.view(-1, dim)
+            elif isinstance(state_dict[key], torch.Tensor):
+                local_shards = []
+                for shard in model_shards:
+                    # Extract shard size and offsets for splicing
+                    shard_sizes = shard.metadata.shard_sizes
+                    shard_offsets = shard.metadata.shard_offsets
+
+                    # Prepare tensor by splicing and placing on appropriate device
+                    spliced_tensor = state_dict[key][
+                        shard_offsets[0] : shard_offsets[0] + shard_sizes[0],
+                        shard_offsets[1] : shard_offsets[1] + shard_sizes[1],
+                    ]
+
+                    # Append spliced tensor into local shards
+                    local_shards.append(spliced_tensor)
+                state_dict[key] = (
+                    torch.empty(0)
+                    if not local_shards
+                    else torch.cat(local_shards, dim=0)
+                )
+            else:
+                raise RuntimeError(
+                    f"Unexpected state_dict key type {type(state_dict[key])} found for {key}"
+                )
 
     def _initialize_torch_state(self) -> None:  # noqa
         """

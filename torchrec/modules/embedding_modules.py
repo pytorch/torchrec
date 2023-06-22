@@ -188,7 +188,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 res = embedding_bag(
                     input=f.values(),
                     offsets=f.offsets(),
-                    per_sample_weights=f.weights() if self._is_weighted else None,
+                    per_sample_weights=f.weights().type(embedding_bag.weight.dtype)
+                    if self._is_weighted
+                    else None,
                 ).float()
                 pooled_embeddings.append(res)
         data = torch.cat(pooled_embeddings, dim=1)
