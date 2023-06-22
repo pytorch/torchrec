@@ -78,7 +78,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         model_info.tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
-                embedding_dim=4,
+                embedding_dim=512,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -401,6 +401,14 @@ class ModelTraceScriptTest(unittest.TestCase):
                     lambda world_size: self.shard_modules_QEBC(
                         world_size=world_size,
                         sharding_type=ShardingType.ROW_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
+                (
+                    lambda world_size: self.shard_modules_QEBC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.COLUMN_WISE.value,
                         quant_state_dict_split_scale_bias=True,
                     ),
                     FxJitTestType.FX_JIT,
