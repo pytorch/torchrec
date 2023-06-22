@@ -136,7 +136,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._device: torch.device = (
             device if device is not None else torch.device("cpu")
         )
-        self._table_name_to_dtype: Dict[str, torch.dtype] = {}
 
         table_names = set()
         for embedding_config in tables:
@@ -148,7 +147,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 if embedding_config.data_type == DataType.FP32
                 else torch.float16
             )
-            self._table_name_to_dtype[embedding_config.name] = dtype
             self.embedding_bags[embedding_config.name] = nn.EmbeddingBag(
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
@@ -184,17 +182,13 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         pooled_embeddings: List[torch.Tensor] = []
 
         feature_dict = features.to_dict()
-        for i, (table_name, embedding_bag) in enumerate(self.embedding_bags.items()):
+        for i, embedding_bag in enumerate(self.embedding_bags.values()):
             for feature_name in self._feature_names[i]:
                 f = feature_dict[feature_name]
                 res = embedding_bag(
                     input=f.values(),
                     offsets=f.offsets(),
-                    per_sample_weights=f.weights().type(
-                        self._table_name_to_dtype[table_name]
-                    )
-                    if self._is_weighted
-                    else None,
+                    per_sample_weights=f.weights() if self._is_weighted else None,
                 ).float()
                 pooled_embeddings.append(res)
         data = torch.cat(pooled_embeddings, dim=1)
