@@ -309,7 +309,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=row_alignment,
                 feature_table_map=feature_table_map,
             )
-            if device != torch.device("meta") and weight_lists is None:
+            if weight_lists is None:
                 emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
 
@@ -586,7 +586,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=row_alignment,
             )
-            if device != torch.device("meta") and weight_lists is None:
+            if weight_lists is None:
                 emb_module.initialize_weights()
 
             self._emb_modules.append(emb_module)

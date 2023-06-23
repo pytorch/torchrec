@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import hypothesis.strategies as st
 import torch
@@ -21,6 +21,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingCollection,
 )
 from torchrec.quant.embedding_modules import (
+    DEFAULT_ROW_ALIGNMENT,
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
     quant_prep_enable_quant_state_dict_split_scale_bias,
@@ -542,3 +543,134 @@ class EmbeddingCollectionTest(unittest.TestCase):
             lengths=torch.as_tensor([1, 1]),
         )
         self._test_ec([eb1_config, eb2_config], features)
+
+
+def round_up(a: int, b: int) -> int:
+    return int((a + b - 1) // b) * b
+
+
+class QuantEmbeddingModulesStateDictTest(unittest.TestCase):
+    def _test_state_dict(
+        self,
+        # pyre-ignore
+        clz,
+    ) -> None:
+        # For QEC all table embedding_dim must be equal
+        t1_dim: int = 3 if clz == QuantEmbeddingBagCollection else 4
+        t2_dim: int = 4
+        kwargs: Dict[str, Any] = (
+            {"is_weighted": False} if clz == QuantEmbeddingBagCollection else {}
+        )
+        prefix = (
+            "embedding_bags" if clz == QuantEmbeddingBagCollection else "embeddings"
+        )
+
+        table_0 = EmbeddingBagConfig(
+            name="t1", embedding_dim=t1_dim, num_embeddings=10, feature_names=["f1"]
+        )
+        # Testing behavior of default dtype
+        self.assertEqual(table_0.data_type, DataType.FP32)
+        table_1 = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=t2_dim,
+            num_embeddings=10,
+            feature_names=["f2"],
+            data_type=DataType.INT8,
+        )
+
+        def _assert_state_dict(
+            qebc: QuantEmbeddingBagCollection,
+            state_dict_tensors: List[Tuple[str, torch.device, torch.dtype, List[int]]],
+        ) -> None:
+            state_dict = qebc.state_dict()
+            assert len(state_dict) == len(state_dict_tensors)
+            for key, device, dtype, shape in state_dict_tensors:
+                t = state_dict[key]
+                self.assertEqual(t.device, device)
+                self.assertEqual(t.dtype, dtype)
+                self.assertEqual(t.shape, torch.Size(shape))
+
+        cuda0 = torch.device("cuda:0")
+        meta = torch.device("meta")
+        u8 = torch.uint8
+        f16 = torch.float16
+        f32b = 4
+
+        _assert_state_dict(
+            clz(
+                tables=[table_0, table_1],
+                device=cuda0,
+                quant_state_dict_split_scale_bias=True,
+                **kwargs,
+            ),
+            [
+                (f"{prefix}.t1.weight", cuda0, u8, [10, f32b * t1_dim]),
+                (f"{prefix}.t2.weight", cuda0, u8, [10, t2_dim]),
+                (f"{prefix}.t2.weight_qscale", cuda0, f16, [10, 1]),
+                (f"{prefix}.t2.weight_qbias", cuda0, f16, [10, 1]),
+            ],
+        )
+        _assert_state_dict(
+            clz(
+                tables=[table_0, table_1],
+                device=meta,
+                quant_state_dict_split_scale_bias=True,
+                **kwargs,
+            ),
+            [
+                (f"{prefix}.t1.weight", meta, u8, [10, f32b * t1_dim]),
+                (f"{prefix}.t2.weight", meta, u8, [10, t2_dim]),
+                (f"{prefix}.t2.weight_qscale", meta, f16, [10, 1]),
+                (f"{prefix}.t2.weight_qbias", meta, f16, [10, 1]),
+            ],
+        )
+        _assert_state_dict(
+            clz(
+                tables=[table_0, table_1],
+                device=cuda0,
+                quant_state_dict_split_scale_bias=False,
+                **kwargs,
+            ),
+            [
+                (
+                    f"{prefix}.t1.weight",
+                    cuda0,
+                    u8,
+                    [10, round_up(f32b * t1_dim, DEFAULT_ROW_ALIGNMENT)],
+                ),
+                (
+                    f"{prefix}.t2.weight",
+                    cuda0,
+                    u8,
+                    [10, round_up(f32b * t2_dim, DEFAULT_ROW_ALIGNMENT)],
+                ),
+            ],
+        )
+        _assert_state_dict(
+            clz(
+                tables=[table_0, table_1],
+                device=meta,
+                quant_state_dict_split_scale_bias=False,
+                **kwargs,
+            ),
+            [
+                (
+                    f"{prefix}.t1.weight",
+                    meta,
+                    u8,
+                    [10, round_up(f32b * t1_dim, DEFAULT_ROW_ALIGNMENT)],
+                ),
+                (
+                    f"{prefix}.t2.weight",
+                    meta,
+                    u8,
+                    [10, round_up(f32b * t2_dim, DEFAULT_ROW_ALIGNMENT)],
+                ),
+            ],
+        )
+
+    def test_state_dict_qebc(self) -> None:
+        self._test_state_dict(QuantEmbeddingBagCollection)
+
+    def test_state_dict_qec(self) -> None:
+        self._test_state_dict(QuantEmbeddingCollection)
