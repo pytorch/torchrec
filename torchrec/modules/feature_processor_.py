@@ -154,16 +154,16 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection):
         seqs = torch.split(cat_seq, features.length_per_key())
         weights_list = []
         for key, seq in zip(features.keys(), seqs):
-            if key in self.max_feature_lengths:
+            if key in self.position_weights:
                 weights_list.append(
                     torch.gather(self.position_weights[key], dim=0, index=seq)
                 )
             else:
                 weights_list.append(
-                    self._dummy_weights[: self.max_feature_lengths[key]]
+                    torch.ones(seq.shape[0], device=features.values().device)
                 )
-        weights = torch.cat(weights_list)
 
+        weights = torch.cat(weights_list)
         return KeyedJaggedTensor(
             keys=features.keys(),
             values=features.values(),
