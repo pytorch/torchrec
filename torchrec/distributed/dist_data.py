@@ -377,7 +377,6 @@ class KJTAllToAll(nn.Module):
         splits (List[int]): List of len(pg.size()) which indicates how many features to
             send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
             destination rank. Same for all ranks.
-        device (Optional[torch.device]): device on which buffers will be allocated.
         stagger (int): stagger value to apply to recat tensor, see `_get_recat` function
             for more detail.
 
@@ -385,7 +384,7 @@ class KJTAllToAll(nn.Module):
 
         keys=['A','B','C']
         splits=[2,1]
-        kjtA2A = KJTAllToAll(pg, splits, device)
+        kjtA2A = KJTAllToAll(pg, splits)
         awaitable = kjtA2A(rank0_input)
 
         # where:
@@ -421,7 +420,6 @@ class KJTAllToAll(nn.Module):
         self,
         pg: dist.ProcessGroup,
         splits: List[int],
-        device: Optional[torch.device] = None,
         stagger: int = 1,
     ) -> None:
         super().__init__()
@@ -447,7 +445,6 @@ class KJTAllToAll(nn.Module):
             Awaitable[KJTAllToAllTensorsAwaitable]: awaitable of a `KJTAllToAllTensorsAwaitable`.
         """
 
-        device = input.values().device
         with torch.no_grad():
             assert len(input.keys()) == sum(self._splits)
             rank = dist.get_rank(self._pg)
@@ -463,7 +460,7 @@ class KJTAllToAll(nn.Module):
                 tensor_splits=input.dist_splits(self._splits),
                 input_tensors=input.dist_tensors(),
                 keys=local_keys,
-                device=device,
+                device=input.device(),
                 stagger=self._stagger,
             )
 

@@ -226,14 +226,12 @@ class ShardedEmbeddingTower(
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             kjt_features_per_node,
-            self._device,
         )
         self._weighted_cross_dist = KJTAllToAll(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             wkjt_features_per_node,
-            self._device,
         )
 
     # pyre-ignore[14]
@@ -622,14 +620,12 @@ class ShardedEmbeddingTowerCollection(
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             self._kjt_num_features_per_pt,
-            self._device,
         )
         self._weighted_cross_dist = KJTAllToAll(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             self._cross_pg,
             self._wkjt_num_features_per_pt,
-            self._device,
         )
 
     # pyre-ignore [14]

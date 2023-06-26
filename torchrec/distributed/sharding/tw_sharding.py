@@ -210,20 +210,17 @@ class TwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     Args:
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         features_per_rank (List[int]): number of features to send to each rank.
-        device (Optional[torch.device]): device on which buffers will be allocated.
     """
 
     def __init__(
         self,
         pg: dist.ProcessGroup,
         features_per_rank: List[int],
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self._dist = KJTAllToAll(
             pg=pg,
             splits=features_per_rank,
-            device=device,
         )
 
     def forward(
@@ -320,7 +317,6 @@ class TwPooledEmbeddingSharding(
         return TwSparseFeaturesDist(
             self._pg,
             self.features_per_rank(),
-            device if device is not None else self._device,
         )
 
     def create_lookup(
