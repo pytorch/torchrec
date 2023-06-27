@@ -225,7 +225,6 @@ class KJTAllToAllTest(MultiProcessTestBase):
             #  `Optional[_distributed_c10d.ProcessGroup]`.
             pg=pg,
             splits=splits,
-            device=device,
         )
         cls._validate(lengths_a2a(_input), output)
         dist.destroy_process_group()
