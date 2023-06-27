@@ -116,7 +116,6 @@ class TwSequenceEmbeddingSharding(
             #  `Optional[ProcessGroup]`.
             self._pg,
             self.features_per_rank(),
-            device if device is not None else self._device,
         )
 
     def create_lookup(

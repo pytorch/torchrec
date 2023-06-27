@@ -306,7 +306,6 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         self._dist = KJTAllToAll(
             pg=pg,
             splits=features_per_rank,
-            device=device,
             stagger=self._num_cross_nodes,
         )
         self._has_feature_processor = has_feature_processor
