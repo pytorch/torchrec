@@ -34,6 +34,10 @@ from torchrec.distributed.fused_params import (
     is_fused_param_register_tbe,
 )
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
+from torchrec.distributed.sharding.rw_sequence_sharding import (
+    InferRwSequenceEmbeddingSharding,
+)
+from torchrec.distributed.sharding.rw_sharding import InferRwSparseFeaturesDist
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
@@ -82,62 +86,145 @@ def create_infer_embedding_sharding(
 ]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
+    elif sharding_type == ShardingType.ROW_WISE.value:
+        return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
-def _construct_jagged_tensors(
-    embeddings: torch.Tensor,
-    features: KeyedJaggedTensor,
-    need_indices: bool = False,
-) -> Dict[str, JaggedTensor]:
-    # ignore cw consideration for inference now.
-    ret: Dict[str, JaggedTensor] = {}
-    lengths = features.lengths().view(-1, features.stride())
-    values = features.values()
-    length_per_key = features.length_per_key()
+@torch.fx.wrap
+def _fx_unwrap_optional_tensor(optional: Optional[torch.Tensor]) -> torch.Tensor:
+    assert optional is not None, "Expected optional to be non-None Tensor"
+    return optional
 
-    embeddings_list = torch.split(embeddings, length_per_key, dim=0)
-    stride = features.stride()
-    lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
-    if need_indices:
-        values_list = torch.split(values, length_per_key)
-        for i, key in enumerate(features.keys()):
-            ret[key] = JaggedTensor(
-                lengths=lengths_tuple[i],
-                values=embeddings_list[i],
-                weights=values_list[i],
-            )
-    else:
-        for i, key in enumerate(features.keys()):
-            ret[key] = JaggedTensor(
-                lengths=lengths_tuple[i],
-                values=embeddings_list[i],
-                weights=None,
-            )
+
+def _construct_jagged_tensors_tw(
+    embeddings: List[torch.Tensor],
+    features: KJTList,
+    need_indices: bool,
+) -> Dict[str, JaggedTensor]:
+    ret: Dict[str, JaggedTensor] = {}
+    for i in range(len(embeddings)):
+        embeddings_i: torch.Tensor = embeddings[i]
+        features_i: KeyedJaggedTensor = features[i]
+
+        lengths = features_i.lengths().view(-1, features_i.stride())
+        values = features_i.values()
+        length_per_key = features_i.length_per_key()
+
+        embeddings_list = torch.split(embeddings_i, length_per_key, dim=0)
+        stride = features_i.stride()
+        lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        if need_indices:
+            values_list = torch.split(values, length_per_key)
+            for i, key in enumerate(features_i.keys()):
+                ret[key] = JaggedTensor(
+                    lengths=lengths_tuple[i],
+                    values=embeddings_list[i],
+                    weights=values_list[i],
+                )
+        else:
+            for i, key in enumerate(features_i.keys()):
+                ret[key] = JaggedTensor(
+                    lengths=lengths_tuple[i],
+                    values=embeddings_list[i],
+                    weights=None,
+                )
     return ret
+
+
+def _construct_jagged_tensors_rw(
+    embeddings: List[torch.Tensor],
+    features_before_input_dist: KeyedJaggedTensor,
+    need_indices: bool,
+    unbucketize_tensor: torch.Tensor,
+) -> Dict[str, JaggedTensor]:
+    ret: Dict[str, JaggedTensor] = {}
+    unbucketized_embs = torch.concat(embeddings, dim=0).index_select(
+        0, unbucketize_tensor
+    )
+    embs_split_per_key = unbucketized_embs.split(
+        features_before_input_dist.length_per_key(), dim=0
+    )
+    stride = features_before_input_dist.stride()
+    lengths_list = torch.unbind(
+        features_before_input_dist.lengths().view(-1, stride), dim=0
+    )
+    values_list: List[torch.Tensor] = []
+    if need_indices:
+        # pyre-ignore
+        values_list = torch.split(
+            features_before_input_dist.values(),
+            features_before_input_dist.length_per_key(),
+        )
+    for i, key in enumerate(features_before_input_dist.keys()):
+        ret[key] = JaggedTensor(
+            values=embs_split_per_key[i],
+            lengths=lengths_list[i],
+            weights=values_list[i] if need_indices else None,
+        )
+    return ret
+
+
+def _construct_jagged_tensors(
+    embeddings: List[torch.Tensor],
+    features: KJTList,
+    embedding_names_per_rank: List[List[str]],
+    features_before_input_dist: KeyedJaggedTensor,
+    need_indices: bool,
+    unbucketize_tensor: Optional[torch.Tensor],
+    features_to_permute_indices: Dict[str, torch.Tensor],
+) -> Dict[str, JaggedTensor]:
+    if unbucketize_tensor is not None:
+        # RW sharding
+        return _construct_jagged_tensors_rw(
+            embeddings,
+            features_before_input_dist,
+            need_indices,
+            unbucketize_tensor,
+        )
+
+    return _construct_jagged_tensors_tw(embeddings, features, need_indices)
 
 
 @torch.fx.wrap
 def output_jt_dict(
     emb_per_sharding: List[List[torch.Tensor]],
     features_per_sharding: List[KJTList],
+    embedding_names_per_rank_per_sharding: List[List[List[str]]],
     need_indices: bool,
+    features_before_input_dist_per_sharding: List[KeyedJaggedTensor],
+    features_to_permute_indices: Dict[str, torch.Tensor],
+    unbucketize_tensors: List[torch.Tensor],
+    unbucketize_tensor_idxs_per_sharding: List[int],
 ) -> Dict[str, JaggedTensor]:
     jt_dict: Dict[str, JaggedTensor] = {}
-    for emb_sharding, f_sharding in zip(
+    for (
+        emb_sharding,
+        features_sharding,
+        embedding_names_per_rank,
+        unbucketize_tensor_idx,
+        features_before_input_dist,
+    ) in zip(
         emb_per_sharding,
         features_per_sharding,
+        embedding_names_per_rank_per_sharding,
+        unbucketize_tensor_idxs_per_sharding,
+        features_before_input_dist_per_sharding,
     ):
-        # Can not use zip here as Iterator of KJTList is not supported by jit
-        for i in range(len(emb_sharding)):
-            jt_dict.update(
-                _construct_jagged_tensors(
-                    embeddings=emb_sharding[i],
-                    features=f_sharding[i],
-                    need_indices=need_indices,
-                )
+        jt_dict.update(
+            _construct_jagged_tensors(
+                embeddings=emb_sharding,
+                features=features_sharding,
+                embedding_names_per_rank=embedding_names_per_rank,
+                features_before_input_dist=features_before_input_dist,
+                need_indices=need_indices,
+                unbucketize_tensor=unbucketize_tensors[unbucketize_tensor_idx]
+                if unbucketize_tensor_idx != -1
+                else None,
+                features_to_permute_indices=features_to_permute_indices,
             )
+        )
     return jt_dict
 
 
@@ -182,6 +269,16 @@ class ShardedQuantEmbeddingCollection(
             )
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
+        self._embedding_dim: int = module.embedding_dim()
+        self._local_embedding_dim: int = self._embedding_dim
+        self._embedding_names_per_sharding: List[List[str]] = []
+        self._embedding_names_per_rank_per_sharding: List[List[List[str]]] = []
+        for sharding in self._sharding_type_to_sharding.values():
+            self._embedding_names_per_sharding.append(sharding.embedding_names())
+            self._embedding_names_per_rank_per_sharding.append(
+                sharding.embedding_names_per_rank()
+            )
+        self._features_to_permute_indices: Dict[str, torch.Tensor] = {}
 
         self._device = device
         self._input_dists: List[nn.Module] = []
@@ -306,6 +403,7 @@ class ShardedQuantEmbeddingCollection(
         if self._has_uninitialized_output_dist:
             self._create_output_dist(features.device())
             self._has_uninitialized_output_dist = False
+        ret: List[KJTList] = []
         with torch.no_grad():
             features_by_sharding = []
             if self._features_order:
@@ -318,22 +416,30 @@ class ShardedQuantEmbeddingCollection(
                 self._feature_splits,
             )
 
-            return ListOfKJTList(
-                [
-                    self._input_dists[i].forward(features_by_sharding[i])
-                    for i in range(len(self._input_dists))
-                ]
-            )
+            for i in range(len(self._input_dists)):
+                input_dist = self._input_dists[i]
+                input_dist_result = input_dist.forward(features_by_sharding[i])
+                ret.append(input_dist_result)
+                ctx.sharding_contexts.append(
+                    InferSequenceShardingContext(
+                        features=input_dist_result,
+                        features_before_input_dist=features,
+                        unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
+                        if isinstance(input_dist, InferRwSparseFeaturesDist)
+                        else None,
+                    )
+                )
+        return ListOfKJTList(ret)
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: ListOfKJTList
     ) -> List[List[torch.Tensor]]:
         ret: List[List[torch.Tensor]] = []
+
         for lookup, features in zip(
             self._lookups,
             dist_input,
         ):
-            ctx.sharding_contexts.append(InferSequenceShardingContext(features))
             ret.append(
                 [o.view(-1, self._embedding_dim) for o in lookup.forward(features)]
             )
@@ -344,19 +450,42 @@ class ShardedQuantEmbeddingCollection(
         self, ctx: EmbeddingCollectionContext, output: List[List[torch.Tensor]]
     ) -> Dict[str, JaggedTensor]:
         emb_per_sharding: List[List[torch.Tensor]] = []
-        features_per_sharding: List[List[KeyedJaggedTensor]] = []
-        for odist, embeddings, sharding_ctx in zip(
+        features_before_input_dist_per_sharding: List[KeyedJaggedTensor] = []
+        features_per_sharding: List[KJTList] = []
+        unbucketize_tensor_idxs_per_sharding: List[int] = []
+        unbucketize_tensors: List[torch.Tensor] = []
+        for sharding_output_dist, embeddings, sharding_ctx in zip(
             self._output_dists,
             output,
             ctx.sharding_contexts,
         ):
-            emb_per_sharding.append(odist.forward(embeddings, sharding_ctx))
-            # pyre-fixme[6]: For 1st argument expected `List[KeyedJaggedTensor]` but
-            #  got `Optional[KJTList]`.
+            sharding_output_dist_res: List[torch.Tensor] = sharding_output_dist.forward(
+                embeddings, sharding_ctx
+            )
+            emb_per_sharding.append(sharding_output_dist_res)
             features_per_sharding.append(sharding_ctx.features)
-
+            if sharding_ctx.unbucketize_permute_tensor is None:
+                unbucketize_tensor_idxs_per_sharding.append(-1)
+            else:
+                unbucketize_tensors.append(
+                    _fx_unwrap_optional_tensor(sharding_ctx.unbucketize_permute_tensor)
+                )
+                unbucketize_tensor_idxs_per_sharding.append(
+                    len(unbucketize_tensors) - 1
+                )
+            features_before_input_dist_per_sharding.append(
+                # pyre-ignore
+                sharding_ctx.features_before_input_dist
+            )
         return output_jt_dict(
-            emb_per_sharding, features_per_sharding, self._need_indices
+            emb_per_sharding=emb_per_sharding,
+            features_per_sharding=features_per_sharding,
+            embedding_names_per_rank_per_sharding=self._embedding_names_per_rank_per_sharding,
+            need_indices=self._need_indices,
+            features_before_input_dist_per_sharding=features_before_input_dist_per_sharding,
+            unbucketize_tensor_idxs_per_sharding=unbucketize_tensor_idxs_per_sharding,
+            unbucketize_tensors=unbucketize_tensors,
+            features_to_permute_indices=self._features_to_permute_indices,
         )
 
     # pyre-ignore
@@ -408,7 +537,11 @@ class QuantEmbeddingCollectionSharder(
             module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
         )
         return ShardedQuantEmbeddingCollection(
-            module, params, env, fused_params, device=device
+            module=module,
+            table_name_to_parameter_sharding=params,
+            env=env,
+            fused_params=fused_params,
+            device=device,
         )
 
     @property

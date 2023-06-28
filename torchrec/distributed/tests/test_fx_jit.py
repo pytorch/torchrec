@@ -429,6 +429,14 @@ class ModelTraceScriptTest(unittest.TestCase):
                     ),
                     FxJitTestType.FX_JIT,
                 ),
+                (
+                    lambda world_size: self.shard_modules_QEC(
+                        world_size=world_size,
+                        sharding_type=ShardingType.ROW_WISE.value,
+                        quant_state_dict_split_scale_bias=True,
+                    ),
+                    FxJitTestType.FX_JIT,
+                ),
             ]
         ]
 

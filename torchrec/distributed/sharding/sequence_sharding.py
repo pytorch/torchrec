@@ -60,14 +60,20 @@ class InferSequenceShardingContext(Multistreamable):
     Stores inference context and reuses it in sequence embedding output_dist or result return.
 
     Attributes:
-        features (Optional[List[KeyedJaggedTensor]]): stores the original
-            shards of KJT after input dist.
+        features KJTList: stores the shards of KJT after input dist.
+        features_before_input_dist KJT: stores the original input KJT (before input dist).
+        unbucketize_permute_tensor Optional[torch.Tensor]: stores unbucketize tensor, only for RowWise sharding.
     """
 
-    features: Optional[KJTList] = None
+    features: KJTList
+    features_before_input_dist: Optional[KeyedJaggedTensor] = None
+    unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        if self.features is not None:
-            # pyre-ignore [16]
-            for feature in self.features:
-                feature.record_stream(stream)
+        for feature in self.features:
+            feature.record_stream(stream)
+        if self.features_before_input_dist is not None:
+            self.features_before_input_dist.record_stream(stream)
+        if self.unbucketize_permute_tensor is not None:
+            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
+            self.unbucketize_permute_tensor.record_stream(stream)

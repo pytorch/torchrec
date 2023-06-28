@@ -5,23 +5,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.dist_data import SequenceEmbeddingsAllToAll
-from torchrec.distributed.embedding_lookup import GroupedEmbeddingsLookup
+from torchrec.distributed.dist_data import (
+    SeqEmbeddingsAllToOne,
+    SequenceEmbeddingsAllToAll,
+)
+from torchrec.distributed.embedding_lookup import (
+    GroupedEmbeddingsLookup,
+    InferGroupedEmbeddingsLookup,
+)
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor
+from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor, KJTList
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
+    InferRwSparseFeaturesDist,
     RwSparseFeaturesDist,
 )
-from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
+from torchrec.distributed.sharding.sequence_sharding import (
+    InferSequenceShardingContext,
+    SequenceShardingContext,
+)
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -136,4 +146,75 @@ class RwSequenceEmbeddingSharding(
             self._get_num_features(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )
+
+
+class InferRwSequenceEmbeddingDist(
+    BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]
+):
+    def __init__(
+        self,
+        device: torch.device,
+        world_size: int,
+    ) -> None:
+        super().__init__()
+        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
+
+    def forward(
+        self,
+        local_embs: List[torch.Tensor],
+        sharding_ctx: Optional[InferSequenceShardingContext] = None,
+    ) -> List[torch.Tensor]:
+        return self._dist.forward(local_embs)
+
+
+class InferRwSequenceEmbeddingSharding(
+    BaseRwEmbeddingSharding[
+        InferSequenceShardingContext, KJTList, List[torch.Tensor], List[torch.Tensor]
+    ]
+):
+    """
+    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly
+    distributed by rows and table slices are placed on all ranks for inference.
+    """
+
+    def create_input_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BaseSparseFeaturesDist[KJTList]:
+        num_features = self._get_num_features()
+        feature_hash_sizes = self._get_feature_hash_sizes()
+        return InferRwSparseFeaturesDist(
+            world_size=self._world_size,
+            num_features=num_features,
+            feature_hash_sizes=feature_hash_sizes,
+            is_sequence=True,
+            has_feature_processor=self._has_feature_processor,
+            need_pos=False,
+        )
+
+    def create_lookup(
+        self,
+        device: Optional[torch.device] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
+    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+        return InferGroupedEmbeddingsLookup(
+            grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
+            world_size=self._world_size,
+            fused_params=fused_params,
+            device=device if device is not None else self._device,
+        )
+
+    def create_output_dist(
+        self,
+        device: Optional[torch.device] = None,
+    ) -> BaseEmbeddingDist[
+        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
+    ]:
+        return InferRwSequenceEmbeddingDist(
+            device if device is not None else self._device,
+            self._world_size,
         )

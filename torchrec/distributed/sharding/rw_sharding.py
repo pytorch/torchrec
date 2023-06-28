@@ -79,7 +79,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._rank: int = self._env.rank
         if device is None:
             device = torch.device("cpu")
-        self._device = device
+        self._device: torch.device = device
         sharded_tables_per_rank = self._shard(sharding_infos)
         self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[
@@ -156,7 +156,13 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         return embedding_names
 
     def embedding_names_per_rank(self) -> List[List[str]]:
-        raise NotImplementedError
+        embedding_names = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            embedding_names_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                embedding_names_per_rank.extend(grouped_config.embedding_names())
+            embedding_names.append(embedding_names_per_rank)
+        return embedding_names
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
@@ -440,7 +446,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features], world_size=world_size
         )
-        assert_fx_safe(not is_sequence, "Not implemented")
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
@@ -450,7 +455,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self,
         sparse_features: KeyedJaggedTensor,
     ) -> KJTList:
-
         (
             bucketized_features,
             self.unbucketize_permute_tensor,
@@ -463,7 +467,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             if sparse_features.weights_or_none() is None
             else self._need_pos,
         )
-        # TODO(ivankobzarev): Store self.unbucketize_permute_tensor in Context for is_sequence
         return self._dist.forward(bucketized_features)
 
 
