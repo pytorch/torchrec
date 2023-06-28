@@ -233,8 +233,10 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
         self,
         sharding_type: str,
         kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
+        shardable_params: Optional[List[str]] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(fused_params=fused_params, shardable_params=shardable_params)
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
 
