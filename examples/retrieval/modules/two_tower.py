@@ -227,5 +227,7 @@ class TwoTowerRetrieval(nn.Module):
         # return logit (dot product)
         return (query_embedding * candidate_embedding).sum(dim=1).squeeze()
 
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool) -> None:
         super().load_state_dict(state_dict, strict)
