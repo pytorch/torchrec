@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 conda install -y cuda -c "nvidia/label/cuda-11.8.0"
-conda install -y conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1.0
+conda install -y -c conda-forge cudatoolkit=11.2 cudnn=8.1.0
 
 echo "before LD library path"
 echo $LD_LIBRARY_PATH
@@ -16,7 +16,7 @@ echo "before ldconfig"
 {
 ldconfig -p && output=$(ldconfig -p); echo "$output"
 } || {
-echo "ldconfig failed"
+echo "ldconfig failed"t
 }
 echo "after ldconfig"
 
