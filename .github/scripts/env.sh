@@ -9,12 +9,24 @@ echo "before LD library path"
 echo $LD_LIBRARY_PATH
 echo "after LD library path"
 
-
-
 echo "before ldconfig"
-sudo ldconfig -p
+{
+ldconfig -p && output=$(ldconfig -p); echo "$output"
+} || {
+echo "ldconfig failed"
+}
 echo "after ldconfig"
 
 echo "before nvidia-smi"
+{
 sudo nvidia-smi
+} || {
+nvidia-smi
+} || {
+echo "nvidia-smi failed"
+}
 echo "after nvidia-smi"
+
+echo "before cuda"
+nvcc --version
+echo "after cuda"
