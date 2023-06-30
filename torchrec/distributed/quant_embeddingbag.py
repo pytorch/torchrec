@@ -244,7 +244,6 @@ class ShardedQuantEmbeddingBagCollection(
             if self._has_features_permute:
                 features = features.permute(
                     self._features_order,
-                    # pyre-ignore [6]
                     self._features_order_tensor,
                 )
             features_by_shards = features.split(self._feature_splits)

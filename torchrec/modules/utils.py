@@ -110,8 +110,5 @@ def convert_list_of_modules_to_modulelist(
     else:
         # recursively create nested list
         return torch.nn.ModuleList(
-            # pyre-fixme[6]: Expected `Iterable[torch.nn.Module]` for 1st param but
-            #  got `Module`.
-            convert_list_of_modules_to_modulelist(m, sizes[1:])
-            for m in modules
+            convert_list_of_modules_to_modulelist(m, sizes[1:]) for m in modules
         )

@@ -447,7 +447,6 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
 
         # Init parameters if at least one parameter is over 'meta' device.
         if has_meta_param and hasattr(module, "reset_parameters"):
-            # pyre-ignore [29]
             module.reset_parameters()
 
     module.apply(init_parameters)

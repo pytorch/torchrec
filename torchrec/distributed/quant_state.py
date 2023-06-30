@@ -57,31 +57,23 @@ class ShardedQuantEmbeddingModuleState(
         )
 
         # weight
-        # pyre-ignore[16]
         self._table_name_to_local_shards: Dict[str, List[Shard]] = {}
-        # pyre-ignore[16]
         self._table_name_to_sharded_tensor: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
 
         # weight_qscale
-        # pyre-ignore[16]
         self._table_name_to_local_shards_qscale: Dict[str, List[Shard]] = {}
-        # pyre-ignore[16]
         self._table_name_to_sharded_tensor_qscale: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
-        # pyre-ignore[16]
         self._table_name_to_tensors_list_qscale: Dict[str, List[torch.Tensor]] = {}
 
         # weight_qbias
-        # pyre-ignore[16]
         self._table_name_to_local_shards_qbias: Dict[str, List[Shard]] = {}
-        # pyre-ignore[16]
         self._table_name_to_sharded_tensor_qbias: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
-        # pyre-ignore[16]
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
 
         for tbe, config in tbes.items():
@@ -99,7 +91,6 @@ class ShardedQuantEmbeddingModuleState(
                 if metadata.placement.device != tbe_split_w.device:
                     metadata.placement = _remote_device(tbe_split_w.device)
                 _append_table_shard(
-                    # pyre-ignore
                     self._table_name_to_local_shards,
                     table.name,
                     Shard(tensor=tbe_split_w, metadata=metadata),
@@ -139,17 +130,14 @@ class ShardedQuantEmbeddingModuleState(
                     sharding_type: str = parameter_sharding.sharding_type
 
                     if sharding_type == ShardingType.COLUMN_WISE.value:
-                        # pyre-ignore
                         if table.name not in table_name_to_tensors_list:
                             assert parameter_sharding.ranks
                             num_shards: int = len(parameter_sharding.ranks)
-                            # pyre-ignore
                             table_name_to_tensors_list[table.name] = [
                                 torch.empty([])
                             ] * num_shards
 
                         column_idx = int(shard_offsets_cols / shard_sizes_cols)
-                        # pyre-ignore
                         table_name_to_tensors_list[table.name][
                             column_idx
                         ] = tbe_split_qparam
@@ -169,7 +157,6 @@ class ShardedQuantEmbeddingModuleState(
                                 tbe_split_qparam.device
                             )
                         _append_table_shard(
-                            # pyre-ignore
                             table_name_to_local_shards,
                             table.name,
                             Shard(tensor=tbe_split_qparam, metadata=qmetadata),
@@ -187,11 +174,9 @@ class ShardedQuantEmbeddingModuleState(
                 self._table_name_to_sharded_tensor_qbias,
             ),
         ]:
-            # pyre-ignore
             for table_name, local_shards in table_name_to_local_shards.items():
                 if len(local_shards) == 1:
                     # Single Tensor per table (TW sharding)
-                    # pyre-ignore
                     table_name_to_sharded_tensor[table_name] = local_shards[0].tensor
                     continue
 
@@ -212,7 +197,6 @@ class ShardedQuantEmbeddingModuleState(
                     shards_metadata=[ls.metadata for ls in local_shards],
                     size=torch.Size([global_rows, global_cols]),
                 )
-                # pyre-ignore
                 table_name_to_sharded_tensor[
                     table_name
                 ] = ShardedTensorBase._init_from_local_shards_and_global_metadata(
@@ -230,7 +214,7 @@ class ShardedQuantEmbeddingModuleState(
             for (
                 table_name,
                 sharded_t,
-            ) in module._table_name_to_sharded_tensor.items():  # pyre-ignore
+            ) in module._table_name_to_sharded_tensor.items():
                 destination[
                     f"{prefix}{tables_weights_prefix}.{table_name}.weight"
                 ] = sharded_t
@@ -250,14 +234,14 @@ class ShardedQuantEmbeddingModuleState(
                 for (
                     table_name,
                     sharded_t,
-                ) in dict_sharded_t.items():  # pyre-ignore
+                ) in dict_sharded_t.items():
                     destination[
                         f"{prefix}{tables_weights_prefix}.{table_name}.weight_{sfx}"
                     ] = sharded_t
                 for (
                     table_name,
                     t_list,
-                ) in dict_t_list.items():  # pyre-ignore
+                ) in dict_t_list.items():
                     destination[
                         f"{prefix}{tables_weights_prefix}.{table_name}.weight_{sfx}"
                     ] = t_list

@@ -106,7 +106,6 @@ def _test_sharding(  # noqa C901
 
             replicate(
                 sharded_sparse_arch,
-                # pyre-ignore
                 ignored_modules=[sharded_sparse_arch._fp_ebc._embedding_bag_collection],
                 process_group=ctx.pg,
                 gradient_as_bucket_view=True,

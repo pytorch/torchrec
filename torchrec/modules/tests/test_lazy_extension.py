@@ -289,8 +289,6 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
         # and the function will be applied right after first forward pass.
         net = torch.nn.Sequential(TestModule(), TestModule())
         net = lazy_apply(net, init_weights)
-        # pyre-ignore[29]
         self.assertTrue(torch.allclose(net[0].param, torch.tensor(1.0)))
         net(torch.tensor(2.0))
-        # pyre-ignore[29]
         self.assertTrue(torch.allclose(net[0].param, torch.tensor(7.0)))

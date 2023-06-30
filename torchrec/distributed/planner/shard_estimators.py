@@ -116,11 +116,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 hasattr(module, "_feature_processor")
                 and hasattr(module._feature_processor, "feature_processor_modules")
                 and isinstance(
-                    module._feature_processor.feature_processor_modules,  # pyre-ignore[16]
+                    module._feature_processor.feature_processor_modules,
                     nn.ModuleDict,
                 )
                 and sharding_option.name
-                in module._feature_processor.feature_processor_modules.keys()  # pyre-ignore[16]
+                in module._feature_processor.feature_processor_modules.keys()
             ):
                 has_feature_processor = True
                 logger.info(f"Table {sharding_option.name} has feature processor.")

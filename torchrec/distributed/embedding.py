@@ -513,8 +513,6 @@ class ShardedEmbeddingCollection(
             for (
                 table_name,
                 tbe_slice,
-                # pyre-fixme[16]: Item `Tensor` of `Union[Tensor, Module]` has no
-                #  attribute `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embeddings[table_name].register_parameter("weight", tbe_slice)
         for (
@@ -670,7 +668,6 @@ class ShardedEmbeddingCollection(
             if self._features_order:
                 features = features.permute(
                     self._features_order,
-                    # pyre-ignore [6]
                     self._features_order_tensor,
                 )
             features_by_shards = features.split(
