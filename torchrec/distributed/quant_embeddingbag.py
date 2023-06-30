@@ -29,6 +29,7 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+    FUSED_PARAM_REGISTER_TBE_BOOL,
     get_tbes_to_register_from_iterable,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
@@ -317,9 +318,15 @@ class QuantEmbeddingBagCollectionSharder(
         fused_params["output_dtype"] = data_type_to_sparse_type(
             dtype_to_data_type(module.output_dtype())
         )
-        fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
-            module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
-        )
+        if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS not in fused_params:
+            fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+                module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            )
+        if FUSED_PARAM_REGISTER_TBE_BOOL not in fused_params:
+            fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+                module, FUSED_PARAM_REGISTER_TBE_BOOL, False
+            )
+
         return ShardedQuantEmbeddingBagCollection(
             module, params, env, fused_params, device=device
         )
