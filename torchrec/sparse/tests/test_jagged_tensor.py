@@ -431,10 +431,10 @@ class TestJaggedTensor(unittest.TestCase):
         self.assertTrue(torch.equal(j_offset.offsets(), j_lens.offsets().int()))
 
     def test_empty(self) -> None:
-        jt = JaggedTensor.empty()
+        jt = JaggedTensor.empty(values_dtype=torch.int64)
 
-        self.assertTrue(torch.equal(jt.values(), torch.tensor([])))
-        self.assertTrue(torch.equal(jt.offsets(), torch.tensor([])))
+        self.assertTrue(torch.equal(jt.values(), torch.tensor([], dtype=torch.int64)))
+        self.assertTrue(torch.equal(jt.offsets(), torch.tensor([], dtype=torch.int32)))
 
     def test_2d(self) -> None:
         values = torch.Tensor([[i * 0.5, i * 1.0, i * 1.5] for i in range(1, 4)])
