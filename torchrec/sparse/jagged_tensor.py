@@ -211,12 +211,22 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._offsets: Optional[torch.Tensor] = offsets
 
     @staticmethod
-    def empty(is_weighted: bool = False) -> "JaggedTensor":
-        weights = torch.tensor([]) if is_weighted else None
+    def empty(
+        is_weighted: bool = False,
+        device: Optional[torch.device] = None,
+        values_dtype: Optional[torch.dtype] = None,
+        weights_dtype: Optional[torch.dtype] = None,
+        lengths_dtype: torch.dtype = torch.int32,
+    ) -> "JaggedTensor":
+        weights = (
+            torch.tensor([], dtype=weights_dtype, device=device)
+            if is_weighted
+            else None
+        )
         return JaggedTensor(
-            values=torch.tensor([]),
-            offsets=torch.tensor([]),
-            lengths=torch.tensor([]),
+            values=torch.tensor([], dtype=values_dtype, device=device),
+            offsets=torch.tensor([], dtype=lengths_dtype, device=device),
+            lengths=torch.tensor([], dtype=lengths_dtype, device=device),
             weights=weights,
         )
 
@@ -937,17 +947,21 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @staticmethod
     def empty(
-        is_weighted: bool = False, device: Optional[torch.device] = None
+        is_weighted: bool = False,
+        device: Optional[torch.device] = None,
+        values_dtype: Optional[torch.dtype] = None,
+        weights_dtype: Optional[torch.dtype] = None,
+        lengths_dtype: torch.dtype = torch.int32,
     ) -> "KeyedJaggedTensor":
         weights = None
         if is_weighted is True:
-            weights = torch.tensor([], device=device) if device else torch.tensor([])
+            weights = torch.tensor([], dtype=weights_dtype, device=device)
 
         return KeyedJaggedTensor(
             keys=[],
-            values=torch.tensor([], device=device) if device else torch.tensor([]),
+            values=torch.tensor([], dtype=values_dtype, device=device),
             weights=weights,
-            lengths=torch.tensor([], device=device) if device else torch.tensor([]),
+            lengths=torch.tensor([], dtype=lengths_dtype, device=device),
             stride=0,
         )
 
