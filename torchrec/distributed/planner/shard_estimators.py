@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 import math
 from typing import cast, Dict, List, Optional, Tuple, Type
 
@@ -37,6 +38,8 @@ from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import CommOp, ModuleSharder, ShardingType
 
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EmbeddingPerfEstimator(ShardEstimator):
@@ -108,9 +111,19 @@ class EmbeddingPerfEstimator(ShardEstimator):
             module = sharding_option.module[1]
 
             # TODO remove this hack once feature processor is disaggregated
-            has_feature_processor = (
-                True if getattr(module, "feature_processor", None) else False
-            )
+            has_feature_processor = False
+            if (
+                hasattr(module, "_feature_processor")
+                and hasattr(module._feature_processor, "feature_processor_modules")
+                and isinstance(
+                    module._feature_processor.feature_processor_modules,  # pyre-ignore[16]
+                    nn.ModuleDict,
+                )
+                and sharding_option.name
+                in module._feature_processor.feature_processor_modules.keys()  # pyre-ignore[16]
+            ):
+                has_feature_processor = True
+                logger.info(f"Table {sharding_option.name} has feature processor.")
 
             if isinstance(module, EmbeddingBagCollectionInterface):
                 is_weighted = module.is_weighted()

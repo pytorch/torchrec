@@ -11,6 +11,7 @@ older versions of TorchRec. Importing new modules from other files may break mod
 publishing flows.
 """
 import abc
+import copy
 import itertools
 import logging
 from collections import defaultdict
@@ -602,6 +603,10 @@ def _get_node_args_helper(
             child_node = arg
 
             if child_node.op == "placeholder":
+                if hasattr(child_node, "ph_key"):
+                    # pyre-ignore[16]
+                    arg_info.input_attrs.insert(0, child_node.ph_key)
+                    arg_info.is_getitems.insert(0, False)
                 num_found += 1
                 break
             # skip this fp node
@@ -660,10 +665,10 @@ def _get_node_args(
     return arg_info_list, num_found
 
 
-def _get_unsharded_module_names_helper(
+def _get_leaf_module_names_helper(
     model: torch.nn.Module,
     path: str,
-    unsharded_module_names: Set[str],
+    leaf_module_names: Set[str],
 ) -> bool:
     sharded_children = set()
     for name, child in model.named_children():
@@ -671,41 +676,77 @@ def _get_unsharded_module_names_helper(
         if isinstance(child, ShardedModule):
             sharded_children.add(name)
         else:
-            child_sharded = _get_unsharded_module_names_helper(
+            child_sharded = _get_leaf_module_names_helper(
                 child,
                 curr_path + ".",
-                unsharded_module_names,
+                leaf_module_names,
             )
             if child_sharded:
                 sharded_children.add(name)
 
     if len(sharded_children) > 0:
-        for name, _ in model.named_children():
-            if name not in sharded_children:
-                unsharded_module_names.add(path + name)
-
+        for name, child in model.named_children():
+            if name in sharded_children:
+                continue
+            # assume module is leaf node unless annotated otherwise
+            if not getattr(child, "_is_pytorch_fx_traceable", False):
+                leaf_module_names.add(path + name)
     return len(sharded_children) > 0
 
 
-def _get_unsharded_module_names(model: torch.nn.Module) -> List[str]:
+def _get_leaf_module_names(model: torch.nn.Module) -> List[str]:
     """
-    Returns a list of top level modules do not contain any sharded sub modules.
+    Returns a list of top level modules to be used as leaf modules for FX tracing.
+    This is a shallow FX trace that only goes the minimum depth required to pipeline
+    the model unless child modules are explicitly tagged as `_is_pytorch_fx_traceable`.
     """
 
-    unsharded_module_names: Set[str] = set()
-    _get_unsharded_module_names_helper(
+    leaf_module_names: Set[str] = set()
+    _get_leaf_module_names_helper(
         model,
         "",
-        unsharded_module_names,
+        leaf_module_names,
     )
-    return list(unsharded_module_names)
+    return list(leaf_module_names)
+
+
+def _jit_modules(module: torch.nn.Module, path: str, optional: bool = True) -> bool:
+    sharded_children = set()
+    for name, child in module.named_children():
+        curr_path = path + name
+        if isinstance(child, ShardedModule):
+            sharded_children.add(name)
+        else:
+            child_sharded = _jit_modules(child, curr_path + ".", optional)
+            if child_sharded:
+                sharded_children.add(name)
+
+    if len(sharded_children) > 0:
+        for name, child in module.named_children():
+            if name not in sharded_children:
+                try:
+                    jit_child = torch.jit.script(child)
+                    setattr(module, name, jit_child)
+                    logger.info(f"jit.script applied to {path + name}.")
+                except Exception as error:
+                    if not optional:
+                        raise
+                    else:
+                        logger.info(
+                            f"Warning: failed to jit.script {path + name}: {error}."
+                        )
+
+    return len(sharded_children) > 0
 
 
 def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
     context: TrainPipelineContext,
     dist_stream: Optional[torch.cuda.streams.Stream],
-) -> List[ShardedModule]:
+    batch: Optional[In] = None,
+    apply_jit: bool = False,
+) -> Tuple[List[ShardedModule], torch.nn.Module]:
+    input_model = model
     # Get underlying nn.Module
     if isinstance(model, DistributedModelParallel):
         model = model.module
@@ -727,18 +768,24 @@ def _rewrite_model(  # noqa C901
             fp_modules[name] = m
 
     # Trace a model.
-    tracer = Tracer(leaf_modules=_get_unsharded_module_names(model))
-    graph = tracer.trace(model)
+    concrete_args = (
+        # pyre-ignore[16]
+        {"inputs": copy.copy(batch).to_proxy()}
+        if batch and hasattr(batch, "to_proxy")
+        else {}
+    )
+    tracer = Tracer(leaf_modules=_get_leaf_module_names(model))
+    graph = tracer.trace(model, concrete_args=concrete_args)
 
     feature_processor_nodes = []
-    # find the fp node
+    # Find the fp node
     for node in graph.nodes:
         if node.op == "call_module" and node.target in fp_modules:
             feature_processor_nodes.append(node)
+
     # Select sharded modules, which are top-level in the forward call graph,
-    # i.e. which don't have input transformations, i.e.
-    # rely only on 'builtins.getattr'.
-    ret = []
+    # i.e. don't have input transformations, i.e. rely only on 'builtins.getattr'.
+    pipelined_forwards = []
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
             total_num_args = len(node.args) + len(node.kwargs)
@@ -764,8 +811,16 @@ def _rewrite_model(  # noqa C901
                     context,
                     dist_stream,
                 )
-                ret.append(child)
-    return ret
+                pipelined_forwards.append(child)
+
+    # JIT script unsharded modules if applicable.
+    if apply_jit:
+        graph_model = torch.fx.GraphModule(model, graph)
+        _jit_modules(graph_model, "")
+        if isinstance(input_model, DistributedModelParallel):
+            input_model.module = graph_model
+
+    return pipelined_forwards, input_model
 
 
 def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> None:
@@ -817,6 +872,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             forward/backward pass will happen.
         execute_all_batches (bool): executes remaining batches in pipeline after
             exhausting dataloader iterator.
+        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
     """
 
     def __init__(
@@ -825,11 +881,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         execute_all_batches: bool = True,
+        apply_jit: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
         self._execute_all_batches = execute_all_batches
+        self._apply_jit = apply_jit
         # use two data streams to support two concurrent batches
         if device.type == "cuda":
             self._memcpy_stream: Optional[
@@ -909,8 +967,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         if self._pipelined_modules:
             return
-        self._pipelined_modules = _rewrite_model(
-            self._model, self._context, self._data_dist_stream
+        self._pipelined_modules, self._model = _rewrite_model(
+            model=self._model,
+            context=self._context,
+            dist_stream=self._data_dist_stream,
+            batch=self._batch_i,
+            apply_jit=self._apply_jit,
         )
         # initializes input dist, so we can override input dist forwards
         self._start_sparse_data_dist(self._batch_i)
