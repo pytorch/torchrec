@@ -64,7 +64,6 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         embeddings = ebc(features)
 
         # test forward
-        # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -239,7 +238,6 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=tables)
 
         # test forward
-        # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -339,7 +337,6 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=tables)
         # test forward
-        # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -379,7 +376,6 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
-        # pyre-ignore
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -430,7 +426,6 @@ class EmbeddingCollectionTest(unittest.TestCase):
         embeddings = ec(features)
 
         # test forward
-        # pyre-ignore [16]
         ec.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type

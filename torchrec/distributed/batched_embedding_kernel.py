@@ -383,17 +383,13 @@ def _gen_named_parameters_by_table_fused(
         table_count = table_name_to_count.pop(table_name)
         if emb_module.weights_precision == SparseType.INT8:
             dim += emb_module.int8_emb_row_dim_offset
-        # pyre-ignore[29]
         offset = emb_module.weights_physical_offsets[t_idx]
         weights: torch.Tensor
         if location == EmbeddingLocation.DEVICE.value:
-            # pyre-ignore
             weights = emb_module.weights_dev
         elif location == EmbeddingLocation.HOST.value:
-            # pyre-ignore
             weights = emb_module.weights_host
         else:
-            # pyre-ignore
             weights = emb_module.weights_uvm
         weight = TableBatchedEmbeddingSlice(
             data=weights,

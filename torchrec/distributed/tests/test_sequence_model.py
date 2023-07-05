@@ -196,9 +196,7 @@ class TestSequenceTowerSparseNN(TestSparseNNBase):
         )
         self.over = nn.Linear(
             in_features=8
-            # pyre-ignore [16]
             + self.tower_0.interaction.linear.out_features
-            # pyre-ignore [16]
             + self.tower_1.interaction.linear.out_features,
             out_features=16,
             device=dense_device,

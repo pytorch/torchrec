@@ -712,9 +712,7 @@ class TestTowerSparseNN(TestSparseNNBase):
 
         self.over = nn.Linear(
             in_features=8
-            # pyre-ignore [16]
             + self.tower_0.interaction.linear.out_features
-            # pyre-ignore [16]
             + self.tower_1.interaction.linear.out_features
             + tables[1].embedding_dim * len(tables[1].feature_names)
             + weighted_tables[0].embedding_dim * len(weighted_tables[0].feature_names),
@@ -806,11 +804,8 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
         self.tower_arch = EmbeddingTowerCollection(towers=[tower_0, tower_1, tower_2])
         self.over = nn.Linear(
             in_features=8
-            # pyre-ignore [16]
             + tower_0.interaction.linear.out_features
-            # pyre-ignore [16]
             + tower_1.interaction.linear.out_features
-            # pyre-ignore [16]
             + tower_2.interaction.linear.out_features,
             out_features=16,
             device=dense_device,

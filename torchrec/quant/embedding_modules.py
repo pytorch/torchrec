@@ -325,7 +325,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         ):
             for embedding_config, (weight, qscale, qbias) in zip(
                 tables,
-                emb_module.split_embedding_weights_with_scale_bias(  # pyre-ignore[29]
+                emb_module.split_embedding_weights_with_scale_bias(
                     split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
                 ),
             ):
@@ -430,7 +430,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             module, "qconfig"
         ), "EmbeddingBagCollection input float module must have qconfig defined"
 
-        # pyre-ignore [16]
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs())
         for config in embedding_bag_configs:
@@ -442,7 +441,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             embedding_bag_configs,
             module.is_weighted(),
             device=device,
-            # pyre-ignore [16]
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
@@ -667,7 +665,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             module, "qconfig"
         ), "EmbeddingCollection input float module must have qconfig defined"
 
-        # pyre-ignore [16]
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         tables = copy.deepcopy(module.embedding_configs())
         for config in tables:
@@ -679,7 +676,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             tables,
             device=device,
             need_indices=module.need_indices(),
-            # pyre-ignore
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),

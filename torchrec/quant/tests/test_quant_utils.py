@@ -44,7 +44,6 @@ class QuantUtilsTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=tables, device=torch.device("meta"))
 
         # test forward
-        # pyre-ignore [16]
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type

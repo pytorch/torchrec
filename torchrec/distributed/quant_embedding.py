@@ -410,7 +410,6 @@ class ShardedQuantEmbeddingCollection(
             if self._features_order:
                 features = features.permute(
                     self._features_order,
-                    # pyre-ignore [6]
                     self._features_order_tensor,
                 )
             features_by_sharding = features.split(

@@ -131,7 +131,6 @@ class Tracer(torch.fx.Tracer):
         """
 
         if hasattr(mod, "_fx_path"):
-            # pyre-ignore
             return mod._fx_path
         else:
             return super().path_of_module(mod)
