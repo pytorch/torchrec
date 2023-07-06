@@ -84,6 +84,7 @@ class DataType(Enum):
 
     FP32 = "FP32"
     FP16 = "FP16"
+    BF16 = "BF16"
     INT64 = "INT64"
     INT32 = "INT32"
     INT8 = "INT8"

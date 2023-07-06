@@ -31,6 +31,7 @@ class PoolingType(Enum):
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
     DataType.FP16: 16,
+    DataType.BF16: 16,
     DataType.INT8: 8,
     DataType.UINT8: 8,
     DataType.INT4: 4,
@@ -67,6 +68,8 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.FP32
     elif dtype == torch.float16 or dtype == torch.half:
         return DataType.FP16
+    elif dtype == torch.bfloat16:
+        return DataType.BF16
     elif dtype in {torch.int, torch.int32}:
         return DataType.INT32
     elif dtype in {torch.long, torch.int64}:
@@ -108,6 +111,8 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
         return SparseType.FP32
     elif data_type == DataType.FP16:
         return SparseType.FP16
+    elif data_type == DataType.BF16:
+        return SparseType.BF16
     elif data_type == DataType.INT8 or data_type == DataType.UINT8:
         return SparseType.INT8
     elif data_type == DataType.INT4:
@@ -123,6 +128,8 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float32
     elif data_type == DataType.FP16:
         return torch.float16
+    elif data_type == DataType.BF16:
+        return torch.bfloat16
     elif data_type == DataType.INT64:
         return torch.int64
     elif data_type == DataType.INT32:
