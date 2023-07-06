@@ -443,9 +443,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        # pyre-ignore [16]
         model.copy_module = CopyModule()
-        # pyre-ignore [16]
         model.no_copy_module = NoCopyModule()
         quant_model = _quantize(model, inplace=True)
         dmp = DistributedModelParallel(
@@ -465,9 +463,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
 
         dmp_1 = dmp.copy(device_1)
-        # pyre-ignore [16]
         self.assertEqual(dmp_1.module.copy_module.tensor.device, device_1)
-        # pyre-ignore [16]
         self.assertEqual(dmp_1.module.no_copy_module.tensor.device, torch.device("cpu"))
 
 
@@ -564,14 +560,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            # pyre-ignore [16]
             all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
         )
         self.assertTrue(
             all(
                 [
                     param.device == torch.device("cpu")
-                    # pyre-ignore [16]
                     for param in dmp.module.sparse.weighted_ebc.buffers()
                 ]
             )
@@ -647,14 +641,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            # pyre-ignore [16]
             all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
         )
         self.assertTrue(
             all(
                 [
                     param.device == torch.device("meta")
-                    # pyre-ignore [16]
                     for param in dmp.module.sparse.weighted_ebc.buffers()
                 ]
             )
@@ -728,14 +720,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            # pyre-ignore [16]
             all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
         )
         self.assertTrue(
             all(
                 [
                     param.device == device
-                    # pyre-ignore [16]
                     for param in dmp.module.sparse.weighted_ebc.buffers()
                 ]
             )
