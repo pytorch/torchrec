@@ -444,7 +444,9 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             ),
         )
         self._dist = KJTOneToAll(
-            splits=self._world_size * [self._num_features], world_size=world_size
+            splits=self._world_size * [self._num_features],
+            world_size=world_size,
+            device=device,
         )
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
