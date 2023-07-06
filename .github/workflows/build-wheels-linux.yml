@@ -10,12 +10,12 @@ on:
 
 jobs:
   generate-matrix:
-    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@expose_gpus_nova
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
     with:
       package-type: wheel
       os: linux
       test-infra-repository: pytorch/test-infra
-      test-infra-ref: expose_gpus_nova
+      test-infra-ref: main
   build:
     needs: generate-matrix
     strategy:
