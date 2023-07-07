@@ -29,6 +29,7 @@ class RecMetricEnum(RecMetricEnumBase):
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "tower_qps"
     ACCURACY = "accuracy"
+    NDCG = "ndcg"
 
 
 @dataclass(unsafe_hash=True, eq=True)
