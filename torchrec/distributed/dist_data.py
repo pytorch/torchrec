@@ -725,6 +725,15 @@ class EmbeddingsAllToOne(nn.Module):
             Awaitable[torch.Tensor]: awaitable of the merged embeddings.
         """
         assert len(tensors) == self._world_size
+        if self._device.type == "cpu":
+            # if target device is cpu, assuming tensors are on cuda:
+            # 1. merge on first tensor device
+            # 2. move to cpu
+            return torch.ops.fbgemm.sum_reduce_to_one(
+                tensors,
+                tensors[0].device,
+            ).to(self._device)
+
         non_cat_size = tensors[0].size(1 - self._cat_dim)
         return torch.ops.fbgemm.merge_pooled_embeddings(
             tensors,
