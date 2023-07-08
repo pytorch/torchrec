@@ -53,6 +53,7 @@ class MetricName(MetricNameBase):
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "qps"
     ACCURACY = "accuracy"
+    NDCG = "ndcg"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -80,6 +81,7 @@ class MetricNamespace(MetricNamespaceBase):
     RECALL_SESSION_LEVEL = "recall_session_level"
 
     TOWER_QPS = "qps"
+    NDCG = "ndcg"
 
 
 class MetricPrefix(StrValueMixin, Enum):
