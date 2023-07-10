@@ -508,3 +508,15 @@ class ModelTraceScriptTest(unittest.TestCase):
             # _recursive_compile_class for that is enough
             torch.jit._script._recursive_compile_class(clz, fake_range())
         torch.jit.script(KeyedJaggedTensor.from_jt_dict)
+
+    def test_jitscript_kjt(self) -> None:
+        def kjt_split(segments: List[int]) -> List[KeyedJaggedTensor]:
+            kjt = KeyedJaggedTensor(
+                keys=["a", "b", "c"],
+                values=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+                lengths=torch.tensor([2, 0, 1, 1, 1, 2]),
+            )
+            return kjt.split(segments)
+
+        sm = torch.jit.script(kjt_split)
+        sm([1, 0, 2, 0])
