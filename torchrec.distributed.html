@@ -4613,7 +4613,7 @@ Inputs and outputs are data-parallel.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionAwaitable">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.embeddingbag.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollectionAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionAwaitable" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyAwaitable</span></code></a>[<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedTensor</span></code></a>]</p>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.LazyGetItemMixin" title="torchrec.distributed.types.LazyGetItemMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyGetItemMixin</span></code></a>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>], <a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyAwaitable</span></code></a>[<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedTensor</span></code></a>]</p>
 </dd></dl>
 
 <dl class="py class">
@@ -6166,6 +6166,15 @@ so it makes sense to retrict in a non-fused version as well.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.types.GetItemLazyAwaitable">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">GetItemLazyAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.GetItemLazyAwaitable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyAwaitable</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">W</span></code>], <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">W</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">ParentW</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">KT</span></code>]</p>
+<p>The LazyAwaitable returned from a __getitem__ call on <cite>LazyGetItemMixin</cite>.</p>
+<p>When the actual value of this awaitable is requested, wait on the parent and
+then call __getitem__ on the result.</p>
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.LazyAwaitable">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">LazyAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.LazyAwaitable" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Awaitable</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">W</span></code>]</p>
@@ -6188,6 +6197,22 @@ implement the corresponding magic methods</p></li>
 the lazy wait mechanism can’t ensure perfect computation/communication
 overlap (i.e. quickly waited the first one but long wait on the second)</p></li>
 </ul>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.types.LazyGetItemMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">LazyGetItemMixin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.LazyGetItemMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">KT</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">VT_co</span></code>]</p>
+<p>Augments the base LazyAwaitable with a lazy __getitem__ method.</p>
+<p>Instead of triggering a wait() on a __getitem__ call, KeyedLazyAwaitable
+will return another awaitable. This can achieve better
+communication/computation overlap by deferring the wait() until the
+tensor data is actually needed.</p>
+<p>This is intended for Awaitables that model keyed collections, like
+dictionaries or EmbeddingBagCollectionAwaitable.</p>
+<p>NOTE: if using this mixin, please include it before LazyAwaitable in the
+inheritance list, so that Python MRO can properly select this __getitem__
+implementation.</p>
 </dd></dl>
 
 <dl class="py class">
