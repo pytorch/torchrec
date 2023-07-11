@@ -1152,21 +1152,28 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     )
                 )
             elif segment == 0:
+                empty_int_list: List[int] = torch.jit.annotate(List[int], [])
                 split_list.append(
                     KeyedJaggedTensor(
                         keys=keys,
                         values=torch.tensor(
-                            [], device=self.device(), dtype=self._values.dtype
+                            empty_int_list,
+                            device=self.device(),
+                            dtype=self._values.dtype,
                         ),
                         weights=None
                         if self.weights_or_none() is None
                         else torch.tensor(
-                            [],
+                            empty_int_list,
                             device=self.device(),
                             dtype=self.weights().dtype,
                         ),
-                        lengths=torch.tensor([], device=self.device(), dtype=torch.int),
-                        offsets=torch.tensor([], device=self.device(), dtype=torch.int),
+                        lengths=torch.tensor(
+                            empty_int_list, device=self.device(), dtype=torch.int
+                        ),
+                        offsets=torch.tensor(
+                            empty_int_list, device=self.device(), dtype=torch.int
+                        ),
                         stride=self._stride,
                         length_per_key=None,
                         offset_per_key=None,
