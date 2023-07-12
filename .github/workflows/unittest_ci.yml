@@ -66,7 +66,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
     - name: Install Dependencies
       shell: bash
       run: |
@@ -166,7 +166,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
     # download wheel from GHA
     - name: Download wheel
       uses: actions/download-artifact@v2
