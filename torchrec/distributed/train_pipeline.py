@@ -27,17 +27,17 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
-    Union,
 )
 
 import torch
 from torch import distributed as dist
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
-from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
+from torchrec.distributed.dist_data import KJTAllToAll
 from torchrec.distributed.embedding_sharding import (
-    KJTListAwaitable,
+    FusedKJTListSplitsAwaitable,
     KJTListSplitsAwaitable,
+    KJTSplitsAllToAllMeta,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable
@@ -175,187 +175,6 @@ class Tracer(torch.fx.Tracer):
         if isinstance(m, ShardedModule) or module_qualified_name in self._leaf_modules:
             return True
         return super().is_leaf_module(m, module_qualified_name)
-
-
-# TODO: remove after packaging issue is resolved.
-class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
-    def __init__(
-        self,
-        input_tensors: List[torch.Tensor],
-        pg: dist.ProcessGroup,
-    ) -> None:
-        super().__init__()
-        self.num_workers: int = pg.size()
-        with record_function("## all2all_data:kjt splits ##"):
-            self._output_tensor: torch.Tensor = torch.empty(
-                [self.num_workers * len(input_tensors)],
-                device=input_tensors[0].device,
-                dtype=input_tensors[0].dtype,
-            )
-            input_tensor = torch.stack(input_tensors, dim=1).flatten()
-            self._splits_awaitable: dist.Work = dist.all_to_all_single(
-                output=self._output_tensor,
-                input=input_tensor,
-                group=pg,
-                async_op=True,
-            )
-
-    def _wait_impl(self) -> List[List[int]]:
-        self._splits_awaitable.wait()
-        return self._output_tensor.view(self.num_workers, -1).T.tolist()
-
-
-# TODO: remove after packaging issue is resolved.
-C = TypeVar("C", bound=Multistreamable)
-T = TypeVar("T")
-
-
-# TODO: remove after packaging issue is resolved.
-def _set_sharding_context(
-    tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
-    ctx: C,
-) -> None:
-    for awaitable, sharding_context in zip(
-        tensors_awaitables,
-        getattr(ctx, "sharding_contexts", []),
-    ):
-        if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
-            if hasattr(sharding_context, "batch_size_per_rank"):
-                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
-            if hasattr(sharding_context, "input_splits"):
-                sharding_context.input_splits = awaitable._input_splits["values"]
-            if hasattr(sharding_context, "output_splits"):
-                sharding_context.output_splits = awaitable._output_splits["values"]
-            if hasattr(sharding_context, "sparse_features_recat"):
-                sharding_context.sparse_features_recat = awaitable._recat
-
-
-# TODO: remove after packaging issue is resolved.
-@dataclass
-class KJTSplitsAllToAllMeta:
-    pg: dist.ProcessGroup
-    input: KeyedJaggedTensor
-    splits: List[int]
-    splits_tensors: List[torch.Tensor]
-    input_splits: List[List[int]]
-    input_tensors: List[torch.Tensor]
-    labels: List[str]
-    keys: List[str]
-    device: torch.device
-    stagger: int
-
-
-# TODO: remove after packaging issue is resolved.
-def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
-    return [
-        flat_list[sum(splits[:i]) : sum(splits[:i]) + n] for i, n in enumerate(splits)
-    ]
-
-
-# TODO: remove after packaging issue is resolved.
-class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
-    def __init__(
-        self,
-        requests: List[KJTListSplitsAwaitable[C]],
-        contexts: List[C],
-        pg: Optional[dist.ProcessGroup],
-    ) -> None:
-        super().__init__()
-        self._contexts = contexts
-        self._awaitables: List[
-            Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
-        ] = [awaitable for request in requests for awaitable in request.awaitables]
-        self._output_lengths: List[int] = [
-            len(request.awaitables) for request in requests
-        ]
-        self._lengths: List[int] = [
-            len(awaitable.splits_tensors)
-            if isinstance(awaitable, KJTSplitsAllToAllMeta)
-            else 0
-            for awaitable in self._awaitables
-        ]
-        splits_tensors = [
-            splits_tensor
-            for awaitable in self._awaitables
-            for splits_tensor in (
-                awaitable.splits_tensors
-                if isinstance(awaitable, KJTSplitsAllToAllMeta)
-                else []
-            )
-        ]
-        self._splits_awaitable: Optional[SplitsAllToAllAwaitable] = (
-            SplitsAllToAllAwaitable(
-                input_tensors=splits_tensors,
-                pg=pg,
-            )
-            if splits_tensors and pg
-            else None
-        )
-
-    def _wait_impl(self) -> List[KJTListAwaitable]:
-        if self._splits_awaitable:
-            splits_list = self._splits_awaitable.wait()
-            splits_per_awaitable = _split(splits_list, self._lengths)
-        else:
-            splits_per_awaitable = [[] for _ in range(len(self._lengths))]
-        tensors_awaitables = []
-        for splits, awaitable in zip(splits_per_awaitable, self._awaitables):
-            if not splits:  # NoWait
-                # pyre-fixme[16]: Item `KJTSplitsAllToAllMeta` of
-                #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                #  KJTSplitsAllToAllMeta]` has no attribute `wait`.
-                tensors_awaitables.append(awaitable.wait())
-                continue
-            output_splits = splits[:-1]
-            batch_size_per_rank = splits[-1]
-            tensors_awaitables.append(
-                KJTAllToAllTensorsAwaitable(
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `pg`.
-                    pg=awaitable.pg,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `input`.
-                    input=awaitable.input,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `splits`.
-                    splits=awaitable.splits,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `input_splits`.
-                    input_splits=awaitable.input_splits,
-                    output_splits=output_splits,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `input_tensors`.
-                    input_tensors=awaitable.input_tensors,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `labels`.
-                    labels=awaitable.labels,
-                    batch_size_per_rank=batch_size_per_rank,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `keys`.
-                    keys=awaitable.keys,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `device`.
-                    device=awaitable.device,
-                    # pyre-fixme[16]: Item `Awaitable` of
-                    #  `Union[Awaitable[Awaitable[KeyedJaggedTensor]],
-                    #  KJTSplitsAllToAllMeta]` has no attribute `stagger`.
-                    stagger=awaitable.stagger,
-                )
-            )
-        output = []
-        awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
-        for awaitables, ctx in zip(awaitables_per_output, self._contexts):
-            _set_sharding_context(awaitables, ctx)
-            output.append(KJTListAwaitable(awaitables))
-        return output
 
 
 @dataclass
