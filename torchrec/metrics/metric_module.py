@@ -36,6 +36,7 @@ from torchrec.metrics.metrics_namespace import (
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
+from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall_session import RecallSessionMetric
@@ -58,6 +59,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.TOWER_QPS: TowerQPSMetric,
     RecMetricEnum.RECALL_SESSION_LEVEL: RecallSessionMetric,
     RecMetricEnum.ACCURACY: AccuracyMetric,
+    RecMetricEnum.NDCG: NDCGMetric,
 }
 
 
