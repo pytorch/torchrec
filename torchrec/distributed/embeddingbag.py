@@ -356,6 +356,10 @@ class ShardedEmbeddingBagCollection(
             config.name for config in self._embedding_bag_configs
         ]
 
+        self._table_name_to_config: Dict[str, EmbeddingBagConfig] = {
+            config.name: config for config in self._embedding_bag_configs
+        }
+
         self.module_sharding_plan: EmbeddingModuleShardingPlan = cast(
             EmbeddingModuleShardingPlan,
             {
