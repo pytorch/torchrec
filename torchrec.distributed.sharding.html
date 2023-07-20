@@ -711,15 +711,15 @@ into before copying them.</p></li>
 <dt class="sig sig-object py" id="torchrec.distributed.dist_data.PooledEmbeddingsAllGather">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">PooledEmbeddingsAllGather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.PooledEmbeddingsAllGather" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
-<p>The module class that wraps all-gather communication primitive for pooled
-embedding communication</p>
-<p>We have a local input tensor with a layout of
-[batch_size, dimension]. We need to gather input tensors from all ranks into a flatten output tensor.</p>
+<p>The module class that wraps the all-gather communication primitive for pooled
+embedding communication.</p>
+<p>Provided a local input tensor with a layout of <cite>[batch_size, dimension]</cite>, we want to
+gather input tensors from all ranks into a flattened output tensor.</p>
 <p>The class returns the async <cite>Awaitable</cite> handle for pooled embeddings tensor.
 The all-gather is only available for NCCL backend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – The process group that the all-gather communication
+<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the all-gather communication
 happens within.</p>
 </dd>
 </dl>
@@ -738,7 +738,8 @@ happens within.</p>
 <dd><p>Performs reduce scatter operation on pooled embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>local_emb</strong> (<em>torch.Tensor</em>) – tensor of shape [num_buckets x batch_size, dimension].</p>
+<dd class="field-odd"><p><strong>local_emb</strong> (<em>torch.Tensor</em>) – tensor of shape
+<cite>[num_buckets x batch_size, dimension]</cite>.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>awaitable of pooled embeddings of tensor of shape [batch_size, dimension].</p>
@@ -847,18 +848,18 @@ from all the processes in the group after collective.</p>
 <p>The module class that wraps reduce-scatter communication primitives for pooled
 embedding communication in row-wise and twrw sharding.</p>
 <p>For pooled embeddings, we have a local model-parallel output tensor with a layout of
-[num_buckets x batch_size, dimension]. We need to sum over num_buckets dimension
-across batches. We split tensor along the first dimension into unequal chunks (tensor
-slices of different buckets) according to input_splits and reduce them into the output
-tensor and scatter the results for corresponding ranks.</p>
+<cite>[num_buckets x batch_size, dimension]</cite>. We need to sum over <cite>num_buckets</cite> dimension
+across batches. We split the tensor along the first dimension into unequal chunks
+(tensor slices of different buckets) according to <cite>input_splits</cite> and reduce them
+into the output tensor and scatter the results for corresponding ranks.</p>
 <p>The class returns the async <cite>Awaitable</cite> handle for pooled embeddings tensor.
-The reduce-scatter-v is only available for NCCL backend.</p>
+The <cite>reduce-scatter-v</cite> operation is only available for NCCL backend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – The process group that the reduce-scatter communication
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the reduce-scatter communication
 happens within.</p></li>
-<li><p><strong>codecs</strong> – Quantization codec</p></li>
+<li><p><strong>codecs</strong> – quantized communication codecs.</p></li>
 </ul>
 </dd>
 </dl>
@@ -869,8 +870,9 @@ happens within.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of shape [num_buckets x batch_size, dimension].</p></li>
-<li><p><strong>input_splits</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – list of splits for local_embs dim0.</p></li>
+<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of shape
+<cite>[num_buckets * batch_size, dimension]</cite>.</p></li>
+<li><p><strong>input_splits</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – list of splits for <cite>local_embs</cite> dim 0.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
