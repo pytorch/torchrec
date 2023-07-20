@@ -199,8 +199,8 @@ class ReduceScatterInfo(object):
 @dataclass
 class ReduceScatterBaseInfo(object):
     """
-    The data class that collects the attributes when calling the `reduce_scatter_base_pooled`
-    operation.
+    The data class that collects the attributes when calling the
+    `reduce_scatter_base_pooled` operation.
 
     Attributes:
         input_sizes (torch.Size): the sizes of the input flatten tensor.
@@ -213,8 +213,8 @@ class ReduceScatterBaseInfo(object):
 @dataclass
 class AllGatherBaseInfo(object):
     """
-    The data class that collects the attributes when calling the `all_gatther_base_pooled`
-    operation.
+    The data class that collects the attributes when calling the
+    `all_gatther_base_pooled` operation.
 
     Attributes:
         input_size (int): the size of the input tensor.
@@ -231,11 +231,11 @@ class ReduceScatterVInfo(object):
     operation.
 
     Attributes:
-        input_sizes (List[torch.Size]): the sizes of the input tensors. This remembers the
+        input_sizes (List[torch.Size]): the sizes of the input tensors. This saves the
             sizes of the input tensors when running the backward pass and producing the
             gradient.
-        input_splits (List[int]): the splits of the input tensors along dim0.
-        total_input_size: (List[int]): total input size
+        input_splits (List[int]): the splits of the input tensors along dim 0.
+        total_input_size: (List[int]): total input size.
     """
 
     input_sizes: List[torch.Size]
@@ -248,7 +248,7 @@ class ReduceScatterVInfo(object):
 @dataclass
 class All2AllDenseInfo(object):
     """
-    The data class that collects the attributes when calling the alltoall_dense
+    The data class that collects the attributes when calling the `alltoall_dense`
     operation.
     """
 
@@ -288,9 +288,8 @@ def alltoall_pooled(
 
     Args:
         a2a_pooled_embs_tensor (Tensor): input pooled embeddings. Must be pooled
-            together before passing into this function. Its shape is B x D_local_sum,
-            where D_local_sum is the dimension sum of all the local
-            embedding tables.
+            together before passing into this function. Its shape is `B x D_local_sum`,
+            where `D_local_sum` is the dimension sum of all the local embedding tables.
         batch_size_per_rank (List[int]): batch size in each rank.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
@@ -300,9 +299,9 @@ def alltoall_pooled(
         cumsum_dim_sum_per_rank_tensor (Optional[Tensor]): cumulative sum of
             `dim_sum_per_rank`, this is only used by the fast kernel of
             `_recat_pooled_embedding_grad_out`.
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
-        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
+        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs.
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -357,12 +356,12 @@ def alltoall_sequence(
         backward_recat_tensor (Tensor): recat tensor for backward.
         lengths_after_sparse_data_all2all (Tensor): lengths of sparse features after
             AlltoAll.
-        input_splits (Tensor): input splits.
-        output_splits (Tensor): output splits.
-        variable_batch_size (bool): whether variable batch size is enabled
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        input_splits (List[int]): input splits.
+        output_splits (List[int]): output splits.
+        variable_batch_size (bool): whether variable batch size is enabled.
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
-        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -413,8 +412,9 @@ def alltoallv(
             split with the assumption that all the embs have the same dimension.
         per_rank_split_lengths (Optional[List[int]]): split lengths per rank. If not
             specified, the `out_split` must be specified.
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting list of tensors.
@@ -468,8 +468,9 @@ def reduce_scatter_pooled(
 
     Args:
         inputs (List[Tensor]): list of tensors to scatter, one per rank.
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
         Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
@@ -493,18 +494,20 @@ def reduce_scatter_pooled(
 
 
 def reduce_scatter_base_pooled(
-    inputs: Tensor,
+    input: Tensor,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
     """
-    Reduces then scatters a flattened pooled embeddings tensor to all processes in a group.
-    Input tensor is of size output tensor size times world size.
+    Reduces then scatters a flattened pooled embeddings tensor to all processes in a
+    group.
+    Input tensor is of size `output_tensor_size * world_size`.
 
     Args:
-        inputs (Tensor): flattened tensor to scatter, .
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        input (Tensor): flattened tensor to scatter.
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
         Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
@@ -517,11 +520,11 @@ def reduce_scatter_base_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(inputs)
+        return NoWait(input)
 
-    myreq = Request(group, device=inputs.device)
-    rsi = ReduceScatterBaseInfo(input_sizes=inputs.size(), codecs=codecs)
-    ReduceScatterBase_Req.apply(group, myreq, rsi, inputs)
+    myreq = Request(group, device=input.device)
+    rsi = ReduceScatterBaseInfo(input_sizes=input.size(), codecs=codecs)
+    ReduceScatterBase_Req.apply(group, myreq, rsi, input)
     return myreq
 
 
@@ -531,12 +534,13 @@ def all_gather_base_pooled(
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
     """
-    All-gathers tensors from all processes in a group to form a flattened pooled embeddings tensor.
-    Input tensor is of size output tensor size divided by world size.
+    All-gathers tensors from all processes in a group to form a flattened pooled
+    embeddings tensor.
+    Input tensor is of size `output_tensor_size / world_size`.
 
     Args:
-        input (Tensor): tensor to gather, .
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        input (Tensor): tensor to gather.
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
 
     Returns:
@@ -565,14 +569,14 @@ def reduce_scatter_v_pooled(
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
     """
-    Performs reduce-scatter-v operation for a pooled embeddings tensor split unevenly into world
-    size number of chunks. The result of the reduce operation gets scattered to all
-    processes in the group according to input_splits.
+    Performs reduce-scatter-v operation for a pooled embeddings tensor split unevenly
+    into world size number of chunks. The result of the reduce operation gets scattered
+    to all processes in the group according to `input_splits`.
 
     Args:
-        input (Tensor): tensors to scatter, one per rank.
+        input (Tensor): tensor to scatter.
         input_splits (List[int]): input splits.
-        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
 
     Returns:

@@ -789,18 +789,18 @@ class PooledEmbeddingsReduceScatter(nn.Module):
     embedding communication in row-wise and twrw sharding.
 
     For pooled embeddings, we have a local model-parallel output tensor with a layout of
-    [num_buckets x batch_size, dimension]. We need to sum over num_buckets dimension
-    across batches. We split tensor along the first dimension into unequal chunks (tensor
-    slices of different buckets) according to input_splits and reduce them into the output
-    tensor and scatter the results for corresponding ranks.
+    `[num_buckets x batch_size, dimension]`. We need to sum over `num_buckets` dimension
+    across batches. We split the tensor along the first dimension into unequal chunks
+    (tensor slices of different buckets) according to `input_splits` and reduce them
+    into the output tensor and scatter the results for corresponding ranks.
 
     The class returns the async `Awaitable` handle for pooled embeddings tensor.
-    The reduce-scatter-v is only available for NCCL backend.
+    The `reduce-scatter-v` operation is only available for NCCL backend.
 
     Args:
-        pg (dist.ProcessGroup): The process group that the reduce-scatter communication
+        pg (dist.ProcessGroup): the process group that the reduce-scatter communication
             happens within.
-        codecs (Optional[QuantizedCommCodecs]): Quantization codec
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
      Example::
 
@@ -829,8 +829,9 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         Performs reduce scatter operation on pooled embeddings tensor.
 
         Args:
-            local_embs (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
-            input_splits (Optional[List[int]]): list of splits for local_embs dim0.
+            local_embs (torch.Tensor): tensor of shape
+                `[num_buckets * batch_size, dimension]`.
+            input_splits (Optional[List[int]]): list of splits for `local_embs` dim 0.
 
         Returns:
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
@@ -849,17 +850,17 @@ class PooledEmbeddingsReduceScatter(nn.Module):
 
 class PooledEmbeddingsAllGather(nn.Module):
     """
-    The module class that wraps all-gather communication primitive for pooled
-    embedding communication
+    The module class that wraps the all-gather communication primitive for pooled
+    embedding communication.
 
-    We have a local input tensor with a layout of
-    [batch_size, dimension]. We need to gather input tensors from all ranks into a flatten output tensor.
+    Provided a local input tensor with a layout of `[batch_size, dimension]`, we want to
+    gather input tensors from all ranks into a flattened output tensor.
 
     The class returns the async `Awaitable` handle for pooled embeddings tensor.
     The all-gather is only available for NCCL backend.
 
     Args:
-        pg (dist.ProcessGroup): The process group that the all-gather communication
+        pg (dist.ProcessGroup): the process group that the all-gather communication
             happens within.
 
     Example::
@@ -886,7 +887,8 @@ class PooledEmbeddingsAllGather(nn.Module):
         Performs reduce scatter operation on pooled embeddings tensor.
 
         Args:
-            local_emb (torch.Tensor): tensor of shape [num_buckets x batch_size, dimension].
+            local_emb (torch.Tensor): tensor of shape
+                `[num_buckets x batch_size, dimension]`.
 
         Returns:
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].

@@ -534,12 +534,12 @@ class PooledEmbeddingsReduceScatterTest(MultiProcessTestBase):
     ) -> None:
         world_size = 2
         embeddding_dim = 10
-        batch_size = 2
+        batch_size = 4
         embeddings = torch.rand((batch_size * world_size, embeddding_dim))
-        embeddings_by_rank = list(torch.chunk(embeddings, batch_size, dim=0))
+        embeddings_by_rank = list(torch.chunk(embeddings, world_size, dim=0))
         expect_results = torch.chunk(
             torch.stack(embeddings_by_rank, dim=0).sum(dim=0),
-            2,
+            world_size,
             dim=0,
         )
         kwargs_per_rank = []
