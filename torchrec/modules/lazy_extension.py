@@ -171,7 +171,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         """
         module.initialize_parameters(*input, **kwargs)
         if module.has_uninitialized_params():
-            raise RuntimeError('module {} has not been fully initialized'.format(self._get_name()))
+            raise RuntimeError(f'module {self._get_name()} has not been fully initialized')
         module._initialize_hook.remove()
         module._load_hook.remove()
         delattr(module, '_initialize_hook')
