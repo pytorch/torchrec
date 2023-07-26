@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, Union
+from typing import Dict, List, Set, Union
 
 import torch
 import torch.nn as nn
@@ -20,11 +20,8 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 @torch.fx.wrap
 def apply_feature_processors_to_kjt(
     features: KeyedJaggedTensor,
-    feature_processors: nn.ModuleDict,
+    feature_processors: Dict[str, nn.Module],
 ) -> KeyedJaggedTensor:
-
-    if len(features.keys()) == 0:
-        return features
 
     processed_weights = []
     features_dict = features.to_dict()
@@ -33,9 +30,9 @@ def apply_feature_processors_to_kjt(
         jt = features_dict[key]
         if key in feature_processors:
             fp_jt = feature_processors[key](jt)
+            processed_weights.append(fp_jt.weights())
         else:
-            fp_jt = jt
-        processed_weights.append(fp_jt.weights())
+            torch.ones(jt.values().shape[0], device=jt.values().device)
 
     return KeyedJaggedTensor(
         keys=features.keys(),
@@ -98,6 +95,7 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
             self._feature_processors = feature_processors
         else:
             self._feature_processors = nn.ModuleDict(feature_processors)
+
             assert set(
                 sum(
                     [
@@ -114,6 +112,11 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
             embedding_bag_collection.is_weighted()
         ), "EmbeddingBagCollection must accept weighted inputs for feature processor"
 
+        feature_names_set: Set[str] = set()
+        for table_config in self._embedding_bag_collection.embedding_bag_configs():
+            feature_names_set.update(table_config.feature_names)
+        self._feature_names: List[str] = list(feature_names_set)
+
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -129,7 +132,10 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         if isinstance(self._feature_processors, FeatureProcessorsCollection):
             fp_features = self._feature_processors(features)
         else:
+            # TODO: This path isn't currently scriptable. May be hard to support Dict[nn.Module]. Workaround is to always use FP-Collections
             fp_features = apply_feature_processors_to_kjt(
-                features, self._feature_processors
+                features,
+                self._feature_processors,
             )
+
         return self._embedding_bag_collection(fp_features)
