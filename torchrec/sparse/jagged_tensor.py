@@ -827,6 +827,21 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
     """
 
+    # NB: ordered to exactly match constructor order, this will matter for
+    # the pytree implementation
+    __slots__ = [
+        "_keys",
+        "_values",
+        "_weights",
+        "_lengths",
+        "_offsets",
+        "_stride",
+        "_length_per_key",
+        "_offset_per_key",
+        "_index_per_key",
+        "_jt_dict",
+    ]
+
     def __init__(
         self,
         keys: List[str],
