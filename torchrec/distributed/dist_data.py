@@ -726,9 +726,6 @@ class EmbeddingsAllToOne(nn.Module):
         """
         assert len(tensors) == self._world_size
         is_target_device_cpu: bool = self._device.type == "cpu"
-        if is_target_device_cpu and tensors[0].device.type == "cpu":
-            # assume all tensors on cpu
-            return torch.cat(tensors, self._cat_dim)
 
         non_cat_size = tensors[0].size(1 - self._cat_dim)
         # if src device is cuda, target device is cpu:
