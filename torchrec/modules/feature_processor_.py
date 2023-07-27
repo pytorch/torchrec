@@ -121,6 +121,24 @@ class FeatureProcessorsCollection(nn.Module):
         pass
 
 
+@torch.fx.wrap
+def get_weights_list(
+    cat_seq: torch.Tensor,
+    features: KeyedJaggedTensor,
+    position_weights: Dict[str, nn.Parameter],
+) -> torch.Tensor:
+    weights_list = []
+    seqs = torch.split(cat_seq, features.length_per_key())
+    for key, seq in zip(features.keys(), seqs):
+        if key in position_weights.keys():
+            weights_list.append(torch.gather(position_weights[key], dim=0, index=seq))
+        else:
+            weights_list.append(
+                torch.ones(seq.shape[0], device=features.values().device)
+            )
+    return torch.cat(weights_list)
+
+
 class PositionWeightedModuleCollection(FeatureProcessorsCollection):
     def __init__(
         self, max_feature_lengths: Dict[str, int], device: Optional[torch.device] = None
@@ -130,44 +148,26 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection):
         for length in self.max_feature_lengths.values():
             if length <= 0:
                 raise
+
         self.position_weights: nn.ParameterDict = nn.ParameterDict()
+        # needed since nn.ParameterDict isn't torchscriptable (get_items)
+        self.position_weights_dict: Dict[str, nn.Parameter] = {}
+
         for key, length in max_feature_lengths.items():
             self.position_weights[key] = nn.Parameter(
                 torch.empty([length], device=device).fill_(1.0)
             )
-        self.register_buffer(
-            "_dummy_weights",
-            torch.tensor(
-                max(self.max_feature_lengths.values()),
-                device=device,
-            ).fill_(1.0),
-        )
+            self.position_weights_dict[key] = self.position_weights[key]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
-        if len(features.keys()) == 0:
-            return features
-
         cat_seq = torch.ops.fbgemm.offsets_range(
             features.offsets().long(), torch.numel(features.values())
         )
 
-        seqs = torch.split(cat_seq, features.length_per_key())
-        weights_list = []
-        for key, seq in zip(features.keys(), seqs):
-            if key in self.position_weights:
-                weights_list.append(
-                    torch.gather(self.position_weights[key], dim=0, index=seq)
-                )
-            else:
-                weights_list.append(
-                    torch.ones(seq.shape[0], device=features.values().device)
-                )
-
-        weights = torch.cat(weights_list)
         return KeyedJaggedTensor(
             keys=features.keys(),
             values=features.values(),
-            weights=weights,
+            weights=get_weights_list(cat_seq, features, self.position_weights_dict),
             lengths=features.lengths(),
             offsets=features.offsets(),
             stride=features.stride(),
