@@ -26,6 +26,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Type,
     TypeVar,
     Union,
 )
@@ -35,6 +36,7 @@ from torch import distributed as dist
 from torch.autograd.profiler import record_function
 from torch.fx.node import Node
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
+from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     KJTListAwaitable,
     KJTListSplitsAwaitable,
@@ -366,6 +368,14 @@ class TrainPipelineContext:
 
 
 @dataclass
+class PrefetchTrainPipelineContext(TrainPipelineContext):
+    module_input_post_prefetch: Dict[str, Multistreamable] = field(default_factory=dict)
+    module_contexts_post_prefetch: Dict[str, Multistreamable] = field(
+        default_factory=dict
+    )
+
+
+@dataclass
 class ArgInfo:
     """
     Representation of args from a node.
@@ -383,21 +393,31 @@ class ArgInfo:
     name: Optional[str]
 
 
-class PipelinedForward:
+class BaseForward:
     def __init__(
         self,
         name: str,
         args: List[ArgInfo],
         module: ShardedModule,
         context: TrainPipelineContext,
-        dist_stream: Optional[torch.cuda.streams.Stream],
+        stream: Optional[torch.cuda.streams.Stream],
     ) -> None:
         self._name = name
         self._args = args
         self._module = module
         self._context = context
-        self._dist_stream = dist_stream
+        self._stream = stream
 
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def args(self) -> List[ArgInfo]:
+        return self._args
+
+
+class PipelinedForward(BaseForward):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert self._name in self._context.input_dist_tensors_requests
@@ -406,13 +426,13 @@ class PipelinedForward:
         with record_function("## wait_sparse_data_dist ##"):
             # Finish waiting on the dist_stream,
             # in case some delayed stream scheduling happens during the wait() call.
-            with torch.cuda.stream(self._dist_stream):
+            with torch.cuda.stream(self._stream):
                 data = request.wait()
 
         # Make sure that both result of input_dist and context
         # are properly transferred to the current stream.
-        if self._dist_stream is not None:
-            torch.cuda.current_stream().wait_stream(self._dist_stream)
+        if self._stream is not None:
+            torch.cuda.current_stream().wait_stream(self._stream)
             cur_stream = torch.cuda.current_stream()
 
             assert isinstance(
@@ -434,13 +454,55 @@ class PipelinedForward:
             self._context.module_contexts[self._name], data
         )
 
-    @property
-    def name(self) -> str:
-        return self._name
 
-    @property
-    def args(self) -> List[ArgInfo]:
-        return self._args
+class PrefetchPipelinedForward(BaseForward):
+    def __init__(
+        self,
+        name: str,
+        args: List[ArgInfo],
+        module: ShardedModule,
+        context: PrefetchTrainPipelineContext,
+        prefetch_stream: Optional[torch.cuda.streams.Stream],
+    ) -> None:
+        super().__init__(
+            name=name,
+            args=args,
+            module=module,
+            context=context,
+            stream=prefetch_stream,
+        )
+        self._context: PrefetchTrainPipelineContext = self._context
+
+    # pyre-ignore [2, 24]
+    def __call__(self, *input, **kwargs) -> Awaitable:
+        assert self._name in self._context.module_input_post_prefetch
+        data = self._context.module_input_post_prefetch[self._name]
+
+        # Make sure that both result of input_dist and context
+        # are properly transferred to the current stream.
+        if self._stream is not None:
+            torch.cuda.current_stream().wait_stream(self._stream)
+            cur_stream = torch.cuda.current_stream()
+
+            assert isinstance(
+                data, (torch.Tensor, Multistreamable)
+            ), f"{type(data)} must implement Multistreamable interface"
+            data.record_stream(cur_stream)
+
+            ctx = self._context.module_contexts_post_prefetch[self._name]
+            ctx.record_stream(cur_stream)
+
+        if len(self._context.feature_processor_forwards) > 0:
+            with record_function("## feature_processor ##"):
+                # pyre-ignore[6]
+                for i, sparse_feature in enumerate(data):
+                    for fp_forward in self._context.feature_processor_forwards:
+                        # pyre-ignore[16]
+                        data[i] = fp_forward(sparse_feature)
+
+        return self._module.compute_and_output_dist(
+            self._context.module_contexts_post_prefetch[self._name], data
+        )
 
 
 class KJTAllToAllForward:
@@ -717,6 +779,7 @@ def _rewrite_model(  # noqa C901
     dist_stream: Optional[torch.cuda.streams.Stream],
     batch: Optional[In] = None,
     apply_jit: bool = False,
+    pipelined_forward: Type[BaseForward] = PipelinedForward,
 ) -> Tuple[List[ShardedModule], torch.nn.Module]:
     input_model = model
     # Get underlying nn.Module
@@ -776,7 +839,7 @@ def _rewrite_model(  # noqa C901
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
                 child = sharded_modules[node.target]
-                child.forward = PipelinedForward(
+                child.forward = pipelined_forward(
                     node.target,
                     arg_info_list,
                     child,
@@ -992,3 +1055,193 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 for names, awaitable in self._context.fused_splits_awaitables:
                     for name, request in zip(names, awaitable.wait()):
                         self._context.input_dist_tensors_requests[name] = request
+
+
+class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
+    """
+    This pipeline overlaps device transfer, `ShardedModule.input_dist()`, and cache
+    prefetching with forward and backward. This helps hide the all2all latency while
+    preserving the training forward / backward ordering.
+
+    stage 4: forward, backward - uses default CUDA stream
+    stage 3: prefetch - uses prefetch CUDA stream
+    stage 2: ShardedModule.input_dist() - uses data_dist CUDA stream
+    stage 1: device transfer - uses memcpy CUDA stream
+
+    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
+    To be considered a top-level module, a module can only depend on 'getattr' calls on
+    input.
+
+    Input model must be symbolically traceable with the exception of `ShardedModule` and
+    `DistributedDataParallel` modules.
+
+    Args:
+        model (torch.nn.Module): model to pipeline.
+        optimizer (torch.optim.Optimizer): optimizer to use.
+        device (torch.device): device where device transfer, sparse data dist, prefetch,
+            and forward/backward pass will happen.
+        execute_all_batches (bool): executes remaining batches in pipeline after
+            exhausting dataloader iterator.
+        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        execute_all_batches: bool = True,
+        apply_jit: bool = False,
+    ) -> None:
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            device=device,
+            execute_all_batches=execute_all_batches,
+            apply_jit=apply_jit,
+        )
+        self._context = PrefetchTrainPipelineContext()
+        if self._device.type == "cuda":
+            self._prefetch_stream: Optional[
+                torch.cuda.streams.Stream
+            ] = torch.cuda.Stream()
+            self._default_stream: Optional[
+                torch.cuda.streams.Stream
+            ] = torch.cuda.current_stream()
+        else:
+            self._prefetch_stream: Optional[torch.cuda.streams.Stream] = None
+            self._default_stream: Optional[torch.cuda.streams.Stream] = None
+        self._batch_ip3: Optional[In] = None
+
+    def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
+        # pipeline is already filled
+        if self._batch_i and self._batch_ip1 and self._batch_ip2:
+            return
+        # executes last batch in pipeline
+        if self._execute_all_batches and (self._batch_i or self._batch_ip1):
+            return
+
+        # batch 1
+        self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
+        if self._batch_i is None:
+            raise StopIteration
+
+        self._init_pipelined_modules(self._batch_i)
+        self._start_sparse_data_dist(self._batch_i)
+        self._wait_sparse_data_dist()
+        self._prefetch(self._batch_i)
+
+        # batch 2
+        self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
+        self._start_sparse_data_dist(self._batch_ip1)
+        self._wait_sparse_data_dist()
+
+        # batch 3
+        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
+
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        self._fill_pipeline(dataloader_iter)
+
+        if self._model.training:
+            with record_function("## zero_grad ##"):
+                self._optimizer.zero_grad()
+
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cast(In, self._batch_i), self._prefetch_stream)
+
+        self._start_sparse_data_dist(self._batch_ip2)
+
+        self._batch_ip3 = self._copy_batch_to_gpu(dataloader_iter)
+
+        # forward
+        with record_function("## forward ##"):
+            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
+
+        self._prefetch(self._batch_ip1)
+
+        self._wait_sparse_data_dist()
+
+        if self._model.training:
+            # backward
+            with record_function("## backward ##"):
+                torch.sum(losses, dim=0).backward()
+
+            # update
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
+
+        self._batch_i = self._batch_ip1
+        self._batch_ip1 = self._batch_ip2
+        self._batch_ip2 = self._batch_ip3
+
+        return output
+
+    def _init_pipelined_modules(self, batch: In) -> None:
+        """
+        Retrieves the pipelined modules after overriding their forwards, initializes the
+        modules' input dists, and overrides the input dist forwards to support fusing
+        the splits collective in the input dist.
+        """
+        if self._pipelined_modules:
+            return
+        self._pipelined_modules, self._model = _rewrite_model(
+            model=self._model,
+            context=self._context,
+            dist_stream=self._data_dist_stream,
+            batch=self._batch_i,
+            apply_jit=self._apply_jit,
+            pipelined_forward=PrefetchPipelinedForward,
+        )
+
+        # initializes input dist, so we can override input dist forwards
+        self._start_sparse_data_dist(self._batch_i)
+        _override_input_dist_forwards(self._pipelined_modules)
+
+    def _prefetch(self, batch: Optional[In]) -> None:
+        """
+        Waits for input dist to finish, then prefetches data.
+        """
+        if batch is None:
+            return
+        self._context.module_input_post_prefetch.clear()
+        self._context.module_contexts_post_prefetch.clear()
+
+        with record_function("## sharded_module_prefetch ##"):
+            with torch.cuda.stream(self._prefetch_stream):
+                batch.record_stream(torch.cuda.current_stream())
+                for sharded_module in self._pipelined_modules:
+                    forward = sharded_module.forward
+                    assert isinstance(forward, PrefetchPipelinedForward)
+
+                    assert forward._name in self._context.input_dist_tensors_requests
+                    request = self._context.input_dist_tensors_requests[forward._name]
+                    assert isinstance(request, Awaitable)
+                    with record_function("## wait_sparse_data_dist ##"):
+                        # Finish waiting on the dist_stream,
+                        # in case some delayed stream scheduling happens during the wait() call.
+                        with torch.cuda.stream(self._data_dist_stream):
+                            data = request.wait()
+
+                    # Make sure that both result of input_dist and context
+                    # are properly transferred to the current stream.
+                    if self._data_dist_stream is not None:
+                        torch.cuda.current_stream().wait_stream(self._data_dist_stream)
+                        cur_stream = torch.cuda.current_stream()
+
+                        assert isinstance(
+                            data, (torch.Tensor, Multistreamable)
+                        ), f"{type(data)} must implement Multistreamable interface"
+                        data.record_stream(cur_stream)
+                        data.record_stream(self._default_stream)
+
+                        ctx = self._context.module_contexts[forward._name]
+                        ctx.record_stream(cur_stream)
+                        ctx.record_stream(self._default_stream)
+
+                    sharded_module.prefetch(
+                        dist_input=data, forward_stream=self._default_stream
+                    )
+                    self._context.module_input_post_prefetch[forward._name] = data
+                    self._context.module_contexts_post_prefetch[
+                        forward._name
+                    ] = self._context.module_contexts[forward._name]

@@ -295,6 +295,16 @@ class ShardedEmbeddingModule(
         self._lookups: List[nn.Module] = []
         self._output_dists: List[nn.Module] = []
 
+    def prefetch(
+        self, dist_input: KJTList, forward_stream: Optional[torch.cuda.Stream] = None
+    ) -> None:
+        """
+        Prefetch input features for each lookup module.
+        """
+
+        for feature, emb_lookup in zip(dist_input, self._lookups):
+            emb_lookup.prefetch(sparse_features=feature, forward_stream=forward_stream)
+
     def extra_repr(self) -> str:
         """
         Pretty prints representation of the module's lookup modules, input_dists and output_dists
