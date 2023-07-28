@@ -91,3 +91,24 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
         torch.testing.assert_close(
             fp_kjt.length_per_key(), fp_kjt_gm_script.length_per_key()
         )
+
+        empty_kjt = KeyedJaggedTensor.from_lengths_sync(
+            keys=[],
+            values=torch.tensor([], dtype=torch.int32),
+            lengths=torch.tensor([], dtype=torch.int32),
+        )
+
+        empty_fp_kjt = position_weighted_module_collection(empty_kjt)
+        empty_fp_kjt_gm_script = position_weighted_module_collection_gm_script(
+            empty_kjt
+        )
+
+        torch.testing.assert_close(
+            empty_fp_kjt.values(), empty_fp_kjt_gm_script.values()
+        )
+        torch.testing.assert_close(
+            empty_fp_kjt.lengths(), empty_fp_kjt_gm_script.lengths()
+        )
+        torch.testing.assert_close(
+            empty_fp_kjt.length_per_key(), empty_fp_kjt_gm_script.length_per_key()
+        )

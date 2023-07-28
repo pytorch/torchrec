@@ -286,6 +286,9 @@ class GroupedPooledEmbeddingsLookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
+            for table in config.embedding_tables:
+                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                    self._need_prefetch = True
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
@@ -305,6 +308,7 @@ class GroupedPooledEmbeddingsLookup(
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
+        self._need_prefetch = False
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device))
 
@@ -331,6 +335,26 @@ class GroupedPooledEmbeddingsLookup(
             if scale_weight_gradients and get_gradient_division()
             else 1
         )
+
+    def prefetch(
+        self,
+        sparse_features: KeyedJaggedTensor,
+        forward_stream: Optional[torch.cuda.Stream] = None,
+    ) -> None:
+        if not self._need_prefetch:
+            return
+        if len(self._emb_modules) > 0:
+            assert sparse_features is not None
+            features_by_group = sparse_features.split(
+                self._feature_splits,
+            )
+            for emb_op, features in zip(self._emb_modules, features_by_group):
+                if hasattr(emb_op.emb_module, "prefetch"):
+                    emb_op.emb_module.prefetch(
+                        indices=features.values(),
+                        offsets=features.offsets(),
+                        forward_stream=forward_stream,
+                    )
 
     def forward(
         self,
