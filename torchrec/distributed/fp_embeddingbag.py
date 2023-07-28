@@ -64,6 +64,8 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             )
         )
 
+        self._lookups: List[nn.Module] = self._embedding_bag_collection._lookups
+
         self._feature_processors: Union[nn.ModuleDict, FeatureProcessorsCollection]
         if isinstance(module._feature_processors, FeatureProcessorsCollection):
             self._feature_processors = module._feature_processors.to(device)
