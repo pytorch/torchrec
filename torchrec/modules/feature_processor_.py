@@ -126,7 +126,7 @@ def get_weights_list(
     cat_seq: torch.Tensor,
     features: KeyedJaggedTensor,
     position_weights: Dict[str, nn.Parameter],
-) -> torch.Tensor:
+) -> Optional[torch.Tensor]:
     weights_list = []
     seqs = torch.split(cat_seq, features.length_per_key())
     for key, seq in zip(features.keys(), seqs):
@@ -136,7 +136,7 @@ def get_weights_list(
             weights_list.append(
                 torch.ones(seq.shape[0], device=features.values().device)
             )
-    return torch.cat(weights_list)
+    return torch.cat(weights_list) if weights_list else features.weights_or_none()
 
 
 class PositionWeightedModuleCollection(FeatureProcessorsCollection):

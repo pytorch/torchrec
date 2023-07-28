@@ -37,7 +37,9 @@ def apply_feature_processors_to_kjt(
     return KeyedJaggedTensor(
         keys=features.keys(),
         values=features.values(),
-        weights=torch.cat(processed_weights),
+        weights=torch.cat(processed_weights)
+        if processed_weights
+        else features.weights_or_none(),
         lengths=features.lengths(),
         offsets=features._offsets,
         stride=features._stride,
