@@ -418,7 +418,7 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.ArgInfo">ArgInfo (class in torchrec.distributed.train_pipeline)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PipelinedForward.args">args (torchrec.distributed.train_pipeline.PipelinedForward property)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.BaseForward.args">args (torchrec.distributed.train_pipeline.BaseForward property)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.Awaitable">Awaitable (class in torchrec.distributed.types)</a>
 </li>
@@ -491,6 +491,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseEmbeddingSharder">BaseEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor">BaseFeatureProcessor (class in torchrec.modules.feature_processor)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.BaseForward">BaseForward (class in torchrec.distributed.train_pipeline)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.distributed.embedding_types)</a>
 
@@ -2105,6 +2107,10 @@
 </li>
       <li><a href="torchrec.distributed.html#id32">module_contexts_next_batch (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.module_contexts_next_batch">[1]</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext.module_contexts_post_prefetch">module_contexts_post_prefetch (torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext.module_input_post_prefetch">module_input_post_prefetch (torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.Tracer.module_stack">module_stack (torchrec.distributed.train_pipeline.Tracer attribute)</a>
 
       <ul>
@@ -2142,7 +2148,7 @@
       <li><a href="torchrec.distributed.html#id26">name (torchrec.distributed.train_pipeline.ArgInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.ArgInfo.name">[1]</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PipelinedForward.name">(torchrec.distributed.train_pipeline.PipelinedForward property)</a>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.BaseForward.name">(torchrec.distributed.train_pipeline.BaseForward property)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.name">(torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
 </li>
@@ -2427,14 +2433,14 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType">PlannerErrorType (class in torchrec.distributed.planner.types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.policy">policy (torchrec.optim.warmup.WarmupStage attribute)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.POLY">POLY (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL">POOLED_EMBEDDINGS_ALL_TO_ALL (torchrec.distributed.types.CommOp attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER">POOLED_EMBEDDINGS_REDUCE_SCATTER (torchrec.distributed.types.CommOp attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllGather">PooledEmbeddingsAllGather (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllGather">[1]</a>
@@ -2489,13 +2495,27 @@
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictModule">PredictModule (class in torchrec.inference.modules)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.prefetch">prefetch() (torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedEmbeddingModule.prefetch">(torchrec.distributed.embedding_types.ShardedEmbeddingModule method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchPipelinedForward">PrefetchPipelinedForward (class in torchrec.distributed.train_pipeline)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext">PrefetchTrainPipelineContext (class in torchrec.distributed.train_pipeline)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineSparseDist">PrefetchTrainPipelineSparseDist (class in torchrec.distributed.train_pipeline)</a>
+</li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.prepend_opt_key">prepend_opt_key() (torchrec.optim.keyed.CombinedOptimizer static method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.prod">prod() (in module torchrec.distributed.planner.utils)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipeline.progress">progress() (torchrec.distributed.train_pipeline.TrainPipeline method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineSparseDist.progress">progress() (torchrec.distributed.train_pipeline.PrefetchTrainPipelineSparseDist method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipeline.progress">(torchrec.distributed.train_pipeline.TrainPipeline method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineBase.progress">(torchrec.distributed.train_pipeline.TrainPipelineBase method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineSparseDist.progress">(torchrec.distributed.train_pipeline.TrainPipelineSparseDist method)</a>
