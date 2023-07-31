@@ -237,7 +237,7 @@ class EmbeddingStats(Stats):
                     "Output",
                     "Weighing",
                     "Features",
-                    "Emb Dim",
+                    "Emb Dim (CW Dim)",
                     "Hash Size",
                     "Ranks",
                 ],
@@ -251,7 +251,7 @@ class EmbeddingStats(Stats):
                     "--------",
                     "----------",
                     "----------",
-                    "---------",
+                    "------------------",
                     "-----------",
                     "-------",
                 ],
@@ -287,7 +287,12 @@ class EmbeddingStats(Stats):
                 output = "pooled" if so.is_pooled else "sequence"
                 weighing = "weighted" if so.is_weighted else "unweighted"
                 num_features = len(so.input_lengths)
-                embedding_dim = so.tensor.shape[1]
+                embedding_dim = (
+                    f"{so.tensor.shape[1]} ({so.shards[0].size[1]})"
+                    if so.sharding_type == ShardingType.COLUMN_WISE.value
+                    or so.sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+                    else f"{so.tensor.shape[1]}"
+                )
                 hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
