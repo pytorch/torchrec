@@ -7,9 +7,10 @@
 
 import operator
 from functools import reduce
-from typing import Any, Iterable, Type, Union
+from typing import Any, Iterable, Optional, Type, Union
 
 import torch
+from torchrec.distributed.planner.types import Storage
 
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
@@ -45,3 +46,12 @@ def placement(
     if compute_device == "cuda":
         param_device = torch.device("cuda", rank % local_size)
     return f"rank:{rank}/{param_device}"
+
+
+def storage_repr_in_gb(storage: Optional[Storage]) -> str:
+    if storage is None:
+        return ""
+    return (
+        f"Storage(hbm = {round(bytes_to_gb(storage.hbm), 3)} GB, "
+        f"ddr = {round(bytes_to_gb(storage.ddr), 3)} GB)"
+    )
