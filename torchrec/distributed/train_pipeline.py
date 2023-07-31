@@ -34,6 +34,7 @@ from typing import (
 import torch
 from torch import distributed as dist
 from torch.autograd.profiler import record_function
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.node import Node
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
@@ -174,7 +175,11 @@ class Tracer(torch.fx.Tracer):
         self._leaf_modules: List[str] = leaf_modules if leaf_modules is not None else []
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if isinstance(m, ShardedModule) or module_qualified_name in self._leaf_modules:
+        if (
+            isinstance(m, ShardedModule)
+            or module_qualified_name in self._leaf_modules
+            or isinstance(m, FSDP)
+        ):
             return True
         return super().is_leaf_module(m, module_qualified_name)
 
@@ -675,6 +680,19 @@ def _get_node_args_helper(
                 arg_info.input_attrs.insert(0, child_node.args[1])
                 arg_info.is_getitems.insert(0, True)
                 arg = child_node.args[0]
+            elif (
+                child_node.op == "call_function"
+                and child_node.target.__module__ == "torch.utils._pytree"
+                # pyre-ignore[16]
+                and child_node.target.__name__ == "tree_unflatten"
+            ):
+                """
+                This is for the PT2 export path where we unflatten the input to reconstruct
+                the structure with the recorded tree spec.
+                """
+                assert arg_info.is_getitems[0]
+                # pyre-fixme[16]
+                arg = child_node.args[0][arg_info.input_attrs[0]]
             else:
                 break
     return arg_info_list, num_found
