@@ -15,6 +15,7 @@ import torch
 import torch.distributed as dist
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
 from torchrec.distributed.embeddingbag import (
@@ -126,6 +127,19 @@ class TestModule(nn.Module):
         return (loss, pred)
 
 
+class Tracer(torch.fx.Tracer):
+    _leaf_module_names: List[str]
+
+    def __init__(self, leaf_module_names: Optional[List[str]] = None) -> None:
+        super().__init__()
+        self._leaf_module_names = leaf_module_names or []
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        if module_qualified_name in self._leaf_module_names:
+            return True
+        return super().is_leaf_module(m, module_qualified_name)
+
+
 class TrainPipelineBaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.device = torch.device("cuda:0")
@@ -169,7 +183,10 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
     def setUp(self) -> None:
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
-        self.pg = init_distributed_single_host(backend="gloo", rank=0, world_size=1)
+        backend = "gloo"
+        if torch.cuda.is_available():
+            backend = "nccl"
+        self.pg = init_distributed_single_host(backend=backend, rank=0, world_size=1)
 
         num_features = 4
         num_weighted_features = 2
@@ -419,15 +436,37 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
             ShardedFeatureProcessedEmbeddingBagCollection,
         )
 
-    def _setup_pipeline(
-        self, sharder: EmbeddingBagCollectionSharder, execute_all_batches: bool
-    ) -> TrainPipelineSparseDist[ModelInput, torch.Tensor]:
+    def _setup_model(
+        self,
+        enable_fsdp: bool = False,
+    ) -> nn.Module:
         unsharded_model = TestSparseNN(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             dense_device=self.device,
             sparse_device=torch.device("meta"),
         )
+        if enable_fsdp:
+            unsharded_model.over.dhn_arch.linear0 = FSDP(
+                unsharded_model.over.dhn_arch.linear0
+            )
+            unsharded_model.over.dhn_arch.linear1 = FSDP(
+                unsharded_model.over.dhn_arch.linear1
+            )
+            unsharded_model.over.dhn_arch = FSDP(unsharded_model.over.dhn_arch)
+
+        return unsharded_model
+
+    def _setup_pipeline(
+        self,
+        sharder: EmbeddingBagCollectionSharder,
+        execute_all_batches: bool,
+        enable_fsdp: bool = False,
+        unsharded_model: Optional[nn.Module] = None,
+    ) -> TrainPipelineSparseDist[ModelInput, torch.Tensor]:
+        if unsharded_model is None:
+            unsharded_model = self._setup_model(enable_fsdp=enable_fsdp)
+
         distributed_model = DistributedModelParallel(
             unsharded_model,
             env=ShardingEnv.from_process_group(self.pg),
@@ -509,6 +548,58 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
                 kernel_type=EmbeddingComputeKernel.FUSED.value,
             ),
             execute_all_batches,
+        )
+        cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
+        data = self._generate_data()
+
+        dataloader = iter(data)
+        if not execute_all_batches:
+            data = data[:-2]
+
+        for batch in data:
+            cpu_optimizer.zero_grad()
+            loss, pred = cpu_model(batch)
+            loss.backward()
+            cpu_optimizer.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(len(pipeline._pipelined_modules), 2)
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertEqual(pred_gpu.cpu().size(), pred.size())
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(execute_all_batches=st.booleans())
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_pipelining_fsdp_pre_trace(self, execute_all_batches: bool) -> None:
+        unsharded_model = self._setup_model(enable_fsdp=True)
+        leaf_module_names = []
+        for i, _ in unsharded_model.named_children():
+            leaf_module_names.append(i)
+        # Simulate a corner case where we trace into the child module
+        # so direct children is not part of the graph. This will break the
+        # original pipelining logic, because the leaf module is only the direct
+        # children, and when the root node calls directly into child's child.
+        # It was broken because the child'child is a FSDP module and it
+        # breaks because FSDP is not trace-able
+        leaf_module_names.remove("over")
+        leaf_module_names.append("over.dhn_arch")
+        tracer = Tracer(leaf_module_names=leaf_module_names)
+        graph = tracer.trace(unsharded_model)
+
+        traced_model = torch.fx.GraphModule(unsharded_model, graph)
+        pipeline = self._setup_pipeline(
+            TestEBCSharder(
+                sharding_type=ShardingType.TABLE_WISE.value,
+                kernel_type=EmbeddingComputeKernel.FUSED.value,
+            ),
+            execute_all_batches,
+            enable_fsdp=True,
+            unsharded_model=traced_model,
         )
         cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
         data = self._generate_data()
