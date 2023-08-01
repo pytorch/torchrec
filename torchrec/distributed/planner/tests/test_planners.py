@@ -120,7 +120,8 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
             context.exception.error_type, PlannerErrorType.INSUFFICIENT_STORAGE
         )
 
-        self.assertEqual(self.planner._num_proposals, 4)
+        # since it has negative storage_constraint
+        self.assertEqual(self.planner._num_proposals, 0)
 
     def test_fail_then_rerun(self) -> None:
         tables = [
