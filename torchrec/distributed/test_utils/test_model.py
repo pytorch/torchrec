@@ -289,6 +289,48 @@ class TestDenseArch(nn.Module):
         return self.linear(dense_input)
 
 
+class TestDHNArch(nn.Module):
+    """
+    Simple version of a model with two linear layers.
+    We use this to test out recursively wrapped FSDP
+
+    Args:
+        in_feature: the size of input dim
+        device: the device on which this module will be placed.
+
+    Call Args:
+        input: input tensor,
+
+    Returns:
+        torch.Tensor
+
+    Example::
+
+        TestDHNArch()
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+
+        self.device = device
+        self.linear0 = nn.Linear(
+            in_features=in_features, out_features=16, device=device
+        )
+        self.linear1 = nn.Linear(in_features=16, out_features=16, device=device)
+
+    def forward(
+        self,
+        input: torch.Tensor,
+    ) -> torch.Tensor:
+        return self.linear1(self.linear0(input))
+
+
 class TestOverArch(nn.Module):
     """
     Basic nn.Module for testing
@@ -333,9 +375,7 @@ class TestOverArch(nn.Module):
                 ]
             )
         )
-        self.linear: nn.modules.Linear = nn.Linear(
-            in_features=in_features, out_features=16, device=device
-        )
+        self.dhn_arch: nn.Module = TestDHNArch(in_features, device)
 
     def forward(
         self,
@@ -348,7 +388,7 @@ class TestOverArch(nn.Module):
             ret_list.append(sparse[feature_name])
         for feature_name in self._weighted_features:
             ret_list.append(sparse[feature_name])
-        return self.linear(torch.cat(ret_list, dim=1))
+        return self.dhn_arch(torch.cat(ret_list, dim=1))
 
 
 @torch.fx.wrap
