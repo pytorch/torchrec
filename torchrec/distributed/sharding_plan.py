@@ -144,18 +144,29 @@ def _calculate_rw_shard_sizes_and_offsets(
     return shard_sizes, shard_offsets
 
 
+def _find_base_dim(lower_bound: int, dim: int) -> int:
+    for i in range(lower_bound, dim):
+        if dim % i == 0 and i % 4 == 0:
+            return i
+    return dim
+
+
 def _calculate_cw_shard_sizes_and_offsets(
     columns: int,
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     block_size: int = min(
-        col_wise_shard_dim if col_wise_shard_dim else MIN_CW_DIM, columns
+        _find_base_dim(col_wise_shard_dim, columns)
+        if col_wise_shard_dim
+        else _find_base_dim(MIN_CW_DIM, columns),
+        columns,
     )
 
     if columns % block_size != 0:
         warnings.warn(
-            f"Dim of {columns} cannot be evenly divided with column wise shard dim {col_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
+            f"Dim of {columns} cannot be evenly divided with column wise shard"
+            "dim {col_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
             UserWarning,
         )
         block_size = columns

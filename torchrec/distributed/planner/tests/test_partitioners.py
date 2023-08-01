@@ -85,7 +85,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 + i,
-                embedding_dim=10 + i,
+                embedding_dim=4 * (10 + i),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -208,7 +208,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=64,
-                embedding_dim=10 + i,
+                embedding_dim=4 * (10 + i),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -271,7 +271,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=64,
-                embedding_dim=10 + i,
+                embedding_dim=4 * (10 + i),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -326,15 +326,15 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             world_size=16, local_world_size=8, compute_device="cuda"
         )
         constraints = {
-            "table_0": ParameterConstraints(min_partition=2),
-            "table_1": ParameterConstraints(min_partition=10),
-            "table_2": ParameterConstraints(min_partition=5),
-            "table_3": ParameterConstraints(min_partition=8),
+            "table_0": ParameterConstraints(min_partition=4 * 2),
+            "table_1": ParameterConstraints(min_partition=4 * 10),
+            "table_2": ParameterConstraints(min_partition=4 * 5),
+            "table_3": ParameterConstraints(min_partition=4 * 8),
         }
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=64,
-                embedding_dim=20 * (i + 1),
+                embedding_dim=80 * (i + 1),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -385,10 +385,12 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
             ),
             "table_1": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=8
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 8,
             ),
             "table_2": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=10
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 10,
             ),
             "table_3": ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
@@ -397,7 +399,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=128,
-                embedding_dim=20 * (i + 1),
+                embedding_dim=80 * (i + 1),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -449,10 +451,12 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
             ),
             "table_1": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=8
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 8,
             ),
             "table_2": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=10
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 10,
             ),
             "table_3": ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
@@ -461,7 +465,7 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=128,
-                embedding_dim=20 * (i + 1),
+                embedding_dim=80 * (i + 1),
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -536,10 +540,12 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
             ),
             "table_1": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=4
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 4,
             ),
             "table_2": ParameterConstraints(
-                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value], min_partition=7
+                sharding_types=[ShardingType.TABLE_COLUMN_WISE.value],
+                min_partition=4 * 7,
             ),
             "table_3": ParameterConstraints(
                 sharding_types=[ShardingType.TABLE_ROW_WISE.value]
