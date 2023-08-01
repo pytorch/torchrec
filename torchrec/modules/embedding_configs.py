@@ -203,4 +203,4 @@ class EmbeddingBagConfig(BaseEmbeddingConfig):
 
 @dataclass
 class EmbeddingConfig(BaseEmbeddingConfig):
-    pass
+    pretrained_weights_path: Optional[str] = None
