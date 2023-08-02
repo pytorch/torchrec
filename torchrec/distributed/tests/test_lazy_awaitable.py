@@ -10,7 +10,7 @@ from typing import Dict
 
 import torch
 import torch.fx
-from torchrec.distributed.types import LazyAwaitable, LazyGetItemMixin
+from torchrec.distributed.types import LazyAwaitable
 
 
 class NeedWait(LazyAwaitable[torch.Tensor]):
@@ -252,33 +252,3 @@ class TestLazyAwaitable(unittest.TestCase):
             self.assertTrue(torch.equal(ref_res, 17 * torch.ones(3, 4)))
 
         tempFile.close()
-
-    def test_lazy_getitem_mixin(self) -> None:
-        class LazyGetItemAwaitable(
-            LazyGetItemMixin[str, torch.Tensor], LazyAwaitable[Dict[str, torch.Tensor]]
-        ):
-            def __init__(self, actual_value: Dict[str, torch.Tensor]):
-                super().__init__()
-                self.actual_value = actual_value
-
-            def _wait_impl(self) -> Dict[str, torch.Tensor]:
-                for v in self.actual_value.values():
-                    v *= 3
-                return self.actual_value
-
-        actual_value = {"foo": torch.tensor(1), "bar": torch.tensor(2)}
-        a = LazyGetItemAwaitable(actual_value)
-        lazy_foo = a["foo"]
-        lazy_bar = a["bar"]
-        # The returned value should be lazy
-        self.assertIsInstance(lazy_foo, LazyAwaitable)
-        self.assertIsInstance(lazy_bar, LazyAwaitable)
-
-        # Our lazy values should not have been waited yet
-        self.assertIsNone(lazy_foo._result)
-        self.assertIsNone(lazy_bar._result)
-        self.assertIsNone(a._result)
-
-        # The use of a torch op should trigger exactly one wait on the parent object.
-        result = torch.add(lazy_foo, lazy_bar)
-        self.assertEqual(result, torch.tensor(1 * 3 + 2 * 3))
