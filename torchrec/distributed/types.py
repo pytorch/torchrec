@@ -342,9 +342,8 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
         else:
             return obj
 
-    @classmethod
     # pyre-ignore [2, 3]
-    def __torch_function__(cls, func, types, args=(), kwargs=None):
+    def __torch_function__(self, func, types, args=(), kwargs=None):
         """
         The LazyAwaitable type has a `__torch_function__` implementation.
         This means when this type is seens as an argument to a PyTorch
@@ -390,48 +389,6 @@ class LazyNoWait(LazyAwaitable[W]):
 
     def _wait_impl(self) -> W:
         return self._obj
-
-
-KT = TypeVar("KT")
-VT_co = TypeVar("VT_co")
-ParentW = TypeVar("ParentW")
-
-
-class LazyGetItemMixin(Generic[KT, VT_co]):
-    """Augments the base LazyAwaitable with a lazy __getitem__ method.
-
-    Instead of triggering a wait() on a __getitem__ call, KeyedLazyAwaitable
-    will return another awaitable. This can achieve better
-    communication/computation overlap by deferring the wait() until the
-    tensor data is actually needed.
-
-    This is intended for Awaitables that model keyed collections, like
-    dictionaries or EmbeddingBagCollectionAwaitable.
-
-    NOTE: if using this mixin, please include it before LazyAwaitable in the
-    inheritance list, so that Python MRO can properly select this __getitem__
-    implementation.
-    """
-
-    def __getitem__(self, key: KT) -> LazyAwaitable[VT_co]:
-        return GetItemLazyAwaitable(self, key)
-
-
-class GetItemLazyAwaitable(LazyAwaitable[W], Generic[W, ParentW, KT]):
-    """The LazyAwaitable returned from a __getitem__ call on `LazyGetItemMixin`.
-
-    When the actual value of this awaitable is requested, wait on the parent and
-    then call __getitem__ on the result.
-    """
-
-    def __init__(self, parent: LazyAwaitable[ParentW], key: KT) -> None:
-        super().__init__()
-        self._parent = parent
-        self._key = key
-
-    def _wait_impl(self) -> W:
-        kt = LazyAwaitable._wait_async(self._parent)
-        return kt[self._key]
 
 
 # install magic methods

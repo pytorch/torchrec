@@ -14,11 +14,13 @@ from torch import nn
 from torchrec.distributed.planner.constants import BIGINT_DTYPE, POOLING_FACTOR
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    PlannerError,
+    PlannerErrorType,
     Storage,
     StorageReservation,
     Topology,
 )
-from torchrec.distributed.planner.utils import sharder_name
+from torchrec.distributed.planner.utils import sharder_name, storage_repr_in_gb
 from torchrec.distributed.types import ModuleSharder
 
 
@@ -227,6 +229,28 @@ class HeuristicalStorageReservation(StorageReservation):
             # 2 pipelined batches each with 10 internal copies
             multiplier=20,
         )
+
+        if reserved_topology.devices[0].storage.hbm < 0:
+            negative_storage_solution = (
+                f"The reserved topology ({storage_repr_in_gb(reserved_topology.devices[0].storage)}) "
+                "has negative available hbm storage, "
+                "after taking into account of the reserved hbm percentage, "
+                "the storage for dense modules, and the kjt storages. Hence "
+                "it is not possible to find a valid sharding plan. "
+                "\nPossible solutions:"
+                "\n  1) If FSDP is used, consider switching to FixedPercentageStorageReservation, since "
+                f"HeuristicalStorageReservation would not be able to calculate the "
+                f"dense storage ({storage_repr_in_gb(self._dense_storage)}) correctly. "
+                f"\n  2) Reduce local batch size ({batch_size}), which can help "
+                f"reduce the per rank kjt storage ({storage_repr_in_gb(self._kjt_storage)}). "
+                f"\n  3) Decrease the reserved hbm percentage ({self._percentage}). "
+                "\n  4) Use hardware with a higher hbm cap (current hardware has "
+                f"{storage_repr_in_gb(topology.devices[0].storage)} per rank). "
+            )
+            raise PlannerError(
+                error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
+                message=negative_storage_solution,
+            )
 
         return reserved_topology
 

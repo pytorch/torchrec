@@ -32,7 +32,9 @@ def apply_feature_processors_to_kjt(
             fp_jt = feature_processors[key](jt)
             processed_weights.append(fp_jt.weights())
         else:
-            torch.ones(jt.values().shape[0], device=jt.values().device)
+            processed_weights.append(
+                torch.ones(jt.values().shape[0], device=jt.values().device),
+            )
 
     return KeyedJaggedTensor(
         keys=features.keys(),

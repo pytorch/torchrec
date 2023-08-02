@@ -43,6 +43,7 @@ from torchrec.distributed.planner.types import (
     StorageReservation,
     Topology,
 )
+from torchrec.distributed.planner.utils import bytes_to_gb, storage_repr_in_gb
 from torchrec.distributed.sharding_plan import get_default_sharders, placement
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
@@ -315,8 +316,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             storage_reservation_solution = (
                 (
                     f"\n\t  Storage reservation percentage: {self._storage_reservation._percentage}, "
-                    f"\n\t  Storage reservation dense storage: {self._storage_reservation._dense_storage}, "
-                    f"\n\t  Storage reservation kjt storage: {self._storage_reservation._kjt_storage}, "
+                    f"\n\t  Per rank reservation for dense storage: {storage_repr_in_gb(self._storage_reservation._dense_storage)}, "
+                    f"\n\t  Per rank reservation for kjt storage: {storage_repr_in_gb(self._storage_reservation._kjt_storage)}, "  # pyre-ignore[16]
                 )
                 if isinstance(self._storage_reservation, HeuristicalStorageReservation)
                 else f"\n\t  Storage reservation percentage: {self._storage_reservation._percentage}, "  # pyre-ignore[16]
@@ -326,11 +327,11 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 "\nPossible solutions:"
                 f"\n  1) Increase the number of devices ({self._topology.world_size})"
                 f"\n  2) Reduce the model size ("
-                f"\n\t  Global storage: {global_storage_capacity.hbm}, "
-                f"\n\t  Hardware memory: {self._topology.devices[0].storage}, "
+                f"\n\t  Global storage: {round(bytes_to_gb(global_storage_capacity.hbm), 3)} GB, "
+                f"\n\t  Per rank hardware memory: {storage_repr_in_gb(self._topology.devices[0].storage)}, "
                 f"{storage_reservation_solution}"
-                f"\n\t  Available for model parallel: {global_storage_constraints}, "
-                f"\n\t  Requirement for model parallel: {lowest_storage})"
+                f"\n\t  Global storage available for model parallel: {storage_repr_in_gb(global_storage_constraints)}, "
+                f"\n\t  Global storage requirement for model parallel: {storage_repr_in_gb(lowest_storage)})"
                 f"\n  3) Reduce local batch size ({self._batch_size})"
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
