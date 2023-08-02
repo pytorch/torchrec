@@ -71,6 +71,42 @@ class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
         #     pooled_embeddings.offset_per_key(),
         # )
 
+    def test_position_weighted_module_ebc_with_excessive_features(self) -> None:
+        #     0       1        2  <-- batch
+        # 0   [0,1] None    [2]
+        # 1   [3]    [4]    [5,6,7]
+        # 2   [8]   None    None
+        # ^
+        # feature
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8, 9, 9, 9]),
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[
+                EmbeddingBagConfig(
+                    name="t1", embedding_dim=8, num_embeddings=16, feature_names=["f1"]
+                ),
+                EmbeddingBagConfig(
+                    name="t2", embedding_dim=8, num_embeddings=16, feature_names=["f2"]
+                ),
+            ],
+            is_weighted=True,
+        )
+        feature_processors = {
+            "f1": cast(FeatureProcessor, PositionWeightedModule(max_feature_length=10)),
+            "f2": cast(FeatureProcessor, PositionWeightedModule(max_feature_length=5)),
+        }
+
+        fp_ebc = FeatureProcessedEmbeddingBagCollection(ebc, feature_processors)
+
+        pooled_embeddings = fp_ebc(features)
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f2"])
+        self.assertEqual(pooled_embeddings.values().size(), (3, 16))
+        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
+
 
 class PositionWeightedModuleCollectionEmbeddingBagCollectionTest(unittest.TestCase):
     def test_position_weighted_collection_module_ebc(self) -> None:
