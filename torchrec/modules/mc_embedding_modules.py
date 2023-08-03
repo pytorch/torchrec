@@ -10,7 +10,11 @@ from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingBagCollectionInterface,
+)
 from torchrec.modules.managed_collision_modules import ManagedCollisionModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
@@ -58,7 +62,7 @@ def evict(
     return
 
 
-class ManagedCollisionEmbeddingBagCollection(nn.Module):
+class ManagedCollisionEmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     ManagedCollisionEmbeddingBagCollection represents a EmbeddingBagCollection module and a set of managed collision modules.
     The inputs into the MC-EBC will first be modified by the managed collision module before being passed into the embedding bag collection.
@@ -145,3 +149,13 @@ class ManagedCollisionEmbeddingBagCollection(nn.Module):
         evict(evictions, self._embedding_bag_collection)
 
         return ret
+
+    def is_weighted(self) -> bool:
+        return self._embedding_bag_collection.is_weighted()
+
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        return self._embedding_bag_collection.embedding_bag_configs()
+
+    @property
+    def device(self) -> torch.device:
+        return self._embedding_bag_collection.device

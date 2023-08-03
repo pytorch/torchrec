@@ -62,6 +62,10 @@ class TriviallyManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
 
         mc_ebc = ManagedCollisionEmbeddingBagCollection(ebc, mc_modules)
 
+        self.assertEqual(mc_ebc.is_weighted(), ebc.is_weighted())
+        self.assertEqual(mc_ebc.embedding_bag_configs(), ebc.embedding_bag_configs())
+        self.assertEqual(mc_ebc.device, ebc.device)
+
         pooled_embeddings = mc_ebc(features)
 
         self.assertEqual(pooled_embeddings.keys(), ["f1", "f2"])
