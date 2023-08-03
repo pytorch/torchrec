@@ -559,7 +559,9 @@ def _start_data_dist(
     context.fused_splits_awaitables.clear()
     for module in pipelined_modules:
         forward = module.forward
-        assert isinstance(forward, PipelinedForward)
+        assert isinstance(forward, PipelinedForward) or isinstance(
+            forward, PrefetchPipelinedForward
+        )
 
         # Retrieve argument for the input_dist of EBC
         # is_getitem True means this argument could be retrieved by a list
