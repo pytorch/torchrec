@@ -34,10 +34,10 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
 EXPECTED_RW_SHARD_SIZES = [
-    [[13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [13, 10], [9, 10]],
-    [[14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [14, 20], [12, 20]],
-    [[15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30], [15, 30]],
-    [[17, 40], [17, 40], [17, 40], [17, 40], [17, 40], [17, 40], [17, 40], [11, 40]],
+    [[13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [9, 20]],
+    [[14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [12, 40]],
+    [[15, 60], [15, 60], [15, 60], [15, 60], [15, 60], [15, 60], [15, 60], [15, 60]],
+    [[17, 80], [17, 80], [17, 80], [17, 80], [17, 80], [17, 80], [17, 80], [11, 80]],
 ]
 
 EXPECTED_RW_SHARD_OFFSETS = [
@@ -49,97 +49,97 @@ EXPECTED_RW_SHARD_OFFSETS = [
 
 EXPECTED_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84488, ddr=0),
-        Storage(hbm=84328, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166928, ddr=0),
+        Storage(hbm=166608, ddr=0),
     ],
     [
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=511072, ddr=0),
-        Storage(hbm=510912, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003712, ddr=0),
+        Storage(hbm=1003392, ddr=0),
     ],
     [
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
-        Storage(hbm=513800, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
+        Storage(hbm=1007120, ddr=0),
     ],
     [
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1340064, ddr=0),
-        Storage(hbm=1339104, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2653504, ddr=0),
+        Storage(hbm=2651584, ddr=0),
     ],
 ]
 
 
 EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84072, ddr=520),
-        Storage(hbm=84040, ddr=360),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166096, ddr=1040),
+        Storage(hbm=166032, ddr=720),
     ],
     [
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510176, ddr=1120),
-        Storage(hbm=510144, ddr=960),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001920, ddr=2240),
+        Storage(hbm=1001856, ddr=1920),
     ],
     [
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
-        Storage(hbm=512360, ddr=1800),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240, ddr=3600),
     ],
     [
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337888, ddr=2720),
-        Storage(hbm=1337696, ddr=1760),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2649152, ddr=5440),
+        Storage(hbm=2648768, ddr=3520),
     ],
 ]
 
 
 EXPECTED_TWRW_SHARD_SIZES = [
-    [[25, 10], [25, 10], [25, 10], [25, 10]],
-    [[28, 20], [28, 20], [28, 20], [26, 20]],
-    [[30, 30], [30, 30], [30, 30], [30, 30]],
-    [[33, 40], [33, 40], [33, 40], [31, 40]],
+    [[25, 20], [25, 20], [25, 20], [25, 20]],
+    [[28, 40], [28, 40], [28, 40], [26, 40]],
+    [[30, 60], [30, 60], [30, 60], [30, 60]],
+    [[33, 80], [33, 80], [33, 80], [31, 80]],
 ]
 
 EXPECTED_TWRW_SHARD_OFFSETS = [
@@ -151,57 +151,54 @@ EXPECTED_TWRW_SHARD_OFFSETS = [
 
 EXPECTED_TWRW_SHARD_STORAGE = [
     [
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
-        Storage(hbm=87016, ddr=0),
+        Storage(hbm=169936, ddr=0),
+        Storage(hbm=169936, ddr=0),
+        Storage(hbm=169936, ddr=0),
+        Storage(hbm=169936, ddr=0),
     ],
     [
-        Storage(hbm=530624, ddr=0),
-        Storage(hbm=530624, ddr=0),
-        Storage(hbm=530624, ddr=0),
-        Storage(hbm=530464, ddr=0),
+        Storage(hbm=1024384, ddr=0),
+        Storage(hbm=1024384, ddr=0),
+        Storage(hbm=1024384, ddr=0),
+        Storage(hbm=1024064, ddr=0),
     ],
     [
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
-        Storage(hbm=536080, ddr=0),
+        Storage(hbm=1031200, ddr=0),
+        Storage(hbm=1031200, ddr=0),
+        Storage(hbm=1031200, ddr=0),
+        Storage(hbm=1031200, ddr=0),
     ],
     [
-        Storage(hbm=1369248, ddr=0),
-        Storage(hbm=1369248, ddr=0),
-        Storage(hbm=1369248, ddr=0),
-        Storage(hbm=1368928, ddr=0),
+        Storage(hbm=2685248, ddr=0),
+        Storage(hbm=2685248, ddr=0),
+        Storage(hbm=2685248, ddr=0),
+        Storage(hbm=2684608, ddr=0),
     ],
 ]
 
 EXPECTED_CW_SHARD_SIZES = [
-    [[100, 10]],
-    [[110, 10], [110, 10]],
-    [[120, 10], [120, 10], [120, 10]],
-    [[130, 20], [130, 20]],
+    [[100, 20]],
+    [[110, 20], [110, 20]],
+    [[120, 20], [120, 20], [120, 20]],
+    [[130, 40], [130, 40]],
 ]
 
 EXPECTED_CW_SHARD_OFFSETS = [
     [[0, 0]],
-    [[0, 0], [0, 10]],
-    [[0, 0], [0, 10], [0, 20]],
     [[0, 0], [0, 20]],
+    [[0, 0], [0, 20], [0, 40]],
+    [[0, 0], [0, 40]],
 ]
 
 EXPECTED_CW_SHARD_STORAGE = [
-    [Storage(hbm=102304, ddr=0)],
-    [Storage(hbm=397616, ddr=0), Storage(hbm=397616, ddr=0)],
+    [Storage(hbm=188224, ddr=0)],
+    [Storage(hbm=647776, ddr=0), Storage(hbm=647776, ddr=0)],
     [
-        Storage(hbm=332480, ddr=0),
-        Storage(hbm=332480, ddr=0),
-        Storage(hbm=332480, ddr=0),
+        Storage(hbm=501120, ddr=0),
+        Storage(hbm=501120, ddr=0),
+        Storage(hbm=501120, ddr=0),
     ],
-    [
-        Storage(hbm=878752, ddr=0),
-        Storage(hbm=878752, ddr=0),
-    ],
+    [Storage(hbm=1544512, ddr=0), Storage(hbm=1544512, ddr=0)],
 ]
 
 EXPECTED_TWCW_SHARD_SIZES: List[List[List[int]]] = EXPECTED_CW_SHARD_SIZES
@@ -209,17 +206,14 @@ EXPECTED_TWCW_SHARD_SIZES: List[List[List[int]]] = EXPECTED_CW_SHARD_SIZES
 EXPECTED_TWCW_SHARD_OFFSETS: List[List[List[int]]] = EXPECTED_CW_SHARD_OFFSETS
 
 EXPECTED_TWCW_SHARD_STORAGE = [
-    [Storage(hbm=102304, ddr=0)],
-    [Storage(hbm=397616, ddr=0), Storage(hbm=397616, ddr=0)],
+    [Storage(hbm=188224, ddr=0)],
+    [Storage(hbm=647776, ddr=0), Storage(hbm=647776, ddr=0)],
     [
-        Storage(hbm=332480, ddr=0),
-        Storage(hbm=332480, ddr=0),
-        Storage(hbm=332480, ddr=0),
+        Storage(hbm=501120, ddr=0),
+        Storage(hbm=501120, ddr=0),
+        Storage(hbm=501120, ddr=0),
     ],
-    [
-        Storage(hbm=878752, ddr=0),
-        Storage(hbm=878752, ddr=0),
-    ],
+    [Storage(hbm=1544512, ddr=0), Storage(hbm=1544512, ddr=0)],
 ]
 
 
@@ -343,20 +337,20 @@ class TestEnumerators(unittest.TestCase):
         self.world_size = 8
         self.local_world_size = 4
         self.constraints = {
-            "table_0": ParameterConstraints(min_partition=10),
+            "table_0": ParameterConstraints(min_partition=20),
             "table_1": ParameterConstraints(
-                min_partition=10, pooling_factors=[1, 3, 5]
+                min_partition=20, pooling_factors=[1, 3, 5]
             ),
-            "table_2": ParameterConstraints(min_partition=10, pooling_factors=[8, 2]),
+            "table_2": ParameterConstraints(min_partition=20, pooling_factors=[8, 2]),
             "table_3": ParameterConstraints(
-                min_partition=20, pooling_factors=[2, 1, 3, 7]
+                min_partition=40, pooling_factors=[2, 1, 3, 7]
             ),
         }
         self.num_tables = 4
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 + i * 10,
-                embedding_dim=10 + i * 10,
+                embedding_dim=20 + i * 20,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
@@ -443,7 +437,6 @@ class TestEnumerators(unittest.TestCase):
             expected_storage = [
                 Storage(hbm=storage_size, ddr=0) for storage_size in storage_sizes
             ]
-
             self.assertEqual(
                 [shard.storage for shard in sharding_option.shards], expected_storage
             )
