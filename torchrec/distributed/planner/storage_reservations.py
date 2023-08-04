@@ -86,14 +86,11 @@ def _reserve_dense_storage(
 def _reserve_kjt_storage(
     topology: Topology,
     batch_size: int,
-    input_lengths: List[float],
+    batch_inputs: List[float],
     input_data_type_size: int,
     multiplier: int,
 ) -> Storage:
-    kjt_size = (
-        math.ceil(float(batch_size) * sum(input_lengths) * float(input_data_type_size))
-        * multiplier
-    )
+    kjt_size = math.ceil(sum(batch_inputs) * float(input_data_type_size)) * multiplier
 
     kjt_storage = Storage(
         hbm=kjt_size if topology.compute_device == "cuda" else 0,
@@ -147,6 +144,57 @@ def _get_input_lengths_and_shardable_parameters(
     populate_shardable_modules(module)
 
     return input_lengths, shardable_modules
+
+
+def _get_batch_inputs_and_shardable_parameters(
+    module: nn.Module,
+    sharders: List[ModuleSharder[nn.Module]],
+    batch_size: int,
+    constraints: Optional[Dict[str, ParameterConstraints]] = None,
+) -> Tuple[List[float], Set[nn.Module]]:
+    sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
+        sharder_name(sharder.module_type): sharder for sharder in sharders
+    }
+    input_lengths: List[float] = []
+    batch_sizes: List[int] = []
+    shardable_modules: Set[nn.Module] = set()
+
+    def populate_shardable_modules(
+        module: nn.Module,
+    ) -> None:
+        sharder_key = sharder_name(type(module))
+        sharder = sharder_map.get(sharder_key)
+
+        if not sharder:
+            for _child_name, child in module.named_children():
+                populate_shardable_modules(child)
+        else:
+            names = sharder.shardable_parameters(module).keys()
+            shardable_modules.add(module)
+
+            for name in names:
+                pooling_factors = (
+                    constraints[name].pooling_factors
+                    if constraints and constraints.get(name)
+                    else [POOLING_FACTOR]
+                )
+                input_lengths.extend(pooling_factors)
+                batch_sizes.extend(
+                    constraints[name].batch_sizes  # pyre-ignore[6]
+                    if constraints
+                    and constraints.get(name)
+                    and constraints[name].batch_sizes
+                    else [batch_size] * len(pooling_factors)
+                )
+
+    populate_shardable_modules(module)
+
+    batch_inputs: List[float] = [
+        input_length * batch_size
+        for input_length, batch_size in zip(input_lengths, batch_sizes)
+    ]
+
+    return batch_inputs, shardable_modules
 
 
 class FixedPercentageStorageReservation(StorageReservation):
@@ -207,8 +255,8 @@ class HeuristicalStorageReservation(StorageReservation):
     ) -> Topology:
         reserved_topology = copy.deepcopy(topology)
 
-        input_lengths, shardable_modules = _get_input_lengths_and_shardable_parameters(
-            module, sharders, constraints
+        batch_inputs, shardable_modules = _get_batch_inputs_and_shardable_parameters(
+            module, sharders, batch_size, constraints
         )
 
         _reserve_storage_percentage(reserved_topology, self._percentage)
@@ -224,7 +272,7 @@ class HeuristicalStorageReservation(StorageReservation):
         self._kjt_storage = _reserve_kjt_storage(
             topology=reserved_topology,
             batch_size=batch_size,
-            input_lengths=input_lengths,
+            batch_inputs=batch_inputs,
             input_data_type_size=BIGINT_DTYPE,
             # 2 pipelined batches each with 10 internal copies
             multiplier=20,
@@ -292,8 +340,8 @@ class InferenceStorageReservation(StorageReservation):
     ) -> Topology:
         reserved_topology = copy.deepcopy(topology)
 
-        input_lengths, shardable_modules = _get_input_lengths_and_shardable_parameters(
-            module, sharders, constraints
+        batch_inputs, shardable_modules = _get_batch_inputs_and_shardable_parameters(
+            module, sharders, batch_size, constraints
         )
 
         _reserve_storage_percentage(reserved_topology, self._percentage)
@@ -309,7 +357,7 @@ class InferenceStorageReservation(StorageReservation):
         self._kjt_storage = _reserve_kjt_storage(
             topology=reserved_topology,
             batch_size=batch_size,
-            input_lengths=input_lengths,
+            batch_inputs=batch_inputs,
             input_data_type_size=BIGINT_DTYPE,
             multiplier=1,
         )
