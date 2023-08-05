@@ -710,6 +710,7 @@ class ComputeKJTToJTDict(torch.nn.Module):
         )
 
 
+@torch.fx.wrap
 def _maybe_compute_kjt_to_jt_dict(
     stride: int,
     keys: List[str],
