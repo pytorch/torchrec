@@ -108,44 +108,6 @@ def _reserve_storage_percentage(topology: Topology, percent: float) -> None:
         device.storage.hbm = int((1 - percent) * device.storage.hbm)
 
 
-def _get_input_lengths_and_shardable_parameters(
-    module: nn.Module,
-    sharders: List[ModuleSharder[nn.Module]],
-    constraints: Optional[Dict[str, ParameterConstraints]] = None,
-) -> Tuple[List[float], Set[nn.Module]]:
-    sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
-        sharder_name(sharder.module_type): sharder for sharder in sharders
-    }
-    input_lengths: List[float] = []
-    shardable_modules: Set[nn.Module] = set()
-
-    def populate_shardable_modules(
-        module: nn.Module,
-    ) -> None:
-        sharder_key = sharder_name(type(module))
-        sharder = sharder_map.get(sharder_key)
-
-        if not sharder:
-            for _child_name, child in module.named_children():
-                populate_shardable_modules(child)
-        else:
-            names = sharder.shardable_parameters(module).keys()
-            shardable_modules.add(module)
-
-            input_lengths.extend(
-                [
-                    sum(constraints[name].pooling_factors)
-                    if constraints and constraints.get(name)
-                    else POOLING_FACTOR
-                    for name in names
-                ]
-            )
-
-    populate_shardable_modules(module)
-
-    return input_lengths, shardable_modules
-
-
 def _get_batch_inputs_and_shardable_parameters(
     module: nn.Module,
     sharders: List[ModuleSharder[nn.Module]],
