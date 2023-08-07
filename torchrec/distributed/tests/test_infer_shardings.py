@@ -190,7 +190,6 @@ def _shard_qec(
         mi.quant_model,
         [sharder],
     )
-    print(f"PLAN: {plan}")
     msp: ModuleShardingPlan = plan.plan["_module_kjt_input.0"]  # TODO: hardcoded
     # pyre-ignore
     ps: ParameterSharding = msp["table_0"]
@@ -319,6 +318,88 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    def test_cw_sequence(self) -> None:
+        num_embeddings = 4
+        emb_dim = 512
+        emb_dim_4 = emb_dim // 4
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device("cuda:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=mi.tables,
+                    device=mi.sparse_device,
+                )
+            )
+        )
+
+        mi.model.training = False
+        mi.quant_model = quantize(
+            mi.model, inplace=False, quant_state_dict_split_scale_bias=True
+        )
+        non_sharded_model = mi.quant_model
+        sharded_model = _shard_qec(
+            mi,
+            sharding_type=ShardingType.COLUMN_WISE,  # column wise sharding the model
+            device=local_device,
+            expected_shards=[
+                ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+                ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+                ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+                ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+            ],
+        )
+
+        inputs = [
+            model_input_to_forward_args_kjt(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size)
+        ]
+
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(sharded_output, non_sharded_output)
 
     # pyre-ignore
     @unittest.skipIf(
