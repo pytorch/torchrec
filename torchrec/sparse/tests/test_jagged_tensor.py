@@ -552,6 +552,43 @@ JaggedTensor({
 """,
         )
 
+    def test_pytree(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        j0 = JaggedTensor(
+            values=values,
+            lengths=torch.IntTensor([1, 0, 2, 3]),
+        )
+        elems, spec = pytree.tree_flatten(j0)
+        j1 = pytree.tree_unflatten(elems, spec)
+
+        self.assertTrue(torch.equal(j0.lengths(), j1.lengths()))
+        self.assertIsNone(j0.weights_or_none())
+        self.assertIsNone(j1.weights_or_none())
+        self.assertTrue(torch.equal(j0.values(), j1.values()))
+
+        values = [
+            torch.Tensor([1.0]),
+            torch.Tensor(),
+            torch.Tensor([7.0, 8.0]),
+            torch.Tensor([10.0, 11.0, 12.0]),
+        ]
+        weights = [
+            torch.Tensor([1.0]),
+            torch.Tensor(),
+            torch.Tensor([7.0, 8.0]),
+            torch.Tensor([10.0, 11.0, 12.0]),
+        ]
+        j0 = JaggedTensor.from_dense(
+            values=values,
+            weights=weights,
+        )
+        elems, spec = pytree.tree_flatten(j0)
+        j1 = pytree.tree_unflatten(elems, spec)
+
+        self.assertTrue(torch.equal(j0.lengths(), j1.lengths()))
+        self.assertTrue(torch.equal(j0.weights(), j1.weights()))
+        self.assertTrue(torch.equal(j0.values(), j1.values()))
+
     def test_from_jt_dict(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
