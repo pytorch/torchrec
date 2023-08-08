@@ -674,6 +674,7 @@ class ComputeKJTToJTDict(torch.nn.Module):
     Args:
 
     Example::
+
         #              0       1        2  <-- dim_1
         # "Feature0"   [V0,V1] None    [V2]
         # "Feature1"   [V3]    [V4]    [V5,V6,V7]
