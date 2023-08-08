@@ -823,12 +823,23 @@ def _rewrite_model(  # noqa C901
             fp_modules[name] = m
 
     # Trace a model.
-    concrete_args = (
-        # pyre-ignore[16]
-        {"inputs": copy.copy(batch).to_proxy()}
-        if batch and hasattr(batch, "to_proxy")
-        else {}
-    )
+    concrete_args = {}
+    if batch:
+        if hasattr(batch, "to_proxy"):
+            # for some special models, it requires using "input"
+            # as the key for input
+            # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy.
+            concrete_args["input"] = copy.copy(batch).to_proxy()
+        elif hasattr(batch, "to_proxy_tuple"):
+            # when the model is pre-fx traced or dynamo exported, the
+            # inputs are already flattened, and therefore we use
+            # tuple as concrete args that fx.trace will automatically
+            # match with the argument names.
+            # We pass in the model for the caller side to customize
+            # the batch
+            # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy_tuple.
+            concrete_args = batch.to_proxy_tuple(model)
+
     tracer = Tracer(leaf_modules=_get_leaf_module_names(model))
     graph = tracer.trace(model, concrete_args=concrete_args)
 
@@ -847,14 +858,6 @@ def _rewrite_model(  # noqa C901
             if total_num_args == 0:
                 continue
             arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
-            if hasattr(model, "_fx_trace_sparse_arg_info"):
-                # the model already provide the arg info, use that to avoid the graph
-                # input already flattened so cannot extract that information
-                # pyre-ignore
-                arg_info_list: List[ArgInfo] = model._fx_trace_sparse_arg_info
-                assert num_found == len(
-                    arg_info_list
-                ), "the number of args doesn't match the fx trace arg info provided in the model"
 
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
