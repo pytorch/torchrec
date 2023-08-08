@@ -1085,6 +1085,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self.offset_per_key()
         return self
 
+    def unsync(self) -> "KeyedJaggedTensor":
+        self._length_per_key = None
+        self._offset_per_key = None
+        return self
+
     def device(self) -> torch.device:
         return self._values.device
 
