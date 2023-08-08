@@ -37,8 +37,6 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import (
-    Awaitable,
-    NoWait,
     NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,
