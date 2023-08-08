@@ -194,6 +194,8 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets.
     """
 
+    _fields = ["_values", "_weights", "_lengths", "_offsets"]
+
     def __init__(
         self,
         values: torch.Tensor,
@@ -547,6 +549,24 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
             + "\n})\n"
         )
+
+
+def _jt_flatten(
+    t: JaggedTensor,
+) -> Tuple[List[Optional[torch.Tensor]], None]:
+    return [getattr(t, a) for a in JaggedTensor._fields], None
+
+
+def _jt_unflatten(values: List[Optional[torch.Tensor]], context: None) -> JaggedTensor:
+    return JaggedTensor(*values)
+
+
+def _jt_flatten_spec(t: JaggedTensor, spec: TreeSpec) -> List[Optional[torch.Tensor]]:
+    return [getattr(t, a) for a in JaggedTensor._fields]
+
+
+_register_pytree_node(JaggedTensor, _jt_flatten, _jt_unflatten)
+register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 
 
 def _assert_tensor_has_no_elements_or_has_integers(
