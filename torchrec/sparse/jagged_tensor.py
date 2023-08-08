@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch.autograd.profiler import record_function
+from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
+from torch.utils._pytree import _register_pytree_node
 
 from torchrec.streamable import Pipelineable
 
@@ -828,6 +830,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset
     """
 
+    # This is the subset of fields on KJT which are required (all other fields
+    # can be derived from these fields, and are only cached)
+    _fields = [
+        "_values",
+        "_weights",
+        "_lengths",
+        "_offsets",
+    ]
+
     def __init__(
         self,
         keys: List[str],
@@ -1433,6 +1444,28 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             stride=sum(batch_size_per_rank),
         )
         return kjt.sync()
+
+
+def _kjt_flatten(
+    t: KeyedJaggedTensor,
+) -> Tuple[List[Optional[torch.Tensor]], List[str]]:
+    return [getattr(t, a) for a in KeyedJaggedTensor._fields], t._keys
+
+
+def _kjt_unflatten(
+    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
+) -> KeyedJaggedTensor:
+    return KeyedJaggedTensor(context, *values)
+
+
+def _kjt_flatten_spec(
+    t: KeyedJaggedTensor, spec: TreeSpec
+) -> List[Optional[torch.Tensor]]:
+    return [getattr(t, a) for a in KeyedJaggedTensor._fields]
+
+
+_register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
+register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
 def _maybe_compute_offset_per_key_kt(
