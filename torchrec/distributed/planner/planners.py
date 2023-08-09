@@ -43,7 +43,11 @@ from torchrec.distributed.planner.types import (
     StorageReservation,
     Topology,
 )
-from torchrec.distributed.planner.utils import bytes_to_gb, storage_repr_in_gb
+from torchrec.distributed.planner.utils import (
+    bytes_to_gb,
+    reset_shard_rank,
+    storage_repr_in_gb,
+)
 from torchrec.distributed.sharding_plan import get_default_sharders, placement
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
@@ -55,12 +59,6 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
-
-
-def _reset_shard_rank(proposal: List[ShardingOption]) -> None:
-    for sharding_option in proposal:
-        for shard in sharding_option.shards:
-            shard.rank = None
 
 
 def _to_sharding_plan(
@@ -282,7 +280,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     proposer.feedback(partitionable=False)
 
                 # clear shard.rank for each sharding_option
-                _reset_shard_rank(proposal)
+                reset_shard_rank(proposal)
                 proposal = proposer.propose()
 
         if best_plan:

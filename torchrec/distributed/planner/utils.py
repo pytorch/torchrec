@@ -7,10 +7,10 @@
 
 import operator
 from functools import reduce
-from typing import Any, Iterable, Optional, Type, Union
+from typing import Any, Iterable, List, Optional, Type, Union
 
 import torch
-from torchrec.distributed.planner.types import Storage
+from torchrec.distributed.planner.types import ShardingOption, Storage
 
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
@@ -55,3 +55,9 @@ def storage_repr_in_gb(storage: Optional[Storage]) -> str:
         f"Storage(hbm = {round(bytes_to_gb(storage.hbm), 3)} GB, "
         f"ddr = {round(bytes_to_gb(storage.ddr), 3)} GB)"
     )
+
+
+def reset_shard_rank(proposal: List[ShardingOption]) -> None:
+    for sharding_option in proposal:
+        for shard in sharding_option.shards:
+            shard.rank = None
