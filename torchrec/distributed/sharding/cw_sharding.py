@@ -246,9 +246,8 @@ class CwPooledEmbeddingSharding(
         ):
             assert len(self._embedding_order) == len(self._embedding_dims)
             embedding_permute_op = PermutePooledEmbeddingsSplit(
-                self._embedding_dims,
-                self._embedding_order,
-            ).to(device=device)
+                self._embedding_dims, self._embedding_order, device=device
+            )
             callbacks = [embedding_permute_op]
         assert self._pg is not None
         return TwPooledEmbeddingDist(

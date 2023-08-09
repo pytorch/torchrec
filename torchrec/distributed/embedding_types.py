@@ -375,6 +375,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                 ]
         else:
+            # TODO re-enable model parallel and dense
             ret += [
                 EmbeddingComputeKernel.DENSE.value,
             ]

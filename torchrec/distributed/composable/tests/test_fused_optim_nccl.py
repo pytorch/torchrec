@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import Dict, List
+from typing import List
 
 import torch
 from torchrec.distributed.shard import shard
@@ -19,7 +19,6 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
 )
-from torchrec.distributed.types import ParameterSharding
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
@@ -35,7 +34,6 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
         local_size: int,
         world_size: int,
         backend: str,
-        parameter_sharding_plan: Dict[str, ParameterSharding],
     ) -> None:
         with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
             ebc = EmbeddingBagCollection(tables=tables, device=torch.device("meta"))
@@ -54,6 +52,19 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                     ebc.embedding_bags["table_3"].weight,
                 ],
                 {"lr": 0.02},
+            )
+
+            parameter_sharding_plan = construct_module_sharding_plan(
+                ebc,
+                per_param_sharding={
+                    "table_0": column_wise(ranks=[0, 0, 1, 1]),
+                    "table_1": row_wise(),
+                    "table_2": column_wise(ranks=[0, 1, 0, 1]),
+                    "table_3": row_wise(),
+                },
+                world_size=ctx.world_size,
+                local_size=ctx.local_size,
+                device_type=ctx.device.type,
             )
 
             ebc = shard(
@@ -142,24 +153,10 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
             for i in range(4)
         ]
 
-        ebc = EmbeddingBagCollection(tables=tables, device=torch.device("meta"))
-        plan = construct_module_sharding_plan(
-            ebc,
-            per_param_sharding={
-                "table_0": column_wise(ranks=[0, 0, 1, 1]),
-                "table_1": row_wise(),
-                "table_2": column_wise(ranks=[0, 1, 0, 1]),
-                "table_3": row_wise(),
-            },
-            world_size=WORLD_SIZE,
-            local_size=LOCAL_SIZE,
-            device_type="cuda",
-        )
         self._run_multi_process_test(
             callable=self._test_sharded_fused_optimizer_state_dict,
             tables=tables,
             backend="nccl",
-            parameter_sharding_plan=plan,
             local_size=LOCAL_SIZE,
             world_size=WORLD_SIZE,
         )

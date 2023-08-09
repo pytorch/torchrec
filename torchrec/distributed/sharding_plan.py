@@ -204,7 +204,16 @@ def _get_compute_kernel(
     device_type: str,
 ) -> str:
     # TODO add placement support for compute_kernel
-    compute_kernels = sharder.compute_kernels(sharding_type, device_type)
+    compute_kernels = [EmbeddingComputeKernel.DENSE.value]
+    if sharding_type != ShardingType.DATA_PARALLEL.value:
+        compute_kernels += [
+            EmbeddingComputeKernel.FUSED.value,
+        ]
+    if device_type in {"cuda"}:
+        compute_kernels += [
+            EmbeddingComputeKernel.FUSED_UVM.value,
+            EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+        ]
 
     if sharding_type == ShardingType.DATA_PARALLEL.value:
         if EmbeddingComputeKernel.DENSE.value in compute_kernels:
@@ -212,8 +221,13 @@ def _get_compute_kernel(
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
             return EmbeddingComputeKernel.QUANT.value
     else:
-        if EmbeddingComputeKernel.FUSED.value in compute_kernels:
+        if (
+            hasattr(param, "_in_backward_optimizers")
+            and EmbeddingComputeKernel.FUSED.value in compute_kernels
+        ):
             return EmbeddingComputeKernel.FUSED.value
+        elif EmbeddingComputeKernel.DENSE.value in compute_kernels:
+            return EmbeddingComputeKernel.DENSE.value
         elif EmbeddingComputeKernel.QUANT.value in compute_kernels:
             return EmbeddingComputeKernel.QUANT.value
 
