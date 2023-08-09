@@ -45,7 +45,6 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
-from torchrec.fx.utils import assert_fx_safe
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -417,6 +416,23 @@ class RwPooledEmbeddingSharding(
         )
 
 
+@torch.fx.wrap
+def get_block_sizes_runtime_device(
+    block_sizes: List[int],
+    runtime_device: torch.device,
+    tensor_cache: Dict[str, torch.Tensor],
+) -> torch.Tensor:
+    cache_key: str = "__block_sizes"
+    if cache_key not in tensor_cache:
+        tensor_cache[cache_key] = torch.tensor(
+            block_sizes,
+            device=runtime_device,
+            dtype=torch.int32,
+        )
+
+    return tensor_cache[cache_key]
+
+
 class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     def __init__(
         self,
@@ -431,18 +447,11 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         super().__init__()
         self._world_size: int = world_size
         self._num_features = num_features
-        feature_block_sizes = [
+        self.feature_block_sizes: List[int] = [
             (hash_size + self._world_size - 1) // self._world_size
             for hash_size in feature_hash_sizes
         ]
-        self.register_buffer(
-            "_feature_block_sizes_tensor",
-            torch.tensor(
-                feature_block_sizes,
-                device=device,
-                dtype=torch.int32,
-            ),
-        )
+        self.tensor_cache: Dict[str, torch.Tensor] = {}
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features],
             world_size=world_size,
@@ -457,13 +466,18 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self,
         sparse_features: KeyedJaggedTensor,
     ) -> KJTList:
+        block_sizes = get_block_sizes_runtime_device(
+            self.feature_block_sizes,
+            sparse_features.device(),
+            self.tensor_cache,
+        )
         (
             bucketized_features,
             self.unbucketize_permute_tensor,
         ) = bucketize_kjt_before_all2all(
             sparse_features,
             num_buckets=self._world_size,
-            block_sizes=self._feature_block_sizes_tensor,
+            block_sizes=block_sizes,
             output_permute=self._is_sequence,
             bucketize_pos=self._has_feature_processor
             if sparse_features.weights_or_none() is None
