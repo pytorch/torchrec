@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from functools import partial
 from typing import Dict, Iterator, List, Optional, Type, Union
 
 import torch
@@ -37,6 +38,11 @@ from torchrec.modules.fp_embedding_modules import (
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
+def param_dp_sync(kt: KeyedTensor, no_op_tensor: torch.Tensor) -> KeyedTensor:
+    kt._values.add_(no_op_tensor)
+    return kt
+
+
 class ShardedFeatureProcessedEmbeddingBagCollection(
     ShardedEmbeddingModule[
         KJTList, List[torch.Tensor], KeyedTensor, EmbeddingBagCollectionContext
@@ -66,13 +72,18 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
 
         self._lookups: List[nn.Module] = self._embedding_bag_collection._lookups
 
+        self._is_collection: bool = False
         self._feature_processors: Union[nn.ModuleDict, FeatureProcessorsCollection]
         if isinstance(module._feature_processors, FeatureProcessorsCollection):
             self._feature_processors = module._feature_processors.to(device)
+            self._is_collection = True
         else:
             self._feature_processors = torch.nn.ModuleDict(
                 {key: fp.to(device) for key, fp in module._feature_processors.items()}
             )
+            self._is_collection = False
+
+        self._no_op_zero: torch.Tensor = torch.zeros((1,), device=self._device)
 
     # pyre-ignore
     def input_dist(
@@ -81,20 +92,18 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         return self._embedding_bag_collection.input_dist(ctx, features)
 
     def apply_feature_processors_to_kjt_list(self, dist_input: KJTList) -> KJTList:
-        if isinstance(self._feature_processors, FeatureProcessorsCollection):
-            return KJTList(
-                [self._feature_processors(features) for features in dist_input]
-            )
-        else:
-            return KJTList(
-                [
+        kjt_list = []
+        for features in dist_input:
+            if self._is_collection:
+                kjt_list.append(self._feature_processors(features))
+            else:
+                kjt_list.append(
                     apply_feature_processors_to_kjt(
                         features,
                         self._feature_processors,
                     )
-                    for features in dist_input
-                ]
-            )
+                )
+        return KJTList(kjt_list)
 
     def compute(
         self,
@@ -110,13 +119,34 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
     ) -> LazyAwaitable[KeyedTensor]:
-        return self._embedding_bag_collection.output_dist(ctx, output)
+        lazy_awaitable_kt = self._embedding_bag_collection.output_dist(ctx, output)
+        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
         fp_features = self.apply_feature_processors_to_kjt_list(input)
-        return self._embedding_bag_collection.compute_and_output_dist(ctx, fp_features)
+        lazy_awaitable_kt = self._embedding_bag_collection.compute_and_output_dist(
+            ctx, fp_features
+        )
+        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+
+    def add_fp_params_grad_sync_callback(
+        self, lazy_awaitable_kt: LazyAwaitable[KeyedTensor]
+    ) -> LazyAwaitable[KeyedTensor]:
+        # This will ensure that all feature processor parameters participate in the
+        # autograd graph across all ranks. This will protect from mismatched collective
+        # calls order when using DistributedDataParallel over feature processors.
+        no_op_tensor = (
+            self._no_op_zero
+            * torch.cat(
+                [x.flatten() for x in self._feature_processors.parameters()]
+            ).sum()
+        )
+        lazy_awaitable_kt.callbacks.append(
+            partial(param_dp_sync, no_op_tensor=no_op_tensor)
+        )
+        return lazy_awaitable_kt
 
     def create_context(self) -> EmbeddingBagCollectionContext:
         return self._embedding_bag_collection.create_context()
