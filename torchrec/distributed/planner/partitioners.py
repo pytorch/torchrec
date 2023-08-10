@@ -6,21 +6,28 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import logging
 from dataclasses import dataclass
 from typing import cast, List
+
+from torchrec.distributed.planner.perf_models import NoopPerfModel
 
 from torchrec.distributed.planner.types import (
     DeviceHardware,
     PartitionByType,
     Partitioner,
     Perf,
+    PerfModel,
     PlannerError,
     PlannerErrorType,
     ShardingOption,
     Storage,
     Topology,
 )
+from torchrec.distributed.planner.utils import bytes_to_gb, reset_shard_rank
 from torchrec.distributed.types import ShardingType
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _sort_devices_by_perf(
@@ -302,3 +309,106 @@ class GreedyPerfPartitioner(Partitioner):
                     sharding_option.shards[i].rank = devices[i].rank
                     devices[i].storage -= storage_needed
                     devices[i].perf += cast(Perf, sharding_option.shards[i].perf)
+
+
+class MemoryBalancedPartitioner(Partitioner):
+    """
+    Memory balanced Partitioner.
+    """
+
+    def __init__(self, max_search_count: int = 10, tolerance: float = 0.02) -> None:
+        self._max_search_count: int = max_search_count
+        self._tolerance: float = tolerance
+
+    def partition(
+        self,
+        proposal: List[ShardingOption],
+        storage_constraint: Topology,
+    ) -> List[ShardingOption]:
+        """
+        Repeatedly calls the GreedyPerfPartitioner to find a plan with perf
+        within the tolerance of the original plan that uses the least amount
+        of memory.
+        """
+        _perf_model: PerfModel = NoopPerfModel(storage_constraint)
+        _partitioner = GreedyPerfPartitioner()
+        # copying storage_constraint, since we modify it in place
+        _topology: Topology = copy.deepcopy(storage_constraint)
+
+        # set up default plan to fall back on
+        default_plan = _partitioner.partition(proposal, _topology)
+        default_plan = copy.deepcopy(default_plan)
+        original_plan_perf = _perf_model.rate(default_plan)
+
+        max_hbm_per_device: int = _topology.devices[0].storage.hbm
+        logger.info(
+            f"Default plan uses {round(bytes_to_gb(max_hbm_per_device), 3)} GB per device."
+        )
+
+        hbm_requirement: int = 0
+        for sharding_option in proposal:
+            for shard in sharding_option.shards:
+                if shard.storage is not None:
+                    hbm_requirement += shard.storage.hbm
+        min_hbm_per_device: int = int(hbm_requirement / _topology.world_size)
+        logger.info(
+            "Searching in the range (min_hbm_per_device, max_hbm_per_device): "
+            f"({round(bytes_to_gb(min_hbm_per_device), 3)}, "
+            f"{round(bytes_to_gb(max_hbm_per_device), 3)})"
+        )
+
+        # binary search with (min, max] setting
+        search_count = 0
+        while (
+            search_count < self._max_search_count
+            and min_hbm_per_device + 10 * 1024**2 < max_hbm_per_device  # 10MB
+        ):
+            search_count += 1
+            reset_shard_rank(proposal)
+            mid_hbm_per_device: int = (max_hbm_per_device + min_hbm_per_device) // 2
+            set_hbm_per_device(_topology, mid_hbm_per_device)
+            try:
+                new_plan = _partitioner.partition(proposal, _topology)
+                new_plan_perf = _perf_model.rate(new_plan)
+                perf_diff = (
+                    (new_plan_perf - original_plan_perf) / original_plan_perf
+                    if original_plan_perf
+                    else 100
+                )
+                if new_plan_perf > original_plan_perf * (1 + self._tolerance):
+                    # the new plan is worse than the original one
+                    logger.info(
+                        f"Found a plan with {round(bytes_to_gb(mid_hbm_per_device), 3)} "
+                        f"GB per device for embedding tables, "
+                        f"but its perf is {round(perf_diff * 100, 3)}% worse than the original plan, "
+                        f"which exceeds the {self._tolerance * 100}% tolerance."
+                    )
+                    min_hbm_per_device = mid_hbm_per_device
+                else:
+                    # the new plan is better than original one
+                    if perf_diff > 0:
+                        perf_diff_str = (
+                            f"{round((perf_diff) * 100, 3)}% worse than the original plan, "
+                            f"which is within the {self._tolerance * 100}% tolerance."
+                        )
+                    else:
+                        perf_diff_str = f"{round((perf_diff) * 100, 3)}% better than the original plan."
+                    logger.info(
+                        f"Found a more memory-balanced plan with {round(bytes_to_gb(mid_hbm_per_device), 3)} "
+                        f"GB per device for embedding tables. The new plan is {perf_diff_str}"
+                    )
+                    default_plan = copy.deepcopy(new_plan)
+                    max_hbm_per_device = mid_hbm_per_device
+            except PlannerError:
+                logger.info(
+                    f"Couldn't find a plan with {round(bytes_to_gb(max_hbm_per_device), 3)} "
+                    f"GB per device for embedding tables."
+                )
+                min_hbm_per_device = mid_hbm_per_device
+
+        return default_plan
+
+
+def set_hbm_per_device(storage_constraint: Topology, hbm_per_device: int) -> None:
+    for device in storage_constraint.devices:
+        device.storage.hbm = hbm_per_device
