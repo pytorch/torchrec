@@ -38,8 +38,13 @@ from torchrec.modules.fp_embedding_modules import (
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
-def param_dp_sync(kt: KeyedTensor, no_op_tensor: torch.Tensor) -> KeyedTensor:
-    kt._values.add_(no_op_tensor)
+def param_dp_sync(
+    kt: Union[KeyedTensor, Dict[str, torch.Tensor]], no_op_tensor: torch.Tensor
+) -> Union[KeyedTensor, Dict[str, torch.Tensor]]:
+    if type(kt) is KeyedTensor:
+        kt._values.add_(no_op_tensor)
+    else:
+        kt["param_dp_sync"] = no_op_tensor
     return kt
 
 
@@ -120,7 +125,9 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         output: List[torch.Tensor],
     ) -> LazyAwaitable[KeyedTensor]:
         lazy_awaitable_kt = self._embedding_bag_collection.output_dist(ctx, output)
-        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+        return self.add_fp_params_grad_sync_callback(
+            lazy_awaitable_kt  # pyre-ignore[6]
+        )
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
@@ -129,7 +136,9 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         lazy_awaitable_kt = self._embedding_bag_collection.compute_and_output_dist(
             ctx, fp_features
         )
-        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+        return self.add_fp_params_grad_sync_callback(
+            lazy_awaitable_kt  # pyre-ignore[6]
+        )
 
     def add_fp_params_grad_sync_callback(
         self, lazy_awaitable_kt: LazyAwaitable[KeyedTensor]
@@ -144,7 +153,7 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             ).sum()
         )
         lazy_awaitable_kt.callbacks.append(
-            partial(param_dp_sync, no_op_tensor=no_op_tensor)
+            partial(param_dp_sync, no_op_tensor=no_op_tensor)  # pyre-ignore[6]
         )
         return lazy_awaitable_kt
 

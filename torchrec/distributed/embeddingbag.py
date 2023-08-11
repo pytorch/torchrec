@@ -289,24 +289,53 @@ def construct_output_kt(
     )
 
 
-class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
+def construct_output_dict(
+    embeddings_per_sharding: List[torch.Tensor],
+    embedding_names_per_sharding: List[List[str]],
+    embedding_dims_per_sharding: List[List[int]],
+) -> Dict[str, torch.Tensor]:
+    ret: Dict[str, torch.Tensor] = {}
+    for embeddings, embedding_names, embedding_dims in zip(
+        embeddings_per_sharding,
+        embedding_names_per_sharding,
+        embedding_dims_per_sharding,
+    ):
+        for embedding, feature in zip(
+            torch.split(embeddings, embedding_dims, dim=1), embedding_names
+        ):
+            ret[feature] = embedding
+    return ret
+
+
+class EmbeddingBagCollectionAwaitable(
+    LazyAwaitable[Union[KeyedTensor, Dict[str, torch.Tensor]]]
+):
     def __init__(
         self,
         awaitables: List[Awaitable[torch.Tensor]],
-        embedding_dims: List[int],
-        embedding_names: List[str],
+        embedding_dims: Union[List[List[int]], List[int]],
+        embedding_names: Union[List[List[str]], List[str]],
     ) -> None:
         super().__init__()
         self._awaitables = awaitables
         self._embedding_dims = embedding_dims
         self._embedding_names = embedding_names
 
-    def _wait_impl(self) -> KeyedTensor:
-        return construct_output_kt(
-            embeddings=[w.wait() for w in self._awaitables],
-            embedding_names=self._embedding_names,
-            embedding_dims=self._embedding_dims,
-        )
+    def _wait_impl(
+        self,
+    ) -> Union[KeyedTensor, Dict[str, torch.Tensor]]:
+        if type(self._embedding_dims) == list and type(self._embedding_dims[0]) == int:
+            return construct_output_kt(
+                embeddings=[w.wait() for w in self._awaitables],
+                embedding_names=self._embedding_names,  # pyre-ignore[6]
+                embedding_dims=self._embedding_dims,  # pyre-ignore[6]
+            )
+        else:
+            return construct_output_dict(
+                embeddings_per_sharding=[w.wait() for w in self._awaitables],
+                embedding_names_per_sharding=self._embedding_names,  # pyre-ignore[6]
+                embedding_dims_per_sharding=self._embedding_dims,  # pyre-ignore[6]
+            )
 
 
 @dataclass
@@ -325,7 +354,7 @@ class ShardedEmbeddingBagCollection(
     ShardedEmbeddingModule[
         KJTList,
         List[torch.Tensor],
-        KeyedTensor,
+        Union[Dict[str, torch.Tensor], KeyedTensor],
         EmbeddingBagCollectionContext,
     ],
     # TODO remove after compute_kernel X sharding decoupling
@@ -643,8 +672,15 @@ class ShardedEmbeddingBagCollection(
     def _create_output_dist(self) -> None:
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist(device=self._device))
-            self._embedding_names.extend(sharding.embedding_names())
-            self._embedding_dims.extend(sharding.embedding_dims())
+            if (
+                type(sharding.embedding_names()) is str
+                and type(sharding.embedding_dims()) is str
+            ):
+                self._embedding_names.extend(sharding.embedding_names())
+                self._embedding_dims.extend(sharding.embedding_dims())
+            else:
+                self._embedding_names.append(sharding.embedding_names())
+                self._embedding_dims.append(sharding.embedding_dims())
 
     # pyre-ignore [14]
     def input_dist(
@@ -681,7 +717,7 @@ class ShardedEmbeddingBagCollection(
         self,
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> LazyAwaitable[Union[Dict[str, torch.Tensor], KeyedTensor]]:
         return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(embeddings, sharding_ctx)
@@ -697,7 +733,7 @@ class ShardedEmbeddingBagCollection(
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> LazyAwaitable[Union[Dict[str, torch.Tensor], KeyedTensor]]:
         return EmbeddingBagCollectionAwaitable(
             awaitables=[
                 dist(lookup(features), sharding_ctx)

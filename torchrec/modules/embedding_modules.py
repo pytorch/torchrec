@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import torch
@@ -28,7 +29,7 @@ class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     def forward(
         self,
         features: KeyedJaggedTensor,
-    ) -> KeyedTensor:
+    ) -> Union[Dict[str, torch.Tensor], KeyedTensor]:
         pass
 
     @abc.abstractmethod
@@ -62,6 +63,68 @@ def get_embedding_names_by_table(
                 embedding_names.append(feature_name)
         embedding_names_by_table.append(embedding_names)
     return embedding_names_by_table
+
+
+@torch.fx.wrap
+def regroup_as_dict(
+    tensor_dicts: List[Dict[str, torch.Tensor]], groups: Dict[str, List[str]]
+) -> Dict[str, torch.Tensor]:
+    """This function is similar to the one in `torchrec.sparse.regroup_as_dict`, except this is meant to be used
+    on EBC's with `return_dict` flag enabled. Resulting output is the same as the original function.
+
+    Args:
+        tensor_dicts (List[Dict[str, torch.Tensor]]): list of tensors to regroup.
+        groups (Dict[str, List[str]]): dictionary of grouped features names to their corresponding feature indices.
+
+    Returns:
+        Dict[str, torch.Tensor]: regrouped tensors.
+
+    Example:\n
+        **Input:**
+
+        `groups: {group_1 : [f0, f1], group_2: [f2,f3]}`\n
+        `dict_tensors: [ {f0: A, f1: B, f2: C}, {f3: D} ]`
+
+        **Return:**
+
+        `{ group_1: torch.cat(A, B), group_2: torch.cat(C,D) }`
+    """
+    feature_to_tensors = _collapse_tensor_dict(tensor_dicts)
+    return _create_grouped_tensors(groups, feature_to_tensors)
+
+
+@torch.fx.wrap
+def _create_grouped_tensors(
+    groups: Dict[str, List[str]], feature_to_tensors: Dict[str, List[torch.Tensor]]
+) -> Dict[str, torch.Tensor]:
+    """This function finds the features associated with a group and concatenates the aforementioned features list of `torch.Tensors` into a single `torch.Tensor` for that group."""
+    return {
+        group: torch.cat(
+            [
+                feature_tensor
+                for feature in features
+                for feature_tensor in feature_to_tensors[feature]
+            ],
+            dim=1,
+        )
+        for group, features in groups.items()
+    }
+
+
+@torch.fx.wrap
+def _collapse_tensor_dict(
+    tensor_dicts: List[Dict[str, torch.Tensor]]
+) -> Dict[str, List[torch.Tensor]]:
+    """This function reformats tensor_dict to be in the dict format of Feature --> List of associated torch.Tensors."""
+    # Init an empty dict to store lists of tensors for each feature
+    feature_to_tensors = defaultdict(list)
+
+    # Go through each dictionary in tensor_dicts and append each tensor to the appropriate list in feature_to_tensors
+    for tensor_dict in tensor_dicts:
+        for feature, tensor in tensor_dict.items():
+            feature_to_tensors[feature].append(tensor)
+
+    return feature_to_tensors
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
@@ -126,6 +189,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         tables: List[EmbeddingBagConfig],
         is_weighted: bool = False,
         device: Optional[torch.device] = None,
+        return_dict: bool = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
@@ -136,6 +200,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._device: torch.device = (
             device if device is not None else torch.device("cpu")
         )
+        self._return_dict = return_dict
 
         table_names = set()
         for embedding_config in tables:
@@ -170,13 +235,15 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
         self.reset_parameters()
 
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+    def forward(
+        self, features: KeyedJaggedTensor
+    ) -> Union[Dict[str, torch.Tensor], KeyedTensor]:
         """
         Args:
             features (KeyedJaggedTensor): KJT of form [F X B X L].
 
         Returns:
-            KeyedTensor
+            Union[Dict[str, torch.Tensor], KeyedTensor]: output representation, depends on if Dict[str, torch.Tensor] flag is enabled on module init
         """
 
         pooled_embeddings: List[torch.Tensor] = []
@@ -191,12 +258,19 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     per_sample_weights=f.weights() if self._is_weighted else None,
                 ).float()
                 pooled_embeddings.append(res)
-        data = torch.cat(pooled_embeddings, dim=1)
-        return KeyedTensor(
-            keys=self._embedding_names,
-            values=data,
-            length_per_key=self._lengths_per_embedding,
-        )
+
+        if self._return_dict:
+            ret_dict: Dict[str, torch.Tensor] = {}
+            for i, embedding in enumerate(pooled_embeddings):
+                ret_dict[self._embedding_names[i]] = embedding
+            return ret_dict
+        else:
+            data = torch.cat(pooled_embeddings, dim=1)
+            return KeyedTensor(
+                keys=self._embedding_names,
+                values=data,
+                length_per_key=self._lengths_per_embedding,
+            )
 
     def is_weighted(self) -> bool:
         return self._is_weighted
