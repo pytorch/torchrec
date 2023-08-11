@@ -18,11 +18,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
 
-from torchrec.distributed.planner import (
-    EmbeddingShardingPlanner,
-    sharder_name,
-    Topology,
-)
+from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     ModuleSharder,
@@ -73,8 +69,12 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
     def __init__(
         self,
         bucket_cap_mb: int = 25,
+        static_graph: bool = True,
+        find_unused_parameters: bool = False,
     ) -> None:
         self._bucket_cap_mb: int = bucket_cap_mb
+        self._static_graph: bool = static_graph
+        self._find_unused_parameters: bool = find_unused_parameters
 
     def wrap(
         self,
@@ -108,7 +108,8 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 process_group=pg,
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
-                static_graph=True,
+                static_graph=self._static_graph,
+                find_unused_parameters=self._find_unused_parameters,
                 bucket_cap_mb=self._bucket_cap_mb,
             ),
         )
