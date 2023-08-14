@@ -15,13 +15,10 @@ from torchrec.distributed.mc_embeddingbag import (
     ManagedCollisionEmbeddingBagCollectionSharder,
     ShardedManagedCollisionEmbeddingBagCollection,
 )
+from torchrec.distributed.mc_module import ShardedManagedCollisionCollection
 from torchrec.distributed.shard import _shard_modules
 
-from torchrec.distributed.sharding_plan import (
-    construct_module_sharding_plan,
-    row_wise,
-    table_wise,
-)
+from torchrec.distributed.sharding_plan import construct_module_sharding_plan, row_wise
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -31,12 +28,13 @@ from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.managed_collision_modules import (
+    DistanceLFU_EvictionPolicy,
     ManagedCollisionModule,
-    TrivialManagedCollisionModule,
+    MCHManagedCollisionModule,
 )
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
 
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
 
 
@@ -45,8 +43,10 @@ class SparseArch(nn.Module):
         self,
         tables: List[EmbeddingBagConfig],
         device: torch.device,
+        return_remapped: bool = False,
     ) -> None:
         super().__init__()
+        self._return_remapped = return_remapped
 
         self._mc_ebc: ManagedCollisionEmbeddingBagCollection = (
             ManagedCollisionEmbeddingBagCollection(
@@ -57,25 +57,48 @@ class SparseArch(nn.Module):
                 cast(
                     Dict[str, ManagedCollisionModule],
                     {
-                        "table_0": TrivialManagedCollisionModule(
-                            max_output_id=16, max_input_id=32, device=device
+                        "table_0": MCHManagedCollisionModule(
+                            max_output_id=16,
+                            device=device,
+                            is_train=True,
+                            max_history_size=8,
+                            zch_size=8,
+                            hash_func=lambda input_ids, hash_size: torch.remainder(
+                                input_ids, hash_size
+                            ),
+                            eviction_policy=DistanceLFU_EvictionPolicy(),
                         ),
-                        "table_1": TrivialManagedCollisionModule(
-                            max_output_id=32, max_input_id=32, device=device
+                        "table_1": MCHManagedCollisionModule(
+                            max_output_id=32,
+                            device=device,
+                            is_train=True,
+                            max_history_size=16,
+                            zch_size=16,
+                            hash_func=lambda input_ids, hash_size: torch.remainder(
+                                input_ids, hash_size
+                            ),
+                            eviction_policy=DistanceLFU_EvictionPolicy(),
                         ),
                     },
                 ),
+                return_remapped_features=self._return_remapped,
             )
         )
 
-    def forward(self, kjt: KeyedJaggedTensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        mc_ebc_out = self._mc_ebc(kjt)
+    def forward(
+        self, kjt: KeyedJaggedTensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Dict[str, JaggedTensor]]]:
+        if self._return_remapped:
+            ebc_out, remapped_ids_out = self._mc_ebc(kjt)
+        else:
+            ebc_out = self._mc_ebc(kjt)
+            remapped_ids_out = None
         pred = torch.cat(
-            [mc_ebc_out[key] for key in ["feature_0", "feature_1"]],
+            [ebc_out[key] for key in ["feature_0", "feature_1"]],
             dim=1,
         )
         loss = pred.mean()
-        return loss, pred
+        return loss, pred, remapped_ids_out
 
 
 def _test_sharding(  # noqa C901
@@ -91,10 +114,13 @@ def _test_sharding(  # noqa C901
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
 
-        sparse_arch = SparseArch(tables, torch.device("meta"))
+        return_remapped: bool = True
+        sparse_arch = SparseArch(
+            tables, torch.device("meta"), return_remapped=return_remapped
+        )
         module_sharding_plan = construct_module_sharding_plan(
             sparse_arch._mc_ebc,
-            per_param_sharding={"table_0": row_wise(), "table_1": table_wise(rank=0)},
+            per_param_sharding={"table_0": row_wise(), "table_1": row_wise()},
             local_size=local_size,
             world_size=world_size,
             device_type="cuda" if torch.cuda.is_available() else "cpu",
@@ -112,11 +138,21 @@ def _test_sharding(  # noqa C901
         assert isinstance(
             sharded_sparse_arch._mc_ebc, ShardedManagedCollisionEmbeddingBagCollection
         )
+        assert isinstance(
+            sharded_sparse_arch._mc_ebc._managed_collision_collection,
+            ShardedManagedCollisionCollection,
+        )
+
+        test_state_dict = sharded_sparse_arch.state_dict()
+        sharded_sparse_arch.load_state_dict(test_state_dict)
 
         # sharded model
         # each rank gets a subbatch
-        sharded_model_pred = sharded_sparse_arch(kjt_input_per_rank[ctx.rank])[0]
-        # torch.stack(unsharded_model_preds).mean().backward()
+        sharded_model_output = sharded_sparse_arch(kjt_input_per_rank[ctx.rank])
+        sharded_model_pred = sharded_model_output[0]
+        remapped_ids_out = sharded_model_output[2]
+        if return_remapped:
+            assert remapped_ids_out
         sharded_model_pred.mean().backward()
 
         if ctx.rank == 0:
