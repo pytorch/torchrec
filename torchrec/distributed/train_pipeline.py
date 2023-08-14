@@ -695,6 +695,16 @@ def _get_node_args_helper(
                 assert arg_info.is_getitems[0]
                 # pyre-fixme[16]
                 arg = child_node.args[0][arg_info.input_attrs[0]]
+            elif (
+                child_node.op == "call_function"
+                and child_node.target.__module__ == "torchrec.sparse.jagged_tensor"
+                # pyre-fixme[16]
+                and child_node.target.__name__ == "KeyedJaggedTensor"
+            ):
+                if "values" in child_node.kwargs:
+                    arg = child_node.kwargs["values"]
+                else:
+                    arg = child_node.args[1]
             else:
                 break
     return arg_info_list, num_found
