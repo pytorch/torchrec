@@ -25,18 +25,18 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.2xlarge
-           python-version: 3.8
-           python-tag: "py38"
-           cuda-tag: "cu11"
-         - os: linux.2xlarge
-           python-version: 3.9
-           python-tag: "py39"
-           cuda-tag: "cu11"
+         # - os: linux.2xlarge
+         #   python-version: 3.8
+         #   python-tag: "py38"
+         #   cuda-tag: "cu11"
+         # - os: linux.2xlarge
+         #   python-version: 3.9
+         #   python-tag: "py39"
+         #   cuda-tag: "cu11"
          - os: linux.2xlarge
            python-version: '3.10'
            python-tag: "py310"
-           cuda-tag: "cu11"
+           cuda-tag: "cu12"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -72,7 +72,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y pytorch pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
     - name: Install Dependencies
       shell: bash
       run: |
@@ -108,7 +108,7 @@ jobs:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
         python-version: [3.8, 3.9, "3.10"]
-        cuda-tag: ["cu11"]
+        cuda-tag: ["cu12"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
@@ -173,7 +173,7 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+        conda install -n build_binary -y pytorch pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
     # download wheel from GHA
     - name: Download wheel
       uses: actions/download-artifact@v2
