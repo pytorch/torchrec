@@ -4,6 +4,7 @@
 name: Push Binary Nightly
 
 on:
+  pull_request:
   workflow_call:
     secrets:
       AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
