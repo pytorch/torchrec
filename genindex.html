@@ -1468,6 +1468,8 @@
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.get_block_sizes_runtime_device">get_block_sizes_runtime_device() (in module torchrec.distributed.sharding.rw_sharding)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.get_ec_index_dedup">get_ec_index_dedup() (in module torchrec.distributed.embedding)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.get_embedding_names_by_table">get_embedding_names_by_table() (in module torchrec.modules.embedding_modules)</a>
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.get_file_row_ranges_and_remainder">get_file_row_ranges_and_remainder() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
@@ -1635,6 +1637,8 @@
       <li><a href="torchrec.distributed.html#id29">input_dist_splits_requests (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.input_dist_splits_requests">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#id30">input_dist_tensors_requests (torchrec.distributed.train_pipeline.TrainPipelineContext attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.TrainPipelineContext.input_dist_tensors_requests">[1]</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionContext.input_features">input_features (torchrec.distributed.embedding.EmbeddingCollectionContext attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_shape">input_shape (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
 </li>
@@ -2659,10 +2663,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo">ReduceScatterBaseInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo">ReduceScatterInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterV_Req">ReduceScatterV_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterV_Wait">ReduceScatterV_Wait (class in torchrec.distributed.comm_ops)</a>
@@ -2702,6 +2706,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.reset_shard_rank">reset_shard_rank() (in module torchrec.distributed.planner.utils)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictFactory.result_metadata">result_metadata() (torchrec.inference.modules.PredictFactory method)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionContext.reverse_indices">reverse_indices (torchrec.distributed.embedding.EmbeddingCollectionContext attribute)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.stats.round_to_one_sigfig">round_to_one_sigfig() (in module torchrec.distributed.planner.stats)</a>
 </li>
@@ -2754,6 +2760,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">SequenceEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">SequenceEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">[1]</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.set_ec_index_dedup">set_ec_index_dedup() (in module torchrec.distributed.embedding)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules">set_extern_modules() (torchrec.inference.model_packager.PredictFactoryPackager class method)</a>
 </li>
@@ -2861,14 +2869,14 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner">ShardingPlanner (class in torchrec.distributed.types)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ModuleShardingMixIn.shardings">shardings (torchrec.distributed.embedding_types.ModuleShardingMixIn property)</a>
 
       <ul>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.shardings">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingType">ShardingType (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle">shuffle() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
