@@ -108,7 +108,7 @@ jobs:
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.8, 3.9, "3.10"]
+        python-version: ["3.10"]
         cuda-tag: ["cu12"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
