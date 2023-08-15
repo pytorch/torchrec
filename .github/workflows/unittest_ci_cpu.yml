@@ -51,7 +51,7 @@ jobs:
         sed -i 's/fbgemm-gpu-nightly/fbgemm-gpu-nightly-cpu/g' requirements.txt
         conda run -n build_binary \
           pip install -r requirements.txt
-        export CPU_ONLY=1
+        export CU_VERSION="cpu"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}

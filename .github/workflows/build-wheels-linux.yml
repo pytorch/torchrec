@@ -2,7 +2,7 @@ name: Build Linux Wheels
 
 on:
   # TODO: Renable after fixed @omkar
-  # pull_request:
+  pull_request:
   push:
     branches:
       - nightly

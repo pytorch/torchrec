@@ -38,10 +38,8 @@ def get_channel():
     return os.getenv("CHANNEL")
 
 
-def get_CPU_only():
-    cpu_only = os.getenv("CPU_ONLY", "0")
-    assert cpu_only in ["0", "1"]
-    return int(cpu_only)
+def get_cu_version():
+    return os.getenv("CU_VERSION", "cpu")
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -79,8 +77,8 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu")
 
-    cpu_only = get_CPU_only()
-    if cpu_only:
+    cu_version = get_cu_version()
+    if cu_version == "cpu":
         if "fbgemm-gpu-nightly" in install_requires:
             install_requires.remove("fbgemm-gpu-nightly")
             install_requires.append("fbgemm-gpu-nightly-cpu")
@@ -88,7 +86,7 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu")
             install_requires.append("fbgemm-gpu-cpu")
 
-    print(f"-- {name} building version: {version} CPU only: {bool(cpu_only)}")
+    print(f"-- {name} building version: {version} CU Version: {cu_version}")
 
     packages = find_packages(
         exclude=(
