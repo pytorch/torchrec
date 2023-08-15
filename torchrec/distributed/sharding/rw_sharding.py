@@ -228,7 +228,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             torch.tensor(
                 feature_block_sizes,
                 device=device,
-                dtype=torch.int32,
+                dtype=torch.int64,
             ),
         )
         self._dist = KJTAllToAll(

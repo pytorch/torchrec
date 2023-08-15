@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import json
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -1489,7 +1490,24 @@ def _kjt_flatten_spec(
     return [getattr(t, a) for a in KeyedJaggedTensor._fields]
 
 
-_register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
+def _kjt_to_str(spec: TreeSpec, child_strings: List[str]) -> str:
+    assert spec.type == KeyedJaggedTensor
+    return f"K({json.dumps([spec.context, ','.join(child_strings)])})"
+
+
+# pyre-ignore[3]
+def _maybe_str_to_kjt(str_spec: str):
+    if not str_spec.startswith("K"):
+        return None
+    assert str_spec[1] == "("
+    assert str_spec[-1] == ")"
+    r = json.loads(str_spec[2:-1])
+    return KeyedJaggedTensor, r[0], r[1]
+
+
+_register_pytree_node(
+    KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten, _kjt_to_str, _maybe_str_to_kjt
+)
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
