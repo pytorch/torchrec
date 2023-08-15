@@ -2,7 +2,7 @@ name: Build Linux Wheels
 
 on:
   # TODO: Renable after fixed @omkar
-  # pull_request:
+  pull_request:
   push:
     branches:
       - nightly
@@ -16,6 +16,7 @@ jobs:
       os: linux
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
+      with-rocm: false
   build:
     needs: generate-matrix
     strategy:
@@ -38,6 +39,7 @@ jobs:
       pre-script: ${{ matrix.pre-script }}
       post-script: ${{ matrix.post-script }}
       package-name: ${{ matrix.package-name }}
+      env-var-script: ./.github/scripts/env.sh
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
     secrets:
