@@ -419,7 +419,7 @@ class InferTwPooledEmbeddingDist(
             Awaitable[torch.Tensor]: awaitable of merged pooled embedding tensor.
         """
 
-        return self._dist.forward(local_embs)
+        return self._dist(local_embs)
 
 
 class InferTwEmbeddingSharding(

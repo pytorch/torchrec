@@ -389,7 +389,9 @@ class ShardedQuantEmbeddingCollection(
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params, device)
-        self._output_dists: List[nn.Module] = []
+
+        # Ensure output dist is set for post processing from an inference runtime (ie. setting device from runtime).
+        self._output_dists: torch.nn.ModuleList = torch.nn.ModuleList()
 
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
