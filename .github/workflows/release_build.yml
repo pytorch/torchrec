@@ -89,7 +89,6 @@ jobs:
         rm -r dist || true
         conda run -n build_binary \
           python setup.py bdist_wheel \
-          --package_name torchrec \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
       uses: actions/upload-artifact@v2
