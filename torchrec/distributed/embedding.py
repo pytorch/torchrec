@@ -15,6 +15,7 @@ from typing import Any, cast, Dict, List, MutableMapping, Optional, Type, Union
 
 import torch
 from torch import nn
+from torch.autograd.profiler import record_function
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
@@ -225,39 +226,42 @@ def _construct_jagged_tensors(
     original_features: Optional[KeyedJaggedTensor] = None,
     reverse_indices: Optional[torch.Tensor] = None,
 ) -> Dict[str, JaggedTensor]:
-    if original_features is not None:
-        features = original_features
-    if reverse_indices is not None:
-        embeddings = torch.index_select(embeddings, 0, reverse_indices.to(torch.int32))
+    with record_function("## _construct_jagged_tensors ##"):
+        if original_features is not None:
+            features = original_features
+        if reverse_indices is not None:
+            embeddings = torch.index_select(
+                embeddings, 0, reverse_indices.to(torch.int32)
+            )
 
-    ret: Dict[str, JaggedTensor] = {}
-    stride = features.stride()
-    length_per_key = features.length_per_key()
-    values = features.values()
+        ret: Dict[str, JaggedTensor] = {}
+        stride = features.stride()
+        length_per_key = features.length_per_key()
+        values = features.values()
 
-    lengths = features.lengths().view(-1, stride)
-    lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
-    embeddings_list = torch.split(embeddings, length_per_key, dim=0)
-    values_list = torch.split(values, length_per_key) if need_indices else None
+        lengths = features.lengths().view(-1, stride)
+        lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        embeddings_list = torch.split(embeddings, length_per_key, dim=0)
+        values_list = torch.split(values, length_per_key) if need_indices else None
 
-    key_indices = defaultdict(list)
-    for i, key in enumerate(embedding_names):
-        key_indices[key].append(i)
-    for key, indices in key_indices.items():
-        # combines outputs in correct order for CW sharding
-        indices = (
-            _permute_indices(indices, features_to_permute_indices[key])
-            if features_to_permute_indices and key in features_to_permute_indices
-            else indices
-        )
-        ret[key] = JaggedTensor(
-            lengths=lengths_tuple[indices[0]],
-            values=embeddings_list[indices[0]]
-            if len(indices) == 1
-            else torch.cat([embeddings_list[i] for i in indices], dim=1),
-            weights=values_list[indices[0]] if values_list else None,
-        )
-    return ret
+        key_indices = defaultdict(list)
+        for i, key in enumerate(embedding_names):
+            key_indices[key].append(i)
+        for key, indices in key_indices.items():
+            # combines outputs in correct order for CW sharding
+            indices = (
+                _permute_indices(indices, features_to_permute_indices[key])
+                if features_to_permute_indices and key in features_to_permute_indices
+                else indices
+            )
+            ret[key] = JaggedTensor(
+                lengths=lengths_tuple[indices[0]],
+                values=embeddings_list[indices[0]]
+                if len(indices) == 1
+                else torch.cat([embeddings_list[i] for i in indices], dim=1),
+                weights=values_list[indices[0]] if values_list else None,
+            )
+        return ret
 
 
 def _permute_indices(indices: List[int], permute: List[int]) -> List[int]:
@@ -776,31 +780,39 @@ class ShardedEmbeddingCollection(
             if not self._ec_index_dedup:
                 features_by_shards = input_feature_splits
             else:
-                features_by_shards = []
-                for i, input_feature in enumerate(input_feature_splits):
-                    hash_size_cumsum = self.get_buffer(f"_hash_size_cumsum_tensor_{i}")
-                    hash_size_offset = self.get_buffer(f"_hash_size_offset_tensor_{i}")
-                    (
-                        lengths,
-                        offsets,
-                        unique_indices,
-                        reverse_indices,
-                    ) = torch.ops.fbgemm.jagged_unique_indices(
-                        hash_size_cumsum,
-                        hash_size_offset,
-                        input_feature.offsets().to(torch.int64),
-                        input_feature.values().to(torch.int64),
-                    )
-                    dedup_features = KeyedJaggedTensor(
-                        keys=input_feature.keys(),
-                        lengths=lengths,
-                        offsets=offsets,
-                        values=unique_indices,
-                    )
+                with record_function("## dedup_ec_indices ##"):
+                    features_by_shards = []
+                    for i, input_feature in enumerate(input_feature_splits):
+                        hash_size_cumsum = self.get_buffer(
+                            f"_hash_size_cumsum_tensor_{i}"
+                        )
+                        hash_size_offset = self.get_buffer(
+                            f"_hash_size_offset_tensor_{i}"
+                        )
+                        (
+                            lengths,
+                            offsets,
+                            unique_indices,
+                            reverse_indices,
+                        ) = torch.ops.fbgemm.jagged_unique_indices(
+                            hash_size_cumsum,
+                            hash_size_offset,
+                            input_feature.offsets().to(torch.int64),
+                            input_feature.values().to(torch.int64),
+                        )
+                        print(
+                            f"unique_indices: {unique_indices.numel()}, input_indices: {input_feature.values().numel()}, {unique_indices.numel()/input_feature.values().numel()}"
+                        )
+                        dedup_features = KeyedJaggedTensor(
+                            keys=input_feature.keys(),
+                            lengths=lengths,
+                            offsets=offsets,
+                            values=unique_indices,
+                        )
 
-                    ctx.input_features.append(input_feature)
-                    ctx.reverse_indices.append(reverse_indices)
-                    features_by_shards.append(dedup_features)
+                        ctx.input_features.append(input_feature)
+                        ctx.reverse_indices.append(reverse_indices)
+                        features_by_shards.append(dedup_features)
 
             awaitables = []
             for input_dist, features in zip(self._input_dists, features_by_shards):
