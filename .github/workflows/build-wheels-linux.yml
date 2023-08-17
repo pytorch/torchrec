@@ -15,6 +15,21 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       with-rocm: false
+  filter-matrix:
+    needs: generate-matrix
+    runs-on: linux.2xlarge
+    outputs:
+      matrix: ${{ steps.filter.outputs.matrix }}
+    steps:
+    - name: Filter Generated Built Matrix
+      id: filter
+      env:
+        MAT: ${{ needs.generate-matrix.outputs.matrix }}
+      runs: |
+        set -ex
+        MATRIX_BLOB="$(python filter.py)"
+        echo "${MATRIX_BLOB}"
+        echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
   build:
     needs: generate-matrix
     name: pytorch/torchrec
@@ -24,7 +39,7 @@ jobs:
       ref: ""
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
-      build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
+      build-matrix: ${{ needs.filter-matrix.outputs.matrix }}
       pre-script: ""
       post-script: ""
       package-name: torchrec
