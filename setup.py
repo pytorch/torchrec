@@ -38,26 +38,12 @@ def get_channel():
     return os.getenv("CHANNEL")
 
 
+def get_cu_version():
+    return os.getenv("CU_VERSION", "cpu")
+
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec setup")
-    parser.add_argument(
-        "--package_name",
-        type=str,
-        default="torchrec",
-        help="the name of this output wheel",
-    )
-    parser.add_argument(
-        "--version",
-        type=str,
-        default=None,
-        help="override version",
-    )
-    parser.add_argument(
-        "--cpu-only",
-        type=bool,
-        default=False,
-        help="True will install CPU only version of fbgemm-gpu",
-    )
     return parser.parse_known_args(argv)
 
 
@@ -66,7 +52,10 @@ def main(argv: List[str]) -> None:
 
     # Set up package name and version
     channel = get_channel()
-    name = args.package_name
+    if channel == "nightly":
+        name = "torchrec-nightly"
+    else:
+        name = "torchrec"
 
     with open(
         os.path.join(os.path.dirname(__file__), "README.MD"), encoding="utf8"
@@ -79,7 +68,7 @@ def main(argv: List[str]) -> None:
         reqs = f.read()
         install_requires = reqs.strip().split("\n")
 
-    version = args.version
+    version = os.getenv("BUILD_VERSION")
     if version is None:
         version = get_nightly_version() if channel == "nightly" else get_version()
 
@@ -88,8 +77,8 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu")
 
-    cpu_only = args.cpu_only
-    if cpu_only:
+    cu_version = get_cu_version()
+    if cu_version == "cpu":
         if "fbgemm-gpu-nightly" in install_requires:
             install_requires.remove("fbgemm-gpu-nightly")
             install_requires.append("fbgemm-gpu-nightly-cpu")
@@ -97,7 +86,7 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu")
             install_requires.append("fbgemm-gpu-cpu")
 
-    print(f"-- {name} building version: {version} CPU only: {cpu_only}")
+    print(f"-- {name} building version: {version} CU Version: {cu_version}")
 
     packages = find_packages(
         exclude=(
