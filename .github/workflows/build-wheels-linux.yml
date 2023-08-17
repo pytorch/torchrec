@@ -26,7 +26,7 @@ jobs:
       id: filter
       env:
         MAT: ${{ needs.generate-matrix.outputs.matrix }}
-      runs: |
+      run: |
         set -ex
         MATRIX_BLOB="$(python filter.py)"
         echo "${MATRIX_BLOB}"
