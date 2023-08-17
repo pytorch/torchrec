@@ -23,7 +23,6 @@ jobs:
       matrix: ${{ steps.filter.outputs.matrix }}
     steps:
     - uses: actions/setup-python@v4
-      with:
     - name: Checkout torchrec repository
       uses: actions/checkout@v3
       with:
