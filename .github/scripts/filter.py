@@ -1,7 +1,7 @@
 import os
 import json
 
-full_matrix_string = os.environ("MAT")
+full_matrix_string = os.environ["MAT"]
 full_matrix = json.loads(full_matrix_string)
 
 new_matrix_entries = []
