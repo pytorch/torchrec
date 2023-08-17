@@ -39,7 +39,7 @@ jobs:
         echo "${MATRIX_BLOB}"
         echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
   build:
-    needs: generate-matrix
+    needs: filter-matrix
     name: pytorch/torchrec
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     with:
