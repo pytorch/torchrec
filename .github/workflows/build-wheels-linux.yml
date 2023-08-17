@@ -28,7 +28,7 @@ jobs:
         MAT: ${{ needs.generate-matrix.outputs.matrix }}
       run: |
         set -ex
-        MATRIX_BLOB="$(python filter.py)"
+        MATRIX_BLOB="$(python .github/scripts/filter.py)"
         echo "${MATRIX_BLOB}"
         echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
   build:
