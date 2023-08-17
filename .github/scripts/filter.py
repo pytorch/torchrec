@@ -2,7 +2,7 @@ import json
 import os
 
 
-def main() -> None:
+def main():
     """
     Since FBGEMM doesn't publish CUDA 12 binaries, torchrec will not work with
     CUDA 12. As a result, we filter out CUDA 12 from the build matrix that
