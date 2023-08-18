@@ -15,10 +15,10 @@ on:
       - .github/workflows/validate-binaries.yml
       - .github/scripts/validate-binaries.sh
   pull_request:
-    paths:
-      - .github/workflows/validate-nightly-binaries.yml
-      - .github/workflows/validate-binaries.yml
-      - .github/scripts/validate-binaries.sh
+    # paths:
+    #   - .github/workflows/validate-nightly-binaries.yml
+    #   - .github/workflows/validate-binaries.yml
+    #   - .github/scripts/validate-binaries.sh
 jobs:
   nightly:
     uses: ./.github/workflows/validate-binaries.yml
