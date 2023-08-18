@@ -282,7 +282,9 @@ class TestSequenceSparseNN(TestSparseNNBase):
         input: ModelInput,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         dense_r = self.dense(input.float_features)
-        sparse_r = self.sparse(input.idlist_features, input.float_features.size(0))
+        # multiply the sparse output by 10 since the model output is not sensitive to the
+        # embedding output. It won't catch the unexpected embedding output without this
+        sparse_r = 10 * self.sparse(input.idlist_features, input.float_features.size(0))
         over_r = self.over(dense_r, sparse_r)
         pred = torch.sigmoid(torch.mean(over_r, dim=1))
         if self.training:

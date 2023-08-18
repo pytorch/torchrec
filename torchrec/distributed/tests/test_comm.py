@@ -181,8 +181,12 @@ class TestAllToAll(unittest.TestCase):
         seq_embs_out = a2a_req.wait()
         seq_embs_out.backward(seq_embs_out)
         grad = input_embeddings.grad
-        # pyre-fixme[16]: Optional type has no attribute `cpu`.
-        assert torch.equal(input_embeddings.cpu().detach(), grad.cpu().detach())
+        assert torch.equal(
+            input_embeddings.cpu().detach(),
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
+            grad.cpu().detach() * world_size,
+        )
+
         dist.destroy_process_group()
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument

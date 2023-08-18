@@ -1016,6 +1016,8 @@ class All2All_Seq_Req(Function):
                         None,
                         sharded_grad_input.numel(),
                     )
+        if GRADIENT_DIVISION:
+            sharded_grad_input.div_(dist.get_world_size(ctx.pg))
         return (None, None, None, sharded_grad_input.view(-1, D))
 
 
