@@ -874,8 +874,11 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
         torch.testing.assert_close(res, output, rtol=rtol, atol=atol)
         res.backward(res)
         grad = _input.grad
-        # pyre-fixme[16]: Optional type has no attribute `cpu`.
-        torch.testing.assert_close(_input.cpu().detach(), grad.cpu().detach())
+        torch.testing.assert_close(
+            _input.cpu().detach(),
+            # pyre-fixme[16]: Optional type has no attribute `cpu`.
+            grad.cpu().detach() * world_size,
+        )
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
