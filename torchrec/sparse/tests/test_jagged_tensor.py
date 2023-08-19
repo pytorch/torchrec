@@ -16,6 +16,7 @@ from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
     ComputeKJTToJTDict,
     JaggedTensor,
+    jt_is_equal,
     KeyedJaggedTensor,
     KeyedTensor,
     kjt_is_equal,
@@ -25,6 +26,105 @@ torch.fx.wrap("len")
 
 
 class TestJaggedTensor(unittest.TestCase):
+    def test_equality(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        lengths = torch.IntTensor([1, 0, 2, 3])
+        weights = torch.Tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        """
+        JaggedTensor representation from above values
+        # [[1.0], [], [2.0, 3.0], [4.0, 5.0, 6.0]]
+        """
+        # JT equality, from different construction methods
+        jt = JaggedTensor(values=values, lengths=lengths)
+        dense_values = torch.Tensor(
+            [[1.0, 11.0, 12.0], [9.0, 23.0, 11.0], [2.0, 3.0, 55.0], [4.0, 5.0, 6.0]]
+        )
+        jt_1 = JaggedTensor.from_dense_lengths(
+            values=dense_values, lengths=torch.IntTensor([1, 0, 2, 3])
+        )
+        self.assertTrue(jt_is_equal(jt, jt_1))
+
+        # Different values
+        jt = JaggedTensor(
+            values=torch.Tensor([2.0, 10.0, 11.0, 42.0, 3.0, 99.0]), lengths=lengths
+        )
+        self.assertFalse(jt_is_equal(jt, jt_1))
+
+        # Different lengths
+        jt = JaggedTensor(values=values, lengths=torch.IntTensor([1, 1, 0, 4]))
+        self.assertFalse(jt_is_equal(jt, jt_1))
+
+        # Including weights
+        """
+        # values: [[1.0], [], [2.0, 3.0], [4.0, 5.0, 6.0]]
+        # weights: [[0.1], [], [0.2, 0.3], [0.4, 0.5 ,0.6]]
+        """
+        jt = JaggedTensor(values=values, lengths=lengths, weights=weights)
+
+        dense_weights = torch.Tensor(
+            [[0.1, 1.1, 1.2], [0.9, 2.3, 1.1], [0.2, 0.3, 5.5], [0.4, 0.5, 0.6]]
+        )
+        jt_1 = JaggedTensor.from_dense_lengths(
+            values=dense_values,
+            lengths=torch.IntTensor([1, 0, 2, 3]),
+            weights=dense_weights,
+        )
+
+        self.assertTrue(jt_is_equal(jt, jt_1))
+
+        # Different weights
+        jt = JaggedTensor(
+            values=values,
+            lengths=lengths,
+            weights=torch.Tensor([1.4, 0.2, 3.2, 0.4, 42.0, 0.6]),
+        )
+        self.assertFalse(jt_is_equal(jt, jt_1))
+
+        # from dense, equal lengths
+        values_for_dense = [
+            torch.Tensor([1.0]),
+            torch.Tensor(),
+            torch.Tensor([2.0, 3.0]),
+            torch.Tensor([4.0, 5.0, 6.0]),
+        ]
+        weights_for_dense = [
+            torch.Tensor([0.1]),
+            torch.Tensor(),
+            torch.Tensor([0.2, 0.3]),
+            torch.Tensor([0.4, 0.5, 0.6]),
+        ]
+
+        jt = JaggedTensor.from_dense(
+            values=values_for_dense,
+            weights=weights_for_dense,
+        )
+
+        self.assertTrue(jt_is_equal(jt, jt_1))
+
+        # from dense, unequal lengths
+        values_for_dense = [
+            torch.Tensor([1.0]),
+            torch.Tensor([3.0, 10.0, 42.0]),
+            torch.Tensor([2.0, 3.0]),
+            torch.Tensor([4.0, 5.0, 6.0]),
+        ]
+        weights_for_dense = [
+            torch.Tensor([0.1]),
+            torch.Tensor([0.3, 1.1, 4.2]),
+            torch.Tensor([0.2, 0.3]),
+            torch.Tensor([0.4, 0.5, 0.6]),
+        ]
+
+        jt = JaggedTensor.from_dense(
+            values=values_for_dense,
+            weights=weights_for_dense,
+        )
+        self.assertFalse(jt_is_equal(jt, jt_1))
+
+        # wrong type
+        jt = "not a jagged tensor"
+        self.assertFalse(jt_is_equal(jt, jt_1))
+
     def test_str(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
         j_1d = JaggedTensor(
