@@ -1049,6 +1049,51 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.jt_is_equal">
+<span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">jt_is_equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">jt_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">jt_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.jt_is_equal" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function checks if two JaggedTensors are equal by comparing their internal representations.
+The comparison is done by comparing the values of the internal representations themselves.
+For optional fields, None values are treated as equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jt_1</strong> (<a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a>) – the first JaggedTensor</p></li>
+<li><p><strong>jt_2</strong> (<a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a>) – the second JaggedTensor</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if both JaggedTensors have the same values</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.kjt_is_equal">
+<span class="sig-prename descclassname"><span class="pre">torchrec.sparse.jagged_tensor.</span></span><span class="sig-name descname"><span class="pre">kjt_is_equal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kjt_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">kjt_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.kjt_is_equal" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function checks if two KeyedJaggedTensors are equal by comparing their internal representations.
+The comparison is done by comparing the values of the internal representations themselves.
+For optional fields, None values are treated as equal.
+We compare the keys by ensuring that they have the same length and that the corresponding keys are the same order and same values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>kjt_1</strong> (<a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – the first KeyedJaggedTensor</p></li>
+<li><p><strong>kjt_2</strong> (<a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – the second KeyedJaggedTensor</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if both KeyedJaggedTensors have the same values</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="module-0">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
