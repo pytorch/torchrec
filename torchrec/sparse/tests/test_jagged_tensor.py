@@ -18,6 +18,7 @@ from torchrec.sparse.jagged_tensor import (
     JaggedTensor,
     KeyedJaggedTensor,
     KeyedTensor,
+    kjt_is_equal,
 )
 
 torch.fx.wrap("len")
@@ -1289,6 +1290,123 @@ KeyedJaggedTensor({
             keys=["index_0", "index_1"],
         ).to(torch.device("cuda"))
         j.record_stream(torch.cuda.current_stream())
+
+    def test_equality(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        keys = ["index_0", "index_1"]
+        offsets = torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8])
+        lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3])
+        """
+        KJT looks like, represented from the inputs above
+        #              0         1        2         3    <-- dim_1
+        # "index_0"   None  [1.0, 2.0]  None     [3.0]
+        # "index_1"   [4.0]    [5.0]    None [1.0, 1.0, 1.5]
+        #   ^
+        #  dim_0
+        """
+        kt = KeyedJaggedTensor.from_offsets_sync(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+        )
+
+        kt_2 = KeyedJaggedTensor.from_lengths_sync(
+            values=values,
+            keys=keys,
+            lengths=lengths,
+        )
+
+        kt_3 = KeyedJaggedTensor(
+            values=values,
+            keys=["index_1", "index_0"],
+            offsets=offsets,
+        )
+
+        kt_4 = KeyedJaggedTensor(
+            values=torch.Tensor([10.0, 4.0, 2.0, 5.0, 2.0, 6.0, 9.0, 8.0]),
+            keys=keys,
+            lengths=lengths,
+        )
+
+        kt_5 = KeyedJaggedTensor(
+            values=values,
+            keys=["index_0"],
+            offsets=offsets,
+        )
+
+        weighted_kt = KeyedJaggedTensor.from_offsets_sync(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+
+        self.assertTrue(kjt_is_equal(kt, kt_2))  # base check
+        self.assertFalse(kjt_is_equal(kt, kt_3))  # different order of keys
+        self.assertFalse(kjt_is_equal(kt, kt_4))  # different values
+        self.assertFalse(kjt_is_equal(kt, kt_5))  # different keys
+        self.assertFalse(kjt_is_equal(kt, weighted_kt))  # different weights
+
+        # Different lengths
+        lengths = torch.IntTensor([1, 2, 3, 4, 5, 6, 7, 8])
+        lengths_2 = torch.IntTensor([8, 7, 6, 5, 4, 3, 2, 1])
+        kt_length_1 = KeyedJaggedTensor.from_lengths_sync(
+            values=values, keys=keys, lengths=lengths
+        )
+        kt_length_2 = KeyedJaggedTensor.from_lengths_sync(
+            values=values, keys=keys, lengths=lengths_2
+        )
+        self.assertFalse(kjt_is_equal(kt_length_1, kt_length_2))
+
+        # Different offsets
+        offsets_2 = torch.IntTensor([8, 4, 1, 5, 0, 1, 2, 1, 2])
+        kt_offset_1 = KeyedJaggedTensor.from_offsets_sync(
+            values=values, keys=keys, offsets=offsets
+        )
+        kt_offset_2 = KeyedJaggedTensor.from_offsets_sync(
+            values=values, keys=keys, offsets=offsets_2
+        )
+        self.assertFalse(kjt_is_equal(kt_offset_1, kt_offset_2))
+
+        # Different length_per_key and offset_per_key
+        length_per_key_1 = [4, 4]
+        length_per_key_2 = [3, 5]
+        offset_per_key_1 = [0, 4]
+        offset_per_key_2 = [0, 3]
+        kt_lpk_opk_1 = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            length_per_key=length_per_key_1,
+            offset_per_key=offset_per_key_1,
+        )
+        kt_lpk_opk_2 = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            length_per_key=length_per_key_2,
+            offset_per_key=offset_per_key_2,
+        )
+        self.assertFalse(kjt_is_equal(kt_lpk_opk_1, kt_lpk_opk_2))
+
+        # None values in optional fields
+        kt_none_fields = KeyedJaggedTensor(values=values, keys=keys, offsets=offsets)
+        kt_some_fields = KeyedJaggedTensor(
+            values=values, keys=keys, offsets=offsets, lengths=lengths, weights=weights
+        )
+        self.assertFalse(kjt_is_equal(kt_none_fields, kt_some_fields))
+
+        # Empty KeyedJaggedTensor
+        kt_empty = KeyedJaggedTensor(
+            values=torch.Tensor([]), keys=[], offsets=torch.IntTensor([])
+        )
+        self.assertTrue(kjt_is_equal(kt_empty, kt_empty))
+        self.assertFalse(kjt_is_equal(kt, kt_empty))
+
+        # Non-KeyedJaggedTensor input
+        non_kjt_input = "not a KeyedJaggedTensor instance"
+        self.assertFalse(kjt_is_equal(kt, non_kjt_input))
 
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):

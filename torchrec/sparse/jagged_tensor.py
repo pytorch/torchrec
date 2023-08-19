@@ -7,7 +7,8 @@
 
 import abc
 import json
-from typing import Dict, List, Optional, Tuple
+import operator
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch.autograd.profiler import record_function
@@ -802,6 +803,101 @@ def _sum_by_splits(input_list: List[int], splits: List[int]) -> List[int]:
         sum(input_list[sum(splits[:i]) : sum(splits[:i]) + n])
         for i, n in enumerate(splits)
     ]
+
+
+@torch.fx.wrap
+def kjt_is_equal(kjt_1: "KeyedJaggedTensor", kjt_2: "KeyedJaggedTensor") -> bool:
+    """This function checks if two KeyedJaggedTensors are equal by comparing their internal representations.
+    The comparison is done by comparing the values of the internal representations themselves.
+    For optional fields, None values are treated as equal.
+    We compare the keys by ensuring that they have the same length and that the corresponding keys are the same order and same values.
+
+    Args:
+        kjt_1 (KeyedJaggedTensor): the first KeyedJaggedTensor
+        kjt_2 (KeyedJaggedTensor): the second KeyedJaggedTensor
+
+    Returns:
+        bool: True if both KeyedJaggedTensors have the same values
+    """
+    if not isinstance(kjt_1, KeyedJaggedTensor) or not isinstance(
+        kjt_2, KeyedJaggedTensor
+    ):
+        return False
+
+    # check for missing/extra keys
+    if len(kjt_1.keys()) != len(kjt_2.keys()):
+        return False
+
+    # check if all keys are equal and in same order
+    for a, b in zip(kjt_1.keys(), kjt_2.keys()):
+        if a != b:
+            return False
+
+    if not _check_attributes(kjt_1.values(), kjt_2.values(), torch.allclose):
+        return False
+
+    _force_length_offset_computation(kjt_1)
+    _force_length_offset_computation(kjt_2)
+    # sync length and offset per key as well
+    kjt_1.sync()
+    kjt_2.sync()
+
+    attributes_to_check = [
+        (kjt_1.lengths_or_none(), kjt_2.lengths_or_none()),
+        (kjt_1.weights_or_none(), kjt_2.weights_or_none()),
+        (kjt_1.offsets_or_none(), kjt_2.offsets_or_none()),
+        (kjt_1.length_per_key_or_none(), kjt_2.length_per_key_or_none()),
+        (kjt_1.offset_per_key_or_none(), kjt_2.offset_per_key_or_none()),
+        (kjt_1.stride(), kjt_2.stride()),
+    ]
+
+    for attr_1, attr_2 in attributes_to_check:
+        if not _check_attributes(
+            attr_1,
+            attr_2,
+            torch.allclose if isinstance(attr_1, torch.Tensor) else operator.eq,
+        ):
+            return False
+
+    return True
+
+
+def _force_length_offset_computation(kjt: "KeyedJaggedTensor") -> None:
+    """Helper function to force length/offset computation for KJT.
+    Mainly used for testing equality, as equal KJT's can be formed from just using lengths or offsets.
+    One can be derived from the other so to ensure properly equality checking we force the computation of
+    the other attribute if it can be done.
+    """
+    offsets = kjt.offsets_or_none()
+    lengths = kjt.lengths_or_none()
+    if offsets is not None and lengths is None:
+        kjt.lengths()
+    elif lengths is not None and offsets is None:
+        kjt.offsets()
+
+
+def _check_attributes(
+    attr_1: Union[torch.Tensor, List[int], List[str], int, None],
+    attr_2: Union[torch.Tensor, List[int], List[str], int, None],
+    comparison_func: Callable[[Any, Any], bool],  # pyre-ignore[2]
+) -> bool:
+    """Helper function to check if two attributes are equal.
+
+    Args:
+        attr_1: The first attribute.
+        attr_2: The second attribute.
+        comparison_func (function): Function to compare the attributes.
+
+    Returns:
+        bool: False if the attributes are not equal or one is None while the other isn't, otherwise True.
+    """
+    if attr_1 is not None and attr_2 is not None:
+        if not comparison_func(attr_1, attr_2):
+            return False
+    elif attr_1 is not None or attr_2 is not None:
+        return False
+
+    return True
 
 
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
