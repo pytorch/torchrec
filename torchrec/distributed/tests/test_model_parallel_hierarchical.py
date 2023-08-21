@@ -9,11 +9,13 @@ import unittest
 from typing import Any, Dict, Optional, Tuple, Type
 
 import torch
+from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import assume, given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.test_model import (
+    TestSparseNN,
     TestTowerCollectionSparseNN,
     TestTowerSparseNN,
 )
@@ -21,6 +23,7 @@ from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTes
 from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
     SharderType,
+    sharding_single_rank_test,
 )
 from torchrec.distributed.types import ShardingType
 from torchrec.test_utils import skip_if_asan_class
@@ -200,6 +203,44 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least three GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_sharding_empty_rank(self, sharding_type: str) -> None:
+        table = self.tables[0]
+        embedding_groups = {"group_0": table.feature_names}
+        self._run_multi_process_test(
+            callable=sharding_single_rank_test,
+            world_size=4,
+            local_size=2,
+            model_class=TestSparseNN,
+            tables=[table],
+            embedding_groups=embedding_groups,
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    sharding_type,
+                    EmbeddingComputeKernel.FUSED.value,
+                    device=torch.device("cuda"),
+                )
+            ],
+            optim=EmbOptimType.EXACT_SGD,
+            backend="nccl",
+            constraints={table.name: ParameterConstraints(min_partition=4)},
+            variable_batch_size=True,
         )
 
     @unittest.skipIf(

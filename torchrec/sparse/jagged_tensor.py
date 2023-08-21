@@ -1733,23 +1733,23 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
     def dist_labels(self) -> List[str]:
-        labels = ["lengths", "values"]
+        labels = ["strides", "lengths", "values"]
         if self.weights_or_none() is not None:
             labels.append("weights")
         return labels
 
     def dist_splits(self, key_splits: List[int]) -> List[List[int]]:
-        batch_size_per_split = _sum_by_splits(
-            [self.stride()] * len(self.keys()), key_splits
-        )
+        num_strides_per_split = key_splits
+        batch_size_per_split = _sum_by_splits(self.stride_per_key(), key_splits)
         length_per_split = _sum_by_splits(self.length_per_key(), key_splits)
-        splits = [batch_size_per_split, length_per_split]
+        splits = [num_strides_per_split, batch_size_per_split, length_per_split]
         if self.weights_or_none() is not None:
             splits.append(length_per_split)
         return splits
 
     def dist_tensors(self) -> List[torch.Tensor]:
-        tensors = [self.lengths(), self.values()]
+        strides = pin_and_move(torch.tensor(self.stride_per_key()), self.device())
+        tensors = [strides, self.lengths(), self.values()]
         if self.weights_or_none() is not None:
             tensors.append(self.weights())
         return tensors
@@ -1758,40 +1758,77 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def dist_init(
         keys: List[str],
         tensors: List[torch.Tensor],
-        batch_size_per_rank: List[int],
         recat: Optional[torch.Tensor],
+        num_workers: int,
+        variable_stride_per_key: bool,
     ) -> "KeyedJaggedTensor":
-        assert len(tensors) in [2, 3]
-        lengths = tensors[0]
-        values = tensors[1]
-        weights = tensors[2] if len(tensors) == 3 else None
+        assert len(tensors) in [3, 4]
+        stride_per_key_tensor = tensors[0]
+        lengths = tensors[1]
+        values = tensors[2]
+        weights = tensors[3] if len(tensors) == 4 else None
 
-        with record_function("## all2all_data:recat_values ##"):
-            if recat is not None and recat.numel() > 0:
-                if all(bs == batch_size_per_rank[0] for bs in batch_size_per_rank):
-                    lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
+        stride_per_key_per_rank: List[List[int]] = stride_per_key_tensor.view(
+            num_workers, len(keys)
+        ).T.tolist()
+
+        strides_cumsum: List[int] = torch.ops.fbgemm.asynchronous_complete_cumsum(
+            stride_per_key_tensor
+        ).tolist()
+        cumsum_lengths = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
+        length_per_key = (
+            cumsum_lengths[strides_cumsum[1:]] - cumsum_lengths[strides_cumsum[:-1]]
+        )
+
+        if recat is not None and recat.numel() > 0:
+            with record_function("## all2all_data:recat_values ##"):
+                stride_per_rank = stride_per_key_per_rank[0]
+                if not variable_stride_per_key and all(
+                    s == stride_per_rank[0] for s in stride_per_rank
+                ):
+                    (
+                        lengths,
+                        values,
+                        weights,
+                    ) = torch.ops.fbgemm.permute_2D_sparse_data(
                         recat,
-                        lengths.view(-1, batch_size_per_rank[0]),
+                        lengths.view(-1, stride_per_rank[0]),
                         values,
                         weights,
                         values.numel(),
                     )
                     lengths = lengths.view(-1)
-                else:  # variable batch size
-                    lengths, values, weights = torch.ops.fbgemm.permute_1D_sparse_data(
+
+                else:
+                    (_, lengths, _,) = torch.ops.fbgemm.permute_1D_sparse_data(
                         recat,
-                        lengths.view(-1),
+                        stride_per_key_tensor,
+                        lengths,
+                        None,
+                        None,
+                    )
+                    (_, values, weights,) = torch.ops.fbgemm.permute_1D_sparse_data(
+                        recat,
+                        length_per_key,
                         values,
                         weights,
-                        values.numel(),
+                        None,
                     )
+
+        if stride_per_key_per_rank and not variable_stride_per_key:
+            stride = sum(stride_per_key_per_rank[0])
+        else:
+            stride = None
+            if variable_stride_per_key and not stride_per_key_per_rank:
+                stride_per_key_per_rank = [[0]] * len(keys)
 
         kjt = KeyedJaggedTensor(
             keys=keys,
             values=values,
             weights=weights,
             lengths=lengths,
-            stride=sum(batch_size_per_rank),
+            stride=stride,
+            stride_per_key_per_rank=stride_per_key_per_rank,
         )
         return kjt.sync()
 

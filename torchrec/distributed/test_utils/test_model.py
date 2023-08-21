@@ -395,13 +395,13 @@ class TestOverArch(nn.Module):
 def _post_sparsenn_forward(
     ebc: KeyedTensor,
     fp_ebc: Optional[KeyedTensor],
-    w_ebc: KeyedTensor,
+    w_ebc: Optional[KeyedTensor],
     batch_size: Optional[int] = None,
 ) -> KeyedTensor:
     if batch_size is None or ebc.values().size(0) == batch_size:
         ebc_values = ebc.values()
         fp_ebc_values = fp_ebc.values() if fp_ebc is not None else None
-        w_ebc_values = w_ebc.values()
+        w_ebc_values = w_ebc.values() if w_ebc is not None else None
     else:
         ebc_values = torch.zeros(
             batch_size,
@@ -420,33 +420,56 @@ def _post_sparsenn_forward(
             fp_ebc_values[: fp_ebc.values().size(0), :] = fp_ebc.values()
         else:
             fp_ebc_values = None
-        w_ebc_values = torch.zeros(
-            batch_size,
-            w_ebc.values().size(1),
-            dtype=w_ebc.values().dtype,
-            device=w_ebc.values().device,
+        if w_ebc is not None:
+            w_ebc_values = torch.zeros(
+                batch_size,
+                w_ebc.values().size(1),
+                dtype=w_ebc.values().dtype,
+                device=w_ebc.values().device,
+            )
+            w_ebc_values[: w_ebc.values().size(0), :] = w_ebc.values()
+        else:
+            w_ebc_values = None
+
+    if fp_ebc is None and w_ebc is None:
+        return KeyedTensor(
+            keys=ebc.keys(),
+            length_per_key=ebc.length_per_key(),
+            values=ebc_values,
         )
-        w_ebc_values[: w_ebc.values().size(0), :] = w_ebc.values()
-    result = (
-        KeyedTensor(
+    elif fp_ebc is None and w_ebc is not None:
+        return KeyedTensor(
             keys=ebc.keys() + w_ebc.keys(),
             length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
-            values=torch.cat([ebc_values, w_ebc_values], dim=1),
+            values=torch.cat(
+                [ebc_values, torch.jit._unwrap_optional(w_ebc_values)], dim=1
+            ),
         )
-        if fp_ebc is None
-        else KeyedTensor(
+    elif fp_ebc is not None and w_ebc is None:
+        return KeyedTensor(
+            keys=ebc.keys() + fp_ebc.keys(),
+            length_per_key=ebc.length_per_key() + fp_ebc.length_per_key(),
+            values=torch.cat(
+                [ebc_values, torch.jit._unwrap_optional(fp_ebc_values)], dim=1
+            ),
+        )
+    else:
+        assert fp_ebc is not None and w_ebc is not None
+        return KeyedTensor(
             keys=ebc.keys() + fp_ebc.keys() + w_ebc.keys(),
             length_per_key=ebc.length_per_key()
             + fp_ebc.length_per_key()
             + w_ebc.length_per_key(),
             # Comment to torch.jit._unwrap_optional fp_ebc_values is inferred as Optional[Tensor] as it can be None when fp_ebc is None. But at this point we now that it has a value and doing jit._unwrap_optional will tell jit to treat it as Tensor type.
             values=torch.cat(
-                [ebc_values, torch.jit._unwrap_optional(fp_ebc_values), w_ebc_values],
+                [
+                    ebc_values,
+                    torch.jit._unwrap_optional(fp_ebc_values),
+                    torch.jit._unwrap_optional(w_ebc_values),
+                ],
                 dim=1,
             ),
         )
-    )
-    return result
 
 
 class TestSparseArch(nn.Module):
@@ -513,16 +536,20 @@ class TestSparseArch(nn.Module):
                 tables=tables,
                 device=device,
             )
-        self.weighted_ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-            tables=weighted_tables,
-            is_weighted=True,
-            device=device,
+        self.weighted_ebc: Optional[EmbeddingBagCollection] = (
+            EmbeddingBagCollection(
+                tables=weighted_tables,
+                is_weighted=True,
+                device=device,
+            )
+            if weighted_tables
+            else None
         )
 
     def forward(
         self,
         features: KeyedJaggedTensor,
-        weighted_features: KeyedJaggedTensor,
+        weighted_features: Optional[KeyedJaggedTensor] = None,
         batch_size: Optional[int] = None,
     ) -> KeyedTensor:
         fp_features = features
@@ -535,7 +562,11 @@ class TestSparseArch(nn.Module):
         fp_ebc: Optional[KeyedTensor] = (
             self.fp_ebc(fp_features) if self.fp_ebc is not None else None
         )
-        w_ebc = self.weighted_ebc(weighted_features)
+        w_ebc = (
+            self.weighted_ebc(weighted_features)
+            if self.weighted_ebc is not None and weighted_features is not None
+            else None
+        )
         result = _post_sparsenn_forward(ebc, fp_ebc, w_ebc, batch_size)
         return result
 
@@ -629,7 +660,9 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         dense_r = self.dense(input.float_features)
         sparse_r = self.sparse(
-            input.idlist_features, input.idscore_features, input.float_features.size(0)
+            features=input.idlist_features,
+            weighted_features=input.idscore_features,
+            batch_size=input.float_features.size(0),
         )
         over_r = self.over(dense_r, sparse_r)
         pred = torch.sigmoid(torch.mean(over_r, dim=1)) + self.dummy_ones
