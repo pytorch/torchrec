@@ -313,7 +313,7 @@ class FusedEmbeddingBagCollection(
             name="t2", embedding_dim=8, num_embeddings=10, feature_names=["f2"]
         )
 
-        ebc = FusedEmbeddingBagCollection(tables=[table_0, table_1], optimizer=torch.optim.SGD, optimizer_kwargs={"lr": .01})
+        ebc = FusedEmbeddingBagCollection(tables=[table_0, table_1], optimizer_type=torch.optim.SGD, optimizer_kwargs={"lr": .01})
 
         #        0       1        2  <-- batch
         # "f1"   [0,1] None    [2]
