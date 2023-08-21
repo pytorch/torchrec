@@ -1746,8 +1746,9 @@ class TestKeyedJaggedTensorScripting(unittest.TestCase):
                 return KeyedJaggedTensor.dist_init(
                     keys=input.keys(),
                     tensors=input.dist_tensors(),
-                    batch_size_per_rank=[2, 2],
                     recat=torch.tensor([]),
+                    num_workers=2,
+                    variable_stride_per_key=False,
                 )
 
         m = MyModule()

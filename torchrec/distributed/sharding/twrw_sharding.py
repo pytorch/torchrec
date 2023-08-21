@@ -328,6 +328,11 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[KeyedJaggedTensor]: awaitable of KeyedJaggedTensor.
         """
 
+        if sparse_features.variable_stride_per_key():
+            raise ValueError(
+                "Variable batch per feature is not supported with table-wise-row-wise sharding"
+            )
+
         bucketized_features = bucketize_kjt_before_all2all(
             sparse_features,
             num_buckets=self._local_size,
@@ -445,7 +450,19 @@ class TwRwPooledEmbeddingDist(
             local_rank = self._rank % self._intra_pg.size()
             batch_size_per_rank = batch_size_per_rank_by_cross_group[local_rank]
             rs_result = self._intra_dist(local_embs, input_splits=lengths).wait()
-            return self._cross_dist(rs_result, batch_size_per_rank=batch_size_per_rank)
+            return self._cross_dist(
+                rs_result,
+                batch_size_per_rank=batch_size_per_rank,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
+            )
+        elif sharding_ctx is not None:
+            if local_embs.numel() == 0 and local_embs.shape == torch.Size([0]):
+                assert len(set(sharding_ctx.batch_size_per_feature_pre_a2a)) == 1
+                b_local = sharding_ctx.batch_size_per_feature_pre_a2a[0]
+                local_embs = local_embs.view(
+                    b_local * self._intra_pg.size() * self._cross_pg.size(), 0
+                )
+            return self._cross_dist(self._intra_dist(local_embs).wait())
         else:
             return self._cross_dist(self._intra_dist(local_embs).wait())
 
