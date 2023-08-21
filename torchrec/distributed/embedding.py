@@ -800,9 +800,6 @@ class ShardedEmbeddingCollection(
                             input_feature.offsets().to(torch.int64),
                             input_feature.values().to(torch.int64),
                         )
-                        print(
-                            f"unique_indices: {unique_indices.numel()}, input_indices: {input_feature.values().numel()}, {unique_indices.numel()/input_feature.values().numel()}"
-                        )
                         dedup_features = KeyedJaggedTensor(
                             keys=input_feature.keys(),
                             lengths=lengths,
