@@ -121,6 +121,31 @@ class All2AllPooledInfo(object):
 
 
 @dataclass
+class VariableBatchAll2AllPooledInfo(object):
+    """
+    The data class that collects the attributes when calling the
+    `variable_batch_alltoall_pooled` operation.
+
+    Attributes:
+        batch_size_per_rank_per_feature (List[List[int]]): batch size per rank per
+            feature.
+        batch_size_per_feature_pre_a2a (List[int]): local batch size before scattering.
+        emb_dim_per_rank_per_feature (List[List[int]]): embedding dimension per rank
+            per feature
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
+        input_splits (Optional[List[int]]): input splits of tensor all to all.
+        output_splits (Optional[List[int]]): output splits of tensor all to all.
+    """
+
+    batch_size_per_rank_per_feature: List[List[int]]
+    batch_size_per_feature_pre_a2a: List[int]
+    emb_dim_per_rank_per_feature: List[List[int]]
+    codecs: Optional[QuantizedCommCodecs] = None
+    input_splits: Optional[List[int]] = None
+    output_splits: Optional[List[int]] = None
+
+
+@dataclass
 class All2AllSequenceInfo(object):
     """
     The data class that collects the attributes when calling the `alltoall_sequence`
@@ -305,7 +330,7 @@ def alltoall_pooled(
         codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
-        Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
+        Awaitable[Tensor]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
 
     .. warning::
         `alltoall_pooled` is experimental and subject to change.
@@ -326,6 +351,32 @@ def alltoall_pooled(
         codecs=codecs,
     )
     All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
+    return myreq
+
+
+def variable_batch_alltoall_pooled(
+    a2a_pooled_embs_tensor: Tensor,
+    batch_size_per_rank_per_feature: List[List[int]],
+    batch_size_per_feature_pre_a2a: List[int],
+    emb_dim_per_rank_per_feature: List[List[int]],
+    group: Optional[dist.ProcessGroup] = None,
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> Awaitable[Tensor]:
+
+    if group is None:
+        group = dist.distributed_c10d._get_default_group()
+
+    if dist.get_world_size(group) <= 1:
+        return NoWait(a2a_pooled_embs_tensor)
+
+    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
+    a2ai = VariableBatchAll2AllPooledInfo(
+        batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
+        batch_size_per_feature_pre_a2a=batch_size_per_feature_pre_a2a,
+        emb_dim_per_rank_per_feature=emb_dim_per_rank_per_feature,
+        codecs=codecs,
+    )
+    Variable_Batch_All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
     return myreq
 
 
@@ -850,6 +901,206 @@ class All2All_Pooled_Wait(Function):
             ]
             output_split_sizes = [
                 D_local_sum * B_rank for B_rank in batch_size_per_rank
+            ]
+
+        sharded_grad_input = torch.empty(
+            sum(output_split_sizes),
+            device=sharded_grad_output.device,
+            dtype=sharded_grad_output.dtype,
+        )
+        with record_function("## alltoall_bwd_single ##"):
+            req = dist.all_to_all_single(
+                output=sharded_grad_input,
+                input=sharded_grad_output,
+                output_split_sizes=output_split_sizes,
+                input_split_sizes=input_split_sizes,
+                group=pg,
+                async_op=True,
+            )
+        myreq.req = req
+        myreq.tensor = sharded_grad_input
+        myreq.qcomm_ctx = qcomm_ctx
+
+        return (None, None, myreq.dummy_tensor)
+
+
+class Variable_Batch_All2All_Pooled_Req(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        a2ai: VariableBatchAll2AllPooledInfo,
+        input_embeddings: Tensor,
+    ) -> Tensor:
+        my_rank = dist.get_rank(pg)
+
+        # get input splits
+        world_size = dist.get_world_size(pg)
+        input_split_sizes = [0 for _ in range(world_size)]
+        if a2ai.batch_size_per_rank_per_feature:
+            for i in range(world_size):
+                curr_size = 0
+                for batch_size, emb_dim in zip(
+                    a2ai.batch_size_per_rank_per_feature[i],
+                    a2ai.emb_dim_per_rank_per_feature[my_rank],
+                ):
+                    curr_size += batch_size * emb_dim
+                input_split_sizes[i] = curr_size
+        a2ai.input_splits = input_split_sizes
+
+        # get output splits
+        output_split_sizes = [0 for _ in range(world_size)]
+        ind = 0
+        for i in range(world_size):
+            curr_size = 0
+            for emb_dim in a2ai.emb_dim_per_rank_per_feature[i]:
+                curr_size += a2ai.batch_size_per_feature_pre_a2a[ind] * emb_dim
+                ind += 1
+            output_split_sizes[i] = curr_size
+        a2ai.output_splits = output_split_sizes
+
+        sharded_input_embeddings = input_embeddings.view(-1)
+        qcomm_ctx = None
+
+        if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.forward.create_context()
+            sharded_input_embeddings = codecs.forward.encode(
+                sharded_input_embeddings,
+                qcomm_ctx,
+            )
+            output_split_sizes = [
+                codecs.forward.calc_quantized_size(
+                    split,
+                    qcomm_ctx,
+                )
+                for split in output_split_sizes
+            ]
+            input_split_sizes = [
+                codecs.forward.calc_quantized_size(
+                    split,
+                    qcomm_ctx,
+                )
+                for split in input_split_sizes
+            ]
+
+        sharded_output_embeddings = torch.empty(
+            sum(output_split_sizes),
+            dtype=sharded_input_embeddings.dtype,
+            device=sharded_input_embeddings.device,
+        )
+
+        with record_function("## alltoall_fwd_single ##"):
+            req = dist.all_to_all_single(
+                output=sharded_output_embeddings,
+                input=sharded_input_embeddings,
+                output_split_sizes=output_split_sizes,
+                input_split_sizes=input_split_sizes,
+                group=pg,
+                async_op=True,
+            )
+
+        myreq.req = req
+        myreq.tensor = sharded_output_embeddings
+        myreq.qcomm_ctx = qcomm_ctx
+        myreq.a2ai = a2ai
+        myreq.wait_function = Variable_Batch_All2All_Pooled_Wait
+        ctx.myreq = myreq
+        ctx.pg = pg
+        return myreq.dummy_tensor
+
+    @staticmethod
+    # pyre-fixme[2]: Parameter must be annotated.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, *unused) -> Tuple[None, None, None, Tensor]:
+        myreq = ctx.myreq
+        a2ai = myreq.a2ai
+        assert myreq.req is not None
+        myreq.req.wait()
+        myreq.req = None
+        grad_output = myreq.tensor
+
+        if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            grad_input = codecs.backward.decode(grad_output, myreq.qcomm_ctx)
+        else:
+            grad_input = grad_output
+        if GRADIENT_DIVISION:
+            grad_input.div_(dist.get_world_size(ctx.pg))
+        myreq.tensor = None
+        myreq.dummy_tensor = None
+        return (None, None, None, grad_input)
+
+
+class Variable_Batch_All2All_Pooled_Wait(Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        pg: dist.ProcessGroup,
+        myreq: Request[Tensor],
+        *dummy_tensor: Tensor,
+    ) -> Tensor:
+        a2ai = myreq.a2ai
+        ctx.a2ai = a2ai
+        assert myreq.req is not None
+        myreq.req.wait()
+        sharded_output_embeddings = myreq.tensor
+        myreq.req = None
+        myreq.tensor = None
+        ctx.pg = pg
+        ctx.myreq = myreq
+
+        if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            sharded_output_embeddings = codecs.forward.decode(
+                sharded_output_embeddings,
+                myreq.qcomm_ctx,
+            )
+        # the return result is a 1-d tensor, like: f_0_s_0, f_0_s1, ..., f_n_s_0, f_n_s_k
+        # f_0, f_1, ... , f_n are ordered by features on each rank
+        return sharded_output_embeddings
+
+    @staticmethod
+    # pyre-fixme[14]: `backward` overrides method defined in `Function` inconsistently.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def backward(ctx, grad_output: Tensor) -> Tuple[None, None, Tensor]:
+        myreq = ctx.myreq
+        a2ai = ctx.a2ai
+        pg = ctx.pg
+
+        assert a2ai.input_splits is not None
+        assert a2ai.output_splits is not None
+        input_split_sizes = a2ai.output_splits
+        output_split_sizes = a2ai.input_splits
+
+        sharded_grad_output = grad_output.contiguous()
+        qcomm_ctx = None
+
+        if a2ai.codecs is not None:
+            codecs = none_throws(a2ai.codecs)
+            qcomm_ctx = codecs.backward.create_context()
+            sharded_grad_output = codecs.backward.encode(
+                sharded_grad_output,
+                qcomm_ctx,
+            )
+            input_split_sizes = [
+                codecs.backward.calc_quantized_size(
+                    split,
+                    qcomm_ctx,
+                )
+                for split in input_split_sizes
+            ]
+            output_split_sizes = [
+                codecs.backward.calc_quantized_size(
+                    split,
+                    qcomm_ctx,
+                )
+                for split in output_split_sizes
             ]
 
         sharded_grad_input = torch.empty(
