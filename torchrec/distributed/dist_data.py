@@ -23,7 +23,7 @@ from torchrec.distributed.comm_ops import (
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, pin_and_move
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -323,7 +323,7 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
             return
 
         input_tensors = [
-            torch.tensor(split, device=device) for split in self._input_splits
+            pin_and_move(torch.tensor(split), device) for split in self._input_splits
         ]
         batch_size_tensor = torch.tensor(
             [input.stride()] * self._workers, device=device
