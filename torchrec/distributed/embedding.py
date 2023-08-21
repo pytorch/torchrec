@@ -834,9 +834,12 @@ class ShardedEmbeddingCollection(
             ctx.sharding_contexts,
             self._sharding_type_to_sharding,
         ):
-            sharding_ctx.lengths_after_input_dist = features.lengths().view(
-                -1, features.stride()
-            )
+            if features.stride() == 0:
+                assert len(set(sharding_ctx.batch_size_per_feature_pre_a2a)) == 1
+                stride = sharding_ctx.batch_size_per_feature_pre_a2a[0]
+            else:
+                stride = features.stride()
+            sharding_ctx.lengths_after_input_dist = features.lengths().view(-1, stride)
             embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
             ret.append(lookup(features).view(-1, embedding_dim))
         return ret
@@ -878,9 +881,12 @@ class ShardedEmbeddingCollection(
             ctx.sharding_contexts,
             self._sharding_type_to_sharding,
         ):
-            sharding_ctx.lengths_after_input_dist = features.lengths().view(
-                -1, features.stride()
-            )
+            if features.stride() == 0:
+                assert len(set(sharding_ctx.batch_size_per_feature_pre_a2a)) == 1
+                stride = sharding_ctx.batch_size_per_feature_pre_a2a[0]
+            else:
+                stride = features.stride()
+            sharding_ctx.lengths_after_input_dist = features.lengths().view(-1, stride)
             embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
             awaitables_per_sharding.append(
                 odist(lookup(features).view(-1, embedding_dim), sharding_ctx)

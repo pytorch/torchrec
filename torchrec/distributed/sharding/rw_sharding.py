@@ -256,6 +256,11 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
 
+        if sparse_features.variable_stride_per_key():
+            raise ValueError(
+                "Variable batch per feature is not supported with row-wise sharding"
+            )
+
         (
             bucketized_features,
             self.unbucketize_permute_tensor,
@@ -289,6 +294,7 @@ class RwPooledEmbeddingDist(
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
+        self._pg: dist.ProcessGroup = pg
 
         self._dist = PooledEmbeddingsReduceScatter(
             pg,
@@ -317,6 +323,10 @@ class RwPooledEmbeddingDist(
         if sharding_ctx is None:
             return self._dist(local_embs)
         else:
+            if local_embs.numel() == 0 and local_embs.shape == torch.Size([0]):
+                assert len(set(sharding_ctx.batch_size_per_feature_pre_a2a)) == 1
+                b_local = sharding_ctx.batch_size_per_feature_pre_a2a[0]
+                local_embs = local_embs.view(b_local * self._pg.size(), 0)
             return self._dist(local_embs, input_splits=sharding_ctx.batch_size_per_rank)
 
 
