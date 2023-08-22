@@ -111,7 +111,6 @@ def create_embedding_bag_sharding(
     env: ShardingEnv,
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
-    need_pos: bool = False,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
 ) -> EmbeddingSharding[
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
@@ -130,7 +129,6 @@ def create_embedding_bag_sharding(
             sharding_infos,
             env,
             device,
-            need_pos=need_pos,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
@@ -140,7 +138,6 @@ def create_embedding_bag_sharding(
             sharding_infos,
             env,
             device,
-            need_pos=need_pos,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
@@ -264,13 +261,6 @@ def create_sharding_infos_by_sharding(
     return sharding_type_to_sharding_infos
 
 
-def _check_need_pos(module: EmbeddingBagCollectionInterface) -> bool:
-    for config in module.embedding_bag_configs():
-        if config.need_pos:
-            return True
-    return False
-
-
 def construct_output_kt(
     embeddings: List[torch.Tensor],
     embedding_names: List[str],
@@ -373,7 +363,6 @@ class ShardedEmbeddingBagCollection(
             "embedding_bags.",
             fused_params,
         )
-        need_pos = _check_need_pos(module)
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
@@ -389,7 +378,6 @@ class ShardedEmbeddingBagCollection(
                 env,
                 device,
                 permute_embeddings=True,
-                need_pos=need_pos,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
             for sharding_type, embedding_configs in sharding_type_to_sharding_infos.items()

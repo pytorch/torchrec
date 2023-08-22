@@ -43,7 +43,6 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.types import Awaitable, NoWait
-from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -372,7 +371,6 @@ class TrainPipelineContext:
         fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
             List of fused splits input dist awaitable and the corresponding module names
             of each awaitable.
-        feature_processor_forwards (List[Any]): List of feature processor forwards.
     """
 
     # pyre-ignore [4]
@@ -384,8 +382,6 @@ class TrainPipelineContext:
     fused_splits_awaitables: List[
         Tuple[List[str], FusedKJTListSplitsAwaitable]
     ] = field(default_factory=list)
-    # pyre-ignore [4]
-    feature_processor_forwards: List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -465,12 +461,6 @@ class PipelinedForward(BaseForward):
             ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
 
-        if len(self._context.feature_processor_forwards) > 0:
-            with record_function("## feature_processor ##"):
-                for i, sparse_feature in enumerate(data):
-                    for fp_forward in self._context.feature_processor_forwards:
-                        data[i] = fp_forward(sparse_feature)
-
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
         )
@@ -512,14 +502,6 @@ class PrefetchPipelinedForward(BaseForward):
 
             ctx = self._context.module_contexts_post_prefetch[self._name]
             ctx.record_stream(cur_stream)
-
-        if len(self._context.feature_processor_forwards) > 0:
-            with record_function("## feature_processor ##"):
-                # pyre-ignore[6]
-                for i, sparse_feature in enumerate(data):
-                    for fp_forward in self._context.feature_processor_forwards:
-                        # pyre-ignore[16]
-                        data[i] = fp_forward(sparse_feature)
 
         return self._module.compute_and_output_dist(
             self._context.module_contexts_post_prefetch[self._name], data
@@ -642,7 +624,6 @@ def _get_node_args_helper(
     # pyre-ignore
     arguments,
     num_found: int,
-    feature_processor_arguments: Optional[List[Node]] = None,
 ) -> Tuple[List[ArgInfo], int]:
     """
     Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
@@ -666,12 +647,6 @@ def _get_node_args_helper(
                     arg_info.is_getitems.insert(0, False)
                 num_found += 1
                 break
-            # skip this fp node
-            elif (
-                feature_processor_arguments is not None
-                and child_node in feature_processor_arguments
-            ):
-                arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "builtins"
@@ -727,12 +702,10 @@ def _get_node_args_helper(
 
 
 def _get_node_args(
-    node: Node, feature_processor_nodes: Optional[List[Node]] = None
+    node: Node,
 ) -> Tuple[List[ArgInfo], int]:
     num_found = 0
-    pos_arg_info_list, num_found = _get_node_args_helper(
-        node.args, num_found, feature_processor_nodes
-    )
+    pos_arg_info_list, num_found = _get_node_args_helper(node.args, num_found)
     kwargs_arg_info_list, num_found = _get_node_args_helper(
         node.kwargs.values(), num_found
     )
@@ -832,21 +805,11 @@ def _rewrite_model(  # noqa C901
     if isinstance(model, DistributedModelParallel):
         model = model.module
 
-    # Collect feature processors.
-    for _, m in model.named_modules():
-        if isinstance(m, BaseGroupedFeatureProcessor):
-            context.feature_processor_forwards.append(m.forward)
-            # pyre-ignore[8]: Incompatible attribute type
-            m.forward = lambda x: x
-
     # Collect a list of sharded modules.
     sharded_modules = {}
-    fp_modules = {}
     for name, m in model.named_modules():
         if isinstance(m, ShardedModule):
             sharded_modules[name] = m
-        if isinstance(m, BaseGroupedFeatureProcessor):
-            fp_modules[name] = m
 
     # Trace a model.
     concrete_args = {}
@@ -869,12 +832,6 @@ def _rewrite_model(  # noqa C901
     tracer = Tracer(leaf_modules=_get_leaf_module_names(model))
     graph = tracer.trace(model, concrete_args=concrete_args)
 
-    feature_processor_nodes = []
-    # Find the fp node
-    for node in graph.nodes:
-        if node.op == "call_module" and node.target in fp_modules:
-            feature_processor_nodes.append(node)
-
     # Select sharded modules, which are top-level in the forward call graph,
     # i.e. don't have input transformations, i.e. rely only on 'builtins.getattr'.
     pipelined_forwards = []
@@ -883,7 +840,7 @@ def _rewrite_model(  # noqa C901
             total_num_args = len(node.args) + len(node.kwargs)
             if total_num_args == 0:
                 continue
-            arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
+            arg_info_list, num_found = _get_node_args(node)
 
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
