@@ -46,8 +46,8 @@ class _RandomRecBatch:
             self.generator = None
 
         self._generated_batches: List[Batch] = [
-            self._generate_batch()
-        ] * num_generated_batches
+            self._generate_batch() for _ in range(num_generated_batches)
+        ]
         self.batch_index = 0
 
     def __iter__(self) -> "_RandomRecBatch":
