@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, cast, Dict, List, Optional, TypeVar, Union
 
 import torch
 import torch.distributed as dist
@@ -14,6 +14,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTOneToAll,
     PooledEmbeddingsAllToAll,
+    VariableBatchPooledEmbeddingsAllToAll,
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -144,6 +145,15 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             dim_sum_per_rank.append(dim_sum)
         return dim_sum_per_rank
 
+    def _emb_dim_per_rank_per_feature(self) -> List[List[int]]:
+        emb_dim_per_rank_per_feature = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            emb_dim_per_feature = []
+            for grouped_config in grouped_embedding_configs:
+                emb_dim_per_feature += grouped_config.embedding_dims()
+            emb_dim_per_rank_per_feature.append(emb_dim_per_feature)
+        return emb_dim_per_rank_per_feature
+
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
         for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
@@ -251,6 +261,8 @@ class TwPooledEmbeddingDist(
         pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
         dim_sum_per_rank (List[int]): number of features (sum of dimensions) of the
             embedding in each rank.
+        emb_dim_per_rank_per_feature (List[List[int]]): embedding dimension per rank per
+            feature, used for variable batch per feature.
         device (Optional[torch.device]): device on which buffers will be allocated.
         callbacks (Optional[List[Callable[[torch.Tensor], torch.Tensor]]]):
         qcomm_codecs_registry (Optional[Dict[str, QuantizedCommCodecs]]):
@@ -260,22 +272,25 @@ class TwPooledEmbeddingDist(
         self,
         pg: dist.ProcessGroup,
         dim_sum_per_rank: List[int],
+        emb_dim_per_rank_per_feature: List[List[int]],
         device: Optional[torch.device] = None,
         callbacks: Optional[List[Callable[[torch.Tensor], torch.Tensor]]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-        self._dist = PooledEmbeddingsAllToAll(
-            pg=pg,
-            dim_sum_per_rank=dim_sum_per_rank,
-            device=device,
-            callbacks=callbacks,
-            codecs=qcomm_codecs_registry.get(
-                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
-            )
+        self._pg = pg
+        self._dim_sum_per_rank = dim_sum_per_rank
+        self._device = device
+        self._callbacks = callbacks
+        self._codecs: Optional[QuantizedCommCodecs] = (
+            qcomm_codecs_registry.get(CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None)
             if qcomm_codecs_registry
-            else None,
+            else None
         )
+        self._emb_dim_per_rank_per_feature = emb_dim_per_rank_per_feature
+        self._dist: Optional[
+            Union[PooledEmbeddingsAllToAll, VariableBatchPooledEmbeddingsAllToAll]
+        ] = None
 
     def forward(
         self,
@@ -287,15 +302,48 @@ class TwPooledEmbeddingDist(
 
         Args:
             local_embs (torch.Tensor): tensor of values to distribute.
+            sharding_ctx (Optional[EmbeddingShardingContext]): shared context from
+                KJTAllToAll operation.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings.
         """
+        if self._dist is None:
+            self._create_output_dist_module(sharding_ctx)
+
         if sharding_ctx is None:
-            return self._dist(local_embs)
+            return cast(PooledEmbeddingsAllToAll, self._dist)(local_embs)
+        elif sharding_ctx.variable_batch_per_feature:
+            return cast(VariableBatchPooledEmbeddingsAllToAll, self._dist)(
+                local_embs,
+                batch_size_per_rank_per_feature=sharding_ctx.batch_size_per_rank_per_feature,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
+            )
         else:
-            return self._dist(
-                local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
+            return cast(PooledEmbeddingsAllToAll, self._dist)(
+                local_embs,
+                batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
+            )
+
+    def _create_output_dist_module(
+        self, sharding_ctx: Optional[EmbeddingShardingContext] = None
+    ) -> None:
+        if sharding_ctx is not None and sharding_ctx.variable_batch_per_feature:
+            self._dist = VariableBatchPooledEmbeddingsAllToAll(
+                pg=self._pg,
+                emb_dim_per_rank_per_feature=self._emb_dim_per_rank_per_feature,
+                device=self._device,
+                callbacks=self._callbacks,
+                codecs=self._codecs,
+            )
+        else:
+            self._dist = PooledEmbeddingsAllToAll(
+                pg=self._pg,
+                dim_sum_per_rank=self._dim_sum_per_rank,
+                device=self._device,
+                callbacks=self._callbacks,
+                codecs=self._codecs,
             )
 
 
@@ -338,9 +386,10 @@ class TwPooledEmbeddingSharding(
     ) -> BaseEmbeddingDist[EmbeddingShardingContext, torch.Tensor, torch.Tensor]:
         assert self._pg is not None
         return TwPooledEmbeddingDist(
-            self._pg,
-            self._dim_sum_per_rank(),
-            device if device is not None else self._device,
+            pg=self._pg,
+            dim_sum_per_rank=self._dim_sum_per_rank(),
+            emb_dim_per_rank_per_feature=self._emb_dim_per_rank_per_feature(),
+            device=device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 

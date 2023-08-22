@@ -751,11 +751,21 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         weights = features.weights_or_none()
         if weights is not None and not torch.is_floating_point(weights):
             weights = None
-        return self.emb_module(
-            indices=features.values().long(),
-            offsets=features.offsets().long(),
-            per_sample_weights=weights,
-        )
+        if features.variable_stride_per_key() and isinstance(
+            self.emb_module, SplitTableBatchedEmbeddingBagsCodegen
+        ):
+            return self.emb_module(
+                indices=features.values().long(),
+                offsets=features.offsets().long(),
+                per_sample_weights=weights,
+                batch_size_per_feature_per_rank=features.stride_per_key_per_rank(),
+            )
+        else:
+            return self.emb_module(
+                indices=features.values().long(),
+                offsets=features.offsets().long(),
+                per_sample_weights=weights,
+            )
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
