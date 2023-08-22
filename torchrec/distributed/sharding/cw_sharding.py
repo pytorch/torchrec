@@ -251,10 +251,11 @@ class CwPooledEmbeddingSharding(
             callbacks = [embedding_permute_op]
         assert self._pg is not None
         return TwPooledEmbeddingDist(
-            self._pg,
-            self._dim_sum_per_rank(),
-            device,
-            callbacks,
+            pg=self._pg,
+            dim_sum_per_rank=self._dim_sum_per_rank(),
+            emb_dim_per_rank_per_feature=self._emb_dim_per_rank_per_feature(),
+            device=device,
+            callbacks=callbacks,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
         )
 
