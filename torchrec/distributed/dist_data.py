@@ -24,7 +24,7 @@ from torchrec.distributed.comm_ops import (
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, pin_and_move
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -317,7 +317,10 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
             return
 
         input_tensors = [
-            pin_and_move(torch.tensor(split), device) for split in self._input_splits
+            torch.tensor(split)
+            if device.type == "cpu"
+            else torch.tensor(split).pin_memory().to(device=device, non_blocking=True)
+            for split in self._input_splits
         ]
         self._splits_awaitable = SplitsAllToAllAwaitable(input_tensors, self._pg)
 
