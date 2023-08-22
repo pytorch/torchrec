@@ -8,7 +8,7 @@
 import itertools
 import random
 import unittest
-from typing import Dict, Generator, List, Optional, Tuple, TypeVar, Union
+from typing import Dict, Generator, Iterable, List, Optional, Tuple, TypeVar, Union
 
 import hypothesis.strategies as st
 import torch
@@ -34,10 +34,10 @@ from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
-T = TypeVar("T", int, float)
+T = TypeVar("T", int, float, List[int])
 
 # Lightly adapted from Stack Overflow #10823877
-def _flatten(iterable: List[T]) -> Generator[T, None, None]:
+def _flatten(iterable: Iterable[T]) -> Generator[T, None, None]:
     iterator, sentinel, stack = iter(iterable), object(), []
     while True:
         value = next(iterator, sentinel)
@@ -108,6 +108,86 @@ def _generate_sparse_features_batch(
         out_jagged.append(
             KeyedJaggedTensor.from_lengths_sync(
                 keys=out_keys,
+                lengths=_to_tensor(
+                    [lengths[key][j] for key, j in key_index],
+                    torch.int,
+                ),
+                values=_to_tensor(
+                    [values[key][j] for key, j in key_index],
+                    torch.int,
+                ),
+                weights=_to_tensor(
+                    [weights[key][j] for key, j in key_index],
+                    torch.float,
+                )
+                if weights
+                else None,
+            )
+        )
+    return in_jagged, out_jagged
+
+
+def _generate_variable_batch_sparse_features_batch(
+    keys: List[str],
+    splits: List[int],
+    batch_size_per_rank_per_feature: List[List[List[int]]],
+    is_weighted: bool = False,
+) -> Tuple[List[KeyedJaggedTensor], List[KeyedJaggedTensor]]:
+    world_size = len(splits)
+    offsets = [0] + list(itertools.accumulate(splits))
+    values = {}
+    lengths = {}
+    weights = {} if is_weighted else None
+
+    for i, key in enumerate(keys):
+        lengths[key] = [
+            [
+                random.randint(0, 10)
+                for _ in range(sum(batch_size_per_rank_per_feature[rank][i]))
+            ]
+            for rank in range(world_size)
+        ]
+        values[key] = [
+            [random.randint(0, 1000) for _ in range(sum(lengths[key][j]))]
+            for j in range(world_size)
+        ]
+
+        if weights:
+            weights[key] = [
+                [random.random() for _ in range(sum(lengths[key][j]))]
+                for j in range(world_size)
+            ]
+
+    in_jagged: List[KeyedJaggedTensor] = []
+    out_jagged: List[KeyedJaggedTensor] = []
+    for i in range(world_size):
+        in_jagged.append(
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=keys,
+                stride_per_key_per_rank=batch_size_per_rank_per_feature[i],
+                lengths=_to_tensor([lengths[key][i] for key in keys], torch.int),
+                values=_to_tensor([values[key][i] for key in keys], torch.int),
+                weights=_to_tensor([weights[key][i] for key in keys], torch.float)
+                if weights
+                else None,
+            )
+        )
+        key_index = []
+        out_keys = keys[offsets[i] : offsets[i + 1]]
+        key_indices = [keys.index(k) for k in out_keys]
+        batch_sizes_by_rank = list(zip(*batch_size_per_rank_per_feature))
+        for key in out_keys:
+            for j in range(world_size):
+                key_index.append((key, j))
+
+        out_jagged.append(
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=out_keys,
+                # pyre-ignore[6]
+                stride_per_key_per_rank=[
+                    list(_flatten(batch_sizes_by_rank[key_idx]))
+                    for key_idx in key_indices
+                ],
                 lengths=_to_tensor(
                     [lengths[key][j] for key, j in key_index],
                     torch.int,
@@ -211,7 +291,6 @@ class KJTAllToAllTest(MultiProcessTestBase):
         output: KeyedJaggedTensor,
         backend: str,
         splits: List[int],
-        batch_size_per_rank: List[int],
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
         device = torch.device(f"cuda:{rank}")
@@ -275,7 +354,66 @@ class KJTAllToAllTest(MultiProcessTestBase):
                     "output": output[rank],
                     "backend": backend,
                     "splits": splits,
-                    "batch_size_per_rank": batch_size_per_rank,
+                }
+            )
+
+        self._run_multi_process_test_per_rank(
+            callable=self._run_test_dist,
+            world_size=world_size,
+            kwargs_per_rank=kwargs_per_rank,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        backend=st.sampled_from(["nccl"]),
+        B=st.integers(min_value=1, max_value=2),
+        features=st.integers(min_value=3, max_value=4),
+        is_weighted=st.booleans(),
+        variable_batch_per_rank=st.booleans(),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_variable_batch_features(
+        self,
+        backend: str,
+        B: int,
+        features: int,
+        is_weighted: bool,
+        variable_batch_per_rank: bool,
+    ) -> None:
+        keys = [f"F{feature}" for feature in range(features)]
+        rank0_split = random.randint(0, features)
+        splits = [rank0_split, features - rank0_split]
+        world_size = 2
+
+        if variable_batch_per_rank:
+            batch_size_per_rank_per_feature = [
+                [[random.randint(B, B + 4)] for _ in range(features)]
+                for _ in range(world_size)
+            ]
+        else:
+            batch_size_per_rank_per_feature = [
+                [[random.randint(B, B + 4)] for _ in range(features)]
+            ] * world_size
+
+        _input, output = _generate_variable_batch_sparse_features_batch(
+            keys=keys,
+            splits=splits,
+            batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
+            is_weighted=is_weighted,
+        )
+
+        kwargs_per_rank = []
+        for rank in range(world_size):
+            kwargs_per_rank.append(
+                {
+                    "_input": _input[rank],
+                    "output": output[rank],
+                    "backend": backend,
+                    "splits": splits,
                 }
             )
 

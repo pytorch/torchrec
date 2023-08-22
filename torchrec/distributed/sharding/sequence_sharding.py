@@ -31,6 +31,8 @@ class SequenceShardingContext(EmbeddingShardingContext):
             KJT bucketize (for row-wise sharding only).
         lengths_after_input_dist (Optional[torch.Tensor]): stores the KJT length after
             input dist.
+        batch_size_per_feature_pre_a2a (List[int]): stores the batch size per feature
+            before input dist.
     """
 
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
@@ -39,6 +41,7 @@ class SequenceShardingContext(EmbeddingShardingContext):
     sparse_features_recat: Optional[torch.Tensor] = None
     unbucketize_permute_tensor: Optional[torch.Tensor] = None
     lengths_after_input_dist: Optional[torch.Tensor] = None
+    batch_size_per_feature_pre_a2a: List[int] = field(default_factory=list)
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         if self.features_before_input_dist is not None:

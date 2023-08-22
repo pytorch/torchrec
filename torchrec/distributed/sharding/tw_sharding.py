@@ -295,7 +295,9 @@ class TwPooledEmbeddingDist(
             return self._dist(local_embs)
         else:
             return self._dist(
-                local_embs, batch_size_per_rank=sharding_ctx.batch_size_per_rank
+                local_embs,
+                batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
             )
 
 

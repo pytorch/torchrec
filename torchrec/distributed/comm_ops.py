@@ -110,7 +110,7 @@ class All2AllPooledInfo(object):
         cumsum_dim_sum_per_rank_tensor (Optional[Tensor]): cumulative sum of
             `dim_sum_per_rank`, this is only used by the fast kernel of
             `_recat_pooled_embedding_grad_out`.
-        B_local (int): local batch size before scattering.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
     """
 
     batch_size_per_rank: List[int]
@@ -134,7 +134,8 @@ class All2AllSequenceInfo(object):
         backward_recat_tensor (Tensor): recat tensor for backward.
         input_splits (List[int]): input splits.
         output_splits (List[int]): output splits.
-        variable_batch_size (bool): whether variable batch size is enabled
+        variable_batch_size (bool): whether variable batch size is enabled.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
         permuted_lengths_after_sparse_data_all2all (Optional[Tensor]): lengths of sparse
             features before AlltoAll.
     """
@@ -301,7 +302,7 @@ def alltoall_pooled(
             `_recat_pooled_embedding_grad_out`.
         group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
-        codecs: Optional[QuantizedCommCodecs]: Quantized communication codecs.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
