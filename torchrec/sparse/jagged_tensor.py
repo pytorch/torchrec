@@ -30,7 +30,7 @@ except ImportError:
     pass
 
 
-def pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     return (
         tensor
         if device.type == "cpu"
@@ -1538,10 +1538,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             permuted_length_per_key.append(length_per_key[index])
             permuted_lengths_sum += length_per_key[index]
         if self.variable_stride_per_key():
-            length_per_key_tensor = pin_and_move(
+            length_per_key_tensor = _pin_and_move(
                 torch.tensor(self.length_per_key()), self.device()
             )
-            stride_per_key_tensor = pin_and_move(
+            stride_per_key_tensor = _pin_and_move(
                 torch.tensor(self.stride_per_key()), self.device()
             )
             (_, permuted_lengths, _,) = torch.ops.fbgemm.permute_1D_sparse_data(
@@ -1748,7 +1748,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return splits
 
     def dist_tensors(self) -> List[torch.Tensor]:
-        strides = pin_and_move(torch.tensor(self.stride_per_key()), self.device())
+        strides = _pin_and_move(torch.tensor(self.stride_per_key()), self.device())
         tensors = [strides, self.lengths(), self.values()]
         if self.weights_or_none() is not None:
             tensors.append(self.weights())
