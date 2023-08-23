@@ -145,10 +145,6 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
 
-        if sparse_features.variable_stride_per_key():
-            raise ValueError(
-                "Dense TBE kernel does not support variable batch per feature"
-            )
         return NoWait(cast(Awaitable[KeyedJaggedTensor], NoWait(sparse_features)))
 
 

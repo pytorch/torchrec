@@ -385,7 +385,7 @@ class GroupedPooledEmbeddingsLookup(
 
         return embeddings_cat_empty_rank_handle(
             embeddings,
-            self._dummy_embs_tensor,
+            fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
             dim=1,
         )
 
