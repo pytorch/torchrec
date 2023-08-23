@@ -50,12 +50,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
 
-    # Set up package name and version
+    # Set up package version
     channel = get_channel()
-    if channel == "nightly":
-        name = "torchrec-nightly"
-    else:
-        name = "torchrec"
 
     with open(
         os.path.join(os.path.dirname(__file__), "README.MD"), encoding="utf8"
@@ -86,7 +82,7 @@ def main(argv: List[str]) -> None:
             install_requires.remove("fbgemm-gpu")
             install_requires.append("fbgemm-gpu-cpu")
 
-    print(f"-- {name} building version: {version} CU Version: {cu_version}")
+    print(f"-- torchrec building version: {version} CU Version: {cu_version}")
 
     packages = find_packages(
         exclude=(
@@ -103,7 +99,7 @@ def main(argv: List[str]) -> None:
 
     setup(
         # Metadata
-        name=name,
+        name="torchrec",
         version=version,
         author="TorchRec Team",
         author_email="packages@pytorch.org",
