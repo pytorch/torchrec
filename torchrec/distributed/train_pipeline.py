@@ -37,13 +37,13 @@ from torch.autograd.profiler import record_function
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.node import Node
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
+from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     KJTListAwaitable,
     KJTListSplitsAwaitable,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable, NoWait
-from torchrec.modules.feature_processor import BaseGroupedFeatureProcessor
+from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -217,7 +217,7 @@ T = TypeVar("T")
 
 
 # TODO: remove after packaging issue is resolved.
-def _set_sharding_context_intra_a2a(
+def _set_sharding_context(
     tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
     ctx: C,
 ) -> None:
@@ -226,6 +226,8 @@ def _set_sharding_context_intra_a2a(
         getattr(ctx, "sharding_contexts", []),
     ):
         if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
+            if hasattr(sharding_context, "batch_size_per_rank"):
+                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
             if hasattr(sharding_context, "input_splits"):
                 sharding_context.input_splits = awaitable._input_splits["values"]
             if hasattr(sharding_context, "output_splits"):
@@ -235,30 +237,10 @@ def _set_sharding_context_intra_a2a(
 
 
 # TODO: remove after packaging issue is resolved.
-def _set_sharding_context_pre_a2a(
-    awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
-    ctx: C,
-) -> None:
-    for awaitable, sharding_context in zip(
-        awaitables,
-        getattr(ctx, "sharding_contexts", []),
-    ):
-        kjt = (
-            awaitable._obj._obj
-            if isinstance(awaitable, NoWait)
-            else awaitable._input  # pyre-ignore[16]: KJTAllToAllSplitsAwaitable or KJTSplitsAllToAllMeta
-        )
-        if hasattr(sharding_context, "batch_size_per_feature_pre_a2a"):
-            sharding_context.batch_size_per_feature_pre_a2a = kjt.stride_per_key()
-        if hasattr(sharding_context, "variable_batch_per_feature"):
-            sharding_context.variable_batch_per_feature = kjt.variable_stride_per_key()
-
-
-# TODO: remove after packaging issue is resolved.
 @dataclass
 class KJTSplitsAllToAllMeta:
     pg: dist.ProcessGroup
-    _input: KeyedJaggedTensor
+    input: KeyedJaggedTensor
     splits: List[int]
     splits_tensors: List[torch.Tensor]
     input_splits: List[List[int]]
@@ -289,8 +271,6 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         self._awaitables: List[
             Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
         ] = [awaitable for request in requests for awaitable in request.awaitables]
-        for req, ctx in zip(requests, self._contexts):
-            _set_sharding_context_pre_a2a(req.awaitables, ctx)
         self._output_lengths: List[int] = [
             len(request.awaitables) for request in requests
         ]
@@ -325,21 +305,24 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         else:
             splits_per_awaitable = [[] for _ in range(len(self._lengths))]
         tensors_awaitables = []
-        for output_splits, awaitable in zip(splits_per_awaitable, self._awaitables):
-            if not output_splits:  # NoWait
+        for splits, awaitable in zip(splits_per_awaitable, self._awaitables):
+            if not splits:  # NoWait
                 assert isinstance(awaitable, Awaitable)
                 tensors_awaitables.append(awaitable.wait())
                 continue
+            output_splits = splits[:-1]
+            batch_size_per_rank = splits[-1]
             assert isinstance(awaitable, KJTSplitsAllToAllMeta)
             tensors_awaitables.append(
                 KJTAllToAllTensorsAwaitable(
                     pg=awaitable.pg,
-                    input=awaitable._input,
+                    input=awaitable.input,
                     splits=awaitable.splits,
                     input_splits=awaitable.input_splits,
                     output_splits=output_splits,
                     input_tensors=awaitable.input_tensors,
                     labels=awaitable.labels,
+                    batch_size_per_rank=batch_size_per_rank,
                     keys=awaitable.keys,
                     device=awaitable.device,
                     stagger=awaitable.stagger,
@@ -348,8 +331,8 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         output = []
         awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
         for awaitables, ctx in zip(awaitables_per_output, self._contexts):
-            _set_sharding_context_intra_a2a(awaitables, ctx)
-            output.append(KJTListAwaitable(awaitables, ctx))
+            _set_sharding_context(awaitables, ctx)
+            output.append(KJTListAwaitable(awaitables))
         return output
 
 
@@ -372,7 +355,6 @@ class TrainPipelineContext:
         fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
             List of fused splits input dist awaitable and the corresponding module names
             of each awaitable.
-        feature_processor_forwards (List[Any]): List of feature processor forwards.
     """
 
     # pyre-ignore [4]
@@ -384,8 +366,6 @@ class TrainPipelineContext:
     fused_splits_awaitables: List[
         Tuple[List[str], FusedKJTListSplitsAwaitable]
     ] = field(default_factory=list)
-    # pyre-ignore [4]
-    feature_processor_forwards: List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -465,12 +445,6 @@ class PipelinedForward(BaseForward):
             ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
 
-        if len(self._context.feature_processor_forwards) > 0:
-            with record_function("## feature_processor ##"):
-                for i, sparse_feature in enumerate(data):
-                    for fp_forward in self._context.feature_processor_forwards:
-                        data[i] = fp_forward(sparse_feature)
-
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
         )
@@ -513,14 +487,6 @@ class PrefetchPipelinedForward(BaseForward):
             ctx = self._context.module_contexts_post_prefetch[self._name]
             ctx.record_stream(cur_stream)
 
-        if len(self._context.feature_processor_forwards) > 0:
-            with record_function("## feature_processor ##"):
-                # pyre-ignore[6]
-                for i, sparse_feature in enumerate(data):
-                    for fp_forward in self._context.feature_processor_forwards:
-                        # pyre-ignore[16]
-                        data[i] = fp_forward(sparse_feature)
-
         return self._module.compute_and_output_dist(
             self._context.module_contexts_post_prefetch[self._name], data
         )
@@ -553,7 +519,7 @@ class KJTAllToAllForward:
             splits_tensors.append(batch_size_tensor)
             return KJTSplitsAllToAllMeta(
                 pg=self._pg,
-                _input=input,
+                input=input,
                 splits=self._splits,
                 splits_tensors=splits_tensors,
                 input_splits=input_splits,
@@ -642,7 +608,6 @@ def _get_node_args_helper(
     # pyre-ignore
     arguments,
     num_found: int,
-    feature_processor_arguments: Optional[List[Node]] = None,
 ) -> Tuple[List[ArgInfo], int]:
     """
     Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
@@ -666,12 +631,6 @@ def _get_node_args_helper(
                     arg_info.is_getitems.insert(0, False)
                 num_found += 1
                 break
-            # skip this fp node
-            elif (
-                feature_processor_arguments is not None
-                and child_node in feature_processor_arguments
-            ):
-                arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "builtins"
@@ -727,12 +686,10 @@ def _get_node_args_helper(
 
 
 def _get_node_args(
-    node: Node, feature_processor_nodes: Optional[List[Node]] = None
+    node: Node,
 ) -> Tuple[List[ArgInfo], int]:
     num_found = 0
-    pos_arg_info_list, num_found = _get_node_args_helper(
-        node.args, num_found, feature_processor_nodes
-    )
+    pos_arg_info_list, num_found = _get_node_args_helper(node.args, num_found)
     kwargs_arg_info_list, num_found = _get_node_args_helper(
         node.kwargs.values(), num_found
     )
@@ -832,21 +789,11 @@ def _rewrite_model(  # noqa C901
     if isinstance(model, DistributedModelParallel):
         model = model.module
 
-    # Collect feature processors.
-    for _, m in model.named_modules():
-        if isinstance(m, BaseGroupedFeatureProcessor):
-            context.feature_processor_forwards.append(m.forward)
-            # pyre-ignore[8]: Incompatible attribute type
-            m.forward = lambda x: x
-
     # Collect a list of sharded modules.
     sharded_modules = {}
-    fp_modules = {}
     for name, m in model.named_modules():
         if isinstance(m, ShardedModule):
             sharded_modules[name] = m
-        if isinstance(m, BaseGroupedFeatureProcessor):
-            fp_modules[name] = m
 
     # Trace a model.
     concrete_args = {}
@@ -869,12 +816,6 @@ def _rewrite_model(  # noqa C901
     tracer = Tracer(leaf_modules=_get_leaf_module_names(model))
     graph = tracer.trace(model, concrete_args=concrete_args)
 
-    feature_processor_nodes = []
-    # Find the fp node
-    for node in graph.nodes:
-        if node.op == "call_module" and node.target in fp_modules:
-            feature_processor_nodes.append(node)
-
     # Select sharded modules, which are top-level in the forward call graph,
     # i.e. don't have input transformations, i.e. rely only on 'builtins.getattr'.
     pipelined_forwards = []
@@ -883,7 +824,7 @@ def _rewrite_model(  # noqa C901
             total_num_args = len(node.args) + len(node.kwargs)
             if total_num_args == 0:
                 continue
-            arg_info_list, num_found = _get_node_args(node, feature_processor_nodes)
+            arg_info_list, num_found = _get_node_args(node)
 
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
