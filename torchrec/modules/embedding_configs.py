@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum, unique
 from functools import partial
 from math import sqrt
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
@@ -204,3 +204,9 @@ class EmbeddingBagConfig(BaseEmbeddingConfig):
 @dataclass
 class EmbeddingConfig(BaseEmbeddingConfig):
     pass
+
+
+class TrecQuantConfig(NamedTuple):
+    activation: torch.quantization.PlaceholderObserver
+    weight: torch.quantization.PlaceholderObserver
+    per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None
