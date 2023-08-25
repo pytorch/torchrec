@@ -328,6 +328,11 @@ class TwRwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[KeyedJaggedTensor]: awaitable of KeyedJaggedTensor.
         """
 
+        if sparse_features.variable_stride_per_key():
+            raise ValueError(
+                "Variable batch per feature is not supported with table-wise-row-wise sharding"
+            )
+
         bucketized_features = bucketize_kjt_before_all2all(
             sparse_features,
             num_buckets=self._local_size,
