@@ -48,7 +48,7 @@ from torchrec.metrics.metrics_namespace import (
 RecModelOutput = Union[torch.Tensor, Dict[str, torch.Tensor]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class MetricComputationReport:
     name: MetricNameBase
     metric_prefix: MetricPrefix
