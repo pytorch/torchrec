@@ -763,6 +763,10 @@ class ShardedEmbeddingCollection(
         ctx: EmbeddingCollectionContext,
         features: KeyedJaggedTensor,
     ) -> Awaitable[Awaitable[KJTList]]:
+        if features.variable_stride_per_key():
+            raise ValueError(
+                "Variable batch per feature is not supported with EmbeddingCollection"
+            )
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
