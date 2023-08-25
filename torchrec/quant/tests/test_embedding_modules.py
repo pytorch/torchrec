@@ -6,11 +6,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List
+from typing import Dict, List, Type
 
 import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings, Verbosity
+from torchrec import inference as trec_infer
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -537,3 +538,69 @@ class EmbeddingCollectionTest(unittest.TestCase):
             lengths=torch.as_tensor([1, 1]),
         )
         self._test_ec([eb1_config, eb2_config], features)
+
+    def test_different_quantization_dtype_per_ec_table(self) -> None:
+        class TestModule(torch.nn.Module):
+            def __init__(self, m: torch.nn.Module) -> None:
+                super().__init__()
+                self.m = m
+
+        eb1_config = EmbeddingConfig(
+            name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingConfig(
+            name="t2", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        ec = EmbeddingCollection(tables=[eb1_config, eb2_config])
+        model = TestModule(ec)
+        qconfig_spec_keys: List[Type[torch.nn.Module]] = [EmbeddingCollection]
+        quant_mapping: Dict[Type[torch.nn.Module], Type[torch.nn.Module]] = {
+            EmbeddingCollection: QuantEmbeddingCollection
+        }
+        trec_infer.modules.quantize_embeddings(
+            model,
+            dtype=torch.int8,
+            additional_qconfig_spec_keys=qconfig_spec_keys,
+            additional_mapping=quant_mapping,
+            inplace=True,
+            per_table_weight_dtype={"t1": torch.float16},
+        )
+        configs = model.m.embedding_configs()
+        self.assertEqual(len(configs), 2)
+        self.assertNotEqual(configs[0].name, configs[1].name)
+        for config in configs:
+            if config.name == "t1":
+                self.assertEqual(config.data_type, DataType.FP16)
+            else:
+                self.assertEqual(config.name, "t2")
+                self.assertEqual(config.data_type, DataType.INT8)
+
+    def test_different_quantization_dtype_per_ebc_table(self) -> None:
+        class TestModule(torch.nn.Module):
+            def __init__(self, m: torch.nn.Module) -> None:
+                super().__init__()
+                self.m = m
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        model = TestModule(ebc)
+        trec_infer.modules.quantize_embeddings(
+            model,
+            dtype=torch.int8,
+            inplace=True,
+            per_table_weight_dtype={"t1": torch.float16},
+        )
+        configs = model.m.embedding_bag_configs()
+        self.assertEqual(len(configs), 2)
+        self.assertNotEqual(configs[0].name, configs[1].name)
+        for config in configs:
+            if config.name == "t1":
+                self.assertEqual(config.data_type, DataType.FP16)
+            else:
+                self.assertEqual(config.name, "t2")
+                self.assertEqual(config.data_type, DataType.INT8)
