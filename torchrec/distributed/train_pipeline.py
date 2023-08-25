@@ -802,7 +802,7 @@ def _rewrite_model(  # noqa C901
             # for some special models, it requires using "input"
             # as the key for input
             # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy.
-            concrete_args["input"] = copy.copy(batch).to_proxy()
+            concrete_args["inputs"] = copy.copy(batch).to_proxy()
         elif hasattr(batch, "to_proxy_tuple"):
             # when the model is pre-fx traced or dynamo exported, the
             # inputs are already flattened, and therefore we use
