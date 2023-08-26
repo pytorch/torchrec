@@ -37,13 +37,12 @@ from torch.autograd.profiler import record_function
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.node import Node
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
-from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_sharding import (
     KJTListAwaitable,
     KJTListSplitsAwaitable,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, NoWait
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -192,6 +191,7 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
     ) -> None:
         super().__init__()
         self.num_workers: int = pg.size()
+
         with record_function("## all2all_data:kjt splits ##"):
             self._output_tensor: torch.Tensor = torch.empty(
                 [self.num_workers * len(input_tensors)],
@@ -217,7 +217,7 @@ T = TypeVar("T")
 
 
 # TODO: remove after packaging issue is resolved.
-def _set_sharding_context(
+def _set_sharding_context_intra_a2a(
     tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
     ctx: C,
 ) -> None:
@@ -226,21 +226,44 @@ def _set_sharding_context(
         getattr(ctx, "sharding_contexts", []),
     ):
         if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
-            if hasattr(sharding_context, "batch_size_per_rank"):
-                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
             if hasattr(sharding_context, "input_splits"):
                 sharding_context.input_splits = awaitable._input_splits["values"]
             if hasattr(sharding_context, "output_splits"):
                 sharding_context.output_splits = awaitable._output_splits["values"]
             if hasattr(sharding_context, "sparse_features_recat"):
                 sharding_context.sparse_features_recat = awaitable._recat
+            if (
+                hasattr(sharding_context, "batch_size_per_rank")
+                and awaitable._stride_per_rank is not None
+            ):
+                sharding_context.batch_size_per_rank = awaitable._stride_per_rank
+
+
+# TODO: remove after packaging issue is resolved.
+def _set_sharding_context_pre_a2a(
+    awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
+    ctx: C,
+) -> None:
+    for awaitable, sharding_context in zip(
+        awaitables,
+        getattr(ctx, "sharding_contexts", []),
+    ):
+        kjt = (
+            awaitable._obj._obj
+            if isinstance(awaitable, NoWait)
+            else awaitable._input  # pyre-ignore[16]: KJTAllToAllSplitsAwaitable or KJTSplitsAllToAllMeta
+        )
+        if hasattr(sharding_context, "batch_size_per_feature_pre_a2a"):
+            sharding_context.batch_size_per_feature_pre_a2a = kjt.stride_per_key()
+        if hasattr(sharding_context, "variable_batch_per_feature"):
+            sharding_context.variable_batch_per_feature = kjt.variable_stride_per_key()
 
 
 # TODO: remove after packaging issue is resolved.
 @dataclass
 class KJTSplitsAllToAllMeta:
     pg: dist.ProcessGroup
-    input: KeyedJaggedTensor
+    _input: KeyedJaggedTensor
     splits: List[int]
     splits_tensors: List[torch.Tensor]
     input_splits: List[List[int]]
@@ -271,6 +294,8 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         self._awaitables: List[
             Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
         ] = [awaitable for request in requests for awaitable in request.awaitables]
+        for req, ctx in zip(requests, self._contexts):
+            _set_sharding_context_pre_a2a(req.awaitables, ctx)
         self._output_lengths: List[int] = [
             len(request.awaitables) for request in requests
         ]
@@ -294,7 +319,7 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
                 input_tensors=splits_tensors,
                 pg=pg,
             )
-            if splits_tensors and pg
+            if splits_tensors and pg is not None
             else None
         )
 
@@ -310,29 +335,33 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
                 assert isinstance(awaitable, Awaitable)
                 tensors_awaitables.append(awaitable.wait())
                 continue
-            output_splits = splits[:-1]
-            batch_size_per_rank = splits[-1]
             assert isinstance(awaitable, KJTSplitsAllToAllMeta)
+            if awaitable._input.variable_stride_per_key():
+                output_splits = splits
+                stride_per_rank = None
+            else:
+                output_splits = splits[:-1]
+                stride_per_rank = splits[-1]
             tensors_awaitables.append(
                 KJTAllToAllTensorsAwaitable(
                     pg=awaitable.pg,
-                    input=awaitable.input,
+                    input=awaitable._input,
                     splits=awaitable.splits,
                     input_splits=awaitable.input_splits,
                     output_splits=output_splits,
                     input_tensors=awaitable.input_tensors,
                     labels=awaitable.labels,
-                    batch_size_per_rank=batch_size_per_rank,
                     keys=awaitable.keys,
                     device=awaitable.device,
                     stagger=awaitable.stagger,
+                    stride_per_rank=stride_per_rank,
                 )
             )
         output = []
         awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
         for awaitables, ctx in zip(awaitables_per_output, self._contexts):
-            _set_sharding_context(awaitables, ctx)
-            output.append(KJTListAwaitable(awaitables))
+            _set_sharding_context_intra_a2a(awaitables, ctx)
+            output.append(KJTListAwaitable(awaitables, ctx))
         return output
 
 
@@ -511,15 +540,15 @@ class KJTAllToAllForward:
             input_splits = input.dist_splits(self._splits)
             device = input.values().device
             splits_tensors = [
-                torch.tensor(split, device=device) for split in input_splits
+                torch.tensor(splits, device=device) for splits in input_splits
             ]
-            batch_size_tensor = torch.tensor(
-                [input.stride()] * self._pg.size(), device=device
-            )
-            splits_tensors.append(batch_size_tensor)
+            if not input.variable_stride_per_key():
+                splits_tensors.append(
+                    torch.tensor([input.stride()] * self._pg.size(), device=device)
+                )
             return KJTSplitsAllToAllMeta(
                 pg=self._pg,
-                input=input,
+                _input=input,
                 splits=self._splits,
                 splits_tensors=splits_tensors,
                 input_splits=input_splits,
@@ -802,7 +831,7 @@ def _rewrite_model(  # noqa C901
             # for some special models, it requires using "input"
             # as the key for input
             # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy.
-            concrete_args["input"] = copy.copy(batch).to_proxy()
+            concrete_args["inputs"] = copy.copy(batch).to_proxy()
         elif hasattr(batch, "to_proxy_tuple"):
             # when the model is pre-fx traced or dynamo exported, the
             # inputs are already flattened, and therefore we use
