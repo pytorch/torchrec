@@ -8,7 +8,7 @@ pandas
 pyre-extensions
 scikit-build
 tabulate
-torchmetrics
+torchmetrics==1.0.3
 torchx
 tqdm
 usort
