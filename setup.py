@@ -7,28 +7,42 @@
 
 import argparse
 import os
-import random
-import re
+import subprocess
 import sys
 from datetime import date
+from pathlib import Path
 from typing import List
 
 from setuptools import find_packages, setup
 
-
-def get_version():
-    # get version string from version.py
-    # TODO: ideally the version.py should be generated when setup is run
-    version_file = os.path.join(os.path.dirname(__file__), "version.py")
-    version_regex = r"__version__ = ['\"]([^'\"]*)['\"]"
-    with open(version_file, "r") as f:
-        version = re.search(version_regex, f.read(), re.M).group(1)
-        return version
+ROOT_DIR = Path(__file__).parent.resolve()
 
 
-def get_nightly_version():
-    today = date.today()
-    return f"{today.year}.{today.month}.{today.day}"
+def _get_version():
+    try:
+        cmd = ["git", "rev-parse", "HEAD"]
+        sha = subprocess.check_output(cmd, cwd=str(ROOT_DIR)).decode("ascii").strip()
+    except Exception:
+        sha = None
+
+    if "BUILD_VERSION" in os.environ:
+        version = os.environ["BUILD_VERSION"]
+    else:
+        with open(os.path.join(ROOT_DIR, "version.txt"), "r") as f:
+            version = f.readline().strip()
+        if sha is not None:
+            version += "+" + sha[:7]
+
+    if sha is None:
+        sha = "Unknown"
+    return version, sha
+
+
+def _export_version(version, sha):
+    version_path = ROOT_DIR / "torchrec" / "version.py"
+    with open(version_path, "w") as fileobj:
+        fileobj.write("__version__ = '{}'\n".format(version))
+        fileobj.write("git_version = {}\n".format(repr(sha)))
 
 
 def get_channel():
@@ -64,9 +78,8 @@ def main(argv: List[str]) -> None:
         reqs = f.read()
         install_requires = reqs.strip().split("\n")
 
-    version = os.getenv("BUILD_VERSION")
-    if version is None:
-        version = get_nightly_version() if channel == "nightly" else get_version()
+    version, sha = _get_version()
+    _export_version(version, sha)
 
     if channel != "nightly":
         if "fbgemm-gpu-nightly" in install_requires:
