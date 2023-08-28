@@ -243,7 +243,9 @@ def copy_to_device(
     if isinstance(copy_module, CopyMixIn):
         return copy_module.copy(to_device)
     copied_param = {
-        name: torch.nn.Parameter(_copy_if_device_match(param.data))
+        name: torch.nn.Parameter(
+            _copy_if_device_match(param.data), requires_grad=param.requires_grad
+        )
         for name, param in copy_module.named_parameters(recurse=False)
     }
     copied_buffer = {
