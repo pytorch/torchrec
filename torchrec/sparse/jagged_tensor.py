@@ -1875,24 +1875,28 @@ def _kjt_flatten_spec(
     return [getattr(t, a) for a in KeyedJaggedTensor._fields]
 
 
-def _kjt_to_str(spec: TreeSpec, child_strings: List[str]) -> str:
-    assert spec.type == KeyedJaggedTensor
-    return f"K({json.dumps([spec.context, ','.join(child_strings)])})"
+try:
 
+    def _kjt_to_str(spec: TreeSpec, child_strings: List[str]) -> str:
+        assert spec.type == KeyedJaggedTensor
+        return f"K({json.dumps([spec.context, ','.join(child_strings)])})"
 
-# pyre-ignore[3]
-def _maybe_str_to_kjt(str_spec: str):
-    if not str_spec.startswith("K"):
-        return None
-    assert str_spec[1] == "("
-    assert str_spec[-1] == ")"
-    r = json.loads(str_spec[2:-1])
-    return KeyedJaggedTensor, r[0], r[1]
+    # pyre-ignore[3]
+    def _maybe_str_to_kjt(str_spec: str):
+        if not str_spec.startswith("K"):
+            return None
+        assert str_spec[1] == "("
+        assert str_spec[-1] == ")"
+        r = json.loads(str_spec[2:-1])
+        return KeyedJaggedTensor, r[0], r[1]
 
+    # pyre-ignore
+    _register_pytree_node(
+        KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten, _kjt_to_str, _maybe_str_to_kjt
+    )
 
-_register_pytree_node(
-    KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten, _kjt_to_str, _maybe_str_to_kjt
-)
+except TypeError:
+    _register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
