@@ -153,6 +153,24 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             quant_state_dict_split_scale_bias,
         )
 
+    def test_create_on_meta_device_without_providing_weights(self) -> None:
+        emb_bag = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+        )
+        QuantEmbeddingBagCollection(
+            [emb_bag], is_weighted=False, device=torch.device("meta")
+        )
+        emb = EmbeddingConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1"],
+        )
+        QuantEmbeddingCollection([emb], device=torch.device("meta"))
+
     def test_shared_tables(self) -> None:
         eb_config = EmbeddingBagConfig(
             name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1", "f2"]
