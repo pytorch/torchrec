@@ -541,6 +541,7 @@ class Stats(abc.ABC):
         run_time: float,
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         debug: bool = False,
     ) -> None:
         """
