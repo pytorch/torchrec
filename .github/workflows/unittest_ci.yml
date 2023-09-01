@@ -176,7 +176,7 @@ jobs:
     - name: Install TorchRec GPU
       run: |
         rm -r dist || true
-        conda run -n build_binary python -m pip install dist/*.whl
+        conda run -n build_binary python -m pip install *.whl
     - name: Test torchrec installation
       shell: bash
       run: |
