@@ -28,9 +28,9 @@ jobs:
         include:
          - os: linux.2xlarge
           # ideally we run on 3.9 and 3.10 as well, however we are limited in resources.
-           python-version: 3.8
-           python-tag: "py38"
-           cuda-tag: "cu11"
+           python-version: 3.9
+           python-tag: "py39"
+           cuda-tag: "cu118"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -98,8 +98,8 @@ jobs:
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.8]
-        cuda-tag: ["cu11"]
+        python-version: [3.9]
+        cuda-tag: ["cu118"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
