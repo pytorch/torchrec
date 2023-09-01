@@ -83,6 +83,8 @@ jobs:
     # here is the issue: https://github.com/conda/conda/issues/10972
     - name: Build TorchRec Binary
       run: |
+        export CU_VERSION=${{ matrix.cuda-tag }}
+        export CHANNEL="nightly"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
