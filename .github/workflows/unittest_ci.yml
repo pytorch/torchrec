@@ -11,7 +11,7 @@ on:
   #     - "third_party/*"
   #     - .gitignore
   #     - "*.md"
-  # pull_request:
+  pull_request:
   #   paths-ignore:
   #     - "docs/*"
   #     - "third_party/*"
