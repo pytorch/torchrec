@@ -6,12 +6,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from typing import Any, Dict, List, Mapping, TypeVar, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
+from torch import Tensor
 from torch.distributed import _remote_device
 from torch.distributed._shard.sharded_tensor import (
     Shard,
@@ -322,3 +323,145 @@ class ShardedQuantEmbeddingModuleState(
             _unexpected_keys.remove(src_state_dict_name)
         missing_keys.extend(_missing_keys)
         unexpected_keys.extend(_unexpected_keys)
+
+
+def sharded_tbes_weights(
+    unsharded_weights: Dict[str, torch.Tensor],
+    sharded_model: torch.nn.Module,
+) -> Dict[str, torch.Tensor]:
+    # INPUT:
+    # unsharded_weights {fqn, Tensor}
+    # Example input:
+    # {
+    #   "seq_arch.embeddings.table_0.weight": Tensor,
+    #   "seq_arch.embeddings.table_0.weight_qscale": Tensor,
+    #   "seq_arch.embeddings.table_0.weight_qbias": Tensor,
+    # }
+    # sharded_module
+    #
+    # OUTPUT:
+    # Sharded mapping corresponding sharded module named buffers:
+    #
+    # {embedding_module_fqn}.tbes.{tbe_idx}.{table_idx}.{table_name}.weight -> ShardedTensor
+    # Example output:
+    # {
+    #   "seq_arch.embeddings.tbes.0.0.table_0.weight": Tensor,
+    #   "seq_arch.embeddings.tbes.0.0.table_0.weight_qscalebias": Tensor,
+    #   "seq_arch.embeddings.tbes.1.0.table_0.weight": Tensor,
+    #   "seq_arch.embeddings.tbes.1.0.table_0.weight_qscalebias": Tensor,
+    # }
+
+    sharded_weights: Dict[str, torch.Tensor] = {}
+
+    for module_fqn, module in sharded_model.named_modules():
+        type_name: str = type(module).__name__
+        is_sqebc: bool = type_name == "ShardedQuantEmbeddingBagCollection"
+        is_sqec: bool = type_name == "ShardedQuantEmbeddingCollection"
+
+        if is_sqebc or is_sqec:
+            tbes_configs: Dict[
+                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+            ] = module.tbes_configs()
+
+            for tbe_idx, (_tbe, config) in enumerate(tbes_configs.items()):
+                splits: List[
+                    Tuple[Tensor, Optional[torch.Tensor]]
+                ] = _tbe.split_embedding_weights()
+                tables = config.embedding_tables
+                for table_idx, table in enumerate(tables):
+                    table_name: str = table.name
+                    num_emb: int = table.num_embeddings
+                    emb_dim: int = table.embedding_dim
+                    assert table.local_metadata
+                    table_metadata: ShardMetadata = table.local_metadata
+                    shard_sizes: List[int] = table_metadata.shard_sizes
+                    shard_offsets: List[int] = table_metadata.shard_offsets
+                    s: str = "embedding_bags" if is_sqebc else "embeddings"
+                    unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
+                    unsharded_fqn_weight_qscale: str = f"{unsharded_fqn_weight}_qscale"
+                    unsharded_fqn_weight_qbias: str = f"{unsharded_fqn_weight}_qbias"
+                    for fqn in [
+                        unsharded_fqn_weight,
+                        unsharded_fqn_weight_qscale,
+                        unsharded_fqn_weight_qbias,
+                    ]:
+                        assert (
+                            fqn in unsharded_weights
+                        ), f"fqn {fqn} is not specified in unsharded_weights:{unsharded_weights.keys()}"
+
+                    unsharded_weight: torch.Tensor = unsharded_weights[
+                        unsharded_fqn_weight
+                    ]
+                    assert unsharded_weight.shape == torch.Size(
+                        [
+                            num_emb,
+                            emb_dim,
+                        ]
+                    ), f"module_fqn:{module_fqn} table_name:{table_name} weight Expected shape {num_emb}, {emb_dim}, got {unsharded_weight.shape}"
+                    unsharded_weight_qscale: torch.Tensor = unsharded_weights[
+                        unsharded_fqn_weight_qscale
+                    ]
+                    assert unsharded_weight_qscale.shape == torch.Size(
+                        [
+                            num_emb,
+                            2,
+                        ]
+                    ), f"module_fqn:{module_fqn} table_name:{table_name} qscale Expected shape {num_emb}, 2 got {unsharded_weight_qscale.shape}"
+                    unsharded_weight_qbias: torch.Tensor = unsharded_weights[
+                        unsharded_fqn_weight_qbias
+                    ]
+                    assert unsharded_weight_qbias.shape == torch.Size(
+                        [
+                            num_emb,
+                            2,
+                        ]
+                    ), f"module_fqn:{module_fqn} table_name:{table_name} qbias Expected shape {num_emb}, 2 got {unsharded_weight_qbias.shape}"
+
+                    sharded_fqn_weight: str = (
+                        f"{module_fqn}.tbes.{tbe_idx}.{table_idx}.{table_name}.weight"
+                    )
+                    sharded_weight: torch.Tensor = unsharded_weight[
+                        shard_offsets[0] : shard_offsets[0] + shard_sizes[0],
+                        shard_offsets[1] : shard_offsets[1] + shard_sizes[1],
+                    ]
+
+                    # columns_offset for qscale/bias is always 0 to handle CW
+                    qsb_shard_offsets: List[int] = [shard_offsets[0], 0]
+                    qsb_shard_sizes: List[int] = [shard_sizes[0], 2]
+                    sharded_weight_qscale: torch.Tensor = unsharded_weight_qscale[
+                        qsb_shard_offsets[0] : qsb_shard_offsets[0]
+                        + qsb_shard_sizes[0],
+                        qsb_shard_offsets[1] : qsb_shard_offsets[1]
+                        + qsb_shard_sizes[1],
+                    ]
+                    sharded_weight_qscale: torch.Tensor = sharded_weight_qscale
+                    sharded_weight_qbias: torch.Tensor = unsharded_weight_qbias[
+                        qsb_shard_offsets[0] : qsb_shard_offsets[0]
+                        + qsb_shard_sizes[0],
+                        qsb_shard_offsets[1] : qsb_shard_offsets[1]
+                        + qsb_shard_sizes[1],
+                    ]
+                    sharded_weight_qscalebias: torch.Tensor = torch.cat(
+                        [sharded_weight_qscale, sharded_weight_qbias], dim=1
+                    )
+
+                    # Assert compatibility of prepared sharded weights with TBE configuration
+                    split: Tuple[torch.Tensor, Optional[torch.Tensor]] = splits[
+                        table_idx
+                    ]
+                    tbe_weight: torch.Tensor = split[0]
+                    assert split[1]
+                    # pyre-ignore
+                    tbe_weight_qscalebias: torch.Tensor = split[1]
+
+                    assert sharded_weight.shape == tbe_weight.shape
+                    assert (
+                        sharded_weight_qscalebias.shape == tbe_weight_qscalebias.shape
+                    )
+
+                    sharded_weights[sharded_fqn_weight] = sharded_weight
+                    sharded_weights[
+                        f"{sharded_fqn_weight}_qscalebias"
+                    ] = sharded_weight_qscalebias
+
+    return sharded_weights

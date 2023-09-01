@@ -96,6 +96,23 @@ class DataType(Enum):
         return self.value
 
 
+def bit_width(data_type: DataType) -> int:
+    if data_type in {DataType.INT64}:
+        return 64
+    if data_type in {DataType.FP32, DataType.INT32}:
+        return 32
+    elif data_type in {DataType.FP16, DataType.BF16}:
+        return 16
+    elif data_type in {DataType.INT8, DataType.UINT8}:
+        return 8
+    elif data_type == DataType.INT4:
+        return 4
+    elif data_type == DataType.INT2:
+        return 2
+    else:
+        raise ValueError(f"Unsupported data type {data_type}")
+
+
 class ShardingType(Enum):
     """
     Well-known sharding types, used by inter-module optimizations.

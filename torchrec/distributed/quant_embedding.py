@@ -408,6 +408,10 @@ class ShardedQuantEmbeddingCollection(
             IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
         ] = get_tbes_to_register_from_iterable(self._lookups)
 
+        self._tbes_configs: Dict[
+            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+        ] = tbes
+
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
@@ -447,6 +451,14 @@ class ShardedQuantEmbeddingCollection(
                         self.embeddings[table_name].register_buffer(
                             "weight", lookup_state_dict[key]
                         )
+
+    def tbes_configs(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return self._tbes_configs
+
+    def embedding_configs(self) -> List[EmbeddingConfig]:
+        return self._embedding_configs
 
     def _generate_permute_indices_per_feature(
         self,
