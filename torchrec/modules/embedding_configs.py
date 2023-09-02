@@ -124,23 +124,23 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
 
 
 def data_type_to_dtype(data_type: DataType) -> torch.dtype:
-    if data_type == DataType.FP32:
+    if data_type.value == DataType.FP32.value:
         return torch.float32
-    elif data_type == DataType.FP16:
+    elif data_type.value == DataType.FP16.value:
         return torch.float16
-    elif data_type == DataType.BF16:
+    elif data_type.value == DataType.BF16.value:
         return torch.bfloat16
-    elif data_type == DataType.INT64:
+    elif data_type.value == DataType.INT64.value:
         return torch.int64
-    elif data_type == DataType.INT32:
+    elif data_type.value == DataType.INT32.value:
         return torch.int32
-    elif data_type == DataType.INT8:
+    elif data_type.value == DataType.INT8.value:
         return torch.int8
-    elif data_type == DataType.UINT8:
+    elif data_type.value == DataType.UINT8.value:
         return torch.uint8
-    elif data_type == DataType.INT4:
+    elif data_type.value == DataType.INT4.value:
         return torch.quint4x2
-    elif data_type == DataType.INT2:
+    elif data_type.value == DataType.INT2.value:
         return torch.quint2x4
     else:
         raise ValueError(f"DataType {data_type} cannot be converted to dtype")

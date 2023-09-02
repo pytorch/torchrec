@@ -9,6 +9,8 @@ import logging
 from collections import defaultdict
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
+from torch import nn
+
 from torchrec.distributed.planner.constants import BIGINT_DTYPE, NUM_POOLINGS
 from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
@@ -25,9 +27,17 @@ from torchrec.distributed.planner.types import (
     StorageReservation,
     Topology,
 )
-from torchrec.distributed.planner.utils import bytes_to_gb, bytes_to_mb
-from torchrec.distributed.types import ParameterSharding, ShardingPlan, ShardingType
-
+from torchrec.distributed.planner.utils import (
+    bytes_to_gb,
+    bytes_to_mb,
+    sharder_name as get_sharder_name,
+)
+from torchrec.distributed.types import (
+    ModuleSharder,
+    ParameterSharding,
+    ShardingPlan,
+    ShardingType,
+)
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -55,6 +65,7 @@ class EmbeddingStats(Stats):
         run_time: float,
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         debug: bool = True,
     ) -> None:
         """
@@ -236,6 +247,7 @@ class EmbeddingStats(Stats):
                     "Num Poolings",
                     "Output",
                     "Weighing",
+                    "Sharder",
                     "Features",
                     "Emb Dim (CW Dim)",
                     "Hash Size",
@@ -250,6 +262,7 @@ class EmbeddingStats(Stats):
                     "--------------",
                     "--------",
                     "----------",
+                    "---------",
                     "----------",
                     "------------------",
                     "-----------",
@@ -262,6 +275,14 @@ class EmbeddingStats(Stats):
                 else None
                 for so in best_plan
             ]
+
+            sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
+                get_sharder_name(sharder.module_type): sharder
+                # pyre-ignore - this is a ModuleSharder below
+                for sharder in sharders
+                if sharders
+            }
+
             if include_batch_sizes := any(feat_batch_sizes):
                 param_table[0].append("Batch Sizes")
                 param_table[1].append("-------------")
@@ -286,6 +307,8 @@ class EmbeddingStats(Stats):
                 num_poolings = str(round(sum(num_poolings), 3))
                 output = "pooled" if so.is_pooled else "sequence"
                 weighing = "weighted" if so.is_weighted else "unweighted"
+                sharder = sharder_map.get(get_sharder_name(type(so.module[1])), None)
+                sharder_name = type(sharder).__name__
                 num_features = len(so.input_lengths)
                 embedding_dim = (
                     f"{so.tensor.shape[1]} ({so.shards[0].size[1]})"
@@ -304,6 +327,7 @@ class EmbeddingStats(Stats):
                         num_poolings,
                         output,
                         weighing,
+                        sharder_name,
                         num_features,
                         embedding_dim,
                         hash_size,
