@@ -1890,7 +1890,6 @@ try:
         r = json.loads(str_spec[2:-1])
         return KeyedJaggedTensor, r[0], r[1]
 
-    # pyre-ignore
     _register_pytree_node(
         KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten, _kjt_to_str, _maybe_str_to_kjt
     )
