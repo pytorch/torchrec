@@ -28,6 +28,8 @@ class _RandomRecBatch:
         manual_seed: Optional[int] = None,
         num_generated_batches: int = 10,
         num_batches: Optional[int] = None,
+        *,
+        min_ids_per_features: Optional[List[int]] = None,
     ) -> None:
 
         self.keys = keys
@@ -35,6 +37,11 @@ class _RandomRecBatch:
         self.batch_size = batch_size
         self.hash_sizes = hash_sizes
         self.ids_per_features = ids_per_features
+        self.min_ids_per_features: List[int] = (
+            min_ids_per_features
+            if min_ids_per_features
+            else [0] * len(ids_per_features)
+        )
         self.num_dense = num_dense
         self.num_batches = num_batches
         self.num_generated_batches = num_generated_batches
@@ -72,16 +79,25 @@ class _RandomRecBatch:
         lengths = []
         for key_idx, _ in enumerate(self.keys):
             hash_size = self.hash_sizes[key_idx]
-            num_ids_in_batch = self.ids_per_features[key_idx]
-
-            values.append(
-                torch.randint(
-                    high=hash_size,
-                    size=(num_ids_in_batch * self.batch_size,),
-                    generator=self.generator,
+            min_num_ids_in_batch = self.min_ids_per_features[key_idx]
+            max_num_ids_in_batch = self.ids_per_features[key_idx]
+            for _ in range(self.batch_size):
+                num_ids_in_batch = int(
+                    torch.randint(
+                        low=min_num_ids_in_batch,
+                        high=max_num_ids_in_batch + 1,
+                        size=(),
+                        generator=self.generator,
+                    ).item()
                 )
-            )
-            lengths.extend([num_ids_in_batch] * self.batch_size)
+                values.append(
+                    torch.randint(
+                        high=hash_size,
+                        size=(num_ids_in_batch,),
+                        generator=self.generator,
+                    )
+                )
+                lengths.extend([num_ids_in_batch])
 
         sparse_features = KeyedJaggedTensor.from_lengths_sync(
             keys=self.keys,
@@ -129,6 +145,7 @@ class RandomRecDataset(IterableDataset[Batch]):
         num_batches: (Optional[int]): Num batches to generate before raising StopIteration
         num_generated_batches int: Num batches to cache. If num_batches > num_generated batches, then we will cycle to the first generated batch.
                                    If this value is negative, batches will be generated on the fly.
+        min_ids_per_feature (int): Minimum number of IDs per features.
 
     Example::
 
@@ -154,6 +171,8 @@ class RandomRecDataset(IterableDataset[Batch]):
         manual_seed: Optional[int] = None,
         num_batches: Optional[int] = None,
         num_generated_batches: int = 10,
+        min_ids_per_feature: Optional[int] = None,
+        min_ids_per_features: Optional[List[int]] = None,
     ) -> None:
         super().__init__()
 
@@ -171,6 +190,16 @@ class RandomRecDataset(IterableDataset[Batch]):
             ids_per_features = [ids_per_feature] * len(keys)
 
         assert ids_per_features is not None
+
+        if min_ids_per_features is None:
+            min_ids_per_feature = (
+                min_ids_per_feature
+                if min_ids_per_feature is not None
+                else ids_per_feature
+            )
+            assert min_ids_per_feature is not None
+            min_ids_per_features = [min_ids_per_feature] * len(keys)
+
         assert len(ids_per_features) == len(
             keys
         ), "length of ids_per_features must be equal to the number of keys"
@@ -184,6 +213,7 @@ class RandomRecDataset(IterableDataset[Batch]):
             manual_seed=manual_seed,
             num_batches=None,
             num_generated_batches=num_generated_batches,
+            min_ids_per_features=min_ids_per_features,
         )
         self.num_batches: int = cast(int, num_batches if not None else sys.maxsize)
 
