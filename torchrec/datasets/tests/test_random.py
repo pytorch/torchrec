@@ -18,6 +18,7 @@ class RandomDataLoader(unittest.TestCase):
             batch_size=16,
             hash_sizes=[100, 200],
             ids_per_features=[100, 200],
+            min_ids_per_features=[100, 200],
             num_dense=5,
         )
 
@@ -47,6 +48,7 @@ class RandomDataLoader(unittest.TestCase):
             batch_size=16,
             hash_size=100,
             ids_per_features=[100, 200],
+            min_ids_per_features=[100, 200],
             num_dense=5,
         )
 
@@ -75,6 +77,7 @@ class RandomDataLoader(unittest.TestCase):
             keys=["feat1", "feat2"],
             batch_size=16,
             hash_size=100,
+            min_ids_per_feature=50,
             ids_per_feature=50,
             num_dense=5,
         )
@@ -105,6 +108,7 @@ class RandomDataLoader(unittest.TestCase):
             batch_size=16,
             hash_size=100,
             ids_per_feature=50,
+            min_ids_per_feature=50,
             num_dense=5,
             num_generated_batches=-1,
         )
