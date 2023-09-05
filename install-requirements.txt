@@ -1,6 +1,4 @@
 fbgemm-gpu-nightly
-iopath
-pandas
 tabulate
-torchmetrics
+torchmetrics==1.0.3
 tqdm
