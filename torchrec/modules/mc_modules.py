@@ -8,13 +8,39 @@
 #!/usr/bin/env python3
 
 import abc
-from typing import Any, Callable, cast, Dict, List, NamedTuple, Optional, Tuple
+from collections import defaultdict
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import torch
-import torch.distributed as dist
 
 from torch import nn
-from torchrec.sparse.jagged_tensor import JaggedTensor
+from torchrec.modules.embedding_configs import BaseEmbeddingConfig
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+
+
+@torch.fx.wrap
+def apply_mc_method_to_jt_dict(
+    method: str,
+    features_dict: Dict[str, JaggedTensor],
+    table_to_features: Dict[str, List[str]],
+    managed_collisions: nn.ModuleDict,
+    force_insert: bool = False,
+) -> Dict[str, JaggedTensor]:
+    """
+    Applies an MC method to a dictionary of JaggedTensors, returning the updated dictionary with same ordering
+    """
+    mc_output: Dict[str, JaggedTensor] = features_dict.copy()
+    for table, features in table_to_features.items():
+        mc_input: Dict[str, JaggedTensor] = {}
+        for feature in features:
+            mc_input[feature] = features_dict[feature]
+        mc_module = managed_collisions[table]
+        attr = getattr(mc_module, method)
+        if force_insert:
+            mc_output.update(attr(mc_input, force_insert))
+        else:
+            mc_output.update(attr(mc_input))
+    return mc_output
 
 
 class ManagedCollisionModule(nn.Module):
@@ -24,7 +50,7 @@ class ManagedCollisionModule(nn.Module):
 
     Args:
         max_output_id (int): Max output value of remapped ids.
-        max_input_id (int): Max value of input range i.e. [0, max_input_id)
+        input_hash_size (int): Max value of input range i.e. [0, input_hash_size)
         remapping_range_start_index (int): Relative start index of remapping range
         device (torch.device): default compute device.
 
@@ -36,29 +62,23 @@ class ManagedCollisionModule(nn.Module):
 
     def __init__(
         self,
-        max_output_id: int,
         device: torch.device,
-        remapping_range_start_index: int = 0,
-        max_input_id: int = 2**40,
     ) -> None:
         # slots is the number of rows to map from global id to
         # for example, if we want to manage 1000 ids to 10 slots
         super().__init__()
-        self._max_input_id: int = max_input_id
-        self._remapping_range_start_index = remapping_range_start_index
-        self._max_output_id = max_output_id
         self._device = device
 
     @abc.abstractmethod
-    def preprocess(self, features: JaggedTensor) -> JaggedTensor:
+    def preprocess(
+        self,
+        features: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
         pass
 
-    @abc.abstractmethod
-    def profile(
-        self,
-        features: JaggedTensor,
-    ) -> None:
-        pass
+    @property
+    def device(self) -> torch.device:
+        return self._device
 
     @abc.abstractmethod
     def evict(self) -> Optional[torch.Tensor]:
@@ -70,36 +90,31 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
-    def remap(self, features: JaggedTensor) -> JaggedTensor:
-        pass
-
-    def local_map_global_offset(self) -> int:
-        """
-        Returns the offset in the global id space of the current map.
-        """
-        return self._remapping_range_start_index
-
-    @abc.abstractmethod
     def forward(
         self,
-        features: JaggedTensor,
-        mc_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> JaggedTensor:
+        features: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
+        pass
+
+    @abc.abstractmethod
+    def output_size(self) -> int:
         """
-        Args:
-        features (JaggedTensor]): feature representation
-        mc_kwargs (Optional[Dict[str, Any]]): optional args dict to pass to MC module
-        Returns:
-            JaggedTensor: modified JT
+        Returns numerical range of output, for validation vs. downstream embedding lookups
         """
         pass
 
     @abc.abstractmethod
-    def rebuild_with_max_output_id(
+    def input_size(self) -> int:
+        """
+        Returns numerical range of input, for sharding info
+        """
+        pass
+
+    @abc.abstractmethod
+    def rebuild_with_output_id_range(
         self,
-        max_output_id: int,
-        remapping_range_start_index: int,
-        device: torch.device,
+        output_id_range: Tuple[int, int],
+        device: Optional[torch.device] = None,
     ) -> "ManagedCollisionModule":
         """
         Used for creating local MC modules for RW sharding, hack for now
@@ -107,79 +122,84 @@ class ManagedCollisionModule(nn.Module):
         pass
 
 
-class TrivialManagedCollisionModule(ManagedCollisionModule):
+class ManagedCollisionCollection(nn.Module):
+    """
+    ManagedCollisionCollection represents a collection of managed collision modules.
+    The inputs passed to the MCC will be remapped by the managed collision modules
+        and returned.
+    Args:
+        managed_collision_modules (Dict[str, ManagedCollisionModule]): Dict of managed collision modules
+        embedding_confgs (List[BaseEmbeddingConfig]): List of embedding configs, for each table with a managed collsion module
+    """
+
     def __init__(
         self,
-        max_output_id: int,
-        device: torch.device,
-        remapping_range_start_index: int = 0,
-        max_input_id: int = 2**64,
+        managed_collision_modules: Dict[str, ManagedCollisionModule],
+        embedding_configs: List[BaseEmbeddingConfig],
     ) -> None:
-        super().__init__(
-            max_output_id, device, remapping_range_start_index, max_input_id
-        )
-        self.register_buffer(
-            "count",
-            torch.zeros(
-                (max_output_id,),
-                device=device,
-            ),
-        )
+        super().__init__()
+        self._managed_collision_modules = nn.ModuleDict(managed_collision_modules)
+        self._embedding_configs = embedding_configs
+        self._feature_to_table: Dict[str, str] = {
+            feature: config.name
+            for config in embedding_configs
+            for feature in config.feature_names
+        }
+        self._table_to_features: Dict[str, List[str]] = defaultdict(list)
+        for feature, table in self._feature_to_table.items():
+            self._table_to_features[table].append(feature)
 
-    @torch.no_grad()
-    def preprocess(self, features: JaggedTensor) -> JaggedTensor:
-        values = features.values() % self._max_output_id
-        return JaggedTensor(
-            values=values,
-            lengths=features.lengths(),
-            offsets=features.offsets(),
-            weights=features.weights_or_none(),
-        )
+        table_to_config = {config.name: config for config in embedding_configs}
 
-    @torch.no_grad()
-    def profile(
-        self,
-        features: JaggedTensor,
-    ) -> None:
-        values = features.values()
-        self.count[values] += 1
+        for name, config in table_to_config.items():
+            if name not in managed_collision_modules:
+                raise ValueError(
+                    f"Table {name} is not present in managed_collision_modules"
+                )
+            assert (
+                managed_collision_modules[name].output_size() == config.num_embeddings
+            ), (
+                f"max_output_id in managed collision module for {name} "
+                f"must match {config.num_embeddings}"
+            )
 
-    @torch.no_grad()
-    def remap(self, features: JaggedTensor) -> JaggedTensor:
-        # no-op as self.preprocess maps input to correct range
-        values = features.values()
-        return JaggedTensor(
-            values=values,
-            lengths=features.lengths(),
-            offsets=features.offsets(),
-            weights=features.weights_or_none(),
-        )
+    def embedding_configs(self) -> List[BaseEmbeddingConfig]:
+        return self._embedding_configs
 
-    @torch.no_grad()
     def forward(
         self,
-        features: JaggedTensor,
-        mc_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> JaggedTensor:
-        self.profile(features)
-        return self.remap(features)
-
-    @torch.no_grad()
-    def evict(self) -> Optional[torch.Tensor]:
-        return None
-
-    def rebuild_with_max_output_id(
-        self,
-        max_output_id: int,
-        remapping_range_start_index: int,
-        device: Optional[torch.device] = None,
-    ) -> "TrivialManagedCollisionModule":
-        return type(self)(
-            max_output_id=max_output_id,
-            remapping_range_start_index=remapping_range_start_index,
-            device=device or self._device,
-            max_input_id=self._max_input_id,
+        features: KeyedJaggedTensor,
+        force_insert: bool = False,
+    ) -> KeyedJaggedTensor:
+        features_dict = apply_mc_method_to_jt_dict(
+            "preprocess",
+            features_dict=features.to_dict(),
+            table_to_features=self._table_to_features,
+            managed_collisions=self._managed_collision_modules,
         )
+        features_dict = apply_mc_method_to_jt_dict(
+            "profile",
+            features_dict=features_dict,
+            table_to_features=self._table_to_features,
+            managed_collisions=self._managed_collision_modules,
+            force_insert=force_insert,
+        )
+        features_dict = apply_mc_method_to_jt_dict(
+            "remap",
+            features_dict=features_dict,
+            table_to_features=self._table_to_features,
+            managed_collisions=self._managed_collision_modules,
+        )
+        return KeyedJaggedTensor.from_jt_dict(features_dict)
+
+    def evict(self) -> Dict[str, Optional[torch.Tensor]]:
+        evictions: Dict[str, Optional[torch.Tensor]] = {}
+        for (
+            table,
+            managed_collision_module,
+        ) in self._managed_collision_modules.items():
+            evictions[table] = managed_collision_module.evict()
+        return evictions
 
 
 class MCHEvictionPolicyMetadataInfo(NamedTuple):
@@ -338,6 +358,10 @@ class LFU_EvictionPolicy(MCHEvictionPolicy):
             ~coalesced_history_mch_matching_elements_mask
         ]
 
+        # TODO: find cleaner way to avoid last element of zch
+
+        mch_counts[mch_size - 1] = torch.iinfo(torch.int64).max
+
         merged_counts = torch.cat(
             [
                 mch_counts,
@@ -461,6 +485,11 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
                 ~coalesced_history_mch_matching_elements_mask
             ]
         )
+
+        # TODO: find cleaner way to avoid last element of zch
+        mch_counts[mch_size - 1] = torch.iinfo(torch.int64).max
+        mch_last_access_iter[mch_size - 1] = current_iter
+
         merged_counts = torch.cat(
             [
                 mch_counts,
@@ -493,6 +522,7 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
 
         # update metadata for evicted ids
         mch_counts[evicted_indices] = new_sorted_uniq_ids_counts[selected_new_indices]
+
         mch_last_access_iter[evicted_indices] = new_sorted_uniq_ids_last_access[
             selected_new_indices
         ]
@@ -501,164 +531,92 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
 
 
 class MCHManagedCollisionModule(ManagedCollisionModule):
+    """
+    ZCH / MCH managed collision module
+
+    Args:
+        zch_size (int): range of output ids, within [output_size_offset, output_size_offset + zch_size - 1)
+        is_train (bool): whether it is training mode (toggles eviction policy)
+        device (torch.device): device on which this module will be executed
+        eviction_policy (eviction policy): eviction policy to be used
+        eviction_interval (int): interval of eviction policy is triggered
+        input_hash_size (int): input feature id range, will be passed to input_hash_func as second arg
+        input_hash_func (Optional[Callable]): function used to generate hashes for input features.  This function is typically used to drive uniform distribution over range same or greater than input data
+        input_history_buffer_size (Optional[int]): size of history buffer where we store input ids for eviction policy calculations
+        mch_size (Optional[int]): size of residual output (ie. legacy MCH), experimental feature.  Ids are internally shifted by output_size_offset + zch_output_range
+        mch_hash_func (Optional[Callable]): function used to generate hashes for residual feature. will hash down to mch_size.
+        output_global_offset (int): offset of the output id for output range, typically only used in sharding applications.
+    """
+
     def __init__(
         self,
-        # total output range size incl. zch (i.e. total_size >= zch_size)
-        max_output_id: int,
-        device: torch.device,
-        # hash_func(input_ids, hash_size) -> hashed_input_ids
-        hash_func: Callable[[torch.Tensor, int], torch.Tensor],
-        is_train: bool,
-        # max rolling tracking window size in number of _total_ IDs
-        max_history_size: int,
         zch_size: int,
+        is_train: bool,
+        device: torch.device,
         eviction_policy: MCHEvictionPolicy,
-        force_update_on_step: int = -1,
-        #####
-        remapping_range_start_index: int = 0,
-        max_input_id: int = 2**62,
+        eviction_interval: int,
+        input_hash_size: int = 2**63,
+        input_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
+        input_history_buffer_size: Optional[int] = None,
+        mch_size: Optional[int] = None,  # experimental
+        mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
+        output_global_offset: int = 0,  # typically not provided by user
     ) -> None:
-        super().__init__(
-            max_output_id, device, remapping_range_start_index, max_input_id
-        )
+        super().__init__(device)
 
         self._is_train = is_train
-        self._max_history_size = max_history_size
-        assert (
-            self._max_output_id >= zch_size
-        ), "zch_size must be less then or equal to max_output_id"
-        self._zch_size = zch_size
+        if input_history_buffer_size is None:
+            input_history_buffer_size = zch_size * 10
+        self._input_history_buffer_size: int = input_history_buffer_size
+        self._input_hash_size = input_hash_size
+        self._zch_size: int = zch_size
         assert self._zch_size > 0, "zch_size must be > 0"
-        self._hash_size: int = self._max_output_id - self._zch_size
-        assert self._hash_size > 0, (
-            "hash_size (= max_output_id - zch_size) must be "
-            ">= 1 for valid output mapping for non-ZCH IDs"
-        )
-        self._hash_func = hash_func
-        self._remapping_range_start_index = remapping_range_start_index
-        self._force_update_on_step: int = (
-            force_update_on_step
-            if force_update_on_step > 0
-            else torch.iinfo(torch.int32).max
-        )
+        self._mch_size: int = 0
+        if mch_size is not None:
+            self._mch_size = mch_size
+            assert (
+                mch_hash_func is not None
+            ), "mch_hash_func must be provided if mch_size is provided"
+        self._output_global_offset: int = output_global_offset
+        self._mch_hash_func = mch_hash_func
+        self._input_hash_func = input_hash_func
+
+        self._eviction_interval = eviction_interval
         self._eviction_policy = eviction_policy
 
         self._current_iter: int = 0
-        self._most_recent_update_iter: int = 0
+        self._init_buffers()
 
-        ## ------ mch info ------
+        ## ------ history info ------
+        self._mch_metadata: Dict[str, torch.Tensor] = {}
+        self._history_metadata: Dict[str, torch.Tensor] = {}
+        self._init_metadata_buffers()
+        self._current_history_buffer_offset: int = 0
+
+        self._evicted: bool = False
+
+    def _init_buffers(self) -> None:
         self.register_buffer(
             "_mch_sorted_raw_ids",
             torch.full(
-                (self._zch_size + 1,),
+                (self._zch_size,),
                 torch.iinfo(torch.int64).max,
                 dtype=torch.int64,
-                device=self._device,
+                device=self.device,
             ),
         )
         self.register_buffer(
             "_mch_remapped_ids_mapping",
-            torch.arange(self._zch_size, dtype=torch.int64, device=self._device),
+            torch.arange(self._zch_size, dtype=torch.int64, device=self.device),
         )
 
-        ## ------ history info ------
-        if self._is_train:
-            self.register_buffer(
-                "_history_accumulator",
-                torch.empty(
-                    self._max_history_size,
-                    dtype=torch.int64,
-                    device=self._device,
-                ),
-                # not checkpointed
-                persistent=False,
-            )
-            self._mch_metadata: Dict[str, torch.Tensor] = {}
-            self._history_metadata: Dict[str, torch.Tensor] = {}
-            self._init_metadata_buffers()
-            self._current_history_buffer_offset: int = 0
-            self._evicted_emb_indices: torch.Tensor = torch.empty(
-                (1,), device=self._device
-            )
-            self._evicted: bool = False
-
-        # HACK for checkpointing
-        # currently changing world_size between
-        # saving/loading is not supported
-
-        self._world_size: int = 1
-        if dist.is_initialized():
-            self._world_size = dist.get_world_size()
-
-        def _post_state_dict_hook(
-            module: MCHManagedCollisionModule,
-            destination: Dict[str, torch.Tensor],
-            prefix: str,
-            _local_metadata: Dict[str, Any],
-        ) -> None:
-            # trim sorted_raw_ids anchor
-            destination[prefix + "_mch_sorted_raw_ids"] = destination[
-                prefix + "_mch_sorted_raw_ids"
-            ][:-1]
-            # update _mch_remapped_ids_mapping from local to global mapping
-            destination[prefix + "_mch_remapped_ids_mapping"].add_(
-                self.local_map_global_offset()
-            )
-            # self._device doesn't update if module.to(..) is called
-            device = destination[prefix + "_mch_sorted_raw_ids"].device
-            destination[prefix + "_current_iter_tensor"] = torch.full(
-                (1,), self._current_iter, dtype=torch.int64, device=device
-            )
-            destination[prefix + "_most_recent_update_iter_tensor"] = torch.full(
-                (1,),
-                self._most_recent_update_iter,
-                dtype=torch.int64,
-                device=device,
-            )
-            destination[prefix + "_world_size_tensor"] = torch.full(
-                (1,), self._world_size, dtype=torch.int64, device=device
-            )
-
-        def _load_state_dict_pre_hook(
-            module: "MCHManagedCollisionModule",
-            state_dict: Dict[str, torch.Tensor],
-            prefix: str,
-            *args: Any,
-        ) -> None:
-            # add sorted_raw_ids anchor
-            state_dict[prefix + "_mch_sorted_raw_ids"] = torch.cat(
-                [
-                    state_dict[prefix + "_mch_sorted_raw_ids"],
-                    torch.tensor(
-                        [torch.iinfo(torch.int64).max],
-                        dtype=torch.int64,
-                        device=state_dict[prefix + "_mch_sorted_raw_ids"].device,
-                    ),
-                ]
-            )
-            # update _mch_remapped_ids_mapping from global to local mapping
-            state_dict[prefix + "_mch_remapped_ids_mapping"].sub_(
-                self.local_map_global_offset()
-            )
-            module._current_iter = cast(
-                int, state_dict.pop(prefix + "_current_iter_tensor").item()
-            )
-            module._most_recent_update_iter = cast(
-                int, state_dict.pop(prefix + "_most_recent_update_iter_tensor").item()
-            )
-            # HACK for checkpointing continued
-            module._world_size = cast(
-                int, state_dict.pop(prefix + "_world_size_tensor").item()
-            )
-            if dist.is_initialized():
-                assert dist.get_world_size() == module._world_size
-            else:
-                assert module._world_size == 1
-
-        self._register_state_dict_hook(_post_state_dict_hook)
-        self._register_load_state_dict_pre_hook(
-            _load_state_dict_pre_hook, with_module=True
+        self._history_accumulator: torch.Tensor = torch.empty(
+            self._input_history_buffer_size if self._is_train else 0,
+            dtype=torch.int64,
+            device=self.device,
         )
+
+        self._evicted_emb_indices: torch.Tensor = torch.empty((1,), device=self.device)
 
     def _init_metadata_buffers(self) -> None:
         eviction_metadata_info = self._eviction_policy.metadata_info
@@ -672,7 +630,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                     torch.zeros(
                         (self._zch_size,),
                         dtype=torch.int64,
-                        device=self._device,
+                        device=self.device,
                     ),
                 )
                 self._mch_metadata[metadata_name] = getattr(self, buffer_name)
@@ -682,9 +640,9 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 self.register_buffer(
                     buffer_name,
                     torch.zeros(
-                        self._max_history_size,
+                        self._input_history_buffer_size,
                         dtype=torch.int64,
-                        device=self._device,
+                        device=self.device,
                     ),
                     # not checkpointed
                     persistent=False,
@@ -692,20 +650,25 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 self._history_metadata[metadata_name] = getattr(self, buffer_name)
 
     @torch.no_grad()
-    def preprocess(self, features: JaggedTensor) -> JaggedTensor:
-        values = self._hash_func(features.values(), self._max_input_id)
-        return JaggedTensor(
-            values=values,
-            lengths=features.lengths(),
-            offsets=features.offsets(),
-            weights=features.weights_or_none(),
-        )
+    def preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+        if self._input_hash_func is None:
+            return features
+        preprocessed_features: Dict[str, JaggedTensor] = {}
+        for name, feature in features.items():
+            preprocessed_features[name] = JaggedTensor(
+                # pyre-ignore [29]
+                values=self._input_hash_func(feature.values(), self._input_hash_size),
+                lengths=feature.lengths(),
+                offsets=feature.offsets(),
+                weights=feature.weights_or_none(),
+            )
+        return preprocessed_features
 
     @torch.no_grad()
     def _match_indices(
         self, sorted_sequence: torch.Tensor, search_values: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        searched_indices = torch.searchsorted(sorted_sequence, search_values)
+        searched_indices = torch.searchsorted(sorted_sequence[:-1], search_values)
         retrieved_ids = sorted_sequence[searched_indices]
         matching_eles = retrieved_ids == search_values
         matched_indices = searched_indices[matching_eles]
@@ -713,7 +676,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
     @torch.no_grad()
     def _sort_mch_buffers(self) -> None:
-        mch_sorted_raw_ids = self._mch_sorted_raw_ids[:-1]
+        mch_sorted_raw_ids = self._mch_sorted_raw_ids
         argsorted_sorted_raw_ids = torch.argsort(mch_sorted_raw_ids, stable=True)
         mch_sorted_raw_ids.copy_(mch_sorted_raw_ids[argsorted_sorted_raw_ids])
         self._mch_remapped_ids_mapping.copy_(
@@ -757,7 +720,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             self._mch_metadata,
             uniq_ids_metadata,
         )
-
         self._mch_sorted_raw_ids[evicted_indices] = new_frequency_sorted_uniq_ids[
             selected_new_indices
         ]
@@ -782,14 +744,10 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._sort_mch_buffers()
 
     @torch.no_grad()
-    def _coalesce_history(self, additional_ids: Optional[torch.Tensor] = None) -> None:
+    def _coalesce_history(self) -> None:
         current_history_accumulator = self._history_accumulator[
             : self._current_history_buffer_offset
         ]
-        if additional_ids is not None:
-            current_history_accumulator = torch.cat(
-                [current_history_accumulator, additional_ids]
-            )
         uniq_ids, uniq_inverse_mapping, uniq_ids_counts = torch.unique(
             current_history_accumulator,
             return_inverse=True,
@@ -806,7 +764,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 },
                 uniq_ids_counts,
                 uniq_inverse_mapping,
-                additional_ids=additional_ids,
             )
         )
         self._update_and_evict(
@@ -814,115 +771,113 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         )
         # reset buffer offset
         self._current_history_buffer_offset = 0
-        # update most recent update step
-        self._most_recent_update_iter = self._current_iter
 
     @torch.no_grad()
     def profile(
         self,
-        features: JaggedTensor,
-        force_update: bool = False,
-        count_multiplier: Optional[int] = None,
-    ) -> None:
-        if self._is_train and self.training:
-            multiplier = (
-                count_multiplier
-                if count_multiplier is not None and count_multiplier > 1
-                else 1
-            )
-            values = features.values()
-            if multiplier > 1:
-                values = values.repeat(multiplier)
-            num_incoming_values = values.size(0)
-            free_elements = self._max_history_size - self._current_history_buffer_offset
-            # check if need to coalesce by one of the following conditions:
-            # 1. buffer will be full with incoming ids
-            # 2. current iteration has reached max update step
-            # 3. force update is set
-            if (
-                num_incoming_values >= free_elements
-                or self._current_iter - self._most_recent_update_iter
-                >= self._force_update_on_step
-                or force_update
-            ):
-                self._coalesce_history(values)
-            else:
-                self._history_accumulator[
-                    self._current_history_buffer_offset : self._current_history_buffer_offset
-                    + num_incoming_values
-                ] = values
-                self._eviction_policy.record_history_metadata(
-                    self._current_iter,
-                    values,
-                    {
-                        metadata_name: metadata_buffer[
-                            self._current_history_buffer_offset : self._current_history_buffer_offset
-                            + num_incoming_values
-                        ]
-                        for metadata_name, metadata_buffer in self._history_metadata.items()
-                    },
-                )
-                self._current_history_buffer_offset += num_incoming_values
+        features: Dict[str, JaggedTensor],
+        force_insert: bool = False,
+    ) -> Dict[str, JaggedTensor]:
+        self._current_iter += 1
+        if self._is_train is False:
+            return features
 
-            self._current_iter += 1
+        for _, feature in features.items():
+            values = feature.values()
+            # TODO: Find a better way to force_insert, doesnt really work...
+            if force_insert:
+                values = values.repeat(5)
+
+            free_elements = (
+                self._input_history_buffer_size - self._current_history_buffer_offset
+            )
+            values = values[:free_elements]
+            self._history_accumulator[
+                self._current_history_buffer_offset : self._current_history_buffer_offset
+                + values.shape[0]
+            ] = values
+            self._eviction_policy.record_history_metadata(
+                self._current_iter,
+                values,
+                {
+                    metadata_name: metadata_buffer[
+                        self._current_history_buffer_offset : self._current_history_buffer_offset
+                        + values.shape[0]
+                    ]
+                    for metadata_name, metadata_buffer in self._history_metadata.items()
+                },
+            )
+            self._current_history_buffer_offset += values.shape[0]
+
+        # coalesce history / evict
+        if self._current_iter % self._eviction_interval == 0 or force_insert:
+            self._coalesce_history()
+
+        return features
 
     @torch.no_grad()
-    def remap(self, features: JaggedTensor) -> JaggedTensor:
-        values = features.values()
-        remapped_ids = torch.empty_like(values)
+    def remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
 
-        # compute overlap between incoming IDs and remapping table
-        searched_indices = torch.searchsorted(self._mch_sorted_raw_ids, values)
-        retrieved_indices = self._mch_sorted_raw_ids[searched_indices]
-        # identify matching inputs IDs
-        matching_indices = retrieved_indices == values
-        # update output with remapped matching IDs
-        remapped_ids[matching_indices] = self._mch_remapped_ids_mapping[
-            searched_indices[matching_indices]
-        ]
-        # select non-matching values
-        non_matching_values = values[~matching_indices]
-        # hash non-matching values
-        hashed_non_matching = self._hash_func(non_matching_values, self._hash_size)
-        # offset hash ids to their starting range
-        remapped_ids[~matching_indices] = hashed_non_matching + self._zch_size
+        remapped_features: Dict[str, JaggedTensor] = {}
+        for name, feature in features.items():
+            values = feature.values()
+            remapped_ids = torch.empty_like(values)
 
-        return JaggedTensor(
-            values=remapped_ids,
-            lengths=features.lengths(),
-            offsets=features.offsets(),
-            weights=features.weights_or_none(),
-        )
+            # compute overlap between incoming IDs and remapping table
+            searched_indices = torch.searchsorted(self._mch_sorted_raw_ids[:-1], values)
+            retrieved_indices = self._mch_sorted_raw_ids[searched_indices]
+            # identify matching inputs IDs
+            matching_indices = retrieved_indices == values
+            # update output with remapped matching IDs
+            remapped_ids[matching_indices] = self._mch_remapped_ids_mapping[
+                searched_indices[matching_indices]
+            ]
+            # select non-matching values
+
+            if self._mch_size:
+                non_matching_values = values[~matching_indices]
+                # pyre-ignore [29]
+                hashed_non_matching = self._mch_hash_func(
+                    non_matching_values, self._mch_size
+                ).add(self._zch_size)
+                # offset hash ids to their starting range
+                remapped_ids[~matching_indices] = hashed_non_matching
+            else:
+                remapped_ids[~matching_indices] = self._zch_size - 1
+
+            remapped_features[name] = JaggedTensor(
+                values=remapped_ids,
+                lengths=feature.lengths(),
+                offsets=feature.offsets(),
+                weights=feature.weights_or_none(),
+            )
+        return remapped_features
 
     @torch.no_grad()
     def forward(
         self,
-        features: JaggedTensor,
-        mc_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> JaggedTensor:
+        features: Dict[str, JaggedTensor],
+        force_insert: bool = False,
+    ) -> Dict[str, JaggedTensor]:
         """
         Args:
-        features (JaggedTensor]): feature representation
-        mc_kwargs (Optional[Dict[str, Any]]: optional args dict to pass to MC module
-            MCHManagedCollisionModule supports:
-                1. force_update (bool): force update this step
-                2. count_multiplier (int): if provided, multiply
-                    count of incoming ids by this value
+        feature (JaggedTensor]): feature representation
+        force_insert (bool): force insert this step
         Returns:
-            JaggedTensor: modified JT
+            Dict[str, JaggedTensor]: modified JT
         """
-        force_update = (
-            mc_kwargs.get("force_update", False) if mc_kwargs is not None else False
-        )
-        count_multiplier = (
-            mc_kwargs.get("count_multiplier", None) if mc_kwargs is not None else None
-        )
-        self.profile(
+
+        features = self.profile(
             features,
-            force_update=force_update,
-            count_multiplier=count_multiplier,
+            force_insert=force_insert,
         )
         return self.remap(features)
+
+    def output_size(self) -> int:
+        return self._zch_size + self._mch_size
+
+    def input_size(self) -> int:
+        return self._input_hash_size
 
     @torch.no_grad()
     def evict(self) -> Optional[torch.Tensor]:
@@ -932,21 +887,30 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         else:
             return None
 
-    def rebuild_with_max_output_id(
+    def rebuild_with_output_id_range(
         self,
-        max_output_id: int,
-        remapping_range_start_index: int,
+        output_id_range: Tuple[int, int],
         device: Optional[torch.device] = None,
     ) -> "MCHManagedCollisionModule":
+
+        new_output_size = output_id_range[1] - output_id_range[0]
+
+        new_zch_size = int(self._zch_size * (new_output_size / self.output_size()))
+        new_mch_size = new_output_size - new_zch_size
+        new_input_history_buffer_size = int(
+            self._input_history_buffer_size * (new_output_size / self.output_size())
+        )
+
         return type(self)(
-            max_output_id=max_output_id,
-            remapping_range_start_index=remapping_range_start_index,
-            zch_size=self._zch_size,
-            device=device or self._device,
-            max_input_id=self._max_input_id,
+            zch_size=new_zch_size,
             is_train=self._is_train,
-            max_history_size=self._max_history_size,
-            hash_func=self._hash_func,
-            force_update_on_step=self._force_update_on_step,
+            device=device or self.device,
+            input_history_buffer_size=new_input_history_buffer_size,
             eviction_policy=self._eviction_policy,
+            eviction_interval=self._eviction_interval,
+            input_hash_size=self._input_hash_size,
+            input_hash_func=self._input_hash_func,
+            mch_size=new_mch_size if new_mch_size > 0 else None,
+            mch_hash_func=self._mch_hash_func,
+            output_global_offset=output_id_range[0],
         )
