@@ -11,232 +11,271 @@ from typing import cast
 import torch
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.managed_collision_modules import (
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
+from torchrec.modules.mc_modules import (
     DistanceLFU_EvictionPolicy,
+    ManagedCollisionCollection,
     ManagedCollisionModule,
     MCHManagedCollisionModule,
-    TrivialManagedCollisionModule,
 )
-from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
-class TriviallyManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
-    def test_trivial_managed_ebc(self) -> None:
-        device = torch.device("cpu")
-        #     0       1        2  <-- batch
-        # 0   [0,1] None    [2]
-        # 1   [3]    [4]    [5,6,7]
-        # ^
-        # feature
-
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2"],
-            values=torch.tensor([100, 101, 102, 103, 104, 105, 106, 107]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        ).to(device)
-
-        ebc = EmbeddingBagCollection(
-            tables=[
-                EmbeddingBagConfig(
-                    name="t1", embedding_dim=8, num_embeddings=16, feature_names=["f1"]
-                ),
-                EmbeddingBagConfig(
-                    name="t2", embedding_dim=8, num_embeddings=16, feature_names=["f2"]
-                ),
-            ],
-            device=device,
-        )
-        mc_modules = {
-            "t1": cast(
-                ManagedCollisionModule,
-                TrivialManagedCollisionModule(
-                    max_output_id=16, max_input_id=32, device=device
-                ),
-            ),
-            "t2": cast(
-                ManagedCollisionModule,
-                TrivialManagedCollisionModule(
-                    max_output_id=16, max_input_id=32, device=device
-                ),
-            ),
-        }
-
-        mc_ebc = ManagedCollisionEmbeddingBagCollection(ebc, mc_modules)
-
-        pooled_embeddings = mc_ebc(features)
-
-        self.assertEqual(pooled_embeddings.keys(), ["f1", "f2"])
-        self.assertEqual(pooled_embeddings.values().size(), (3, 16))
-        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
-
-        print("state dict", mc_ebc.state_dict())
-
-
 class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
-    def test_zch_managed_ebc(self) -> None:
+    def test_zch_ebc(self) -> None:
         device = torch.device("cpu")
-        table_size = 100
-        zch_size = 50
+        zch_size = 20
+        update_interval = 2
+        update_size = 10
 
+        embedding_configs = [
+            EmbeddingBagConfig(
+                name="t1",
+                embedding_dim=8,
+                num_embeddings=zch_size,
+                feature_names=["f1", "f2"],
+            ),
+        ]
         ebc = EmbeddingBagCollection(
-            tables=[
-                EmbeddingBagConfig(
-                    name="t1", embedding_dim=8, num_embeddings=100, feature_names=["f1"]
-                ),
-            ],
+            tables=embedding_configs,
             device=device,
         )
         mc_modules = {
             "t1": cast(
                 ManagedCollisionModule,
                 MCHManagedCollisionModule(
-                    max_output_id=table_size,
+                    zch_size=zch_size,
                     device=device,
                     is_train=True,
-                    max_history_size=zch_size,
-                    zch_size=zch_size,
-                    hash_func=lambda input_ids, hash_size: torch.remainder(
-                        input_ids, hash_size
-                    ),
+                    eviction_interval=update_interval,
                     eviction_policy=DistanceLFU_EvictionPolicy(),
                 ),
             ),
         }
+        mcc = ManagedCollisionCollection(
+            managed_collision_modules=mc_modules,
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
         mc_ebc = ManagedCollisionEmbeddingBagCollection(
             ebc,
-            mc_modules,
+            mcc,
             return_remapped_features=True,
         )
 
-        ################ 1 ################
-        # values in first id set will be tracked but won't trigger zch update
-        # output values should therefore be in hashed range
-        update_one_size = zch_size // 2
         update_one = KeyedJaggedTensor.from_lengths_sync(
-            keys=["f1"],
-            values=torch.arange(
-                start=0, end=update_one_size, step=1, dtype=torch.int64
+            keys=["f1", "f2"],
+            values=torch.concat(
+                [
+                    torch.arange(1000, 1000 + update_size, dtype=torch.int64),
+                    torch.arange(
+                        1000 + update_size,
+                        1000 + 2 * update_size,
+                        dtype=torch.int64,
+                    ),
+                ]
             ),
-            lengths=torch.ones((update_one_size,), dtype=torch.int64),
+            lengths=torch.ones((2 * update_size,), dtype=torch.int64),
             weights=None,
         )
-        _, remapped_jt1 = mc_ebc.forward(
-            update_one,
-            mc_kwargs={
-                "t1": {
-                    "force_update": False,
-                }
-            },
-        )
-        remapped_jt = remapped_jt1
-        assert remapped_jt is not None
+        _, remapped_kjt1 = mc_ebc.forward(update_one)
+        _, remapped_kjt2 = mc_ebc.forward(update_one)
         assert torch.all(
-            # pyre-ignore[6]
-            remapped_jt["f1"].values()
-            >= zch_size
-        ), "no remapped ids should be in zch_range"
-
-        ################ 2 ################
-        # second id set is same as first. as max_coalesce_history_size == zch_size
-        # this will trigger a coalesce and the output values should be in zch_range
-        _, remapped_jt2 = mc_ebc.forward(
-            update_one,
-            mc_kwargs={
-                "t1": {
-                    "force_update": False,
-                }
-            },
-        )
-        remapped_jt = remapped_jt2
-        assert remapped_jt is not None
+            # pyre-ignore[16]
+            remapped_kjt1["f1"].values()
+            == zch_size - 1
+        ), "all remapped ids should be mapped to end of range"
         assert torch.all(
-            # pyre-ignore[6]
-            remapped_jt["f1"].values()
-            < zch_size
-        ), "all remapped ids should be in zch_range"
+            remapped_kjt1["f2"].values() == zch_size - 1
+        ), "all remapped ids should be mapped to end of range"
 
-        ################ 3 ################
-        # third id set will fill remainder of unused zch_range.
-        # by setting count_multiplier to 5, coalesce will be triggered
-        # output values should be in zch_range.
-        update_two_size = zch_size - update_one_size
+        assert torch.all(
+            remapped_kjt2["f1"].values() == torch.arange(0, 10, dtype=torch.int64)
+        )
+        assert torch.all(
+            remapped_kjt2["f2"].values()
+            == torch.cat(
+                [
+                    torch.arange(10, 19, dtype=torch.int64),
+                    torch.tensor([zch_size - 1], dtype=torch.int64),  # empty value
+                ]
+            )
+        )
         update_two = KeyedJaggedTensor.from_lengths_sync(
-            keys=["f1"],
-            values=torch.arange(
-                start=update_one_size,
-                end=update_one_size + update_two_size,
-                step=1,
-                dtype=torch.int64,
+            keys=["f1", "f2"],
+            values=torch.concat(
+                [
+                    torch.arange(2000, 2000 + update_size, dtype=torch.int64),
+                    torch.arange(
+                        1000 + update_size,
+                        1000 + 2 * update_size,
+                        dtype=torch.int64,
+                    ),
+                ]
             ),
-            lengths=torch.ones((update_two_size,), dtype=torch.int64),
+            lengths=torch.ones((2 * update_size,), dtype=torch.int64),
             weights=None,
         )
-        _, remapped_jt3 = mc_ebc.forward(
-            update_two,
-            mc_kwargs={"t1": {"force_update": False, "count_multiplier": 5}},
-        )
-        remapped_jt = remapped_jt3
-        assert remapped_jt is not None
-        assert torch.all(
-            # pyre-ignore[6]
-            remapped_jt["f1"].values()
-            < zch_size
-        ), "all remapped ids should be in zch_range"
+        _, remapped_kjt3 = mc_ebc.forward(update_two)
+        _, remapped_kjt4 = mc_ebc.forward(update_two)
 
-        ################ 4 ################
-        # fourth id set is same size as first and will overwrite it via eviction.
-        # output values should be in zch_range _and_ same as remapped update_one ids
-        update_three_size = update_one_size
-        update_three = KeyedJaggedTensor.from_lengths_sync(
-            keys=["f1"],
-            values=torch.arange(
-                start=update_one_size + update_two_size,
-                end=update_one_size + update_two_size + update_three_size,
-                step=1,
-                dtype=torch.int64,
+        assert torch.all(
+            remapped_kjt3["f1"].values() == zch_size - 1
+        ), "all remapped ids should be mapped to end of range"
+
+        assert torch.all(remapped_kjt3["f2"].values() == remapped_kjt2["f2"].values())
+
+        assert torch.all(
+            remapped_kjt4["f1"].values()
+            == torch.cat(
+                [
+                    torch.arange(1, 10, dtype=torch.int64),
+                    torch.tensor([zch_size - 1], dtype=torch.int64),  # empty value
+                ]
+            )
+        )
+        assert torch.all(
+            remapped_kjt4["f2"].values()
+            == torch.cat(
+                [
+                    torch.arange(10, 19, dtype=torch.int64),
+                    torch.tensor([0], dtype=torch.int64),  # assigned first open slot
+                ]
+            )
+        )
+
+    def test_mch_ebc(self) -> None:
+        device = torch.device("cpu")
+        zch_size = 10
+        mch_size = 10
+        update_interval = 2
+        update_size = 10
+
+        embedding_configs = [
+            EmbeddingBagConfig(
+                name="t1",
+                embedding_dim=8,
+                num_embeddings=zch_size + mch_size,
+                feature_names=["f1", "f2"],
             ),
-            lengths=torch.ones((update_three_size,), dtype=torch.int64),
+        ]
+        ebc = EmbeddingBagCollection(
+            tables=embedding_configs,
+            device=device,
+        )
+
+        def preprocess_func(id: torch.Tensor, hash_size: int) -> torch.Tensor:
+            return id % hash_size
+
+        mc_modules = {
+            "t1": cast(
+                ManagedCollisionModule,
+                MCHManagedCollisionModule(
+                    zch_size=zch_size,
+                    mch_size=mch_size,
+                    device=device,
+                    is_train=True,
+                    eviction_interval=update_interval,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                    mch_hash_func=preprocess_func,
+                ),
+            ),
+        }
+        mcc = ManagedCollisionCollection(
+            managed_collision_modules=mc_modules,
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
+        mc_ebc = ManagedCollisionEmbeddingBagCollection(
+            ebc,
+            mcc,
+            return_remapped_features=True,
+        )
+
+        update_one = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2"],
+            values=torch.concat(
+                [
+                    torch.arange(1000, 1000 + update_size, dtype=torch.int64),
+                    torch.arange(
+                        1000 + update_size,
+                        1000 + 2 * update_size,
+                        dtype=torch.int64,
+                    ),
+                ]
+            ),
+            lengths=torch.ones((2 * update_size,), dtype=torch.int64),
             weights=None,
         )
-        _, remapped_jt4 = mc_ebc.forward(
-            update_three,
-            mc_kwargs={"t1": {"force_update": True, "count_multiplier": 3}},
-        )
-        remapped_jt = remapped_jt4
-        assert remapped_jt is not None
-        assert torch.all(
-            # pyre-ignore[6]
-            remapped_jt4["f1"].values().sort(stable=True)[0]
-            # pyre-ignore[6]
-            == remapped_jt2["f1"].values().sort(stable=True)[0]
-        ), "all remapped ids should match evicted update_one"
+        _, remapped_kjt1 = mc_ebc.forward(update_one)
 
-        ################ 5 ################
-        # fifth id set is not part of current mapped zch
-        # and will not trigger a zch_update.
-        # output values should be in hashed range.
-        update_four_size = zch_size - 1
-        update_four = KeyedJaggedTensor.from_lengths_sync(
-            keys=["f1"],
-            values=torch.arange(
-                start=update_one_size + update_two_size + update_three_size,
-                end=update_one_size
-                + update_two_size
-                + update_three_size
-                + update_four_size,
-                step=1,
-                dtype=torch.int64,
+        _, remapped_kjt2 = mc_ebc.forward(update_one)
+
+        assert torch.all(
+            # pyre-ignore[16]
+            remapped_kjt1["f1"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+        assert torch.all(
+            remapped_kjt1["f2"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+
+        assert torch.all(
+            remapped_kjt2["f1"].values()
+            == torch.cat(
+                [
+                    torch.arange(0, 9, dtype=torch.int64),
+                    torch.tensor([19], dtype=torch.int64),  # % MCH for last value
+                ]
+            )
+        )
+
+        assert torch.all(
+            remapped_kjt2["f2"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+
+        update_two = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2"],
+            values=torch.concat(
+                [
+                    torch.arange(2000, 2000 + update_size, dtype=torch.int64),
+                    torch.arange(
+                        1000 + update_size,
+                        1000 + 2 * update_size,
+                        dtype=torch.int64,
+                    ),
+                ]
             ),
-            lengths=torch.ones((update_four_size,), dtype=torch.int64),
+            lengths=torch.ones((2 * update_size,), dtype=torch.int64),
             weights=None,
         )
 
-        _, remapped_jt5 = mc_ebc.forward(update_four)
-        remapped_jt = remapped_jt5
-        assert remapped_jt is not None
+        _, remapped_kjt3 = mc_ebc.forward(update_two)
+        _, remapped_kjt4 = mc_ebc.forward(update_two)
+
         assert torch.all(
-            # pyre-ignore[6]
-            remapped_jt["f1"].values()
-            >= zch_size
-        ), "no remapped ids should be in zch_range"
+            remapped_kjt3["f1"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+
+        assert torch.all(
+            remapped_kjt3["f2"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+
+        assert torch.all(
+            remapped_kjt4["f1"].values()
+            == torch.arange(zch_size, zch_size + mch_size, dtype=torch.int64)
+        ), "all remapped ids are in mch section"
+
+        assert torch.all(
+            remapped_kjt4["f2"].values()
+            == torch.cat(
+                [
+                    torch.arange(0, 9, dtype=torch.int64),
+                    torch.tensor([19], dtype=torch.int64),  # assigned first open slot
+                ]
+            )
+        )
