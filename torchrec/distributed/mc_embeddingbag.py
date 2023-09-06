@@ -5,76 +5,66 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import logging
 from dataclasses import dataclass
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Type
 
 import torch
+from torch.autograd.profiler import record_function
 
-from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
+    EmbeddingComputeKernel,
     KJTList,
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionAwaitable,
     EmbeddingBagCollectionContext,
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
-from torchrec.distributed.mc_module import (
-    ManagedCollisionCollectionAwaitable,
-    ManagedCollisionCollectionContext,
+from torchrec.distributed.mc_modules import (
     ManagedCollisionCollectionSharder,
     ShardedManagedCollisionCollection,
 )
 from torchrec.distributed.types import (
     Awaitable,
     LazyAwaitable,
+    NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardingEnv,
 )
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
-class ManagedCollisionEmbeddingBagCollectionAwaitable(
-    LazyAwaitable[
-        Union[KeyedTensor, Tuple[KeyedTensor, Optional[Dict[str, JaggedTensor]]]]
-    ],
-):
-    def __init__(
-        self,
-        ebc_awaitable: EmbeddingBagCollectionAwaitable,
-        remapped_ids_awaitable: Optional[ManagedCollisionCollectionAwaitable],
-    ) -> None:
-        super().__init__()
-        self._ebc_awaitable = ebc_awaitable
-        self._remapped_ids_awaitable = remapped_ids_awaitable
-
-    def _wait_impl(
-        self,
-    ) -> Union[KeyedTensor, Tuple[KeyedTensor, Optional[Dict[str, JaggedTensor]]]]:
-        ebc_output = self._ebc_awaitable.wait()
-        if self._remapped_ids_awaitable is not None:
-            remapped_ids_output = self._remapped_ids_awaitable.wait()
-            return ebc_output, remapped_ids_output
-        else:
-            return ebc_output
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ManagedCollisionEmbeddingBagCollectionContext(ManagedCollisionCollectionContext):
-    pass
+class ManagedCollisionEmbeddingBagCollectionContext(EmbeddingBagCollectionContext):
+    evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None
+    remapped_kjt: Optional[KJTList] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        super().record_stream(stream)
+        if self.evictions_per_table:
+            #  pyre-ignore
+            for value in self.evictions_per_table.values():
+                if value is None:
+                    continue
+                value.record_stream(stream)
+        if self.remapped_kjt is not None:
+            self.remapped_kjt.record_stream(stream)
 
 
 class ShardedManagedCollisionEmbeddingBagCollection(
     ShardedEmbeddingModule[
         KJTList,
-        Tuple[List[torch.Tensor], KJTList],
-        Union[KeyedTensor, Tuple[KeyedTensor, Optional[Dict[str, JaggedTensor]]]],
+        List[torch.Tensor],
+        Tuple[LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]],
         ManagedCollisionEmbeddingBagCollectionContext,
     ]
 ):
@@ -110,22 +100,15 @@ class ShardedManagedCollisionEmbeddingBagCollection(
         )
         self._return_remapped_features: bool = module._return_remapped_features
 
-        self._features_to_tables: Dict[str, str] = module._features_to_tables
-
         # pyre-ignore
         self._table_to_tbe_and_index = {}
         for lookup in self._embedding_bag_collection._lookups:
-            if isinstance(lookup, GroupedPooledEmbeddingsLookup):
-                for emb_module in lookup._emb_modules:
-                    for table_idx, table in enumerate(
-                        emb_module._config.embedding_tables
-                    ):
-                        self._table_to_tbe_and_index[table.name] = (
-                            emb_module._emb_module,
-                            torch.tensor(
-                                [table_idx], dtype=torch.int, device=self._device
-                            ),
-                        )
+            for emb_module in lookup._emb_modules:
+                for table_idx, table in enumerate(emb_module._config.embedding_tables):
+                    self._table_to_tbe_and_index[table.name] = (
+                        emb_module._emb_module,
+                        torch.tensor([table_idx], dtype=torch.int, device=self._device),
+                    )
         self._buffer_ids: torch.Tensor = torch.tensor(
             [0], device=self._device, dtype=torch.int
         )
@@ -135,9 +118,15 @@ class ShardedManagedCollisionEmbeddingBagCollection(
         self,
         ctx: ManagedCollisionEmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
-        mc_kwargs: Optional[Dict[str, Dict[str, Any]]] = None,
+        force_insert: bool = False,
     ) -> Awaitable[Awaitable[KJTList]]:
-        return self._managed_collision_collection.input_dist(ctx, features, mc_kwargs)
+        # TODO: resolve incompatiblity with different contexts
+        return self._managed_collision_collection.input_dist(
+            # pyre-fixme [6]
+            ctx,
+            features,
+            force_insert,
+        )
 
     def _evict(self, evictions_per_table: Dict[str, Optional[torch.Tensor]]) -> None:
         for table, evictions_indices_for_table in evictions_per_table.items():
@@ -148,7 +137,9 @@ class ShardedManagedCollisionEmbeddingBagCollection(
                     dtype=torch.long,
                     device=self._device,
                 )
-
+                logger.info(
+                    f"Evicting {evictions_indices_for_table.numel()} ids from {table}"
+                )
                 with torch.no_grad():
                     # embeddings, and optimizer state will be reset
                     tbe.reset_embedding_weight_momentum(
@@ -177,51 +168,42 @@ class ShardedManagedCollisionEmbeddingBagCollection(
         self,
         ctx: ManagedCollisionEmbeddingBagCollectionContext,
         dist_input: KJTList,
-    ) -> Tuple[List[torch.Tensor], KJTList]:
+    ) -> List[torch.Tensor]:
+        with record_function("## compute:mcc ##"):
+            remapped_kjt = self._managed_collision_collection.compute(
+                # pyre-fixme [6]
+                ctx,
+                dist_input,
+            )
+            evictions_per_table = self._managed_collision_collection.evict()
 
-        mc_dist_input = self._managed_collision_collection.compute(
-            ctx,
-            dist_input,
-        )
-        evictions_per_table: Dict[str, Optional[torch.Tensor]] = {}
-        # TODO refactor this to be cleaner...
-        for (
-            table,
-            managed_collision_module,
-        ) in self._managed_collision_collection._managed_collision_modules.items():
-            if table not in self._table_to_tbe_and_index:
-                continue
-            evictions_per_table[table] = managed_collision_module.evict()
-        self._evict(evictions_per_table)
+            self._evict(evictions_per_table)
+            ctx.remapped_kjt = remapped_kjt
+            ctx.evictions_per_table = evictions_per_table
 
-        ebc_ret = self._embedding_bag_collection.compute(
-            cast(EmbeddingBagCollectionContext, ctx), mc_dist_input
-        )
+            return self._embedding_bag_collection.compute(ctx, remapped_kjt)
 
-        return ebc_ret, mc_dist_input
-
+    # pyre-ignore
     def output_dist(
         self,
         ctx: ManagedCollisionEmbeddingBagCollectionContext,
-        output: Tuple[List[torch.Tensor], KJTList],
-    ) -> LazyAwaitable[
-        Union[KeyedTensor, Tuple[KeyedTensor, Optional[Dict[str, JaggedTensor]]]]
-    ]:
-        # TODO investigate if we can overlap eviction with this
-        ebc_output, mc_output = output
-        ebc_awaitable = self._embedding_bag_collection.output_dist(
-            cast(EmbeddingBagCollectionContext, ctx), ebc_output
-        )
+        output: List[torch.Tensor],
+    ) -> Tuple[LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]]:
+
+        ebc_awaitable = self._embedding_bag_collection.output_dist(ctx, output)
+
         if self._return_remapped_features:
-            remapped_ids_awaitable = self._managed_collision_collection.output_dist(
-                ctx, mc_output
+            kjt_awaitable = self._managed_collision_collection.output_dist(
+                # pyre-fixme [6]
+                ctx,
+                # pyre-ignore [6]
+                ctx.remapped_kjt,
             )
         else:
-            remapped_ids_awaitable = None
+            kjt_awaitable = NoWait(None)
 
-        return ManagedCollisionEmbeddingBagCollectionAwaitable(
-            ebc_awaitable=ebc_awaitable, remapped_ids_awaitable=remapped_ids_awaitable
-        )
+        # pyre-ignore
+        return ebc_awaitable, kjt_awaitable
 
     def create_context(self) -> ManagedCollisionEmbeddingBagCollectionContext:
         return ManagedCollisionEmbeddingBagCollectionContext(sharding_contexts=[])
@@ -247,10 +229,7 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
             ebc_sharder or EmbeddingBagCollectionSharder(self.qcomm_codecs_registry)
         )
         self._mc_sharder: ManagedCollisionCollectionSharder = (
-            mc_sharder
-            or ManagedCollisionCollectionSharder(
-                qcomm_codecs_registry=self.qcomm_codecs_registry
-            )
+            mc_sharder or ManagedCollisionCollectionSharder()
         )
 
     def shard(
@@ -281,6 +260,13 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
     @property
     def module_type(self) -> Type[ManagedCollisionEmbeddingBagCollection]:
         return ManagedCollisionEmbeddingBagCollection
+
+    def compute_kernels(
+        self,
+        sharding_type: str,
+        compute_device_type: str,
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.FUSED.value]
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
         return list(
