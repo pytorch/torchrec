@@ -435,6 +435,7 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = [
             ShardingType.TABLE_WISE.value,
+            ShardingType.ROW_WISE.value,
         ]
 
         return types
