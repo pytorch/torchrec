@@ -62,6 +62,7 @@ class EmbeddingEnumerator(Enumerator):
         self._local_world_size: int = topology.local_world_size
         self._batch_size: int = batch_size
         self._constraints = constraints
+        self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {}
 
         if estimator:
             self._estimators: List[ShardEstimator] = (
@@ -89,7 +90,7 @@ class EmbeddingEnumerator(Enumerator):
             List[ShardingOption]: valid sharding options with values populated.
         """
 
-        sharder_map: Dict[str, ModuleSharder[nn.Module]] = {
+        self._sharder_map = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
         }
         sharding_options: List[ShardingOption] = []
@@ -98,7 +99,7 @@ class EmbeddingEnumerator(Enumerator):
         while named_modules_queue:
             child_path, child_module = named_modules_queue.pop()
             sharder_key = sharder_name(type(child_module))
-            sharder = sharder_map.get(sharder_key, None)
+            sharder = self._sharder_map.get(sharder_key, None)
             if not sharder:
                 for n, m in child_module.named_children():
                     if child_path != "":
@@ -167,10 +168,13 @@ class EmbeddingEnumerator(Enumerator):
                         f"after applying user provided constraints for {name}"
                     )
 
-        for estimator in self._estimators:
-            estimator.estimate(sharding_options, sharder_map)
+        self.populate_estimates(sharding_options)
 
         return sharding_options
+
+    def populate_estimates(self, sharding_options: List[ShardingOption]) -> None:
+        for estimator in self._estimators:
+            estimator.estimate(sharding_options, self._sharder_map)
 
     def _filter_sharding_types(self, name: str, sharding_types: List[str]) -> List[str]:
         if not self._constraints or not self._constraints.get(name):
