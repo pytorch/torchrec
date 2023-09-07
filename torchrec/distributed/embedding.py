@@ -677,25 +677,22 @@ class ShardedEmbeddingCollection(
         feature_names: List[str],
     ) -> None:
         feature_index = 0
-        for i, lookup in enumerate(self._lookups):
+        for i, sharding in enumerate(self._sharding_type_to_sharding.values()):
             feature_hash_size: List[int] = []
             feature_hash_size_lengths: List[int] = []
-            for group_config in lookup.grouped_configs:
-                for table in group_config.embedding_tables:
-                    table_hash_size = [0] * table.num_features()
-                    table_hash_size[-1] = table.num_embeddings
-                    feature_hash_size.extend(table_hash_size)
+            for table in sharding.embedding_tables():
+                table_hash_size = [0] * table.num_features()
+                table_hash_size[-1] = table.num_embeddings
+                feature_hash_size.extend(table_hash_size)
 
-                    table_hash_size = [0] * table.num_features()
-                    table_hash_size[0] = table.num_features()
-                    feature_hash_size_lengths.extend(table_hash_size)
+                table_hash_size = [0] * table.num_features()
+                table_hash_size[0] = table.num_features()
+                feature_hash_size_lengths.extend(table_hash_size)
 
-                    # Sanity check for feature orders
-                    for f in range(table.num_features()):
-                        assert (
-                            feature_names[feature_index + f] == table.feature_names[f]
-                        )
-                    feature_index += table.num_features()
+                # Sanity check for feature orders
+                for f in range(table.num_features()):
+                    assert feature_names[feature_index + f] == table.feature_names[f]
+                feature_index += table.num_features()
 
             feature_hash_size_cumsum: List[int] = [0] + list(
                 accumulate(feature_hash_size)

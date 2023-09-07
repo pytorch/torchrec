@@ -608,6 +608,9 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
     def embedding_names_per_rank(self) -> List[List[str]]:
         pass
 
+    def embedding_tables(self) -> List[ShardedEmbeddingTable]:
+        raise NotImplementedError
+
 
 @dataclass
 class EmbeddingShardingInfo:

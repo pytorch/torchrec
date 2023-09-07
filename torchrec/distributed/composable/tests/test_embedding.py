@@ -48,8 +48,10 @@ def _test_sharding(  # noqa C901
     backend: str,
     local_size: Optional[int] = None,
     use_apply_optimizer_in_backward: bool = False,
+    use_index_dedup: bool = False,
 ) -> None:
     trec_dist.comm_ops.set_gradient_division(False)
+    trec_dist.embedding.set_ec_index_dedup(use_index_dedup)
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         sharder = EmbeddingCollectionSharder()
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
@@ -193,15 +195,20 @@ class ShardedEmbeddingCollectionParallelTest(MultiProcessTestBase):
     # pyre-ignore
     @given(
         use_apply_optimizer_in_backward=st.booleans(),
+        use_index_dedup=st.booleans(),
     )
-    def test_sharding_ebc(self, use_apply_optimizer_in_backward: bool) -> None:
+    def test_sharding_ebc(
+        self,
+        use_apply_optimizer_in_backward: bool,
+        use_index_dedup: bool,
+    ) -> None:
 
         WORLD_SIZE = 2
 
         embedding_config = [
             EmbeddingConfig(
                 name="table_0",
-                feature_names=["feature_0", "feature_1"],
+                feature_names=["feature_0"],
                 embedding_dim=8,
                 num_embeddings=4,
             ),
@@ -249,4 +256,5 @@ class ShardedEmbeddingCollectionParallelTest(MultiProcessTestBase):
             kjt_input_per_rank=kjt_input_per_rank,
             backend="nccl",
             use_apply_optimizer_in_backward=use_apply_optimizer_in_backward,
+            use_index_dedup=use_index_dedup,
         )
