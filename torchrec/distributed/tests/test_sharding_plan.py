@@ -668,15 +668,15 @@ class ShardingPlanTest(unittest.TestCase):
         expected = """
 module: ebc
 
-param     sharding type    compute kernel    ranks
---------  ---------------  ----------------  -------
-user_id   table_wise       dense             [0]
-movie_id  row_wise         dense             [0, 1]
+ param   | sharding type | compute kernel | ranks 
+-------- | ------------- | -------------- | ------
+user_id  | table_wise    | dense          | [0]   
+movie_id | row_wise      | dense          | [0, 1]
 
-param     shard offsets    shard sizes    placement
---------  ---------------  -------------  -------------
-user_id   [0, 0]           [4096, 32]     rank:0/cuda:0
-movie_id  [0, 0]           [2048, 32]     rank:0/cuda:0
-movie_id  [2048, 0]        [2048, 32]     rank:0/cuda:1
+ param   | shard offsets | shard sizes |   placement  
+-------- | ------------- | ----------- | -------------
+user_id  | [0, 0]        | [4096, 32]  | rank:0/cuda:0
+movie_id | [0, 0]        | [2048, 32]  | rank:0/cuda:0
+movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
 """
         self.assertEqual(expected.strip(), str(plan))
