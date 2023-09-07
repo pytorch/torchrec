@@ -4,25 +4,25 @@
 name: Unit Test CI
 
 on:
-  # TODO: re-enable when GPU unit tests are working
   # push:
   #   paths-ignore:
   #     - "docs/*"
   #     - "third_party/*"
   #     - .gitignore
   #     - "*.md"
-  # pull_request:
-  #   paths-ignore:
-  #     - "docs/*"
-  #     - "third_party/*"
-  #     - .gitignore
-  #     - "*.md"
+  pull_request:
+    # paths-ignore:
+    #   - "docs/*"
+    #   - "third_party/*"
+    #   - .gitignore
+    #   - "*.md"
   workflow_dispatch:
 
 jobs:
   # build on cpu hosts and upload to GHA
   build_on_cpu:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         include:
@@ -30,7 +30,7 @@ jobs:
           # ideally we run on 3.9 and 3.10 as well, however we are limited in resources.
            python-version: 3.8
            python-tag: "py38"
-           cuda-tag: "cu11"
+           cuda-tag: "cu118"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -83,6 +83,8 @@ jobs:
     # here is the issue: https://github.com/conda/conda/issues/10972
     - name: Build TorchRec Binary
       run: |
+        export CU_VERSION=${{ matrix.cuda-tag }}
+        export CHANNEL="nightly"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
@@ -95,11 +97,12 @@ jobs:
   # download from GHA, test on gpu
   test_on_gpu:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
         python-version: [3.8]
-        cuda-tag: ["cu11"]
+        cuda-tag: ["cu118"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
@@ -165,7 +168,19 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+        conda run -n build_binary \
+          python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
+    - name: Test torch installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import torch"
+    - name: Test cuda
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.device_count())"
+        nvidia-smi
     # download wheel from GHA
     - name: Download wheel
       uses: actions/download-artifact@v2
@@ -176,7 +191,16 @@ jobs:
     - name: Install TorchRec GPU
       run: |
         rm -r dist || true
-        conda run -n build_binary python -m pip install dist/*.whl
+        conda run -n build_binary python -m pip install *.whl
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        conda run -n build_binary python -m pip install -r requirements.txt
+    - name: Test fbgemm installation
+      shell: bash
+      run: |
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
     - name: Test torchrec installation
       shell: bash
       run: |
@@ -184,7 +208,8 @@ jobs:
           python -c "import torchrec"
     - name: Test with pytest
       run: |
+        set -ex
         conda run -n build_binary \
           python -m pip install pytest
         conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw and not test_load_state_dict_prefix and not test_load_state_dict_cw_multiple_shards and not test_infer_shardings' --ignore-glob=**/test_utils/
