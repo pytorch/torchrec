@@ -17,8 +17,15 @@ from torchrec.distributed.sharding_plan import (
     column_wise,
     construct_module_sharding_plan,
     data_parallel,
+    EmbeddingBagCollectionSharder,
+    EmbeddingCollectionSharder,
+    FeatureProcessedEmbeddingBagCollectionSharder,
+    FusedEmbeddingBagCollectionSharder,
     get_module_to_default_sharders,
+    ManagedCollisionEmbeddingBagCollectionSharder,
     ParameterShardingGenerator,
+    QuantEmbeddingBagCollectionSharder,
+    QuantEmbeddingCollectionSharder,
     row_wise,
     table_row_wise,
     table_wise,
@@ -39,7 +46,17 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingCollection,
+)
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
+from torchrec.quant.embedding_modules import (
+    EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    EmbeddingCollection as QuantEmbeddingCollection,
+)
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
@@ -680,3 +697,44 @@ movie_id  [0, 0]           [2048, 32]     rank:0/cuda:0
 movie_id  [2048, 0]        [2048, 32]     rank:0/cuda:1
 """
         self.assertEqual(expected.strip(), str(plan))
+
+    def test_module_to_default_sharders(self) -> None:
+        default_sharder_map = get_module_to_default_sharders()
+        self.assertCountEqual(
+            default_sharder_map,
+            [
+                EmbeddingBagCollection,
+                FeatureProcessedEmbeddingBagCollection,
+                EmbeddingCollection,
+                FusedEmbeddingBagCollection,
+                QuantEmbeddingBagCollection,
+                QuantEmbeddingCollection,
+                ManagedCollisionEmbeddingBagCollection,
+            ],
+        )
+        self.assertIsInstance(
+            default_sharder_map[EmbeddingBagCollection], EmbeddingBagCollectionSharder
+        )
+        self.assertIsInstance(
+            default_sharder_map[FeatureProcessedEmbeddingBagCollection],
+            FeatureProcessedEmbeddingBagCollectionSharder,
+        )
+        self.assertIsInstance(
+            default_sharder_map[EmbeddingCollection], EmbeddingCollectionSharder
+        )
+        self.assertIsInstance(
+            default_sharder_map[FusedEmbeddingBagCollection],
+            FusedEmbeddingBagCollectionSharder,
+        )
+        self.assertIsInstance(
+            default_sharder_map[QuantEmbeddingBagCollection],
+            QuantEmbeddingBagCollectionSharder,
+        )
+        self.assertIsInstance(
+            default_sharder_map[QuantEmbeddingCollection],
+            QuantEmbeddingCollectionSharder,
+        )
+        self.assertIsInstance(
+            default_sharder_map[ManagedCollisionEmbeddingBagCollection],
+            ManagedCollisionEmbeddingBagCollectionSharder,
+        )
