@@ -536,7 +536,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
     Args:
         zch_size (int): range of output ids, within [output_size_offset, output_size_offset + zch_size - 1)
-        is_train (bool): whether it is training mode (toggles eviction policy)
         device (torch.device): device on which this module will be executed
         eviction_policy (eviction policy): eviction policy to be used
         eviction_interval (int): interval of eviction policy is triggered
@@ -551,7 +550,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
     def __init__(
         self,
         zch_size: int,
-        is_train: bool,
         device: torch.device,
         eviction_policy: MCHEvictionPolicy,
         eviction_interval: int,
@@ -564,7 +562,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
     ) -> None:
         super().__init__(device)
 
-        self._is_train = is_train
         if input_history_buffer_size is None:
             input_history_buffer_size = zch_size * 10
         self._input_history_buffer_size: int = input_history_buffer_size
@@ -610,8 +607,9 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             torch.arange(self._zch_size, dtype=torch.int64, device=self.device),
         )
 
+        # TODO: explicitly create / destory this buffer when going between training / eval
         self._history_accumulator: torch.Tensor = torch.empty(
-            self._input_history_buffer_size if self._is_train else 0,
+            self._input_history_buffer_size if self.training else 0,
             dtype=torch.int64,
             device=self.device,
         )
@@ -779,7 +777,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         force_insert: bool = False,
     ) -> Dict[str, JaggedTensor]:
         self._current_iter += 1
-        if self._is_train is False:
+        if not self.training:
             return features
 
         for _, feature in features.items():
@@ -903,7 +901,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
         return type(self)(
             zch_size=new_zch_size,
-            is_train=self._is_train,
             device=device or self.device,
             input_history_buffer_size=new_input_history_buffer_size,
             eviction_policy=self._eviction_policy,
