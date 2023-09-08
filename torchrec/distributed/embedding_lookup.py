@@ -15,6 +15,9 @@ import torch.distributed as dist
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
+    SplitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 
 from torch.autograd.function import FunctionCtx
@@ -349,6 +352,14 @@ class GroupedPooledEmbeddingsLookup(
                 self._feature_splits,
             )
             for emb_op, features in zip(self._emb_modules, features_by_group):
+                if (
+                    isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
+                    and not emb_op.emb_module.prefetch_pipeline
+                ):
+                    logging.error(
+                        "Invalid setting on SplitTableBatchedEmbeddingBagsCodegen modules. prefetch_pipeline must be set to True.\n"
+                        "If you don’t turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
+                    )
                 if hasattr(emb_op.emb_module, "prefetch"):
                     emb_op.emb_module.prefetch(
                         indices=features.values(),
