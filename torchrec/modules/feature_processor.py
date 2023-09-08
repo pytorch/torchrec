@@ -55,12 +55,15 @@ class PositionWeightedModule(BaseFeatureProcessor):
     def __init__(
         self,
         max_feature_lengths: Dict[str, int],
+        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self.max_feature_lengths = max_feature_lengths
         self.position_weights: nn.ParameterDict = nn.ParameterDict()
         for key, length in max_feature_lengths.items():
-            self.position_weights[key] = nn.Parameter(torch.empty([length]).fill_(1.0))
+            self.position_weights[key] = nn.Parameter(
+                torch.empty([length], device=device).fill_(1.0)
+            )
 
     def forward(
         self,
