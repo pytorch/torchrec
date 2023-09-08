@@ -193,6 +193,13 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 feature_names.extend(grouped_config.feature_names())
         return feature_names
 
+    def embedding_tables(self) -> List[ShardedEmbeddingTable]:
+        embedding_tables = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            for grouped_config in grouped_embedding_configs:
+                embedding_tables.extend(grouped_config.embedding_tables)
+        return embedding_tables
+
     def feature_names_per_rank(self) -> List[List[str]]:
         feature_names = []
         for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:

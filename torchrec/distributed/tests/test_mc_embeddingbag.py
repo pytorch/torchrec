@@ -60,7 +60,6 @@ class SparseArch(nn.Module):
             mch_hash_func=mch_hash_func if mch_size else None,
             input_hash_size=4000,
             device=device,
-            is_train=True,
             eviction_interval=2,
             eviction_policy=DistanceLFU_EvictionPolicy(),
         )
@@ -70,7 +69,6 @@ class SparseArch(nn.Module):
             mch_size=mch_size,
             mch_hash_func=mch_hash_func if mch_size else None,
             device=device,
-            is_train=True,
             input_hash_size=4000,
             eviction_interval=2,
             eviction_policy=DistanceLFU_EvictionPolicy(),
