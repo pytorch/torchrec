@@ -9,7 +9,19 @@ import abc
 import operator
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, Type, TypeVar
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from torch.autograd.profiler import record_function
 from torchrec.types import ModuleNoCopyMixin
@@ -53,6 +65,42 @@ from torch.distributed._shard.sharding_spec import (  # noqa
 )
 from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
+
+
+def _tabulate(
+    table: List[List[Union[str, int]]], headers: Optional[List[str]] = None
+) -> str:
+    """
+    Format a table as a string.
+    Parameters:
+        table (list of lists or list of tuples): The data to be formatted as a table.
+        headers (list of strings, optional): The column headers for the table. If not provided, the first row of the table will be used as the headers.
+    Returns:
+        str: A string representation of the table.
+    """
+    if headers is None:
+        headers = table[0]
+        table = table[1:]
+    headers = cast(List[str], headers)
+    rows = []
+    # Determine the maximum width of each column
+    col_widths = [max([len(str(item)) for item in column]) for column in zip(*table)]
+    col_widths = [max(i, len(j)) for i, j in zip(col_widths, headers)]
+    # Format each row of the table
+    for row in table:
+        row_str = " | ".join(
+            [str(item).ljust(width) for item, width in zip(row, col_widths)]
+        )
+        rows.append(row_str)
+    # Add the header row and the separator line
+    rows.insert(
+        0,
+        " | ".join(
+            [header.center(width) for header, width in zip(headers, col_widths)]
+        ),
+    )
+    rows.insert(1, " | ".join(["-" * width for width in col_widths]))
+    return "\n".join(rows)
 
 
 @unique
@@ -487,8 +535,6 @@ class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterShardin
     """
 
     def __str__(self) -> str:
-        from tabulate import tabulate
-
         out = ""
         param_table = []
         shard_table = []
@@ -513,10 +559,10 @@ class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterShardin
                                 shard.placement,
                             ]
                         )
-        out += "\n\n" + tabulate(
+        out += "\n\n" + _tabulate(
             param_table, ["param", "sharding type", "compute kernel", "ranks"]
         )
-        out += "\n\n" + tabulate(
+        out += "\n\n" + _tabulate(
             shard_table, ["param", "shard offsets", "shard sizes", "placement"]
         )
         return out

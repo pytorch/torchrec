@@ -7,7 +7,6 @@ numpy
 pandas
 pyre-extensions
 scikit-build
-tabulate
 torchmetrics==1.0.3
 torchx
 tqdm
