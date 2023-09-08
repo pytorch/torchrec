@@ -122,6 +122,12 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             feature_names.extend(grouped_config.feature_names())
         return feature_names
 
+    def embedding_tables(self) -> List[ShardedEmbeddingTable]:
+        embedding_tables = []
+        for grouped_config in self._grouped_embedding_configs:
+            embedding_tables.extend(grouped_config.embedding_tables)
+        return embedding_tables
+
 
 class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     """
