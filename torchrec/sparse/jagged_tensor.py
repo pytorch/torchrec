@@ -1443,7 +1443,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         with record_function("## all2all_data:recat_values ##"):
             if recat is not None and recat.numel() > 0:
-                if all(bs == batch_size_per_rank[0] for bs in batch_size_per_rank):
+                if False:
                     lengths, values, weights = torch.ops.fbgemm.permute_2D_sparse_data(
                         recat,
                         lengths.view(-1, batch_size_per_rank[0]),
