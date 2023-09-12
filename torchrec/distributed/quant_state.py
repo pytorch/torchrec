@@ -6,7 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from typing import Any, Dict, List, Mapping, TypeVar, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
@@ -19,6 +20,7 @@ from torch.distributed._shard.sharded_tensor import (
     ShardedTensorMetadata,
     ShardMetadata,
 )
+from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     ShardedEmbeddingModule,
@@ -322,3 +324,97 @@ class ShardedQuantEmbeddingModuleState(
             _unexpected_keys.remove(src_state_dict_name)
         missing_keys.extend(_missing_keys)
         unexpected_keys.extend(_unexpected_keys)
+
+
+@dataclass
+class WeightSpec:
+    fqn: str  # "ebc.embedding_bags.table_0.weight"
+    shard_offsets: List[int]  # shard offsets
+    shard_sizes: List[int]  # shard sizes
+    sharding_type: Optional[str]  # e.g. ShardingType.ROW_WISE.value=="row_wise"
+
+
+def sharded_tbes_weights_spec(
+    sharded_model: torch.nn.Module,
+) -> Dict[str, WeightSpec]:
+    # OUTPUT:
+    # Example:
+    # {
+    # tbes.0
+    # table_0 in tbes.0
+    # 	"ebc.tbes.0.0.table_0.weight": WeightSpec("ebc.embedding_bags.table_0.weight", [0, 0], [500, 192])
+    # 	"ebc.tbes.0.0.table_0.weight_qscale":WeightSpec("ebc.embedding_bags.table_0.weight_qscale", [0, 0], [500, 2])
+    # 	"ebc.tbes.0.0.table_0.weight_qbias":WeightSpec("ebc.embedding_bags.table_0.weight_qbias", [0, 0], [500, 2])
+    # table_1 in tbes.1
+    # 	"ebc.tbes.0.1.table_1.weight": WeightSpec("ebc.embedding_bags.table_1.weight", [0, 0], [500, 192])
+    # 	"ebc.tbes.0.1.table_1.weight_qscale":WeightSpec("ebc.embedding_bags.table_1.weight_qscale", [0, 0], [500, 2])
+    # 	"ebc.tbes.0.1.table_1.weight_qbias":WeightSpec("ebc.embedding_bags.table_1.weight_qbias", [0, 0], [500, 2])
+    # tbes.1
+    # table_0 in tbes.1
+    # 	"ebc.tbes.1.0.table_0.weight": WeightSpec("ebc.embedding_bags.table_0.weight", [500, 0], [500, 192])
+    # 	"ebc.tbes.1.0.table_0.weight_qscale":WeightSpec("ebc.embedding_bags.table_0.weight_qscale", [500, 0], [500, 2])
+    # 	"ebc.tbes.1.0.table_0.weight_qbias":WeightSpec("ebc.embedding_bags.table_0.weight_qbias", [500, 0], [500, 2])
+    # table_1 in tbes.1
+    # 	"ebc.tbes.1.1.table_1.weight": WeightSpec("ebc.embedding_bags.table_1.weight", [500, 0], [500, 192])
+    # 	"ebc.tbes.1.1.table_1.weight_qscale":WeightSpec("ebc.embedding_bags.table_1.weight_qscale", [500, 0], [500, 2])
+    # 	"ebc.tbes.1.1.table_1.weight_qbias":WeightSpec("ebc.embedding_bags.table_1.weight_qbias", [500, 0], [500, 2])
+    # }
+
+    ret: Dict[str, WeightSpec] = {}
+    for module_fqn, module in sharded_model.named_modules():
+        type_name: str = type(module).__name__
+        is_sqebc: bool = type_name == "ShardedQuantEmbeddingBagCollection"
+        is_sqec: bool = type_name == "ShardedQuantEmbeddingCollection"
+
+        if is_sqebc or is_sqec:
+            tbes_configs: Dict[
+                IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+            ] = module.tbes_configs()
+            sharding_type_to_sharding_infos: Dict[
+                str, List[EmbeddingShardingInfo]
+            ] = module.sharding_type_to_sharding_infos()
+
+            table_shardings: Dict[str, str] = {}
+            for (
+                sharding_type,
+                sharding_infos,
+            ) in sharding_type_to_sharding_infos.items():
+                for info in sharding_infos:
+                    table_shardings[info.embedding_config.name] = sharding_type
+            for tbe_idx, (_tbe, config) in enumerate(tbes_configs.items()):
+                tables = config.embedding_tables
+                for table_idx, table in enumerate(tables):
+                    table_name: str = table.name
+                    # pyre-ignore
+                    table_metadata: ShardMetadata = table.local_metadata
+                    shard_sizes: List[int] = table_metadata.shard_sizes
+                    shard_offsets: List[int] = table_metadata.shard_offsets
+                    s: str = "embedding_bags" if is_sqebc else "embeddings"
+                    unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
+
+                    sharded_fqn_weight: str = (
+                        f"{module_fqn}.tbes.{tbe_idx}.{table_idx}.{table_name}.weight"
+                    )
+                    sharding_type: str = table_shardings[table_name]
+                    ret[sharded_fqn_weight] = WeightSpec(
+                        fqn=unsharded_fqn_weight,
+                        shard_offsets=shard_offsets,
+                        shard_sizes=shard_sizes,
+                        sharding_type=sharding_type,
+                    )
+
+                    for qcomponent in ["qscale", "qbias"]:
+                        qcomp_shard_offsets: List[int] = copy.deepcopy(shard_offsets)
+                        # handling CW - no columns shift for qscale/qbias
+                        qcomp_shard_offsets[1] = 0
+                        qcomp_shard_sizes: List[int] = copy.deepcopy(shard_sizes)
+                        # Assuming qscale and qbias are always torch.half (float16), represented as tensor of byte type => sizeof(float16) == 2 (bytes)
+                        qcomp_shard_sizes[1] = 2
+
+                        ret[f"{sharded_fqn_weight}_{qcomponent}"] = WeightSpec(
+                            fqn=f"{unsharded_fqn_weight}_{qcomponent}",
+                            shard_offsets=qcomp_shard_offsets,
+                            shard_sizes=qcomp_shard_sizes,
+                            sharding_type=sharding_type,
+                        )
+    return ret
