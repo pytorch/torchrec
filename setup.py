@@ -81,19 +81,23 @@ def main(argv: List[str]) -> None:
     version, sha = _get_version()
     _export_version(version, sha)
 
-    if channel != "nightly":
-        if "fbgemm-gpu-nightly" in install_requires:
-            install_requires.remove("fbgemm-gpu-nightly")
-        install_requires.append("fbgemm-gpu")
+    # if channel != "nightly":
+    #     if "fbgemm-gpu-nightly" in install_requires:
+    #         install_requires.remove("fbgemm-gpu-nightly")
+    #     install_requires.append("fbgemm-gpu")
 
     cu_version = get_cu_version()
     if cu_version == "cpu":
-        if "fbgemm-gpu-nightly" in install_requires:
-            install_requires.remove("fbgemm-gpu-nightly")
-            install_requires.append("fbgemm-gpu-nightly-cpu")
-        if "fbgemm-gpu" in install_requires:
+        # if "fbgemm-gpu-nightly" in install_requires:
+        #     install_requires.remove("fbgemm-gpu-nightly")
+        #     install_requires.append("fbgemm-gpu-nightly-cpu")
+        # if "fbgemm-gpu" in install_requires:
             install_requires.remove("fbgemm-gpu")
-            install_requires.append("fbgemm-gpu-cpu")
+            install_requires.append("fbgemm-gpu-cpu==0.5.0rc3")
+    else:
+        install_requires.remove("fbgemm-gpu")
+        install_requires.append("fbgemm-gpu==0.5.0rc2")
+
 
     print(f"-- torchrec building version: {version} CU Version: {cu_version}")
 
