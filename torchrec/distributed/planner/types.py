@@ -132,6 +132,7 @@ class Topology:
         assert compute_device in [
             "cpu",
             "cuda",
+            "mtia",
         ], f"unsupported compute device {compute_device}"
 
         self._compute_device = compute_device

@@ -848,8 +848,13 @@ class ModuleSharder(abc.ABC, Generic[M]):
         compute kernel.
         """
 
-        assert compute_device_type in {"cuda", "cpu"}
-        storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
+        assert compute_device_type in {"cuda", "cpu", "mtia"}
+        storage_map = {
+            "cuda": ParameterStorage.HBM,
+            "cpu": ParameterStorage.DDR,
+            # TODO: Update it later. Setting for MTIA is same as CPU's for now.
+            "mtia": ParameterStorage.DDR,
+        }
         return {
             storage_map[compute_device_type].value: tensor.element_size()
             * tensor.nelement()
