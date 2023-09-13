@@ -102,7 +102,9 @@ class ShardedQuantEmbeddingBagCollection(
         self._embedding_bag_configs: List[
             EmbeddingBagConfig
         ] = module.embedding_bag_configs()
-        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
+        self._sharding_type_to_sharding_infos: Dict[
+            str, List[EmbeddingShardingInfo]
+        ] = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, "embedding_bags.", fused_params
         )
         self._sharding_type_to_sharding: Dict[
@@ -117,7 +119,7 @@ class ShardedQuantEmbeddingBagCollection(
             sharding_type: create_infer_embedding_bag_sharding(
                 sharding_type, embedding_confings, env
             )
-            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
+            for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
         }
         self._device = device
         self._is_weighted: bool = module.is_weighted()
@@ -141,6 +143,10 @@ class ShardedQuantEmbeddingBagCollection(
         tbes: Dict[
             IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
         ] = get_tbes_to_register_from_iterable(self._lookups)
+
+        self._tbes_configs: Dict[
+            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+        ] = tbes
 
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
@@ -181,6 +187,17 @@ class ShardedQuantEmbeddingBagCollection(
                         self.embedding_bags[table_name].register_buffer(
                             "weight", lookup_state_dict[key]
                         )
+
+    def tbes_configs(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return self._tbes_configs
+
+    def sharding_type_to_sharding_infos(self) -> Dict[str, List[EmbeddingShardingInfo]]:
+        return self._sharding_type_to_sharding_infos
+
+    def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        return self._embedding_bag_configs
 
     def _create_input_dist(
         self,

@@ -8,8 +8,9 @@
 #!/usr/bin/env python3
 
 import copy
+
 import unittest
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 from torch.distributed._shard.sharding_spec import ShardingSpec
@@ -21,6 +22,7 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
+from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules
 
 from torchrec.distributed.test_utils.infer_utils import (
@@ -58,6 +60,40 @@ def assert_close(expected, actual) -> None:
                 actual = actual.to(expected.device)
 
         torch.testing.assert_close(expected, actual)
+
+
+def assert_weight_spec(
+    weights_spec: Dict[str, WeightSpec],
+    expected_shards: List[Tuple[Tuple[int, int, int, int], str]],
+    ebc_fqn: str,
+    weights_prefix: str,
+    table_names: List[str],
+    sharding_type: str,
+) -> None:
+    tbe_table_idxs = [0, 0]
+    for table_name in table_names:
+        unsharded_weight_fqn = f"{ebc_fqn}.{weights_prefix}.{table_name}.weight"
+        for (offset_r, offset_c, size_r, size_c), placement in expected_shards:
+            tbe_idx: int = 0
+            if "rank:1/cuda:1" == placement:
+                tbe_idx = 1
+            sharded_weight_fqn: str = f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            tbe_table_idxs[tbe_idx] += 1
+            assert sharded_weight_fqn in weights_spec
+            wspec = weights_spec[sharded_weight_fqn]
+            assert wspec.fqn == unsharded_weight_fqn
+            assert wspec.shard_sizes == [size_r, size_c]
+            assert wspec.shard_offsets == [offset_r, offset_c]
+            assert wspec.sharding_type == sharding_type
+
+            for qcomp in ["qscale", "qbias"]:
+                sharded_weight_qcomp_fqn: str = f"{sharded_weight_fqn}_{qcomp}"
+                assert sharded_weight_qcomp_fqn in weights_spec
+                wqcomp_spec = weights_spec[sharded_weight_qcomp_fqn]
+                assert wqcomp_spec.fqn == f"{unsharded_weight_fqn}_{qcomp}"
+                assert wqcomp_spec.shard_sizes == [size_r, 2]
+                assert wqcomp_spec.shard_offsets == [offset_r, 0]
+                assert wqcomp_spec.sharding_type == sharding_type
 
 
 def _model(
@@ -243,14 +279,15 @@ class InferShardingsTest(unittest.TestCase):
 
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2
+        expected_shards = [
+            ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
+            ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+        ]
         sharded_model = _shard_qebc(
             mi,
             sharding_type=ShardingType.ROW_WISE,
             device=local_device,
-            expected_shards=[
-                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
-            ],
+            expected_shards=expected_shards,
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
@@ -267,6 +304,16 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module.sparse.ebc",
+            "embedding_bags",
+            ["table_0"],
+            ShardingType.ROW_WISE.value,
+        )
 
     # pyre-ignore
     @unittest.skipIf(
@@ -291,16 +338,17 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         non_sharded_model = mi.quant_model
+        expected_shards = [
+            ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+            ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+            ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+            ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+        ]
         sharded_model = _shard_qebc(
             mi,
             sharding_type=ShardingType.COLUMN_WISE,
             device=local_device,
-            expected_shards=[
-                ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-                ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-            ],
+            expected_shards=expected_shards,
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
@@ -318,6 +366,16 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module.sparse.ebc",
+            "embedding_bags",
+            ["table_0"],
+            ShardingType.COLUMN_WISE.value,
+        )
 
     # pyre-ignore
     @unittest.skipIf(
@@ -379,18 +437,18 @@ class InferShardingsTest(unittest.TestCase):
             mi.model, inplace=False, quant_state_dict_split_scale_bias=True
         )
         non_sharded_model = mi.quant_model
+        expected_shards = [
+            ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+            ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+            ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+            ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+        ]
         sharded_model = _shard_qec(
             mi,
             sharding_type=ShardingType.COLUMN_WISE,  # column wise sharding the model
             device=local_device,
-            expected_shards=[
-                ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-                ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-            ],
+            expected_shards=expected_shards,
         )
-
         inputs = [
             model_input_to_forward_args_kjt(inp.to(local_device))
             for inp in prep_inputs(mi, world_size, batch_size)
@@ -400,6 +458,16 @@ class InferShardingsTest(unittest.TestCase):
         sharded_output = sharded_model(*inputs[0])
         non_sharded_output = non_sharded_model(*inputs[0])
         assert_close(sharded_output, non_sharded_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module_kjt_input.0",
+            "embeddings",
+            ["table_0", "table_1"],
+            ShardingType.COLUMN_WISE.value,
+        )
 
     # pyre-ignore
     @unittest.skipIf(
@@ -461,14 +529,15 @@ class InferShardingsTest(unittest.TestCase):
         )
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2
+        expected_shards = [
+            ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
+            ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+        ]
         sharded_model = _shard_qec(
             mi,
             sharding_type=ShardingType.ROW_WISE,
             device=local_device,
-            expected_shards=[
-                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
-            ],
+            expected_shards=expected_shards,
         )
 
         inputs = [
@@ -485,3 +554,13 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module_kjt_input.0",
+            "embeddings",
+            ["table_0", "table_1"],
+            ShardingType.ROW_WISE.value,
+        )
