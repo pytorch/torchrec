@@ -92,10 +92,10 @@ def main(argv: List[str]) -> None:
         #     install_requires.remove("fbgemm-gpu-nightly")
         #     install_requires.append("fbgemm-gpu-nightly-cpu")
         # if "fbgemm-gpu" in install_requires:
-            install_requires.remove("fbgemm-gpu")
-            install_requires.append("fbgemm-gpu-cpu==0.5.0rc3")
+        install_requires.remove("fbgemm-gpu-nightly")
+        install_requires.append("fbgemm-gpu-cpu==0.5.0rc3")
     else:
-        install_requires.remove("fbgemm-gpu")
+        install_requires.remove("fbgemm-gpu-nightly")
         install_requires.append("fbgemm-gpu==0.5.0rc2")
 
 
