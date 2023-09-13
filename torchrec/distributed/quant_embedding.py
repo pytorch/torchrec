@@ -346,7 +346,9 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
-        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
+        self._sharding_type_to_sharding_infos: Dict[
+            str, List[EmbeddingShardingInfo]
+        ] = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, fused_params
         )
         self._sharding_type_to_sharding: Dict[
@@ -361,7 +363,7 @@ class ShardedQuantEmbeddingCollection(
             sharding_type: create_infer_embedding_sharding(
                 sharding_type, embedding_confings, env
             )
-            for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
+            for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
         }
         self._embedding_dim: int = module.embedding_dim()
         self._local_embedding_dim: int = self._embedding_dim
@@ -408,6 +410,10 @@ class ShardedQuantEmbeddingCollection(
             IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
         ] = get_tbes_to_register_from_iterable(self._lookups)
 
+        self._tbes_configs: Dict[
+            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
+        ] = tbes
+
         # Optional registration of TBEs for model post processing utilities
         if is_fused_param_register_tbe(fused_params):
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(tbes.keys())
@@ -447,6 +453,17 @@ class ShardedQuantEmbeddingCollection(
                         self.embeddings[table_name].register_buffer(
                             "weight", lookup_state_dict[key]
                         )
+
+    def tbes_configs(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return self._tbes_configs
+
+    def sharding_type_to_sharding_infos(self) -> Dict[str, List[EmbeddingShardingInfo]]:
+        return self._sharding_type_to_sharding_infos
+
+    def embedding_configs(self) -> List[EmbeddingConfig]:
+        return self._embedding_configs
 
     def _generate_permute_indices_per_feature(
         self,
