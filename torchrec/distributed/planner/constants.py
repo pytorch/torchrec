@@ -64,6 +64,11 @@ def kernel_bw_lookup(
         ("cpu", EmbeddingComputeKernel.DENSE.value): 0.5 * ddr_mem_bw,
         ("cpu", EmbeddingComputeKernel.FUSED.value): 1 * ddr_mem_bw,
         ("cpu", EmbeddingComputeKernel.QUANT.value): 1 * ddr_mem_bw,
+        # TODO: Determine the correct value later. MTIA uses values same as CPU's.
+        # MTIA
+        ("mtia", EmbeddingComputeKernel.DENSE.value): 0.5 * ddr_mem_bw,
+        ("mtia", EmbeddingComputeKernel.FUSED.value): 1 * ddr_mem_bw,
+        ("mtia", EmbeddingComputeKernel.QUANT.value): 1 * ddr_mem_bw,
         # CUDA
         ("cuda", EmbeddingComputeKernel.DENSE.value): 0.5 * hbm_mem_bw,
         ("cuda", EmbeddingComputeKernel.FUSED.value): 1 * hbm_mem_bw,

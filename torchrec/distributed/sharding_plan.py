@@ -60,8 +60,8 @@ def placement(
     local_size: int,
 ) -> str:
     param_device = compute_device
-    if compute_device == "cuda":
-        param_device = torch.device("cuda", rank % local_size)
+    if compute_device in {"cuda", "mtia"}:
+        param_device = torch.device(compute_device, rank % local_size)
     return f"rank:{rank}/{param_device}"
 
 

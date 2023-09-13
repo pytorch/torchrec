@@ -343,6 +343,10 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
+        # For MTIA, sharding types are restricted to TW.
+        if compute_device_type in {"mtia"}:
+            return [ShardingType.TABLE_WISE.value]
+
         types = [
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
@@ -399,8 +403,13 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
         else:
-            assert compute_device_type in {"cuda", "cpu"}
-            storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
+            assert compute_device_type in {"cuda", "cpu", "mtia"}
+            storage_map = {
+                "cuda": ParameterStorage.HBM,
+                "cpu": ParameterStorage.DDR,
+                # TODO: Update it later. Setting for MTIA is same as CPU's for now.
+                "mtia": ParameterStorage.DDR,
+            }
             return {
                 storage_map[compute_device_type].value: tensor.element_size()
                 * tensor.nelement()
@@ -500,6 +509,11 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
             assert compute_device_type in {"cuda"}
             return {ParameterStorage.DDR.value: tensor_bytes}
         else:
-            assert compute_device_type in {"cuda", "cpu"}
-            storage_map = {"cuda": ParameterStorage.HBM, "cpu": ParameterStorage.DDR}
+            assert compute_device_type in {"cuda", "cpu", "mtia"}
+            storage_map = {
+                "cuda": ParameterStorage.HBM,
+                "cpu": ParameterStorage.DDR,
+                # TODO: Update it later. Setting for MTIA is same as CPU's for now.
+                "mtia": ParameterStorage.DDR,
+            }
             return {storage_map[compute_device_type].value: tensor_bytes}
