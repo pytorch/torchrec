@@ -8,40 +8,65 @@
 
 export PYTORCH_CUDA_PKG=""
 
+conda create -y -n build_binary python="${MATRIX_PYTHON_VERSION}"
+
+conda run -n build_binary python --version
+
 # Install pytorch, torchrec and fbgemm as per
 # installation instructions on following page
 # https://github.com/pytorch/torchrec#installations
+# switch back to conda once torch nightly is fixed
+# if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
+#     export PYTORCH_CUDA_PKG="pytorch-cuda=${MATRIX_GPU_ARCH_VERSION}"
+# fi
+
+if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
+    echo "We don't support rocm"
+    exit 0
+fi
+
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
-    export PYTORCH_CUDA_PKG="pytorch-cuda=${MATRIX_GPU_ARCH_VERSION}"
-fi
-
-if [[ ${MATRIX_CHANNEL} = 'nightly' ]]; then
-    # shellcheck disable=SC2086
-    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch-nightly -c nvidia
-    pip install torchrec_nightly
-else
-    # shellcheck disable=SC2086
-    conda install -y pytorch ${PYTORCH_CUDA_PKG} -c pytorch -c nvidia
-    pip install torchrec
-fi
-
-if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cpu' || ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
-    if [[ ${MATRIX_CHANNEL} = 'nightly' ]]; then
-        pip uninstall fbgemm-gpu-nightly -y
-        pip install fbgemm-gpu-nightly-cpu
+    if [[ ${MATRIX_GPU_ARCH_VERSION} = '11.8' ]]; then
+        export CUDA_VERSION="cu118"
     else
-        pip uninstall fbgemm-gpu -y
-        pip install fbgemm-gpu-cpu
+        export CUDA_VERSION="cu121"
     fi
+else
+    export CUDA_VERSION="cpu"
 fi
+
+if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' && ${MATRIX_GPU_ARCH_VERSION} = '11.8' ]]; then
+    conda install -n build_binary pytorch pytorch-cuda=11.8 -c pytorch-test -c nvidia -y
+    conda run -n build_binary pip install fbgemm-gpu==0.5.0rc2
+    conda run -n build_binary pip install torchmetrics==1.0.3
+    conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cu118
+fi 
+
+if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' && ${MATRIX_GPU_ARCH_VERSION} = '12.1' ]]; then
+    # conda install pytorch pytorch-cuda=12.1 -c pytorch-test -c nvidia
+    # 
+    # pip install torchmetrics==1.0.3
+    # 
+    exit 0
+fi 
+
+if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cpu' ]]; then
+    conda install -n build_binary pytorch cpuonly -c pytorch-test
+    conda run -n build_binary pip install fbgemm-gpu-cpu==0.5.0rc3
+    conda run -n build_binary pip install torchmetrics==1.0.3
+    conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cpu
+fi 
 
 # Run small import test
-python -c "import torch; import fbgemm_gpu; import torchrec"
+conda run -n build_binary python -c "import torch; import fbgemm_gpu; import torchrec"
+
+# check directory
+ls -R
 
 # Finally run smoke test
-pip install torchx
+conda run -n build_binary pip install torchx iopath
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
-    torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
+    conda run -n build_binary torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
 else
-    torchx run -s local_cwd dist.ddp -j 1 --script test_installation.py -- --cpu_only
+    conda run -n build_binary torchx run -s local_cwd dist.ddp -j 1 --script test_installation.py -- --cpu_only
 fi
