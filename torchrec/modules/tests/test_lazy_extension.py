@@ -66,13 +66,12 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
 
         # reproduce the only changes:
         expected_lazy_ext_infer_parameters_src = original_infer_parameters_src.replace(
-            "def _infer_parameters(self: _LazyProtocol, module, input):",
-            "def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs) -> None:",
+            "def _infer_parameters(self: _LazyProtocol, module, args, kwargs=None):",
+            "def _infer_parameters(self: _LazyExtensionProtocol, module, args, kwargs) -> None:",
         ).replace(
-            "module.initialize_parameters(*input)",
-            "module.initialize_parameters(*input, **kwargs)",
+            "module.initialize_parameters(*args)",
+            "module.initialize_parameters(*args, **kwargs)",
         )
-
         self.assertEqual(
             lazy_ext_infer_parameters_src,
             expected_lazy_ext_infer_parameters_src,
