@@ -51,7 +51,7 @@ if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' && ${MATRIX_GPU_ARCH_VERSION} = '12.1' ]]
 fi 
 
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cpu' ]]; then
-    conda install -n build_binary pytorch cpuonly -c pytorch-test
+    conda install -n build_binary pytorch cpuonly -c pytorch-test -y 
     conda run -n build_binary pip install fbgemm-gpu-cpu==0.5.0rc3
     conda run -n build_binary pip install torchmetrics==1.0.3
     conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cpu
