@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+import os
 from collections import defaultdict
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
@@ -390,8 +391,7 @@ class EmbeddingStats(Stats):
 
         self._stats_table.append("#" * self._width)
 
-        for row in self._stats_table:
-            logger.info(row)
+        logger.info(os.linesep + os.linesep.join(self._stats_table))
 
     def _get_shard_stats(
         self,
