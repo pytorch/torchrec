@@ -16,12 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "Channel to use (nightly, release)"
+        description: "Channel to use (nightly, release, test)"
         required: true
         type: choice
         options:
           - release
           - nightly
+          - test
       ref:
         description: 'Reference to checkout, defaults to empty'
         default: ""
