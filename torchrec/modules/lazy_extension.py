@@ -157,9 +157,8 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
 
     # fmt: off
     # pyre-ignore[2, 47]
-    # pyre-fixme[14]: `_infer_parameters` overrides method defined in
     #  `LazyModuleMixin` inconsistently.
-    def _infer_parameters(self: _LazyExtensionProtocol, module, input, kwargs) -> None:
+    def _infer_parameters(self: _LazyExtensionProtocol, module, args, kwargs) -> None:
         r"""Infers the size and initializes the parameters according to the
         provided input batch.
         Given a module that contains parameters that were declared inferrable
@@ -169,7 +168,8 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
         The module is set into evaluation mode before running the forward pass in order
         to avoid saving statistics or calculating gradients
         """
-        module.initialize_parameters(*input, **kwargs)
+        kwargs = kwargs if kwargs else {}
+        module.initialize_parameters(*args, **kwargs)
         if module.has_uninitialized_params():
             raise RuntimeError(f'module {self._get_name()} has not been fully initialized')
         module._initialize_hook.remove()
