@@ -262,11 +262,6 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
 
-        if sparse_features.variable_stride_per_key():
-            raise ValueError(
-                "Variable batch per feature is not supported with row-wise sharding"
-            )
-
         (
             bucketized_features,
             self.unbucketize_permute_tensor,

@@ -27,7 +27,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
@@ -219,10 +218,6 @@ def group_tables(
     return grouped_embedding_configs_by_rank
 
 
-C = TypeVar("C", bound=Multistreamable)
-T = TypeVar("T")
-
-
 class KJTListAwaitable(Awaitable[KJTList]):
     """
     Awaitable of KJTList.
@@ -230,18 +225,14 @@ class KJTListAwaitable(Awaitable[KJTList]):
     Args:
         awaitables (List[Awaitable[KeyedJaggedTensor]]): list of `Awaitable` of sparse
             features.
-        ctx (C): sharding context to save the batch size info from the KJT for the
-            embedding AlltoAll.
     """
 
     def __init__(
         self,
         awaitables: List[Awaitable[KeyedJaggedTensor]],
-        ctx: C,
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
-        self.ctx = ctx
 
     def _wait_impl(self) -> KJTList:
         """
@@ -250,31 +241,15 @@ class KJTListAwaitable(Awaitable[KJTList]):
         Returns:
             KJTList: synced `KJTList`.
         """
-        kjts = [w.wait() for w in self.awaitables]
-        _set_sharding_context_post_a2a(kjts, self.ctx)
-        return KJTList(kjts)
+
+        return KJTList([w.wait() for w in self.awaitables])
 
 
-def _set_sharding_context_post_a2a(
-    kjts: List[KeyedJaggedTensor],
-    ctx: C,
-) -> None:
-    for kjt, sharding_context in zip(kjts, getattr(ctx, "sharding_contexts", [])):
-        if (
-            hasattr(sharding_context, "batch_size_per_rank_per_feature")
-            and kjt.variable_stride_per_key()
-            and kjt.stride_per_key_per_rank()
-        ):
-            sharding_context.batch_size_per_rank_per_feature = [
-                [
-                    kjt.stride_per_key_per_rank()[i][j]
-                    for i in range(len(kjt.stride_per_key_per_rank()))
-                ]
-                for j in range(len(kjt.stride_per_key_per_rank()[0]))
-            ]
+C = TypeVar("C", bound=Multistreamable)
+T = TypeVar("T")
 
 
-def _set_sharding_context_intra_a2a(
+def _set_sharding_context(
     tensors_awaitables: List[Awaitable[KeyedJaggedTensor]],
     ctx: C,
 ) -> None:
@@ -283,36 +258,14 @@ def _set_sharding_context_intra_a2a(
         getattr(ctx, "sharding_contexts", []),
     ):
         if isinstance(awaitable, KJTAllToAllTensorsAwaitable):
+            if hasattr(sharding_context, "batch_size_per_rank"):
+                sharding_context.batch_size_per_rank = awaitable._batch_size_per_rank
             if hasattr(sharding_context, "input_splits"):
                 sharding_context.input_splits = awaitable._input_splits["values"]
             if hasattr(sharding_context, "output_splits"):
                 sharding_context.output_splits = awaitable._output_splits["values"]
             if hasattr(sharding_context, "sparse_features_recat"):
                 sharding_context.sparse_features_recat = awaitable._recat
-            if (
-                hasattr(sharding_context, "batch_size_per_rank")
-                and awaitable._stride_per_rank is not None
-            ):
-                sharding_context.batch_size_per_rank = awaitable._stride_per_rank
-
-
-def _set_sharding_context_pre_a2a(
-    awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
-    ctx: C,
-) -> None:
-    for awaitable, sharding_context in zip(
-        awaitables,
-        getattr(ctx, "sharding_contexts", []),
-    ):
-        kjt = (
-            awaitable._obj._obj
-            if isinstance(awaitable, NoWait)
-            else awaitable._input  # pyre-ignore[16]: KJTAllToAllSplitsAwaitable or KJTSplitsAllToAllMeta
-        )
-        if hasattr(sharding_context, "batch_size_per_feature_pre_a2a"):
-            sharding_context.batch_size_per_feature_pre_a2a = kjt.stride_per_key()
-        if hasattr(sharding_context, "variable_batch_per_feature"):
-            sharding_context.variable_batch_per_feature = kjt.variable_stride_per_key()
 
 
 def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
@@ -340,7 +293,6 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         super().__init__()
         self.awaitables = awaitables
         self.ctx = ctx
-        _set_sharding_context_pre_a2a(self.awaitables, self.ctx)
 
     def _wait_impl(self) -> KJTListAwaitable:
         """
@@ -354,14 +306,14 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
             KJTListAwaitable: awaitables for tensors of the sparse features.
         """
         tensors_awaitables = [w.wait() for w in self.awaitables]
-        _set_sharding_context_intra_a2a(tensors_awaitables, self.ctx)
-        return KJTListAwaitable(tensors_awaitables, self.ctx)
+        _set_sharding_context(tensors_awaitables, self.ctx)
+        return KJTListAwaitable(tensors_awaitables)
 
 
 @dataclass
 class KJTSplitsAllToAllMeta:
     pg: dist.ProcessGroup
-    _input: KeyedJaggedTensor
+    input: KeyedJaggedTensor
     splits: List[int]
     splits_tensors: List[torch.Tensor]
     input_splits: List[List[int]]
@@ -370,7 +322,6 @@ class KJTSplitsAllToAllMeta:
     keys: List[str]
     device: torch.device
     stagger: int
-    splits_cumsum: List[int]
 
 
 class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
@@ -385,8 +336,6 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         self._awaitables: List[
             Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
         ] = [awaitable for request in requests for awaitable in request.awaitables]
-        for req, ctx in zip(requests, self._contexts):
-            _set_sharding_context_pre_a2a(req.awaitables, ctx)
         self._output_lengths: List[int] = [
             len(request.awaitables) for request in requests
         ]
@@ -410,7 +359,7 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
                 input_tensors=splits_tensors,
                 pg=pg,
             )
-            if splits_tensors and pg is not None
+            if splits_tensors and pg
             else None
         )
 
@@ -426,33 +375,29 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
                 assert isinstance(awaitable, Awaitable)
                 tensors_awaitables.append(awaitable.wait())
                 continue
+            output_splits = splits[:-1]
+            batch_size_per_rank = splits[-1]
             assert isinstance(awaitable, KJTSplitsAllToAllMeta)
-            if awaitable._input.variable_stride_per_key():
-                output_splits = splits
-                stride_per_rank = None
-            else:
-                output_splits = splits[:-1]
-                stride_per_rank = splits[-1]
             tensors_awaitables.append(
                 KJTAllToAllTensorsAwaitable(
                     pg=awaitable.pg,
-                    input=awaitable._input,
+                    input=awaitable.input,
                     splits=awaitable.splits,
                     input_splits=awaitable.input_splits,
                     output_splits=output_splits,
                     input_tensors=awaitable.input_tensors,
                     labels=awaitable.labels,
+                    batch_size_per_rank=batch_size_per_rank,
                     keys=awaitable.keys,
                     device=awaitable.device,
                     stagger=awaitable.stagger,
-                    stride_per_rank=stride_per_rank,
                 )
             )
         output = []
         awaitables_per_output = _split(tensors_awaitables, self._output_lengths)
         for awaitables, ctx in zip(awaitables_per_output, self._contexts):
-            _set_sharding_context_intra_a2a(awaitables, ctx)
-            output.append(KJTListAwaitable(awaitables, ctx))
+            _set_sharding_context(awaitables, ctx)
+            output.append(KJTListAwaitable(awaitables))
         return output
 
 
@@ -518,9 +463,6 @@ W = TypeVar("W")
 @dataclass
 class EmbeddingShardingContext(Multistreamable):
     batch_size_per_rank: List[int] = field(default_factory=list)
-    batch_size_per_rank_per_feature: List[List[int]] = field(default_factory=list)
-    batch_size_per_feature_pre_a2a: List[int] = field(default_factory=list)
-    variable_batch_per_feature: bool = False
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass

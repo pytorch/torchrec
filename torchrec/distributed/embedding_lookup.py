@@ -394,16 +394,9 @@ class GroupedPooledEmbeddingsLookup(
 
                 embeddings.append(emb_op(features))
 
-        dummy_embedding = (
-            self._dummy_embs_tensor
-            if sparse_features.variable_stride_per_key()
-            else fx_wrap_tensor_view2d(
-                self._dummy_embs_tensor, sparse_features.stride(), 0
-            )
-        )
         return embeddings_cat_empty_rank_handle(
             embeddings,
-            dummy_embedding,
+            fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
             dim=1,
         )
 

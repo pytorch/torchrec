@@ -36,7 +36,11 @@ class SequenceModelParallelTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.just(ShardingType.ROW_WISE.value),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.ROW_WISE.value,
+            ]
+        ),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
@@ -60,6 +64,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_rw(
@@ -70,6 +75,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -86,6 +92,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend="nccl",
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -94,9 +101,17 @@ class SequenceModelParallelTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.just(ShardingType.DATA_PARALLEL.value),
-        kernel_type=st.just(EmbeddingComputeKernel.DENSE.value),
-        apply_optimizer_in_backward_config=st.just(None),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.DATA_PARALLEL.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from([None]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
         # apply_optimizer_in_backward_config=st.booleans(),
     )
@@ -126,7 +141,11 @@ class SequenceModelParallelTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.just(ShardingType.TABLE_WISE.value),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+            ]
+        ),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
@@ -150,6 +169,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_tw(
@@ -160,6 +180,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -176,7 +197,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             backend="nccl",
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
-            variable_batch_size=False,
+            variable_batch_size=variable_batch_size,
         )
 
     @unittest.skipIf(
@@ -185,7 +206,11 @@ class SequenceModelParallelTest(MultiProcessTestBase):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.just(ShardingType.COLUMN_WISE.value),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
@@ -201,6 +226,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
                 },
             ]
         ),
+        variable_batch_size=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_nccl_cw(
@@ -210,6 +236,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        variable_batch_size: bool,
     ) -> None:
         assume(
             apply_optimizer_in_backward_config is None
@@ -224,45 +251,11 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             ],
             backend="nccl",
             constraints={
-                table.name: ParameterConstraints(min_partition=8)
+                table.name: ParameterConstraints(min_partition=16)
                 for table in self.tables
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
-            variable_batch_size=False,
-        )
-
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
-    # pyre-fixme[56]
-    @given(
-        sharding_type=st.sampled_from(
-            [
-                ShardingType.TABLE_WISE.value,
-                ShardingType.COLUMN_WISE.value,
-                ShardingType.ROW_WISE.value,
-            ]
-        ),
-    )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
-    def test_sharding_variable_batch(
-        self,
-        sharding_type: str,
-    ) -> None:
-        self._test_sharding(
-            sharders=[
-                TestEmbeddingCollectionSharder(
-                    sharding_type=sharding_type,
-                    kernel_type=EmbeddingComputeKernel.FUSED.value,
-                )
-            ],
-            backend="nccl",
-            constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
-            },
-            variable_batch_size=True,
+            variable_batch_size=variable_batch_size,
         )
 
     # pyre-fixme[56]
