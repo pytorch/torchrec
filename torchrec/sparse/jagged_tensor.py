@@ -1078,6 +1078,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._offsets: Optional[torch.Tensor] = offsets
 
         self._stride_per_key_per_rank: List[List[int]] = []
+        self._stride_per_key: List[int] = []
         self._variable_stride_per_key: bool = False
         self._stride: int = -1
 
@@ -1087,6 +1088,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     "Cannot initialize KJT with both `stride` and `stride_per_key_per_rank`"
                 )
             self._stride_per_key_per_rank = stride_per_key_per_rank
+            self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
             self._variable_stride_per_key = True
             if not stride_per_key_per_rank:
                 self._stride = 0
@@ -1101,6 +1103,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
             self._stride = stride
             self._stride_per_key_per_rank = [[stride]] * len(self._keys)
+            self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
 
         # lazy fields
         self._length_per_key: Optional[List[int]] = length_per_key
@@ -1370,7 +1373,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return self._stride
 
     def stride_per_key(self) -> List[int]:
-        return [sum(stride) for stride in self._stride_per_key_per_rank]
+        return self._stride_per_key
 
     def stride_per_key_per_rank(self) -> List[List[int]]:
         return self._stride_per_key_per_rank
