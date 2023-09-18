@@ -350,12 +350,12 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         types = [
             ShardingType.DATA_PARALLEL.value,
             ShardingType.TABLE_WISE.value,
-            ShardingType.ROW_WISE.value,
             ShardingType.COLUMN_WISE.value,
             ShardingType.TABLE_COLUMN_WISE.value,
         ]
         if compute_device_type in {"cuda"}:
             types += [
+                ShardingType.ROW_WISE.value,
                 ShardingType.TABLE_ROW_WISE.value,
             ]
 
