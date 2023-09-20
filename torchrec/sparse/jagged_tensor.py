@@ -768,6 +768,36 @@ class ComputeKJTToJTDict(torch.nn.Module):
         )
 
 
+class ComputeJTDictToKJT(torch.nn.Module):
+    """Converts a dict of JaggedTensors to KeyedJaggedTensor.
+    Args:
+
+    Example:
+    passing in jt_dict
+        {
+            "Feature0": JaggedTensor([[V0,V1],None,V2]),
+            "Feature1": JaggedTensor([V3,V4,[V5,V6,V7]]),
+        }
+    Returns::
+    kjt with content:
+    #              0       1        2  <-- dim_1
+    # "Feature0"   [V0,V1] None    [V2]
+    # "Feature1"   [V3]    [V4]    [V5,V6,V7]
+    #   ^
+    #  dim_0
+
+    """
+
+    def forward(self, jt_dict: Dict[str, JaggedTensor]) -> "KeyedJaggedTensor":
+        """
+        Args:
+            jt_dict: a dict of JaggedTensor
+        Returns:
+            KeyedJaggedTensor
+        """
+        return KeyedJaggedTensor.from_jt_dict(jt_dict)
+
+
 @torch.fx.wrap
 def _maybe_compute_kjt_to_jt_dict(
     stride: int,
