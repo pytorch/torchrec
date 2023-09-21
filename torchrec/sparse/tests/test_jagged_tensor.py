@@ -14,6 +14,7 @@ import torch.utils._pytree as pytree
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
+    ComputeJTDictToKJT,
     ComputeKJTToJTDict,
     JaggedTensor,
     jt_is_equal,
@@ -706,6 +707,37 @@ JaggedTensor({
         self.assertTrue(torch.equal(j0.lengths(), j1.lengths()))
         self.assertTrue(torch.equal(j0.weights(), j1.weights()))
         self.assertTrue(torch.equal(j0.values(), j1.values()))
+
+    def test_compute_jt_dict_to_kjt_module(self) -> None:
+        compute_jt_dict_to_kjt = ComputeJTDictToKJT()
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        keys = ["index_0", "index_1"]
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+
+        jag_tensor = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+        jag_tensor_dict = jag_tensor.to_dict()
+        kjt = compute_jt_dict_to_kjt(jag_tensor_dict)
+        j0 = kjt["index_0"]
+        j1 = kjt["index_1"]
+
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(isinstance(j0, JaggedTensor))
+        self.assertTrue(torch.equal(j0.lengths(), torch.IntTensor([2, 0, 1])))
+        self.assertTrue(torch.equal(j0.weights(), torch.Tensor([1.0, 0.5, 1.5])))
+        self.assertTrue(torch.equal(j0.values(), torch.Tensor([1.0, 2.0, 3.0])))
+        self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([1, 1, 3])))
+        self.assertTrue(
+            torch.equal(j1.weights(), torch.Tensor([1.0, 0.5, 1.0, 1.0, 1.5]))
+        )
+        self.assertTrue(
+            torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
+        )
 
     def test_from_jt_dict(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
