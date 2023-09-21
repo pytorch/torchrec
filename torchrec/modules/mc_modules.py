@@ -43,6 +43,11 @@ def apply_mc_method_to_jt_dict(
     return mc_output
 
 
+@torch.fx.wrap
+def coalesce_feature_dict(features_dict: Dict[str, JaggedTensor]) -> KeyedJaggedTensor:
+    return KeyedJaggedTensor.from_jt_dict(features_dict)
+
+
 class ManagedCollisionModule(nn.Module):
     """
     Abstract base class for ManagedCollisionModule.
@@ -190,7 +195,7 @@ class ManagedCollisionCollection(nn.Module):
             table_to_features=self._table_to_features,
             managed_collisions=self._managed_collision_modules,
         )
-        return KeyedJaggedTensor.from_jt_dict(features_dict)
+        return coalesce_feature_dict(features_dict)
 
     def evict(self) -> Dict[str, Optional[torch.Tensor]]:
         evictions: Dict[str, Optional[torch.Tensor]] = {}
@@ -818,7 +823,10 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
         remapped_features: Dict[str, JaggedTensor] = {}
         for name, feature in features.items():
-            values = feature.values()
+            # TODO: This is a temporary hack to support i32 ID list so it could
+            # match remapper size. A more memory-efficient fix would be make
+            # remapper i32-tensor instead.
+            values = feature.values().to(torch.int64)
             remapped_ids = torch.empty_like(values)
 
             # compute overlap between incoming IDs and remapping table
