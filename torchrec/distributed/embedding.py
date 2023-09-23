@@ -8,6 +8,7 @@
 
 import copy
 import logging
+import warnings
 from collections import defaultdict, deque, OrderedDict
 from dataclasses import dataclass, field
 from itertools import accumulate
@@ -86,6 +87,11 @@ EC_INDEX_DEDUP: bool = False
 
 
 def set_ec_index_dedup(val: bool) -> None:
+    warnings.warn(
+        "Please set use_index_dedup in EmbeddingCollectionSharder during __init__ instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global EC_INDEX_DEDUP
     EC_INDEX_DEDUP = val
 
@@ -361,6 +367,7 @@ class ShardedEmbeddingCollection(
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        use_index_dedup: bool = False,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
@@ -377,6 +384,8 @@ class ShardedEmbeddingCollection(
         )
 
         self._env = env
+        # TODO get rid of get_ec_index_dedup global flag
+        self._use_index_dedup: bool = use_index_dedup or get_ec_index_dedup()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,
             table_name_to_parameter_sharding,
@@ -409,8 +418,7 @@ class ShardedEmbeddingCollection(
         self._features_order: List[int] = []
 
         self._has_uninitialized_input_dist: bool = True
-        self._ec_index_dedup: bool = get_ec_index_dedup()
-        logger.info(f"EC index dedup enabled: {self._ec_index_dedup}.")
+        logger.info(f"EC index dedup enabled: {self._use_index_dedup}.")
 
         # Get all fused optimizers and combine them.
         optims = []
@@ -741,7 +749,7 @@ class ShardedEmbeddingCollection(
             persistent=False,
         )
 
-        if self._ec_index_dedup:
+        if self._use_index_dedup:
             self._create_hash_size_info(feature_names)
 
     def _create_lookups(self) -> None:
@@ -778,7 +786,7 @@ class ShardedEmbeddingCollection(
                 self._feature_splits,
             )
 
-            if not self._ec_index_dedup:
+            if not self._use_index_dedup:
                 features_by_shards = input_feature_splits
             else:
                 with record_function("## dedup_ec_indices ##"):
@@ -916,9 +924,14 @@ class ShardedEmbeddingCollection(
 
 
 class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
-    """
-    This implementation uses non-fused EmbeddingCollection
-    """
+    def __init__(
+        self,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        use_index_dedup: bool = False,
+    ) -> None:
+        super().__init__(fused_params, qcomm_codecs_registry)
+        self._use_index_dedup = use_index_dedup
 
     def shard(
         self,
@@ -934,6 +947,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
             self.fused_params,
             device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+            use_index_dedup=self._use_index_dedup,
         )
 
     def shardable_parameters(

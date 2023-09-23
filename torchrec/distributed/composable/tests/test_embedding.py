@@ -51,9 +51,8 @@ def _test_sharding(  # noqa C901
     use_index_dedup: bool = False,
 ) -> None:
     trec_dist.comm_ops.set_gradient_division(False)
-    trec_dist.embedding.set_ec_index_dedup(use_index_dedup)
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-        sharder = EmbeddingCollectionSharder()
+        sharder = EmbeddingCollectionSharder(use_index_dedup=use_index_dedup)
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
 
         unsharded_model = EmbeddingCollection(
