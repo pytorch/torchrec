@@ -170,18 +170,15 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
         self.reset_parameters()
 
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+    def forward_jt_dict(self, feature_dict: Dict[str, JaggedTensor]) -> KeyedTensor:
         """
         Args:
-            features (KeyedJaggedTensor): KJT of form [F X B X L].
+            features (Dict[str, JaggedTensor]): JaggedTensor dict from KJT.to_dict().
 
         Returns:
             KeyedTensor
         """
-
         pooled_embeddings: List[torch.Tensor] = []
-
-        feature_dict = features.to_dict()
         for i, embedding_bag in enumerate(self.embedding_bags.values()):
             for feature_name in self._feature_names[i]:
                 f = feature_dict[feature_name]
@@ -197,6 +194,16 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             values=data,
             length_per_key=self._lengths_per_embedding,
         )
+
+    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+        """
+        Args:
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
+
+        Returns:
+            KeyedTensor
+        """
+        return self.forward_jt_dict(features.to_dict())
 
     def is_weighted(self) -> bool:
         return self._is_weighted
@@ -355,6 +362,34 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         )
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
 
+    def forward_jt_dict(
+        self,
+        feature_dict: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
+        """
+        Args:
+            features (Dict[str, JaggedTensor]): JaggedTensor dict from KJT.to_dict.
+
+        Returns:
+            Dict[str, JaggedTensor]
+        """
+        feature_embeddings: Dict[str, JaggedTensor] = {}
+        for i, emb_module in enumerate(self.embeddings.values()):
+            feature_names = self._feature_names[i]
+            embedding_names = self._embedding_names_by_table[i]
+            for j, embedding_name in enumerate(embedding_names):
+                feature_name = feature_names[j]
+                f = feature_dict[feature_name]
+                lookup = emb_module(
+                    input=f.values(),
+                ).float()
+                feature_embeddings[embedding_name] = JaggedTensor(
+                    values=lookup,
+                    lengths=f.lengths(),
+                    weights=f.values() if self._need_indices else None,
+                )
+        return feature_embeddings
+
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -366,24 +401,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         Returns:
             Dict[str, JaggedTensor]
         """
-
-        feature_embeddings: Dict[str, JaggedTensor] = {}
-        jt_dict: Dict[str, JaggedTensor] = features.to_dict()
-        for i, emb_module in enumerate(self.embeddings.values()):
-            feature_names = self._feature_names[i]
-            embedding_names = self._embedding_names_by_table[i]
-            for j, embedding_name in enumerate(embedding_names):
-                feature_name = feature_names[j]
-                f = jt_dict[feature_name]
-                lookup = emb_module(
-                    input=f.values(),
-                ).float()
-                feature_embeddings[embedding_name] = JaggedTensor(
-                    values=lookup,
-                    lengths=f.lengths(),
-                    weights=f.values() if self._need_indices else None,
-                )
-        return feature_embeddings
+        return self.forward_jt_dict(features.to_dict())
 
     def need_indices(self) -> bool:
         return self._need_indices
