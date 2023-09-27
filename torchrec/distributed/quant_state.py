@@ -387,7 +387,8 @@ def sharded_tbes_weights_spec(
                     table_name: str = table.name
                     # pyre-ignore
                     table_metadata: ShardMetadata = table.local_metadata
-                    shard_sizes: List[int] = table_metadata.shard_sizes
+                    # TODO(ivankobzarev) Switch to use table_metadata.shard_sizes when it works correctly with int4 quantized modules
+                    shard_sizes: List[int] = [table.local_rows, table.local_cols]
                     shard_offsets: List[int] = table_metadata.shard_offsets
                     s: str = "embedding_bags" if is_sqebc else "embeddings"
                     unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
