@@ -9,6 +9,7 @@ import itertools
 import logging
 from typing import Callable, Dict, List, Optional
 
+from torch.distributed._functional_collectives import all_to_all_single
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -156,12 +157,7 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
                 dtype=input_tensors[0].dtype,
             )
             input_tensor = torch.stack(input_tensors, dim=1).flatten()
-            self._splits_awaitable: dist.Work = dist.all_to_all_single(
-                output=self._output_tensor,
-                input=input_tensor,
-                group=pg,
-                async_op=True,
-            )
+            self._output_tensor = all_to_all_single(input_tensor, None, None, group=pg)
 
     def _wait_impl(self) -> List[List[int]]:
         self._splits_awaitable.wait()
@@ -240,17 +236,9 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                 sum(output_split), device=self._device, dtype=input_tensor.dtype
             )
             with record_function(f"## all2all_data:kjt {label} ##"):
-                awaitable = dist.all_to_all_single(
-                    output=output_tensor,
-                    input=input_tensor,
-                    output_split_sizes=output_split,
-                    input_split_sizes=input_split,
-                    group=self._pg,
-                    async_op=True,
-                )
+                output_tensor = all_to_all_single(input_tensor, output_split, input_split, self._pg)
 
             self._output_tensors.append(output_tensor)
-            self._awaitables.append(awaitable)
 
     def _wait_impl(self) -> KeyedJaggedTensor:
         """
@@ -264,10 +252,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             self._input.sync()
             return self._input
 
-        for awaitable in self._awaitables:
-            awaitable.wait()
-
-        return type(self._input).dist_init(
+        return self._input.__class__.dist_init(
             keys=self._keys,
             tensors=self._output_tensors,
             variable_stride_per_key=self._input.variable_stride_per_key(),
@@ -1164,6 +1149,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             SequenceEmbeddingsAwaitable: awaitable of sequence embeddings.
         """
 
+        # TODO: this is known problem
         variable_batch_size = (
             batch_size_per_rank is not None and len(set(batch_size_per_rank)) > 1
         )
