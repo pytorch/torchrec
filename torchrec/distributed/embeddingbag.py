@@ -609,11 +609,15 @@ class ShardedEmbeddingBagCollection(
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
 
+        d = {}
+        for i, f in enumerate(input_feature_names):
+            d[f] = i
+
         if feature_names == input_feature_names:
             self._has_features_permute = False
         else:
             for f in feature_names:
-                self._features_order.append(input_feature_names.index(f))
+                self._features_order.append(d[f])
             self.register_buffer(
                 "_features_order_tensor",
                 torch.tensor(
@@ -686,16 +690,15 @@ class ShardedEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
+        awaitables = []
+        for i in range(len(self._lookups)):
+            lookup = self._lookups[i]
+            dist = self._output_dists[i]
+            sharding_ctx = ctx.sharding_contexts[i]
+            features = input[i]
+            awaitables.append(dist(lookup(features), sharding_ctx))
         return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(lookup(features), sharding_ctx)
-                for lookup, dist, sharding_ctx, features in zip(
-                    self._lookups,
-                    self._output_dists,
-                    ctx.sharding_contexts,
-                    input,
-                )
-            ],
+            awaitables=awaitables,
             embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
         )
