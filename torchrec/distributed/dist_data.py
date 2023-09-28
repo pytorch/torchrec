@@ -13,6 +13,7 @@ from torch.distributed._functional_collectives import all_to_all_single
 import torch
 import torch.distributed as dist
 from torch import nn
+import torch.export
 from torch.autograd.profiler import record_function
 from torchrec.distributed.comm_ops import (
     all_gather_base_pooled,
@@ -162,7 +163,11 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
             self._output_tensor = all_to_all_single(input_tensor, None, None, group=pg)
 
     def _wait_impl(self) -> List[List[int]]:
-        return self._output_tensor.view(self.num_workers, -1).T.tolist()
+        rs = self._output_tensor.view(self.num_workers, -1).T.tolist()
+        for r in rs:
+            for s in r:
+                torch.export.constrain_as_size(s)
+        return rs
 
 
 class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):

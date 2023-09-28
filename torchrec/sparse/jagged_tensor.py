@@ -1855,7 +1855,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             with record_function("## all2all_data:recat_values ##"):
                 if recat is not None and recat.numel() > 0:
                     stride = stride_per_rank[0]
-                    if all(s == stride for s in stride_per_rank):
+                    if True:
                         (
                             lengths,
                             values,
