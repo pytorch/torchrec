@@ -22,6 +22,7 @@ from torchrec.distributed.comm_ops import (
     reduce_scatter_v_pooled,
     variable_batch_alltoall_pooled,
 )
+import torch.export
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
@@ -232,6 +233,8 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             input_tensors,
             labels,
         ):
+            for s in output_split:
+                torch.export.constrain_as_size(s)
             output_tensor = torch.empty(
                 sum(output_split), device=self._device, dtype=input_tensor.dtype
             )
