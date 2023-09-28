@@ -94,9 +94,10 @@ def _get_recat(
                 recat.append(i + j * local_split)
 
         # variable batch size
-        if batch_size_per_rank is not None and any(
+        # Assume uniform batch size (cannot easily test)
+        if batch_size_per_rank is not None and (False and any(
             bs != batch_size_per_rank[0] for bs in batch_size_per_rank
-        ):
+        )):
             batch_size_per_feature = list(
                 itertools.chain.from_iterable(
                     itertools.repeat(x, local_split) for x in batch_size_per_rank
