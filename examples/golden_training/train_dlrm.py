@@ -157,7 +157,7 @@ def train(
     # chokes on
     print(model(next(train_iterator).to(device)))  # warmup, input dists
 
-    #train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
+    train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
 
     print(model(next(train_iterator).to(device)))
     print(model(next(train_iterator).to(device)))
