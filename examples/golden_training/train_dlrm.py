@@ -157,7 +157,7 @@ def train(
     # chokes on
     print(model(next(train_iterator).to(device)))  # warmup, input dists
 
-    train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
+    #train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
 
     print(model(next(train_iterator).to(device)))
     print(model(next(train_iterator).to(device)))
@@ -331,6 +331,8 @@ def permute_1D_sparse_data_meta(permute, lengths, values, weights=None, permuted
 
 
 torch._dynamo.config.optimize_ddp = False
+torch._dynamo.config.capture_scalar_outputs = True
+torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
 if __name__ == "__main__":
     main()

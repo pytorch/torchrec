@@ -160,7 +160,6 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
             self._output_tensor = all_to_all_single(input_tensor, None, None, group=pg)
 
     def _wait_impl(self) -> List[List[int]]:
-        self._splits_awaitable.wait()
         return self._output_tensor.view(self.num_workers, -1).T.tolist()
 
 
