@@ -7,12 +7,16 @@
 
 import abc
 import copy
+import logging
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
 
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.distributed.algorithms.ddp_comm_hooks import (
+    default_hooks as ddp_default_hooks,
+)
 from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -71,10 +75,12 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         bucket_cap_mb: int = 25,
         static_graph: bool = True,
         find_unused_parameters: bool = False,
+        allreduce_comm_precision: Optional[str] = None,
     ) -> None:
         self._bucket_cap_mb: int = bucket_cap_mb
         self._static_graph: bool = static_graph
         self._find_unused_parameters: bool = find_unused_parameters
+        self._allreduce_comm_precision = allreduce_comm_precision
 
     def wrap(
         self,
@@ -113,6 +119,16 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 bucket_cap_mb=self._bucket_cap_mb,
             ),
         )
+        if self._allreduce_comm_precision == "fp16":
+            dmp._dmp_wrapped_module.register_comm_hook(
+                None, ddp_default_hooks.fp16_compress_hook
+            )
+            logging.info("Use fp16 for AllReduce")
+        elif self._allreduce_comm_precision == "bf16":
+            dmp._dmp_wrapped_module.register_comm_hook(
+                None, ddp_default_hooks.bf16_compress_hook
+            )
+            logging.info("Use bf16 for AllReduce")
 
 
 def get_unwrapped_module(module: nn.Module) -> nn.Module:
