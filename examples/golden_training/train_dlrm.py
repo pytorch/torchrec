@@ -329,6 +329,205 @@ def permute_1D_sparse_data_meta(permute, lengths, values, weights=None, permuted
     return permuted_lengths, permuted_indices, permuted_weights
 
 
+@register_meta("expand_into_jagged_permute")
+def expand_into_jagged_permute_meta(permute, input_offsets, output_offsets, output_size):
+    torch._check(permute.numel() > 0, lambda: "")
+    torch._check(permute.numel() == input_offsets.numel() - 1, lambda: "")
+    torch._check(permute.numel() == output_offsets.numel() - 1, lambda: "")
+    output_permute = input_offsets.new_empty(output_size)
+    return output_permute
+
+
+DEFAULT_INFO_NUM_BITS = 32
+DEFAULT_INFO_B_NUM_BITS = 26
+DEFAULT_INFO_B_MASK = (1 << DEFAULT_INFO_B_NUM_BITS) - 1
+MAX_T = (1 << (DEFAULT_INFO_NUM_BITS - DEFAULT_INFO_B_NUM_BITS)) - 1
+MAX_B = (1 << DEFAULT_INFO_B_NUM_BITS) - 1
+
+
+def adjust_info_B_num_bits(B, T):
+    info_B_num_bits = DEFAULT_INFO_B_NUM_BITS
+    info_B_mask = DEFAULT_INFO_B_MASK
+    max_T = MAX_T
+    max_B = MAX_B
+    invalid_T = T > max_T
+    invalid_B = B > max_B
+
+    torch._check(not (invalid_T and invalid_B), lambda: f"Not enough infos bits to accommodate T and B. Default num bits = {DEFAULT_INFO_NUM_BITS}")
+
+    if invalid_T:
+        # Reduce info_B_num_bits
+        while invalid_T and not invalid_B and info_B_num_bits > 0:
+            info_B_num_bits -= 1
+            max_T = ((max_T + 1) << 1) - 1
+            max_B = ((max_B + 1) >> 1) - 1
+            invalid_T = T > max_T
+            invalid_B = B > max_B
+    elif invalid_B:
+        # Increase info_B_num_bits
+        while not invalid_T and invalid_B and info_B_num_bits < DEFAULT_INFO_NUM_BITS:
+            info_B_num_bits += 1
+            max_T = ((max_T + 1) >> 1) - 1
+            max_B = ((max_B + 1) << 1) - 1
+            invalid_T = T > max_T
+            invalid_B = B > max_B
+
+    torch._check(not invalid_T and not invalid_B, lambda: f"Not enough infos bits to accommodate T and B. Default num bits = {DEFAULT_INFO_NUM_BITS}")
+
+    info_B_mask = (1 << info_B_num_bits) - 1
+
+    return info_B_num_bits, info_B_mask
+
+
+class SplitLookupFunction_rowwise_adagrad_Op(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,
+        placeholder_autograd_tensor,
+        output_dtype,
+        dev_weights,
+        uvm_weights,
+        lxu_cache_weights,
+        weights_placements,
+        weights_offsets,
+        D_offsets,
+        total_D,
+        max_D,
+        hash_size_cumsum,
+        total_hash_size_bits,
+        indices,
+        offsets,
+        pooling_mode,
+        indice_weights,
+        feature_requires_grad,
+        lxu_cache_locations,
+        gradient_clipping,
+        max_gradient,
+        stochastic_rounding,
+        is_experimental,
+        momentum1_dev,
+        momentum1_uvm,
+        momentum1_placements,
+        momentum1_offsets,
+        eps = 0,
+        learning_rate = 0,
+        weight_decay = 0.0,
+        weight_decay_mode = 0,
+        max_norm = 0.0,
+    ):
+        T = weights_offsets.numel()
+        max_B_ = offsets.size(0) // T
+
+        info_B_num_bits, info_B_mask = adjust_info_B_num_bits(max_B_, T)
+
+        ctx.save_for_backward(
+            dev_weights,
+            uvm_weights,
+            lxu_cache_weights,
+            weights_placements,
+            weights_offsets,
+            D_offsets,
+            hash_size_cumsum,
+            indices,
+            offsets,
+            indice_weights,
+            feature_requires_grad,
+            lxu_cache_locations,
+            momentum1_dev, momentum1_uvm, momentum1_placements, momentum1_offsets
+        )
+        ctx.max_D = max_D
+        ctx.pooling_mode = pooling_mode
+        ctx.total_hash_size_bits = total_hash_size_bits
+        ctx.gradient_clipping = gradient_clipping
+        ctx.max_gradient = max_gradient
+        ctx.stochastic_rounding = stochastic_rounding
+        ctx.info_B_num_bits = info_B_num_bits
+        ctx.info_B_mask = info_B_mask
+        ctx.eps = eps
+        ctx.learning_rate = learning_rate
+        ctx.weight_decay = weight_decay
+        ctx.weight_decay_mode = weight_decay_mode
+        ctx.max_norm = max_norm
+
+        flatten_dev_weights = dev_weights
+
+        assert False
+
+    @staticmethod
+    def backward(ctx):
+        pass
+
+
+@torch.ops.fbgemm.split_embedding_codegen_lookup_rowwise_adagrad_function.default.py_impl(torch._C.DispatchKey.AutogradCUDA)
+def split_embedding_codegen_lookup_rowwise_adagrad_function(
+    placeholder_autograd_tensor,
+    dev_weights, uvm_weights,
+    lxu_cache_weights,
+    weights_placements,
+    weights_offsets,
+    D_offsets,
+    total_D,
+    max_D,
+    hash_size_cumsum,
+    total_hash_size_bits,
+    indices,
+    offsets,
+    pooling_mode,
+    indice_weights,
+    feature_requires_grad,
+    lxu_cache_locations,
+    gradient_clipping,
+    max_gradient,
+    stochastic_rounding,
+    momentum1_dev,
+    momentum1_uvm,
+    momentum1_placements,
+    momentum1_offsets,
+    eps = 0,
+    learning_rate = 0,
+    weight_decay = 0.0,
+    weight_decay_mode = 0,
+    max_norm = 0.0,
+    output_dtype=0,
+    B_offsets=None,
+    vbe_output_offsets_feature_rank=None,
+    vbe_B_offsets_rank_per_feature=None,
+    max_B=-1,
+    max_B_feature_rank=-1,
+    vbe_output_size=-1,
+    is_experimental=False,
+):
+    if B_offsets is not None:
+        assert False, "a"
+    else:
+        if pooling_mode is PoolingMode.NONE:
+            assert False, "b"
+        else:
+            return SplitLookupFunction_rowwise_adagrad_Op.apply(
+                placeholder_autograd_tensor,
+                output_dtype,
+                dev_weights,
+                uvm_weights,
+                lxu_cache_weights,
+                weights_placements,
+                weights_offsets,
+                D_offsets,
+                total_D,
+                max_D,
+                hash_size_cumsum,
+                total_hash_size_bits,
+                indices,
+                offsets,
+                pooling_mode,
+                indice_weights,
+                feature_requires_grad,
+                lxu_cache_locations,
+                gradient_clipping,
+                max_gradient,
+                stochastic_rounding,
+                is_experimental,
+                momentum1_dev, momentum1_uvm, momentum1_placements, momentum1_offsets, eps, learning_rate, weight_decay, weight_decay_mode, max_norm
+            )[0]
+
 
 torch._dynamo.config.optimize_ddp = False
 torch._dynamo.config.capture_scalar_outputs = True
