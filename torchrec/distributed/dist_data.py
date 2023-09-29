@@ -29,6 +29,24 @@ from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
+import operator
+def accumulate(iterable, func=operator.add, *, initial=None):
+    'Return running totals'
+    # accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+    # accumulate([1,2,3,4,5], initial=100) --> 100 101 103 106 110 115
+    # accumulate([1,2,3,4,5], operator.mul) --> 1 2 6 24 120
+    it = iter(iterable)
+    total = initial
+    if initial is None:
+        try:
+            total = next(it)
+        except StopIteration:
+            return
+    yield total
+    for element in it:
+        total = func(total, element)
+        yield total
+
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
@@ -97,15 +115,13 @@ def _get_recat(
 
         # assume variable batch size
         if batch_size_per_rank is not None:
-            batch_size_per_feature = list(
-                itertools.chain.from_iterable(
-                    itertools.repeat(x, local_split) for x in batch_size_per_rank
-                )
-            )
+            batch_size_per_feature = []
+            for x in batch_size_per_rank:
+                batch_size_per_feature.extend([x] * local_split)
             permuted_batch_size_per_feature = [batch_size_per_feature[r] for r in recat]
-            input_offset = [0] + list(itertools.accumulate(batch_size_per_feature))
+            input_offset = [0] + list(accumulate(batch_size_per_feature))
             output_offset = [0] + list(
-                itertools.accumulate(permuted_batch_size_per_feature)
+                accumulate(permuted_batch_size_per_feature)
             )
             recat_tensor = torch.tensor(
                 recat,
