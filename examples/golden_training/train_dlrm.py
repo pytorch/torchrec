@@ -7,6 +7,7 @@
 
 import os
 from typing import List, Optional
+import time
 
 import torch
 import torch._dynamo.config
@@ -346,8 +347,17 @@ MAX_B = (1 << DEFAULT_INFO_B_NUM_BITS) - 1
 
 
 def adjust_info_B_num_bits(B, T):
+    """
+    if dist.get_rank() == 0:
+        breakpoint()
+    else:
+        time.sleep(99999999)
+    """
     info_B_num_bits = DEFAULT_INFO_B_NUM_BITS
     info_B_mask = DEFAULT_INFO_B_MASK
+
+    return info_B_num_bits, info_B_mask  # YOLOOOOO
+
     max_T = MAX_T
     max_B = MAX_B
     invalid_T = T > max_T
@@ -450,11 +460,29 @@ class SplitLookupFunction_rowwise_adagrad_Op(torch.autograd.Function):
 
         flatten_dev_weights = dev_weights
 
-        assert False
+        if indice_weights is None:
+            return torch.ops.fbgemm.split_embedding_codegen_forward_unweighted_cuda.default(
+                flatten_dev_weights,
+                uvm_weights,
+                lxu_cache_weights,
+                weights_placements,
+                weights_offsets,
+                D_offsets,
+                total_D,
+                max_D,
+                indices,
+                offsets,
+                pooling_mode,
+                lxu_cache_locations,
+                output_dtype,
+                is_experimental
+            )
+        else:
+            assert False, "y"
 
     @staticmethod
     def backward(ctx):
-        pass
+        assert False
 
 
 @torch.ops.fbgemm.split_embedding_codegen_lookup_rowwise_adagrad_function.default.py_impl(torch._C.DispatchKey.AutogradCUDA)
