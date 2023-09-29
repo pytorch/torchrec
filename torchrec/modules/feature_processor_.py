@@ -58,11 +58,20 @@ class PositionWeightedModule(FeatureProcessor):
         `max_length`.
     """
 
-    def __init__(self, max_feature_length: int) -> None:
+    def __init__(
+        self, max_feature_length: int, device: Optional[torch.device] = None
+    ) -> None:
         super().__init__()
         self.position_weight = nn.Parameter(
-            torch.empty([max_feature_length]).fill_(1.0)
+            torch.empty([max_feature_length], device=device),
+            requires_grad=True,
         )
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        with torch.no_grad():
+            self.position_weight.fill_(1.0)
 
     def forward(
         self,
@@ -155,9 +164,17 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection):
 
         for key, length in max_feature_lengths.items():
             self.position_weights[key] = nn.Parameter(
-                torch.empty([length], device=device).fill_(1.0)
+                torch.empty([length], device=device)
             )
+
             self.position_weights_dict[key] = self.position_weights[key]
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        with torch.no_grad():
+            for key, _length in self.max_feature_lengths.items():
+                self.position_weights[key].fill_(1.0)
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
         cat_seq = torch.ops.fbgemm.offsets_range(

@@ -29,7 +29,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
-from torchrec.distributed.utils import append_prefix
+from torchrec.distributed.utils import append_prefix, init_parameters
 from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
 from torchrec.modules.fp_embedding_modules import (
     apply_feature_processors_to_kjt,
@@ -75,14 +75,15 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         self._is_collection: bool = False
         self._feature_processors: Union[nn.ModuleDict, FeatureProcessorsCollection]
         if isinstance(module._feature_processors, FeatureProcessorsCollection):
-            self._feature_processors = module._feature_processors.to(device)
+            self._feature_processors = module._feature_processors
             self._is_collection = True
         else:
             self._feature_processors = torch.nn.ModuleDict(
-                {key: fp.to(device) for key, fp in module._feature_processors.items()}
+                module._feature_processors.items()
             )
             self._is_collection = False
 
+        init_parameters(self._feature_processors, device)
         self._no_op_zero: torch.Tensor = torch.zeros((1,), device=self._device)
 
     # pyre-ignore
