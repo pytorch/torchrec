@@ -557,6 +557,39 @@ def split_embedding_codegen_lookup_rowwise_adagrad_function(
             )[0]
 
 
+
+@register_meta("split_embedding_codegen_forward_unweighted_cuda")
+def split_embedding_codegen_forward_unweighted_cuda_meta(
+    dev_weights,
+    uvm_weights,
+    lxu_cache_weights,
+    weights_placements,
+    weights_offsets,
+    D_offsets,
+    total_D,
+    max_D,
+    indices,
+    offsets,
+    pooling_mode,
+    lxu_cache_locations,
+    output_dtype,
+    is_experimental
+):
+    T = D_offsets.numel() - 1
+    torch._check(T > 0, lambda: "")
+    total_B = offsets.size(0) - 1
+    B = total_B // T
+    torch._check(B >= 0, lambda: "")
+    torch._check(total_D > 0, lambda: "")
+    torch._check(total_D % 4 == 0, lambda: "")
+    torch._check(max_D <= 1024, lambda: "")
+    o_dtype = getScalarType(output_dtype)
+    total_adjusted_D = total_D
+    assert output_dtype is not torch.int8  # TODO
+    output = dev_weights.new_empty((B, total_adjusted_D), dtype=o_dtype)
+    return output
+
+
 torch._dynamo.config.optimize_ddp = False
 torch._dynamo.config.capture_scalar_outputs = True
 torch._dynamo.config.capture_dynamic_output_shape_ops = True
