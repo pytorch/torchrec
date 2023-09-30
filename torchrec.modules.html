@@ -1388,7 +1388,7 @@ registered hooks while the latter silently ignores them.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.feature_processor.</span></span><span class="sig-name descname"><span class="pre">PositionWeightedModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_feature_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.feature_processor.</span></span><span class="sig-name descname"><span class="pre">PositionWeightedModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_feature_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.modules.feature_processor.BaseFeatureProcessor" title="torchrec.modules.feature_processor.BaseFeatureProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseFeatureProcessor</span></code></a></p>
 <p>Adds position weights to id list features.</p>
 <dl class="field-list simple">
@@ -1415,6 +1415,11 @@ representing the features.</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule.reset_parameters">
+<span class="sig-name descname"><span class="pre">reset_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.modules.feature_processor.PositionWeightedModule.reset_parameters" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.feature_processor.PositionWeightedModule.training">
