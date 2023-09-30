@@ -8,7 +8,7 @@
 import copy
 import unittest
 from operator import xor
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -44,6 +44,71 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
 
 
+def get_unsharded_and_sharded_module(
+    tables: List[EmbeddingBagConfig],
+    sharder: ModuleSharder[nn.Module],
+    use_dmp: bool,
+    use_fp_collection: bool,
+    init_device: torch.device,
+    ctx: MultiProcessContext,
+) -> Tuple[nn.Module, nn.Module]:
+    sparse_arch = create_module_and_freeze(
+        tables,
+        use_fp_collection=use_fp_collection,
+        device=init_device,
+    )
+
+    apply_optimizer_in_backward(
+        torch.optim.SGD,
+        sparse_arch._fp_ebc._embedding_bag_collection.embedding_bags.parameters(),
+        {"lr": 1.0},
+    )
+
+    module_sharding_plan = construct_module_sharding_plan(
+        sparse_arch._fp_ebc,
+        per_param_sharding={
+            "table_0": column_wise(ranks=[0, 1]),
+            "table_1": table_wise(rank=0),
+            "table_2": data_parallel(),
+            "table_3": column_wise(ranks=[0, 0, 1]),
+        },
+        local_size=ctx.local_size,
+        world_size=ctx.world_size,
+        device_type="cuda" if torch.cuda.is_available() else "cpu",
+        sharder=sharder,
+    )
+
+    if use_dmp:
+        sharded_sparse_arch = DistributedModelParallel(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"_fp_ebc": module_sharding_plan}),
+            # pyre-ignore
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[sharder],
+            device=ctx.device,
+        )
+    else:
+        sharded_sparse_arch = _shard_modules(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"._fp_ebc": module_sharding_plan}),
+            # pyre-ignore
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[sharder],
+            device=ctx.device,
+        )
+        from torch.distributed._composable.replicate import replicate
+
+        replicate(
+            sharded_sparse_arch,
+            ignored_modules=[sharded_sparse_arch._fp_ebc._embedding_bag_collection],
+            process_group=ctx.pg,
+            gradient_as_bucket_view=True,
+            device_ids=None if ctx.device.type == "cpu" else [ctx.device],
+            broadcast_buffers=False,
+        )
+    return sparse_arch, sharded_sparse_arch
+
+
 def _test_sharding(  # noqa C901
     tables: List[EmbeddingBagConfig],
     rank: int,
@@ -62,56 +127,14 @@ def _test_sharding(  # noqa C901
 
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
 
-        sparse_arch = create_module_and_freeze(
-            tables, use_fp_collection=use_fp_collection, device=ctx.device
+        sparse_arch, sharded_sparse_arch = get_unsharded_and_sharded_module(
+            tables,
+            sharder,
+            use_dmp,
+            use_fp_collection,
+            init_device=ctx.device,
+            ctx=ctx,
         )
-
-        apply_optimizer_in_backward(
-            torch.optim.SGD,
-            sparse_arch._fp_ebc._embedding_bag_collection.embedding_bags.parameters(),
-            {"lr": 1.0},
-        )
-
-        module_sharding_plan = construct_module_sharding_plan(
-            sparse_arch._fp_ebc,
-            per_param_sharding={
-                "table_0": column_wise(ranks=[0, 1]),
-                "table_1": table_wise(rank=0),
-                "table_2": data_parallel(),
-                "table_3": column_wise(ranks=[0, 0, 1]),
-            },
-            local_size=local_size,
-            world_size=world_size,
-            device_type="cuda" if torch.cuda.is_available() else "cpu",
-            sharder=sharder,
-        )
-
-        if use_dmp:
-            sharded_sparse_arch = DistributedModelParallel(
-                module=copy.deepcopy(sparse_arch),
-                plan=ShardingPlan({"_fp_ebc": module_sharding_plan}),
-                env=ShardingEnv.from_process_group(ctx.pg),
-                sharders=[sharder],
-                device=ctx.device,
-            )
-        else:
-            sharded_sparse_arch = _shard_modules(
-                module=copy.deepcopy(sparse_arch),
-                plan=ShardingPlan({"._fp_ebc": module_sharding_plan}),
-                env=ShardingEnv.from_process_group(ctx.pg),
-                sharders=[sharder],
-                device=ctx.device,
-            )
-            from torch.distributed._composable.replicate import replicate
-
-            replicate(
-                sharded_sparse_arch,
-                ignored_modules=[sharded_sparse_arch._fp_ebc._embedding_bag_collection],
-                process_group=ctx.pg,
-                gradient_as_bucket_view=True,
-                device_ids=None if ctx.device.type == "cpu" else [ctx.device],
-                broadcast_buffers=False,
-            )
 
         copy_state_dict(
             sharded_sparse_arch.state_dict(),
@@ -159,6 +182,117 @@ def _test_sharding(  # noqa C901
         ), "State dict keys are not the same"
 
 
+def _test_sharding_from_meta(  # noqa C901
+    tables: List[EmbeddingBagConfig],
+    rank: int,
+    world_size: int,
+    sharder: ModuleSharder[nn.Module],
+    backend: str,
+    local_size: Optional[int] = None,
+) -> None:
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        sparse_arch, sharded_sparse_arch = get_unsharded_and_sharded_module(
+            tables,
+            sharder,
+            use_dmp=True,
+            use_fp_collection=False,
+            init_device=torch.device("meta"),
+            ctx=ctx,
+        )
+
+        state_dict = sharded_sparse_arch.state_dict()
+        for key, param in state_dict.items():
+            if "_feature_processors" not in key:
+                continue
+            torch.testing.assert_close(param, torch.ones_like(param))
+
+
+def get_configs_and_kjt_inputs() -> Tuple[
+    List[EmbeddingBagConfig], List[KeyedJaggedTensor]
+]:
+    embedding_bag_config = [
+        EmbeddingBagConfig(
+            name="table_0",
+            feature_names=["feature_0"],
+            embedding_dim=3 * 16,
+            num_embeddings=16,
+        ),
+        EmbeddingBagConfig(
+            name="table_1",
+            feature_names=["feature_1"],
+            embedding_dim=8,
+            num_embeddings=16,
+        ),
+        EmbeddingBagConfig(
+            name="table_2",
+            feature_names=["feature_2"],
+            embedding_dim=8,
+            num_embeddings=16,
+        ),
+        EmbeddingBagConfig(
+            name="table_3",
+            feature_names=["feature_3"],
+            embedding_dim=3 * 16,
+            num_embeddings=16,
+        ),
+    ]
+
+    # Rank 0
+    #             instance 0   instance 1  instance 2
+    # "feature_0"   [0, 1]       None        [2]
+    # "feature_1"   [0, 1]       None        [2]
+    # "feature_2"   [3, 1]       [4,1]        [5]
+    # "feature_3"   [1]       [6,1,8]        [0,3,3]
+
+    # Rank 1
+
+    #             instance 0   instance 1  instance 2
+    # "feature_0"   [3, 2]       [1,2]       [0,1,2,3]
+    # "feature_1"   [2, 3]       None        [2]
+    # "feature_2"   [2, 7]       [1,8,2]        [8,1]
+    # "feature_3"   [9]       [8]        [7]
+
+    kjt_input_per_rank = [  # noqa
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1", "feature_2", "feature_3"],
+            values=torch.LongTensor(
+                [0, 1, 2, 0, 1, 2, 3, 1, 4, 1, 5, 1, 6, 1, 8, 0, 3, 3]
+            ),
+            lengths=torch.LongTensor(
+                [
+                    2,
+                    0,
+                    1,
+                    2,
+                    0,
+                    1,
+                    2,
+                    2,
+                    1,
+                    1,
+                    3,
+                    3,
+                ]
+            ),
+            weights=torch.FloatTensor(
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            ),
+        ),
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1", "feature_2", "feature_3"],
+            values=torch.LongTensor(
+                [3, 2, 1, 2, 0, 1, 2, 3, 2, 3, 2, 2, 7, 1, 8, 2, 8, 1, 9, 8, 7]
+            ),
+            lengths=torch.LongTensor([2, 2, 4, 2, 0, 1, 2, 3, 2, 1, 1, 1]),
+            weights=torch.FloatTensor(
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            ),
+        ),
+    ]
+
+    return embedding_bag_config, kjt_input_per_rank
+
+
 @skip_if_asan_class
 class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @unittest.skipIf(
@@ -183,86 +317,7 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         hypothesis.assume(not xor(use_dmp, use_fp_collection))
 
         WORLD_SIZE = 2
-
-        embedding_bag_config = [
-            EmbeddingBagConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=3 * 16,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_2",
-                feature_names=["feature_2"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_3",
-                feature_names=["feature_3"],
-                embedding_dim=3 * 16,
-                num_embeddings=16,
-            ),
-        ]
-
-        # Rank 0
-        #             instance 0   instance 1  instance 2
-        # "feature_0"   [0, 1]       None        [2]
-        # "feature_1"   [0, 1]       None        [2]
-        # "feature_2"   [3, 1]       [4,1]        [5]
-        # "feature_3"   [1]       [6,1,8]        [0,3,3]
-
-        # Rank 1
-
-        #             instance 0   instance 1  instance 2
-        # "feature_0"   [3, 2]       [1,2]       [0,1,2,3]
-        # "feature_1"   [2, 3]       None        [2]
-        # "feature_2"   [2, 7]       [1,8,2]        [8,1]
-        # "feature_3"   [9]       [8]        [7]
-
-        kjt_input_per_rank = [  # noqa
-            KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1", "feature_2", "feature_3"],
-                values=torch.LongTensor(
-                    [0, 1, 2, 0, 1, 2, 3, 1, 4, 1, 5, 1, 6, 1, 8, 0, 3, 3]
-                ),
-                lengths=torch.LongTensor(
-                    [
-                        2,
-                        0,
-                        1,
-                        2,
-                        0,
-                        1,
-                        2,
-                        2,
-                        1,
-                        1,
-                        3,
-                        3,
-                    ]
-                ),
-                weights=torch.FloatTensor(
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                ),
-            ),
-            KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1", "feature_2", "feature_3"],
-                values=torch.LongTensor(
-                    [3, 2, 1, 2, 0, 1, 2, 3, 2, 3, 2, 2, 7, 1, 8, 2, 8, 1, 9, 8, 7]
-                ),
-                lengths=torch.LongTensor([2, 2, 4, 2, 0, 1, 2, 3, 2, 1, 1, 1]),
-                weights=torch.FloatTensor(
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                ),
-            ),
-        ]
+        embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
 
         self._run_multi_process_test(
             callable=_test_sharding,
@@ -276,4 +331,16 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             set_gradient_division=set_gradient_division,
             use_dmp=use_dmp,
             use_fp_collection=use_fp_collection,
+        )
+
+    def test_sharding_fp_ebc_from_meta(self) -> None:
+        embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
+        self._run_multi_process_test(
+            callable=_test_sharding_from_meta,
+            world_size=2,
+            tables=embedding_bag_config,
+            sharder=FeatureProcessedEmbeddingBagCollectionSharder(),
+            backend="nccl"
+            if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
+            else "gloo",
         )

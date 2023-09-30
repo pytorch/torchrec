@@ -58,6 +58,18 @@ class PositionWeightedModuleTest(unittest.TestCase):
             weighted_features.lengths(), weighted_features_gm_script.lengths()
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 0,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_init_on_meta(self) -> None:
+        pw = PositionWeightedModule(max_feature_length=10, device=torch.device("cpu"))
+        pw = pw.to(torch.device("cuda"))
+        torch.testing.assert_close(
+            pw.position_weight, torch.ones_like(pw.position_weight)
+        )
+
 
 class PositionWeightedCollectionModuleTest(unittest.TestCase):
     def test_populate_weights(self) -> None:
