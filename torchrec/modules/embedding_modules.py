@@ -334,6 +334,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             if self._embedding_dim != config.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
+                    + f" Violating case: {config.name}'s embedding_dim {config.embedding_dim} !="
+                    + f" {self._embedding_dim}"
                 )
             dtype = (
                 torch.float32 if config.data_type == DataType.FP32 else torch.float16
