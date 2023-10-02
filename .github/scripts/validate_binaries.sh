@@ -37,24 +37,26 @@ fi
 
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' && ${MATRIX_GPU_ARCH_VERSION} = '11.8' ]]; then
     conda install -n build_binary pytorch pytorch-cuda=11.8 -c pytorch-test -c nvidia -y
-    conda run -n build_binary pip install fbgemm-gpu==0.5.0rc2
+    conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu118
     conda run -n build_binary pip install torchmetrics==1.0.3
     conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cu118
 fi 
 
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' && ${MATRIX_GPU_ARCH_VERSION} = '12.1' ]]; then
-    # conda install pytorch pytorch-cuda=12.1 -c pytorch-test -c nvidia
-    # 
-    # pip install torchmetrics==1.0.3
-    # 
+    conda install -n build_binary pytorch pytorch-cuda=12.1 -c pytorch-test -c nvidia -y
+    conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu121
+    conda run -n build_binary pip install torchmetrics==1.0.3
+    conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cu118
     exit 0
 fi 
 
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cpu' ]]; then
     conda install -n build_binary pytorch cpuonly -c pytorch-test -y 
-    conda run -n build_binary pip install fbgemm-gpu-cpu==0.5.0rc3
+    conda run -n build_binary pip install fbgemm-gpu-cpu
     conda run -n build_binary pip install torchmetrics==1.0.3
     conda run -n build_binary pip install --pre torchrec --index-url https://download.pytorch.org/whl/test/cpu
+    conda run -n build_binary pip uninstall fbgemm-gpu-cpu -y
+    conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cpu
 fi 
 
 # Run small import test
@@ -64,7 +66,7 @@ conda run -n build_binary python -c "import torch; import fbgemm_gpu; import tor
 ls -R
 
 # Finally run smoke test
-conda run -n build_binary pip install torchx iopath
+conda run -n build_binary pip install torchx-nightly iopath
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
     conda run -n build_binary torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
 else
