@@ -123,12 +123,10 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.fp16_compress_hook
             )
-            logging.info("Use fp16 for AllReduce")
         elif self._allreduce_comm_precision == "bf16":
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.bf16_compress_hook
             )
-            logging.info("Use bf16 for AllReduce")
 
 
 def get_unwrapped_module(module: nn.Module) -> nn.Module:
