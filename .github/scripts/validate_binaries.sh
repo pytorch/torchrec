@@ -58,6 +58,7 @@ conda run -n build_binary pip install torch --index-url "$PYTORCH_URL"
 conda run -n build_binary pip install fbgemm-gpu --index-url "$PYTORCH_URL"
 
 # install torchrec
+conda run -n build_binary pip install torchmetrics==1.0.3
 conda run -n build_binary pip install torchrec --index-url "$PYTORCH_URL"
 
 # Run small import test
