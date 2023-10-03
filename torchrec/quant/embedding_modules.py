@@ -576,6 +576,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             if self._embedding_dim != config.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
+                    + f" Violating case: {config.name}'s embedding_dim {config.embedding_dim} !="
+                    + f" {self._embedding_dim}"
                 )
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]

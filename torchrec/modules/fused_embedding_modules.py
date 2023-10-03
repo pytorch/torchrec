@@ -650,6 +650,8 @@ class FusedEmbeddingCollection(EmbeddingCollectionInterface, FusedOptimizerModul
             elif self._embedding_dim != table.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
+                    + f" Violating case: {table}'s embedding_dim {table.embedding_dim} !="
+                    + f" {self._embedding_dim}"
                 )
             for feature in table.feature_names:
                 if feature in seen_features:
