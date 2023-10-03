@@ -204,6 +204,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         best_plan = None
         lowest_storage = Storage(MAX_SIZE, MAX_SIZE)
         last_planner_error: Optional[PlannerError] = None
+        last_proposal: List[ShardingOption] = []
         best_perf_rating = MAX_SIZE
 
         storage_constraint: Topology = self._storage_reservation.reserve(
@@ -263,6 +264,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     )
                 except PlannerError as planner_error:
                     last_planner_error = planner_error
+                    # shallow copy of the proposal
+                    last_proposal: List[ShardingOption] = copy.copy(proposal)
                     current_storage = cast(
                         Storage,
                         reduce(
@@ -335,6 +338,30 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 "\n  4) Remove planner constraints that might be reducing search space or available storage\n"
             )
             last_planner_error_info = f"Last planner error: \n\t{last_planner_error}\n"
+
+            # printout stats for no plan situation
+            end_time = perf_counter()
+            sharding_plan = ShardingPlan(plan={})
+            # force all shards to have rank= -1
+            for sharding_option in last_proposal:
+                for shard in sharding_option.shards:
+                    shard.rank = -1
+
+            for stats in self._stats:
+                stats.log(
+                    sharding_plan=sharding_plan,
+                    topology=self._topology,
+                    batch_size=self._batch_size,
+                    storage_reservation=self._storage_reservation,
+                    num_proposals=self._num_proposals,
+                    num_plans=self._num_plans,
+                    run_time=end_time - start_time,
+                    best_plan=last_proposal,
+                    constraints=self._constraints,
+                    sharders=sharders,
+                    debug=self._debug,
+                )
+
             if not lowest_storage.fits_in(global_storage_constraints):
                 raise PlannerError(
                     error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
