@@ -54,7 +54,7 @@ jobs:
       test-infra-ref: main
       build-matrix: ${{ needs.filter-matrix.outputs.matrix }}
       pre-script: ""
-      post-script: ""
+      post-script: .github/scripts/install_fbgemm.sh
       package-name: torchrec
       smoke-test-script: ""
       trigger-event: ${{ github.event_name }}
