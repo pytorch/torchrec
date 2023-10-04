@@ -47,14 +47,16 @@ jobs:
         conda run -n build_binary python --version
         conda install -n build_binary \
           --yes \
-          -c pytorch-nightly \
-          "pytorch-nightly"::pytorch[build="*cpu*"]
+          pytorch cpuonly -c pytorch-nightly
         conda run -n build_binary \
           python -c "import torch.distributed"
-        sed -i 's/fbgemm-gpu-nightly/fbgemm-gpu-nightly-cpu/g' requirements.txt
+        conda run -n build_binary \
+          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
         conda run -n build_binary \
           pip install -r requirements.txt
-        export CU_VERSION="cpu"
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
@@ -64,9 +66,6 @@ jobs:
         conda run -n build_binary \
           python -c "import numpy"
         echo "numpy succeeded"
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
-        echo "fbgemm_gpu succeeded"
         conda install -n build_binary -y pytest
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw and not test_load_state_dict_prefix and not test_load_state_dict_cw_multiple_shards' --ignore-glob=**/test_utils/
