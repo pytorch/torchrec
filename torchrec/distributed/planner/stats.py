@@ -203,6 +203,7 @@ class EmbeddingStats(Stats):
             used_hbm_ratio = (
                 used_hbm[rank] / ((1 - reserved_hbm_percent) * device.storage.hbm)
                 if topology.compute_device == "cuda"
+                and ((1 - reserved_hbm_percent) * device.storage.hbm) != 0
                 else 0
             )
             used_ddr_gb = bytes_to_gb(used_ddr[rank])
@@ -331,7 +332,7 @@ class EmbeddingStats(Stats):
                         num_features,
                         embedding_dim,
                         hash_size,
-                        ",".join(ranks),
+                        ",".join(ranks) if sharding_plan.plan else "None",
                     ]
                 )
                 if include_batch_sizes:
@@ -355,16 +356,19 @@ class EmbeddingStats(Stats):
         divider = "-" * (self._width - 4)
         self._stats_table.append(f"#{divider: ^{self._width-2}}#")
 
-        for row in formatted_table:
-            self._stats_table.append(f"# {row: <{self._width-3}}#")
+        if sharding_plan.plan:
+            for row in formatted_table:
+                self._stats_table.append(f"# {row: <{self._width-3}}#")
 
-        perf_breakdown = "Perf: Total perf (Forward compute, Forward comms, Backward compute, Backward comms)"
-        legend = "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
-        hbm_info = "HBM: estimated peak memory usage for shards, dense tensors, and features (KJT)"
-        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {perf_breakdown: <{self._width-3}}#")
-        self._stats_table.append(f"# {legend: <{self._width-3}}#")
-        self._stats_table.append(f"# {hbm_info: <{self._width-3}}#")
+            perf_breakdown = "Perf: Total perf (Forward compute, Forward comms, Backward compute, Backward comms)"
+            legend = (
+                "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
+            )
+            hbm_info = "HBM: estimated peak memory usage for shards, dense tensors, and features (KJT)"
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(f"# {perf_breakdown: <{self._width-3}}#")
+            self._stats_table.append(f"# {legend: <{self._width-3}}#")
+            self._stats_table.append(f"# {hbm_info: <{self._width-3}}#")
 
         if debug:
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
@@ -376,10 +380,16 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {batch_size_text : <{self._width-3}}#")
 
-        self._log_compute_kernel_stats(compute_kernels_to_count)
+        if not sharding_plan.plan:
+            rank_size_text = f"World Size: {topology.world_size}"
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(f"# {rank_size_text : <{self._width-3}}#")
+
+            self._log_compute_kernel_stats(compute_kernels_to_count)
 
         if debug:
-            self._log_max_perf_and_max_hbm(perf, used_hbm)
+            if sharding_plan.plan:
+                self._log_max_perf_and_max_hbm(perf, used_hbm)
             self._log_storage_reservation_stats(
                 storage_reservation,
                 topology,
