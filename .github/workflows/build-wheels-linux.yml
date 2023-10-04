@@ -10,6 +10,7 @@ on:
     tags:
       # Release candidate tags look like: v1.11.0-rc1
       - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+
   workflow_dispatch:
 
 jobs:
