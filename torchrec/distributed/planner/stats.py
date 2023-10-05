@@ -28,6 +28,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import (
+    _find_imbalance_tables,
     bytes_to_gb,
     bytes_to_mb,
     sharder_name as get_sharder_name,
@@ -397,6 +398,8 @@ class EmbeddingStats(Stats):
                 dense_storage,
                 kjt_storage,
             )
+            if sharding_plan.plan:
+                self._log_imbalance_tables(best_plan)
 
         self._stats_table.append("#" * self._width)
 
@@ -533,6 +536,21 @@ class EmbeddingStats(Stats):
                 f"# {'KJT Storage (per rank): ' : <{self._width-3}}#"
             )
             self._stats_table.append(f"#    {kjt_storage_text : <{self._width-6}}#")
+
+    def _log_imbalance_tables(self, best_plan: List[ShardingOption]) -> None:
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        perf_imbalance_tables = _find_imbalance_tables(best_plan)
+        hbm_imbalance_tables = _find_imbalance_tables(best_plan, target_imbalance="hbm")
+        self._stats_table.append(
+            f"# {'Top 5 Tables Causing Max Perf:' : <{self._width-3}}#"
+        )
+        for sharding_option in perf_imbalance_tables[0:5]:
+            self._stats_table.append(f"#    {sharding_option.name : <{self._width-6}}#")
+        self._stats_table.append(
+            f"# {'Top 5 Tables Causing Max HBM:' : <{self._width-3}}#"
+        )
+        for sharding_option in hbm_imbalance_tables[0:5]:
+            self._stats_table.append(f"#    {sharding_option.name : <{self._width-6}}#")
 
     def _log_compute_kernel_stats(
         self, compute_kernels_to_count: Dict[str, int]

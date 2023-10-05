@@ -9,7 +9,6 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 from typing import List
 
@@ -45,17 +44,6 @@ def _export_version(version, sha):
         fileobj.write("git_version = {}\n".format(repr(sha)))
 
 
-def get_channel():
-    # Channel typically takes on the following values:
-    # - NIGHTLY: for nightly published binaries
-    # - TEST: for binaries build from release candidate branches
-    return os.getenv("CHANNEL")
-
-
-def get_cu_version():
-    return os.getenv("CU_VERSION", "cpu")
-
-
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="torchrec setup")
     return parser.parse_known_args(argv)
@@ -63,9 +51,6 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def main(argv: List[str]) -> None:
     args, unknown = parse_args(argv)
-
-    # Set up package version
-    channel = get_channel()
 
     with open(
         os.path.join(os.path.dirname(__file__), "README.MD"), encoding="utf8"
@@ -81,21 +66,7 @@ def main(argv: List[str]) -> None:
     version, sha = _get_version()
     _export_version(version, sha)
 
-    if channel != "nightly":
-        if "fbgemm-gpu-nightly" in install_requires:
-            install_requires.remove("fbgemm-gpu-nightly")
-        install_requires.append("fbgemm-gpu")
-
-    cu_version = get_cu_version()
-    if cu_version == "cpu":
-        if "fbgemm-gpu-nightly" in install_requires:
-            install_requires.remove("fbgemm-gpu-nightly")
-            install_requires.append("fbgemm-gpu-nightly-cpu")
-        if "fbgemm-gpu" in install_requires:
-            install_requires.remove("fbgemm-gpu")
-            install_requires.append("fbgemm-gpu-cpu")
-
-    print(f"-- torchrec building version: {version} CU Version: {cu_version}")
+    print(f"-- torchrec building version: {version}")
 
     packages = find_packages(
         exclude=(

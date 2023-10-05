@@ -1,6 +1,6 @@
 black
 cmake
-fbgemm-gpu-nightly
+fbgemm-gpu
 hypothesis==6.70.1
 iopath
 numpy

@@ -52,12 +52,13 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        conda install -n build_binary -y -c pytorch-nightly "pytorch-nightly"::pytorch[build="*cpu*"]
+        conda install -n build_binary --yes pytorch cpuonly -c pytorch-nightly
+    - name: Install fbgemm
+      run: |
+        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
     - name: Install TorchRec
       run: |
-        conda run -n build_binary python -m pip install torchrec_nightly
-        conda run -n build_binary python -m pip uninstall fbgemm-gpu-nightly -y
-        conda run -n build_binary python -m pip install fbgemm-gpu-nightly-cpu
+        pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
