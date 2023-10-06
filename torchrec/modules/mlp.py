@@ -50,13 +50,18 @@ class Perceptron(torch.nn.Module):
             Callable[[torch.Tensor], torch.Tensor],
         ] = torch.relu,
         device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         self._out_size = out_size
         self._in_size = in_size
         self._linear: nn.Linear = nn.Linear(
-            self._in_size, self._out_size, bias=bias, device=device
+            self._in_size,
+            self._out_size,
+            bias=bias,
+            device=device,
+            dtype=dtype,
         )
         self._activation_fn: Callable[[torch.Tensor], torch.Tensor] = activation
 
@@ -120,6 +125,7 @@ class MLP(torch.nn.Module):
             Callable[[torch.Tensor], torch.Tensor],
         ] = torch.relu,
         device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
 
@@ -137,6 +143,7 @@ class MLP(torch.nn.Module):
                         bias=bias,
                         activation=extract_module_or_tensor_callable(activation),
                         device=device,
+                        dtype=dtype,
                     )
                     for i in range(len(layer_sizes))
                 ]
