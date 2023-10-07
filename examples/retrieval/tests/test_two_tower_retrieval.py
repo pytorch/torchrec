@@ -26,4 +26,5 @@ class InferTest(unittest.TestCase):
         infer(
             embedding_dim=16,
             layer_sizes=[16],
+            world_size=2,
         )

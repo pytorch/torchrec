@@ -174,6 +174,7 @@ class TwoTowerRetrieval(nn.Module):
         layer_sizes: List[int],
         k: int,
         device: Optional[torch.device] = None,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__()
         self.embedding_dim: int = query_ebc.embedding_bag_configs()[0].embedding_dim
@@ -186,10 +187,16 @@ class TwoTowerRetrieval(nn.Module):
         self.query_ebc = query_ebc
         self.candidate_ebc = candidate_ebc
         self.query_proj = MLP(
-            in_size=self.embedding_dim, layer_sizes=layer_sizes, device=device
+            in_size=self.embedding_dim,
+            layer_sizes=layer_sizes,
+            device=device,
+            dtype=dtype,
         )
         self.candidate_proj = MLP(
-            in_size=self.embedding_dim, layer_sizes=layer_sizes, device=device
+            in_size=self.embedding_dim,
+            layer_sizes=layer_sizes,
+            device=device,
+            dtype=dtype,
         )
         self.faiss_index: Union[faiss.GpuIndexIVFPQ, faiss.IndexIVFPQ] = faiss_index
         self.k = k
@@ -212,6 +219,7 @@ class TwoTowerRetrieval(nn.Module):
         candidates = torch.empty(
             (batch_size, self.k), device=self.device, dtype=torch.int64
         )
+        query_embedding = query_embedding.to(torch.float32)  # required by faiss
         self.faiss_index.search(query_embedding, self.k, distances, candidates)
 
         # candidate lookup

@@ -18,7 +18,7 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.types import ShardingEnv, ShardingType
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -78,6 +78,7 @@ def infer(
     faiss_device_idx: int = 0,
     batch_size: int = 32,
     load_dir: Optional[str] = None,
+    world_size: int = 2,
 ) -> None:
     """
     Loads the serialized model and FAISS index from `two_tower_train.py`.
@@ -116,6 +117,7 @@ def infer(
             embedding_dim=embedding_dim,
             num_embeddings=num_embeddings,
             feature_names=[feature_name],
+            data_type=DataType.FP16,
         )
         ebcs.append(
             EmbeddingBagCollection(
@@ -156,7 +158,9 @@ def infer(
         index.train(embeddings)
         index.add(embeddings)
 
-    retrieval_model = TwoTowerRetrieval(index, ebcs[0], ebcs[1], layer_sizes, k, device)
+    retrieval_model = TwoTowerRetrieval(
+        index, ebcs[0], ebcs[1], layer_sizes, k, device, dtype=torch.float16
+    )
 
     constraints = {}
     for feature_name in two_tower_column_names:
@@ -166,13 +170,16 @@ def infer(
         )
 
     quant_model = trec_infer.modules.quantize_embeddings(
-        retrieval_model, dtype=torch.qint8, inplace=True
+        retrieval_model,
+        dtype=torch.qint8,
+        inplace=True,
+        output_dtype=torch.float16,
     )
 
     dmp = DistributedModelParallel(
         module=quant_model,
         device=device,
-        env=ShardingEnv.from_local(world_size=2, rank=model_device_idx),
+        env=ShardingEnv.from_local(world_size=world_size, rank=model_device_idx),
         init_data_parallel=False,
     )
     if retrieval_sd is not None:
