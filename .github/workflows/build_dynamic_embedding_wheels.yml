@@ -14,19 +14,23 @@ on:
 
 jobs:
   build_wheels:
-    name: Wheels on ${{ matrix.os }}/${{ matrix.pyver }}/cu${{ matrix.cuver }}
+    name: build_dynamic_embedding_wheels_${{ matrix.python-version }}_cu${{ matrix.cuver }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
-        pyver: [ cp38, cp39, cp310 ]
-        cuver: [ "11.6", "11.3"]
+        os: [linux.2xlarge]
+        python-version: ["3.8"]
+        cuver: ["11.6"]
 
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: install pipx
+        run: |
+          pip3 install --user pipx
 
       - uses: pypa/cibuildwheel@v2.8.0
         with:
