@@ -493,6 +493,7 @@ class CacheParams:
     load_factor: Optional[float] = None
     reserved_memory: Optional[float] = None
     precision: Optional[DataType] = None
+    prefetch_pipeline: Optional[bool] = None
 
 
 @dataclass
