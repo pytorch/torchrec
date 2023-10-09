@@ -1061,14 +1061,20 @@ functions.</p></li>
 </dd>
 </dl>
 <p>Example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">emb_dim_per_rank_per_feature</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]]</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">kjt_split</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+<span class="n">emb_dim_per_rank_per_feature</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]]</span>
 <span class="n">a2a</span> <span class="o">=</span> <span class="n">VariableBatchPooledEmbeddingsAllToAll</span><span class="p">(</span>
     <span class="n">pg</span><span class="p">,</span> <span class="n">emb_dim_per_rank_per_feature</span><span class="p">,</span> <span class="n">device</span>
 <span class="p">)</span>
 
 <span class="n">t0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span> <span class="c1"># 2 * (2 + 1)</span>
 <span class="n">t1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">24</span><span class="p">)</span> <span class="c1"># 3 * (1 + 3) + 3 * (2 + 2)</span>
-<span class="n">r0_batch_size_per_rank_per_feature</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+<span class="c1">#        r0_batch_size   r1_batch_size</span>
+<span class="c1">#  f_0:              2               1</span>
+<span class="o">-----------------------------------------</span>
+<span class="c1">#  f_1:              1               2</span>
+<span class="c1">#  f_2:              3               2</span>
+<span class="n">r0_batch_size_per_rank_per_feature</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
 <span class="n">r1_batch_size_per_rank_per_feature</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]]</span>
 <span class="n">r0_batch_size_per_feature_pre_a2a</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
 <span class="n">r1_batch_size_per_feature_pre_a2a</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
@@ -1081,7 +1087,7 @@ functions.</p></li>
 <span class="p">)</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
 <span class="c1"># input splits:</span>
-<span class="c1">#   r0: [2*2, 1*1]</span>
+<span class="c1">#   r0: [2*2, 1*2]</span>
 <span class="c1">#   r1: [1*3 + 3*3, 2*3 + 2*3]</span>
 
 <span class="c1"># output splits:</span>
