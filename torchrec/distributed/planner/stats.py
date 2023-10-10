@@ -245,6 +245,7 @@ class EmbeddingStats(Stats):
                     "Sharding",
                     "Compute Kernel",
                     "Perf (ms)",
+                    "Storage (HBM, DDR)",
                     "Pooling Factor",
                     "Num Poolings",
                     "Output",
@@ -260,6 +261,7 @@ class EmbeddingStats(Stats):
                     "----------",
                     "----------------",
                     "-----------",
+                    "--------------------",
                     "----------------",
                     "--------------",
                     "--------",
@@ -298,6 +300,12 @@ class EmbeddingStats(Stats):
 
                 shard_perfs = _format_perf_breakdown(so_perf)
 
+                so_storage = Storage(hbm=0, ddr=0)
+                for shard in so.shards:
+                    so_storage += cast(Storage, shard.storage)
+
+                shard_storages = _format_storage_breakdown(so_storage)
+
                 pooling_factor = str(round(sum(so.input_lengths), 3))
                 num_poolings = (
                     cast(List[float], constraints[so.name].num_poolings)
@@ -325,6 +333,7 @@ class EmbeddingStats(Stats):
                         _get_sharding_type_abbr(so.sharding_type),
                         so.compute_kernel,
                         shard_perfs,
+                        shard_storages,
                         pooling_factor,
                         num_poolings,
                         output,
@@ -607,6 +616,12 @@ def _format_perf_breakdown(perf: Perf) -> str:
     )
 
     return f"{str(round(perf.total, 3))} ({breakdown_string})"
+
+
+def _format_storage_breakdown(storage: Storage) -> str:
+    storage_hbm = round(bytes_to_gb(storage.hbm), 3)
+    storage_ddr = round(bytes_to_gb(storage.ddr), 3)
+    return f"({storage_hbm} GB, {storage_ddr} GB)"
 
 
 def round_to_one_sigfig(x: float) -> str:

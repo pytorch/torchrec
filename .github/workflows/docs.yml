@@ -56,9 +56,12 @@ jobs:
     - name: Install fbgemm
       run: |
         conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+    - name: Install torchmetrics
+      run: |
+        conda run -n build_binary pip install torchmetrics==1.0.3
     - name: Install TorchRec
       run: |
-        pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |

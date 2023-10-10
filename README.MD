@@ -5,7 +5,7 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 
 ## TorchRec contains:
 - Parallelism primitives that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism/model-parallelism.
-- The TorchRec sharder can shard embedding tables with different sharding strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, and column-wise sharding.
+- The TorchRec sharder can shard embedding tables with different sharding strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, column-wise, table-wise-column-wise sharding.
 - The TorchRec planner can automatically generate optimized sharding plans for models.
 - Pipelined training overlaps dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
 - Optimized kernels for RecSys powered by FBGEMM.
@@ -17,37 +17,35 @@ TorchRec is a PyTorch domain library built to provide common sparsity & parallel
 
 # Installation
 
-Torchrec requires Python >= 3.7 and CUDA >= 11.0 (CUDA is highly recommended for performance but not required). The example below shows how to install with CUDA 11.8. This setup assumes you have conda installed.
+Torchrec requires Python >= 3.8 and CUDA >= 11.8 (CUDA is highly recommended for performance but not required). The example below shows how to install with Python 3.8 and CUDA 12.1. This setup assumes you have conda installed.
 
 ## Binaries
 
-Experimental binary on Linux for Python 3.7, 3.8 and 3.9 can be installed via pip wheels
+Experimental binary on Linux for Python 3.8, 3.9, 3.10 and 3.11, and CPU, CUDA 11.8 and CUDA 12.1 can be installed via pip wheels from [download.pytorch.org](download.pytorch.org) and PyPI (only for CUDA 12.1).
+
+Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, swap "cu121" for "cpu" or "cu118".
 
 ### Installations
 ```
-TO use the library without cuda, use the *-cpu fbgemm installations. However, this will be much slower than the CUDA variant.
-
 Nightly
 
-conda install pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
-pip install torchrec_nightly
+pip install torch --index-url https://download.pytorch.org/whl/nightly/cu121
+pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu121
+pip install torchmetrics==1.0.3
+pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cu121
 
-Stable
+Stable via pytorch.org
 
-conda install pytorch pytorch-cuda=11.8 -c pytorch -c nvidia
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/cu121
+pip install torchmetrics==1.0.3
+pip install torchrec --index-url https://download.pytorch.org/whl/cu121
+
+Stable via PyPI (only for CUDA 12.1)
+
+pip install torch
+pip install fbgemm-gpu
 pip install torchrec
-
-If you have no CUDA device:
-
-Nightly
-
-pip uninstall fbgemm-gpu-nightly -y
-pip install fbgemm-gpu-nightly-cpu
-
-Stable
-
-pip uninstall fbgemm-gpu -y
-pip install fbgemm-gpu-cpu
 
 ```
 
@@ -59,27 +57,55 @@ See our colab notebook for an introduction to torchrec which includes runnable i
 
 ## From Source
 
-We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 11.3. This setup assumes you have conda installed.
+We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 12.1. This setup assumes you have conda installed.
 
-1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/)
+1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/).
    ```
-   conda install pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+   CUDA 12.1
+
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu121
+
+   CUDA 11.8
+
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu118
+
+   CPU
+
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
    ```
 
-2. Install Requirements
+2. Clone TorchRec.
+   ```
+   git clone --recursive https://github.com/pytorch/torchrec
+   cd torchrec
+   ```
+
+3. Install FBGEMM.
+   ```
+   CUDA 12.1
+
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu121
+
+   CUDA 11.8
+
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu118
+
+   CPU
+
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+   ```
+
+4. Install other requirements.
    ```
    pip install -r requirements.txt
    ```
 
-3. Download and install TorchRec.
+4. Install TorchRec.
    ```
-   git clone --recursive https://github.com/pytorch/torchrec
-
-   cd torchrec
    python setup.py install develop
    ```
 
-4. Test the installation.
+5. Test the installation (use torchx-nightly for 3.11).
    ```
    GPU mode
 

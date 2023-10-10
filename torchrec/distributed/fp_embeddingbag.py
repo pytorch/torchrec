@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from functools import partial
-from typing import Dict, Iterator, List, Optional, Type, Union
+from typing import Any, Dict, Iterator, List, Optional, Type, Union
 
 import torch
 from torch import nn
@@ -189,6 +189,11 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
             env=env,
             device=device,
         )
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        # TODO: to be deprecate after planner get cache_load_factor from ParameterConstraints
+        return self._ebc_sharder.fused_params
 
     def shardable_parameters(
         self, module: FeatureProcessedEmbeddingBagCollection
