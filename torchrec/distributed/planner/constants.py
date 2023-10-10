@@ -42,6 +42,7 @@ def kernel_bw_lookup(
     hbm_mem_bw: float,
     ddr_mem_bw: float,
     caching_ratio: Optional[float] = None,
+    prefetch_pipeline: bool = False,
 ) -> Optional[float]:
     """
     Calculates the device bandwidth based on given compute device, compute kernel, and
@@ -54,6 +55,7 @@ def kernel_bw_lookup(
         ddr_mem_bw (float): the bandwidth of the system DDR memory.
         caching_ratio (Optional[float]): caching ratio used to determine device bandwidth
             if UVM caching is enabled.
+        prefetch_pipeline (bool): whether prefetch pipeline is enabled.
 
     Returns:
         Optional[float]: the device bandwidth.
@@ -84,4 +86,12 @@ def kernel_bw_lookup(
         )
         / 10,
     }
+
+    if (
+        prefetch_pipeline
+        and compute_device == "cuda"
+        and compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+    ):
+        return lookup.get(("cuda", EmbeddingComputeKernel.FUSED.value))
+
     return lookup.get((compute_device, compute_kernel))
