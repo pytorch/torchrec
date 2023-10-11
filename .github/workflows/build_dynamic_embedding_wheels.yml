@@ -21,9 +21,22 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
         pyver: [ cp38, cp39, cp310 ]
-        cuver: [ "11.6", "11.3"]
+        cuver: [ "11.6" ]
 
     steps:
+      -
+        name: Check disk space
+        run: df . -h
+
+      - name: Remove unnecessary files
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      -
+        name: Check disk space
+        run: df . -h
+
       - uses: actions/checkout@v3
         with:
           submodules: recursive
