@@ -148,6 +148,23 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 bwd_sr_comm_data_type_size,
             ) = _extract_comm_data_type_size(sharder, sharding_option)
 
+            prefetch_pipeline = (
+                self._constraints[  # pyre-ignore[16]
+                    sharding_option.name
+                ].cache_params.prefetch_pipeline
+                if self._constraints
+                and self._constraints.get(sharding_option.name)
+                and self._constraints[sharding_option.name].cache_params
+                else False
+            )
+            # TODO: remove after deprecating fused_params in sharder
+            if prefetch_pipeline is False:
+                prefetch_pipeline = (
+                    sharder.fused_params.get("prefetch_pipeline", False)
+                    if hasattr(sharder, "fused_params") and sharder.fused_params
+                    else False
+                )
+
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
@@ -172,6 +189,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 is_weighted=is_weighted,
                 is_inference=self._is_inference,
                 caching_ratio=caching_ratio,
+                prefetch_pipeline=prefetch_pipeline,
             )
 
             for shard, perf in zip(sharding_option.shards, shard_perfs):
@@ -202,6 +220,7 @@ def perf_func_emb_wall_time(
     is_weighted: bool = False,
     caching_ratio: Optional[float] = None,
     is_inference: bool = False,
+    prefetch_pipeline: bool = False,
 ) -> List[Perf]:
     """
     Attempts to model perfs as a function of relative wall times.
@@ -236,6 +255,7 @@ def perf_func_emb_wall_time(
         is_inference (bool = False): if planning for inference.
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
             of device.
+        prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
 
     Returns:
         List[float]: the list of perf for each shard.
@@ -243,7 +263,12 @@ def perf_func_emb_wall_time(
 
     shard_perfs = []
     device_bw = kernel_bw_lookup(
-        compute_device, compute_kernel, hbm_mem_bw, ddr_mem_bw, caching_ratio
+        compute_device,
+        compute_kernel,
+        hbm_mem_bw,
+        ddr_mem_bw,
+        caching_ratio,
+        prefetch_pipeline,
     )
     if device_bw is None:
         raise PlannerError(
