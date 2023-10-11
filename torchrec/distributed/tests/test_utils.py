@@ -360,7 +360,11 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             compute_kernel="dense",
             ranks=[0, 1],
             sharding_spec=None,
-            cache_params=CacheParams(algorithm=CacheAlgorithm.LFU, reserved_memory=1.0),
+            cache_params=CacheParams(
+                algorithm=CacheAlgorithm.LFU,
+                reserved_memory=1.0,
+                prefetch_pipeline=False,
+            ),
             enforce_hbm=False,
             stochastic_rounding=True,
             bounds_check_mode=BoundsCheckMode.WARNING,
@@ -374,6 +378,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
         expected_fused_params = {
             "cache_algorithm": CacheAlgorithm.LFU,
             "cache_reserved_memory": 1.0,
+            "prefetch_pipeline": False,
             "enforce_hbm": False,
             "stochastic_rounding": True,
             "bounds_check_mode": BoundsCheckMode.WARNING,
@@ -385,6 +390,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             "learning_rate": 0.1,
             "cache_algorithm": CacheAlgorithm.LRU,
             "stochastic_rounding": False,
+            "prefetch_pipeline": True,
         }
         fused_params = add_params_from_parameter_sharding(
             fused_params, self.parameter_sharding
@@ -393,6 +399,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             "learning_rate": 0.1,
             "cache_algorithm": CacheAlgorithm.LFU,
             "cache_reserved_memory": 1.0,
+            "prefetch_pipeline": False,
             "enforce_hbm": False,
             "stochastic_rounding": True,
             "bounds_check_mode": BoundsCheckMode.WARNING,

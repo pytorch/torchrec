@@ -649,6 +649,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         self,
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
+        if len(self.grouped_configs) == 0:
+            return fx_wrap_tensor_view2d(
+                self._dummy_embs_tensor, sparse_features.stride(), 0
+            )
+
         embeddings: List[torch.Tensor] = []
         features_by_group = sparse_features.split(
             self._feature_splits,
@@ -668,7 +673,8 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 
         return embeddings_cat_empty_rank_handle(
             embeddings,
-            fx_wrap_tensor_view2d(self._dummy_embs_tensor, sparse_features.stride(), 0),
+            # Not used as empty configs case is handled by guard
+            self._dummy_embs_tensor,
             dim=1,
         )
 
