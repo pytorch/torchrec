@@ -513,7 +513,9 @@ class MetaInferGroupedEmbeddingsLookup(
             "_dummy_embs_tensor",
             torch.empty(
                 [0],
-                dtype=torch.float32,
+                dtype=fused_params["output_dtype"].as_dtype()
+                if fused_params and "output_dtype" in fused_params
+                else torch.float16,
                 device=device,
             ),
         )
@@ -632,7 +634,9 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             "_dummy_embs_tensor",
             torch.empty(
                 [0],
-                dtype=torch.float16,
+                dtype=fused_params["output_dtype"].as_dtype()
+                if fused_params and "output_dtype" in fused_params
+                else torch.float16,
                 device=device,
             ),
         )
