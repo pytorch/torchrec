@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import Dict, List, Type
+from typing import Dict, List, Optional, Type
 
 import hypothesis.strategies as st
 import torch
@@ -16,6 +16,7 @@ from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
+    QuantConfig,
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
@@ -57,6 +58,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         quant_type: torch.dtype = torch.qint8,
         output_type: torch.dtype = torch.float,
         quant_state_dict_split_scale_bias: bool = False,
+        per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
     ) -> None:
         ebc = EmbeddingBagCollection(tables=tables)
         if quant_state_dict_split_scale_bias:
@@ -65,12 +67,25 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         embeddings = ebc(features)
 
         # test forward
-        ebc.qconfig = torch.quantization.QConfig(
-            activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=output_type
-            ),
-            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
-        )
+        if not per_table_weight_dtype:
+            ebc.qconfig = torch.quantization.QConfig(
+                activation=torch.quantization.PlaceholderObserver.with_args(
+                    dtype=output_type
+                ),
+                weight=torch.quantization.PlaceholderObserver.with_args(
+                    dtype=quant_type
+                ),
+            )
+        else:
+            ebc.qconfig = QuantConfig(
+                activation=torch.quantization.PlaceholderObserver.with_args(
+                    dtype=output_type
+                ),
+                weight=torch.quantization.PlaceholderObserver.with_args(
+                    dtype=quant_type
+                ),
+                per_table_weight_dtype=per_table_weight_dtype,
+            )
 
         qebc = QuantEmbeddingBagCollection.from_float(ebc)
         quantized_embeddings = qebc(features)
@@ -108,6 +123,12 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ),
         permute_order=st.booleans(),
         quant_state_dict_split_scale_bias=st.booleans(),
+        per_table_weight_dtype=st.sampled_from(
+            [
+                {"t1": torch.quint4x2, "t2": torch.qint8},
+                {"t1": torch.qint8, "t2": torch.quint4x2},
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_ebc(
@@ -117,6 +138,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         output_type: torch.dtype,
         permute_order: bool,
         quant_state_dict_split_scale_bias: bool,
+        per_table_weight_dtype: Dict[str, torch.dtype],
     ) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1",
@@ -151,6 +173,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             quant_type,
             output_type,
             quant_state_dict_split_scale_bias,
+        )
+
+        self._test_ebc(
+            [eb1_config, eb2_config],
+            features,
+            quant_type,
+            output_type,
+            quant_state_dict_split_scale_bias,
+            per_table_weight_dtype,
         )
 
     def test_create_on_meta_device_without_providing_weights(self) -> None:
