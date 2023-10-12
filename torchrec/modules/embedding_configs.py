@@ -206,7 +206,7 @@ class EmbeddingConfig(BaseEmbeddingConfig):
     pass
 
 
-class TrecQuantConfig(NamedTuple):
+class QuantConfig(NamedTuple):
     activation: torch.quantization.PlaceholderObserver
     weight: torch.quantization.PlaceholderObserver
     per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None
