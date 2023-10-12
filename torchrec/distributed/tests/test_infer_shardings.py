@@ -528,6 +528,93 @@ class InferShardingsTest(unittest.TestCase):
 
     # pyre-ignore
     @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
+    def test_cw_irregular_shard_placement(self) -> None:
+        num_embeddings = 64
+        emb_dim = 384
+        emb_dim_2 = emb_dim // 2
+        emb_dim_3 = emb_dim // 3
+        local_size = 4
+        world_size = 4
+        batch_size = 4
+        local_device = torch.device("cuda:0")
+        mi = _model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            num_features=3,
+        )
+
+        non_sharded_model = mi.quant_model
+        expected_shards = [
+            [
+                ((0, 0, num_embeddings, emb_dim_2), "rank:2/cuda:2"),
+                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:1/cuda:1"),
+            ],
+            [
+                ((0, 0, num_embeddings, emb_dim_2), "rank:0/cuda:0"),
+                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:3/cuda:3"),
+            ],
+            [
+                ((0, 0, num_embeddings, emb_dim_3), "rank:0/cuda:0"),
+                ((0, 1 * emb_dim_3, num_embeddings, emb_dim_3), "rank:2/cuda:2"),
+                ((0, 2 * emb_dim_3, num_embeddings, emb_dim_3), "rank:3/cuda:3"),
+            ],
+        ]
+
+        sharder = TestQuantEBCSharder(
+            sharding_type=ShardingType.COLUMN_WISE.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+
+        module_plan = construct_module_sharding_plan(
+            non_sharded_model._module.sparse.ebc,
+            per_param_sharding={
+                "table_0": column_wise(ranks=[2, 1]),
+                "table_1": column_wise(ranks=[0, 3]),
+                "table_2": column_wise(ranks=[0, 2, 3]),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+        )
+
+        plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
+        sharded_model = _shard_qebc(
+            mi,
+            sharding_type=ShardingType.COLUMN_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
+            plan=plan,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+        # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
+
+        # We need this first inference to make all lazy init in forward
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    # pyre-ignore
+    @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
