@@ -10,9 +10,12 @@
 import copy
 
 import unittest
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import hypothesis.strategies as st
 
 import torch
+from hypothesis import given, settings
 from torch.distributed._shard.sharding_spec import ShardingSpec
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
@@ -24,7 +27,10 @@ from torchrec.distributed.planner.shard_estimators import (
 )
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules
-
+from torchrec.distributed.sharding_plan import (
+    column_wise,
+    construct_module_sharding_plan,
+)
 from torchrec.distributed.test_utils.infer_utils import (
     KJTInputWrapper,
     model_input_to_forward_args,
@@ -41,6 +47,7 @@ from torchrec.distributed.types import (
     ModuleShardingPlan,
     ParameterSharding,
     ShardingEnv,
+    ShardingPlan,
 )
 from torchrec.fx import symbolic_trace
 
@@ -171,19 +178,22 @@ def _shard_qebc(
     sharding_type: ShardingType,
     device: torch.device,
     expected_shards: List[Tuple[Tuple[int, int, int, int], str]],
+    plan: Optional[ShardingPlan] = None,
 ) -> torch.nn.Module:
     sharder = TestQuantEBCSharder(
         sharding_type=sharding_type.value,
         kernel_type=EmbeddingComputeKernel.QUANT.value,
         shardable_params=[table.name for table in mi.tables],
     )
-    # pyre-ignore
-    plan = mi.planner.plan(
-        mi.quant_model,
-        [sharder],
-    )
-    msp: ModuleShardingPlan = plan.plan["_module.sparse.ebc"]
-    # pyre-ignore
+
+    if not plan:
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+    msp = plan.plan["_module.sparse.ebc"]
     ps: ParameterSharding = msp["table_0"]
     assert ps.sharding_type == sharding_type.value
     assert ps.sharding_spec is not None
@@ -315,15 +325,20 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.ROW_WISE.value,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_cw(self) -> None:
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
+        test_permute=st.booleans(),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_cw(self, test_permute: bool) -> None:
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = 512 // 4
+        local_size = 2
         world_size = 2
         batch_size = 4
         local_device = torch.device("cuda:0")
@@ -339,16 +354,51 @@ class InferShardingsTest(unittest.TestCase):
 
         non_sharded_model = mi.quant_model
         expected_shards = [
-            ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-            ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-            ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-            ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+            (
+                (0, 0, num_embeddings, emb_dim_4),
+                "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+            ),
+            (
+                (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
+                "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+            ),
+            (
+                (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
+                "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+            ),
+            (
+                (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
+                "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+            ),
         ]
+
+        plan = None
+        if test_permute:
+            sharder = TestQuantEBCSharder(
+                sharding_type=ShardingType.COLUMN_WISE.value,
+                kernel_type=EmbeddingComputeKernel.QUANT.value,
+                shardable_params=[table.name for table in mi.tables],
+            )
+
+            module_plan = construct_module_sharding_plan(
+                non_sharded_model._module.sparse.ebc,
+                per_param_sharding={
+                    "table_0": column_wise(ranks=[1, 0, 1, 0]),
+                },
+                # pyre-ignore
+                sharder=sharder,
+                local_size=local_size,
+                world_size=world_size,
+            )
+
+            plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
         sharded_model = _shard_qebc(
             mi,
             sharding_type=ShardingType.COLUMN_WISE,
             device=local_device,
             expected_shards=expected_shards,
+            plan=plan,
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
