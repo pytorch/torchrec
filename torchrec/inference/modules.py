@@ -15,7 +15,7 @@ import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
-from torchrec.modules.embedding_configs import TrecQuantConfig
+from torchrec.modules.embedding_configs import QuantConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollectionInterface,
     EmbeddingCollectionInterface,
@@ -52,12 +52,12 @@ def quantize_embeddings(
     output_dtype: torch.dtype = torch.float,
     per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
 ) -> nn.Module:
-    qconfig = TrecQuantConfig(
+    qconfig = QuantConfig(
         activation=quant.PlaceholderObserver.with_args(dtype=output_dtype),
         weight=quant.PlaceholderObserver.with_args(dtype=dtype),
         per_table_weight_dtype=per_table_weight_dtype,
     )
-    qconfig_spec: Dict[Type[nn.Module], TrecQuantConfig] = {
+    qconfig_spec: Dict[Type[nn.Module], QuantConfig] = {
         trec.EmbeddingBagCollection: qconfig,
     }
     mapping: Dict[Type[nn.Module], Type[nn.Module]] = {

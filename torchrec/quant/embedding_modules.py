@@ -8,7 +8,7 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
@@ -20,15 +20,17 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from torch import Tensor
 from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
     DATA_TYPE_NUM_BITS,
     data_type_to_sparse_type,
     DataType,
     dtype_to_data_type,
     EmbeddingBagConfig,
     EmbeddingConfig,
+    EmbeddingTableConfig,
     pooling_type_to_pooling_mode,
     PoolingType,
-    TrecQuantConfig,
+    QuantConfig,
 )
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection as OriginalEmbeddingBagCollection,
@@ -167,6 +169,23 @@ def quantize_state_dict(
                 quant_weight, scale_shift = quant_res, None
         table_name_to_quantized_weights[table_name] = (quant_weight, scale_shift)
     return device
+
+
+def _update_embedding_configs(
+    embedding_configs: List[BaseEmbeddingConfig],
+    quant_config: Union[QuantConfig, torch.quantization.QConfig],
+) -> None:
+    per_table_weight_dtype = (
+        quant_config.per_table_weight_dtype
+        if isinstance(quant_config, QuantConfig) and quant_config.per_table_weight_dtype
+        else {}
+    )
+    for config in embedding_configs:
+        config.data_type = dtype_to_data_type(
+            per_table_weight_dtype[config.name]
+            if config.name in per_table_weight_dtype
+            else quant_config.weight().dtype
+        )
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
@@ -431,29 +450,17 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         assert hasattr(
             module, "qconfig"
         ), "EmbeddingBagCollection input float module must have qconfig defined"
-        per_table_weight_dtype = (
-            module.qconfig.per_table_weight_dtype
-            if isinstance(module.qconfig, TrecQuantConfig)
-            else None
-        )
-        data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs())
-        table_name_to_data_type: Dict[str, DataType] = {}
-        for config in embedding_bag_configs:
-            if (
-                per_table_weight_dtype is not None
-                and config.name in per_table_weight_dtype
-            ):
-                config.data_type = dtype_to_data_type(
-                    per_table_weight_dtype[config.name]
-                )
-            else:
-                config.data_type = data_type
-            table_name_to_data_type[config.name] = config.data_type
+        _update_embedding_configs(
+            cast(List[BaseEmbeddingConfig], embedding_bag_configs),
+            module.qconfig,
+        )
 
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(
-            module, table_name_to_quantized_weights, table_name_to_data_type
+            module,
+            table_name_to_quantized_weights,
+            {table.name: table.data_type for table in embedding_bag_configs},
         )
         return cls(
             embedding_bag_configs,
@@ -684,31 +691,18 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         assert hasattr(
             module, "qconfig"
         ), "EmbeddingCollection input float module must have qconfig defined"
-        per_table_weight_dtype = (
-            module.qconfig.per_table_weight_dtype
-            if isinstance(module.qconfig, TrecQuantConfig)
-            else None
+        embedding_configs = copy.deepcopy(module.embedding_configs())
+        _update_embedding_configs(
+            cast(List[BaseEmbeddingConfig], embedding_configs), module.qconfig
         )
-        data_type = dtype_to_data_type(module.qconfig.weight().dtype)
-        tables = copy.deepcopy(module.embedding_configs())
-        table_name_to_data_type: Dict[str, DataType] = {}
-        for config in tables:
-            if (
-                per_table_weight_dtype is not None
-                and config.name in per_table_weight_dtype
-            ):
-                config.data_type = dtype_to_data_type(
-                    per_table_weight_dtype[config.name]
-                )
-            else:
-                config.data_type = data_type
-            table_name_to_data_type[config.name] = config.data_type
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(
-            module, table_name_to_quantized_weights, table_name_to_data_type
+            module,
+            table_name_to_quantized_weights,
+            {table.name: table.data_type for table in embedding_configs},
         )
         return cls(
-            tables,
+            embedding_configs,
             device=device,
             need_indices=module.need_indices(),
             output_dtype=module.qconfig.activation().dtype,
