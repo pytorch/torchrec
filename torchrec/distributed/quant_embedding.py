@@ -566,8 +566,10 @@ class ShardedQuantEmbeddingCollection(
                     self._features_order,
                     self._features_order_tensor,
                 )
-            features_by_sharding = features.split(
-                self._feature_splits,
+            features_by_sharding = (
+                [features]
+                if len(self._feature_splits) == 1
+                else features.split(self._feature_splits)
             )
 
             for i in range(len(self._input_dists)):
