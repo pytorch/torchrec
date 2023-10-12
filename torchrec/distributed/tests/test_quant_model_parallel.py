@@ -29,7 +29,7 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
 from torchrec.distributed.utils import copy_to_device
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, QuantConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
@@ -64,6 +64,7 @@ def _quantize(
     inplace: bool,
     output_type: torch.dtype = torch.float,
     quant_state_dict_split_scale_bias: bool = False,
+    per_table_weight_dtypes: Optional[Dict[str, torch.dtype]] = None,
 ) -> nn.Module:
     if quant_state_dict_split_scale_bias:
         quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
@@ -73,6 +74,13 @@ def _quantize(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
     )
+    if per_table_weight_dtypes:
+        qconfig = QuantConfig(
+            activation=quant.PlaceholderObserver.with_args(dtype=output_type),
+            weight=quant.PlaceholderObserver.with_args(dtype=torch.quint8),
+            per_table_weight_dtype=per_table_weight_dtypes,
+        )
+
     return quant.quantize_dynamic(
         module,
         qconfig_spec={
@@ -505,9 +513,23 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
                 (ShardingType.COLUMN_WISE.value, True),
             ]
         ),
+        per_table_weight_dtypes=st.sampled_from(
+            [
+                None,
+                {"table_0": torch.quint4x2, "table_1": torch.quint8},
+                {
+                    "table_0": torch.quint4x2,
+                    "table_1": torch.quint8,
+                    "table_3": torch.quint4x2,
+                    "table_4": torch.int8,
+                },
+            ]
+        ),
     )
     def test_shard_one_ebc_cuda(
-        self, sharding_type_qsplitscalebias: Tuple[str, bool]
+        self,
+        sharding_type_qsplitscalebias: Tuple[str, bool],
+        per_table_weight_dtypes: Optional[Dict[str, torch.dtype]],
     ) -> None:
         (
             sharding_type,
@@ -526,6 +548,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             model,
             inplace=True,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+            per_table_weight_dtypes=per_table_weight_dtypes,
         )
         sharders = [
             cast(
