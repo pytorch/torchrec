@@ -117,6 +117,7 @@ def _model(
     num_float_features: int = 8,
     num_weight_features: int = 1,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    weight_quant_dtype: Optional[torch.dtype] = torch.qint8,
 ) -> TestModelInfo:
     topology: Topology = Topology(world_size=world_size, compute_device="cuda")
     mi = TestModelInfo(
@@ -176,6 +177,7 @@ def _model(
         module=mi.model,
         inplace=False,
         quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        weight_quant_dtype=weight_quant_dtype,
     )
     return mi
 
@@ -343,9 +345,10 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(
         test_permute=st.booleans(),
+        weight_quant_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw(self, test_permute: bool) -> None:
+    def test_cw(self, test_permute: bool, weight_quant_dtype: torch.dtype) -> None:
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
@@ -361,6 +364,7 @@ class InferShardingsTest(unittest.TestCase):
             dense_device=local_device,
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
+            weight_quant_dtype=weight_quant_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -386,17 +390,25 @@ class InferShardingsTest(unittest.TestCase):
         ]
 
         plan = None
-        if test_permute:
+        if test_permute or weight_quant_dtype != torch.qint8:
             sharder = TestQuantEBCSharder(
                 sharding_type=ShardingType.COLUMN_WISE.value,
                 kernel_type=EmbeddingComputeKernel.QUANT.value,
                 shardable_params=[table.name for table in mi.tables],
             )
 
+            col_dim_multiplier = None
+            if weight_quant_dtype == torch.quint4x2:
+                col_dim_multiplier = 2
+            elif weight_quant_dtype == torch.quint2x4:
+                col_dim_multiplier = 4
             module_plan = construct_module_sharding_plan(
                 non_sharded_model._module.sparse.ebc,
                 per_param_sharding={
-                    "table_0": column_wise(ranks=[1, 0, 1, 0]),
+                    "table_0": column_wise(
+                        ranks=[1, 0, 1, 0] if test_permute else [0, 1, 0, 1],
+                        col_dim_multiplier=col_dim_multiplier,
+                    ),
                 },
                 # pyre-ignore
                 sharder=sharder,

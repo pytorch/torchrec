@@ -71,6 +71,7 @@ def calculate_shard_sizes_and_offsets(
     local_world_size: int,
     sharding_type: str,
     col_wise_shard_dim: Optional[int] = None,
+    col_dim_multiplier: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Calculates sizes and offsets for tensor sharded according to provided sharding type.
@@ -81,6 +82,7 @@ def calculate_shard_sizes_and_offsets(
         local_world_size (int): total number of devices in host group topology.
         sharding_type (str): provided ShardingType value.
         col_wise_shard_dim (Optional[int]): dimension for column wise sharding split.
+        col_dim_multiplier (Optional[int]): multiplier for column dimension. Used only for packed quantized types containing multiple elements per tensor item, e.g. quint4x2, quint2x4.
 
     Returns:
         Tuple[List[List[int]], List[List[int]]]: shard sizes, represented as a list of the dimensions of the sharded tensor on each device, and shard offsets, represented as a list of coordinates of placement on each device.
@@ -90,6 +92,8 @@ def calculate_shard_sizes_and_offsets(
     """
 
     (rows, columns) = tensor.shape
+    if col_dim_multiplier:
+        columns *= col_dim_multiplier
 
     if sharding_type == ShardingType.DATA_PARALLEL.value:
         return [[rows, columns]] * world_size, [[0, 0]] * world_size
@@ -189,6 +193,7 @@ def _get_parameter_size_offsets(
     local_size: int,
     world_size: int,
     col_wise_shard_dim: Optional[int] = None,
+    col_dim_multiplier: Optional[int] = None,
 ) -> List[Tuple[List[int], List[int]]]:
     (shard_sizes, shard_offsets,) = calculate_shard_sizes_and_offsets(
         tensor=none_throws(param),
@@ -196,6 +201,7 @@ def _get_parameter_size_offsets(
         local_world_size=local_size,
         sharding_type=sharding_type.value,
         col_wise_shard_dim=col_wise_shard_dim,
+        col_dim_multiplier=col_dim_multiplier,
     )
     return list(zip(shard_sizes, shard_offsets))
 
@@ -417,6 +423,7 @@ def row_wise() -> ParameterShardingGenerator:
 
 def column_wise(
     ranks: List[int],
+    col_dim_multiplier: Optional[int] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
@@ -448,12 +455,15 @@ def column_wise(
                 f"column dim of {param.shape[1]} cannot be evenly divided across {ranks}"
             )
         shard_dim = param.shape[1] // len(ranks)
+        if col_dim_multiplier:
+            shard_dim *= col_dim_multiplier
         size_and_offsets = _get_parameter_size_offsets(
             param,
             ShardingType.COLUMN_WISE,
             local_size,
             world_size,
             col_wise_shard_dim=shard_dim,
+            col_dim_multiplier=col_dim_multiplier,
         )
 
         size_offset_ranks = []

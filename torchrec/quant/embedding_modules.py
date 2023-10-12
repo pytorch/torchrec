@@ -174,7 +174,7 @@ def quantize_state_dict(
 def _update_embedding_configs(
     embedding_configs: List[BaseEmbeddingConfig],
     quant_config: Union[QuantConfig, torch.quantization.QConfig],
-) -> None:
+) -> Dict[str, DataType]:
     per_table_weight_dtype = (
         quant_config.per_table_weight_dtype
         if isinstance(quant_config, QuantConfig) and quant_config.per_table_weight_dtype
@@ -186,6 +186,7 @@ def _update_embedding_configs(
             if config.name in per_table_weight_dtype
             else quant_config.weight().dtype
         )
+    return {config.name: config.data_type for config in embedding_configs}
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
@@ -262,6 +263,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        per_table_weight_dtype: Optional[Dict[str, DataType]] = None,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -279,6 +281,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None
         self.row_alignment = row_alignment
+        self.per_table_weight_dtype = per_table_weight_dtype
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -451,7 +454,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             module, "qconfig"
         ), "EmbeddingBagCollection input float module must have qconfig defined"
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs())
-        _update_embedding_configs(
+        per_table_weight_dtype = _update_embedding_configs(
             cast(List[BaseEmbeddingConfig], embedding_bag_configs),
             module.qconfig,
         )
@@ -475,6 +478,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             row_alignment=getattr(
                 module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
             ),
+            per_table_weight_dtype=per_table_weight_dtype,
         )
 
     def embedding_bag_configs(
@@ -560,6 +564,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        per_table_weight_dtype: Optional[Dict[str, DataType]] = None,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -571,6 +576,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._output_dtype = output_dtype
         self._device = device
         self.row_alignment = row_alignment
+        self.per_table_weight_dtype = per_table_weight_dtype
 
         table_names = set()
         for config in tables:
@@ -692,7 +698,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             module, "qconfig"
         ), "EmbeddingCollection input float module must have qconfig defined"
         embedding_configs = copy.deepcopy(module.embedding_configs())
-        _update_embedding_configs(
+        per_table_weight_dtype = _update_embedding_configs(
             cast(List[BaseEmbeddingConfig], embedding_configs), module.qconfig
         )
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
@@ -714,6 +720,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             row_alignment=getattr(
                 module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
             ),
+            per_table_weight_dtype=per_table_weight_dtype,
         )
 
     def _get_name(self) -> str:

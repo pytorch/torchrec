@@ -16,7 +16,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from torch.distributed import _remote_device
 from torch.distributed._shard.sharded_tensor import (
     Shard,
-    ShardedTensorBase,
     ShardedTensorMetadata,
     ShardMetadata,
 )
@@ -26,6 +25,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingType
+from torchrec.modules.embedding_configs import DataType
 from torchrec.streamable import Multistreamable
 
 Out = TypeVar("Out")
@@ -34,8 +34,61 @@ DistOut = TypeVar("DistOut")
 ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
 
 
+@dataclass
+class InferenceShard:
+    """
+    A copy of implementation of torch.distributed._shard.sharded_tensor.Shard without restriction the local tensor size equals metadata
+    This is used in unblock uint4 quantization for TorchRec Inference
+
+    Args:
+        tensor(torch.Tensor): Local tensor for the shard.
+        metadata(:class `torch.distributed._shard.sharded_tensor.ShardMetadata`):
+            The metadata for the shard, including offsets, lengths and device placement.
+        dtype (:class `torch.dtype`): The data type of the shard.
+    """
+
+    tensor: torch.Tensor
+    metadata: ShardMetadata
+    dtype: DataType = DataType.INT8
+
+    def __post_init__(self) -> None:
+        placement_device = self.metadata.placement
+        if (
+            placement_device is not None
+            and placement_device.device() != self.tensor.device
+        ):
+            raise ValueError(
+                f"Local shard tensor device does not match with local Shard's placement! "
+                f"Found local shard tensor device: {self.tensor.device}, "
+                f"local shard metadata placement device: {placement_device.device()}"
+            )
+
+
+class InferenceSharedTensor:
+    """
+    A copy of implementation of torch.distributed._shard.sharded_tensor.ShardedTensorBase without restriction the local tensor size equals metadata
+    This is used in unblock uint4 quantization for TorchRec Inference
+
+    Args:
+        local_shards(List[:class:`InferenceShard`]):
+            list of :class:`InferenceShard` representing the local shards on this
+        sharded_tensor_metadata (:class `torch.distributed._shard.sharded_tensor.ShardedTensorMetadata`): The metadata of the sharded tensor.
+    """
+
+    _sharded_tensor_metadata: ShardedTensorMetadata
+    _local_shards: List[InferenceShard]
+
+    def __init__(
+        self,
+        sharded_tensor_metadata: ShardedTensorMetadata,
+        local_shards: List[InferenceShard],
+    ) -> None:
+        self._sharded_tensor_metadata = sharded_tensor_metadata
+        self._local_shards = local_shards
+
+
 def _append_table_shard(
-    d: Dict[str, List[Shard]], table_name: str, shard: Shard
+    d: Dict[str, List[InferenceShard]], table_name: str, shard: InferenceShard
 ) -> None:
     if table_name not in d:
         d[table_name] = []
@@ -61,20 +114,20 @@ class ShardedQuantEmbeddingModuleState(
         # weight
         self._table_name_to_local_shards: Dict[str, List[Shard]] = {}
         self._table_name_to_sharded_tensor: Dict[
-            str, Union[torch.Tensor, ShardedTensorBase]
+            str, Union[torch.Tensor, InferenceSharedTensor]
         ] = {}
 
         # weight_qscale
         self._table_name_to_local_shards_qscale: Dict[str, List[Shard]] = {}
         self._table_name_to_sharded_tensor_qscale: Dict[
-            str, Union[torch.Tensor, ShardedTensorBase]
+            str, Union[torch.Tensor, InferenceSharedTensor]
         ] = {}
         self._table_name_to_tensors_list_qscale: Dict[str, List[torch.Tensor]] = {}
 
         # weight_qbias
         self._table_name_to_local_shards_qbias: Dict[str, List[Shard]] = {}
         self._table_name_to_sharded_tensor_qbias: Dict[
-            str, Union[torch.Tensor, ShardedTensorBase]
+            str, Union[torch.Tensor, InferenceSharedTensor]
         ] = {}
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
 
@@ -86,8 +139,6 @@ class ShardedQuantEmbeddingModuleState(
                 # weight shards section:
                 assert table.local_metadata
                 metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
-                metadata.shard_sizes = [tbe_split_w.size(0), tbe_split_w.size(1)]
-
                 # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
                 # pyre-ignore
                 if metadata.placement.device != tbe_split_w.device:
@@ -95,7 +146,9 @@ class ShardedQuantEmbeddingModuleState(
                 _append_table_shard(
                     self._table_name_to_local_shards,
                     table.name,
-                    Shard(tensor=tbe_split_w, metadata=metadata),
+                    InferenceShard(
+                        tensor=tbe_split_w, metadata=metadata, dtype=table.data_type
+                    ),
                 )
                 # end of weight shards section
 
@@ -161,7 +214,7 @@ class ShardedQuantEmbeddingModuleState(
                         _append_table_shard(
                             table_name_to_local_shards,
                             table.name,
-                            Shard(tensor=tbe_split_qparam, metadata=qmetadata),
+                            InferenceShard(tensor=tbe_split_qparam, metadata=qmetadata),
                         )
                     # end of weight_qscale & weight_qbias section
 
@@ -199,9 +252,7 @@ class ShardedQuantEmbeddingModuleState(
                     shards_metadata=[ls.metadata for ls in local_shards],
                     size=torch.Size([global_rows, global_cols]),
                 )
-                table_name_to_sharded_tensor[
-                    table_name
-                ] = ShardedTensorBase._init_from_local_shards_and_global_metadata(
+                table_name_to_sharded_tensor[table_name] = InferenceSharedTensor(
                     local_shards=local_shards,
                     sharded_tensor_metadata=global_metadata,
                 )
@@ -272,13 +323,13 @@ class ShardedQuantEmbeddingModuleState(
                 continue
 
             src_tensor = state_dict[src_state_dict_name]
-            if isinstance(dst_tensor, ShardedTensorBase) and isinstance(
-                src_tensor, ShardedTensorBase
+            if isinstance(dst_tensor, InferenceSharedTensor) and isinstance(
+                src_tensor, InferenceSharedTensor
             ):
                 # sharded to sharded model, only identically sharded
-                for dst_local_shard in dst_tensor.local_shards():
+                for dst_local_shard in dst_tensor._local_shards:
                     copied: bool = False
-                    for src_local_shard in src_tensor.local_shards():
+                    for src_local_shard in src_tensor._local_shards:
                         if (
                             dst_local_shard.metadata.shard_offsets
                             == src_local_shard.metadata.shard_offsets
@@ -289,11 +340,11 @@ class ShardedQuantEmbeddingModuleState(
                             copied = True
                             break
                     assert copied, "Incompatible state_dict"
-            elif isinstance(dst_tensor, ShardedTensorBase) and isinstance(
+            elif isinstance(dst_tensor, InferenceSharedTensor) and isinstance(
                 src_tensor, torch.Tensor
             ):
                 # non_sharded to sharded model
-                for dst_local_shard in dst_tensor.local_shards():
+                for dst_local_shard in dst_tensor._local_shards:
                     dst_tensor = dst_local_shard.tensor
                     assert src_tensor.ndim == dst_tensor.ndim
                     meta = dst_local_shard.metadata
@@ -305,10 +356,15 @@ class ShardedQuantEmbeddingModuleState(
                     elif t.ndim == 2:
                         cols_from = meta.shard_offsets[1]
                         cols_to = cols_from + meta.shard_sizes[1]
+                        divider = 1
+                        if dst_local_shard.dtype == DataType.INT4:
+                            divider = 2
+                        elif dst_local_shard.dtype == DataType.INT2:
+                            divider = 4
                         dst_tensor.copy_(
                             t[
                                 rows_from:rows_to,
-                                cols_from:cols_to,
+                                cols_from // divider : cols_to // divider,
                             ]
                         )
                     else:

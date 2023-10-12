@@ -32,7 +32,9 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
 )
+from torchrec.modules.embedding_configs import DataType
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
+from torchrec.quant.embedding_modules import EmbeddingBagCollection, EmbeddingCollection
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -118,6 +120,16 @@ class EmbeddingEnumerator(Enumerator):
                     bounds_check_mode,
                 ) = _extract_constraints_for_param(self._constraints, name)
 
+                col_dim_multiplier = None
+                if isinstance(child_module, EmbeddingBagCollection) or isinstance(
+                    child_module, EmbeddingCollection
+                ):
+                    # pyre-ignore
+                    if child_module.per_table_weight_dtype[name] == DataType.INT4:
+                        col_dim_multiplier = 2
+                    elif child_module.per_table_weight_dtype[name] == DataType.INT2:
+                        col_dim_multiplier = 4
+
                 for sharding_type in self._filter_sharding_types(
                     name, sharder.sharding_types(self._compute_device)
                 ):
@@ -134,6 +146,7 @@ class EmbeddingEnumerator(Enumerator):
                             local_world_size=self._local_world_size,
                             sharding_type=sharding_type,
                             col_wise_shard_dim=col_wise_shard_dim,
+                            col_dim_multiplier=col_dim_multiplier,
                         )
                         dependency = None
                         if isinstance(child_module, EmbeddingTower):
