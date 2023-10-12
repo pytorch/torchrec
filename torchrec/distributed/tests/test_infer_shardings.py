@@ -25,6 +25,7 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
+from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.sharding_plan import (
@@ -32,6 +33,7 @@ from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
 )
 from torchrec.distributed.test_utils.infer_utils import (
+    create_cw_min_partition_constraints,
     KJTInputWrapper,
     model_input_to_forward_args,
     model_input_to_forward_args_kjt,
@@ -114,6 +116,7 @@ def _model(
     num_features: int = 1,
     num_float_features: int = 8,
     num_weight_features: int = 1,
+    constraints: Optional[Dict[str, ParameterConstraints]] = None,
 ) -> TestModelInfo:
     topology: Topology = Topology(world_size=world_size, compute_device="cuda")
     mi = TestModelInfo(
@@ -135,6 +138,7 @@ def _model(
                 EmbeddingPerfEstimator(topology=topology, is_inference=True),
                 EmbeddingStorageEstimator(topology=topology),
             ],
+            constraints=constraints,
         ),
     )
 
@@ -344,7 +348,7 @@ class InferShardingsTest(unittest.TestCase):
     def test_cw(self, test_permute: bool) -> None:
         num_embeddings = 64
         emb_dim = 512
-        emb_dim_4 = 512 // 4
+        emb_dim_4 = emb_dim // 4
         local_size = 2
         world_size = 2
         batch_size = 4
@@ -408,6 +412,89 @@ class InferShardingsTest(unittest.TestCase):
             device=local_device,
             expected_shards=expected_shards,
             plan=plan,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+        # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
+
+        # We need this first inference to make all lazy init in forward
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module.sparse.ebc",
+            "embedding_bags",
+            ["table_0"],
+            ShardingType.COLUMN_WISE.value,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
+        emb_dim=st.sampled_from([192, 128]),
+        test_permute=st.booleans(),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_cw_with_smaller_emb_dim(self, emb_dim: int, test_permute: bool) -> None:
+        num_embeddings = 64
+        emb_dim_4 = emb_dim // 4
+        world_size = 2
+        batch_size = 4
+        local_device = torch.device("cuda:0")
+        constraints = create_cw_min_partition_constraints([("table_0", emb_dim_4)])
+        mi = _model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            constraints=constraints,
+        )
+
+        non_sharded_model = mi.quant_model
+        expected_shards = [
+            [
+                (
+                    (0, 0, num_embeddings, emb_dim_4),
+                    "rank:0/cuda:0",
+                ),
+                (
+                    (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:1/cuda:1",
+                ),
+                (
+                    (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:0/cuda:0",
+                ),
+                (
+                    (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:1/cuda:1",
+                ),
+            ]
+        ]
+
+        sharded_model = _shard_qebc(
+            mi,
+            sharding_type=ShardingType.COLUMN_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
