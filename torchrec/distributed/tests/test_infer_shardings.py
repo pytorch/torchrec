@@ -71,14 +71,14 @@ def assert_close(expected, actual) -> None:
 
 def assert_weight_spec(
     weights_spec: Dict[str, WeightSpec],
-    expected_shards: List[Tuple[Tuple[int, int, int, int], str]],
+    all_expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
     ebc_fqn: str,
     weights_prefix: str,
-    table_names: List[str],
+    all_table_names: List[str],
     sharding_type: str,
 ) -> None:
     tbe_table_idxs = [0, 0]
-    for table_name in table_names:
+    for table_name, expected_shards in zip(all_table_names, all_expected_shards):
         unsharded_weight_fqn = f"{ebc_fqn}.{weights_prefix}.{table_name}.weight"
         for (offset_r, offset_c, size_r, size_c), placement in expected_shards:
             tbe_idx: int = 0
@@ -111,14 +111,17 @@ def _model(
     dense_device: torch.device,
     sparse_device: torch.device,
     quant_state_dict_split_scale_bias: bool = False,
+    num_features: int = 1,
+    num_float_features: int = 8,
+    num_weight_features: int = 1,
 ) -> TestModelInfo:
     topology: Topology = Topology(world_size=world_size, compute_device="cuda")
     mi = TestModelInfo(
         dense_device=dense_device,
         sparse_device=sparse_device,
-        num_features=1,
-        num_float_features=8,
-        num_weighted_features=1,
+        num_features=num_features,
+        num_float_features=num_float_features,
+        num_weighted_features=num_weight_features,
         topology=topology,
     )
 
@@ -177,7 +180,7 @@ def _shard_qebc(
     mi: TestModelInfo,
     sharding_type: ShardingType,
     device: torch.device,
-    expected_shards: List[Tuple[Tuple[int, int, int, int], str]],
+    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
     plan: Optional[ShardingPlan] = None,
 ) -> torch.nn.Module:
     sharder = TestQuantEBCSharder(
@@ -194,18 +197,19 @@ def _shard_qebc(
         )
 
     msp = plan.plan["_module.sparse.ebc"]
-    ps: ParameterSharding = msp["table_0"]
-    assert ps.sharding_type == sharding_type.value
-    assert ps.sharding_spec is not None
-    sharding_spec: ShardingSpec = ps.sharding_spec
-    # pyre-ignore
-    assert len(sharding_spec.shards) == len(expected_shards)
-    for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
-        sharding_spec.shards, expected_shards
-    ):
-        assert shard.shard_offsets == [offset_r, offset_c]
-        assert shard.shard_sizes == [size_r, size_c]
-        assert str(shard.placement) == placement
+    for i in range(mi.num_features):
+        ps: ParameterSharding = msp[f"table_{i}"]
+        assert ps.sharding_type == sharding_type.value
+        assert ps.sharding_spec is not None
+        sharding_spec: ShardingSpec = ps.sharding_spec
+        # pyre-ignore
+        assert len(sharding_spec.shards) == len(expected_shards[i])
+        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+            sharding_spec.shards, expected_shards[i]
+        ):
+            assert shard.shard_offsets == [offset_r, offset_c]
+            assert shard.shard_sizes == [size_r, size_c]
+            assert str(shard.placement) == placement
 
     # We want to leave quant_model unchanged to compare the results with it
     quant_model_copy = copy.deepcopy(mi.quant_model)
@@ -225,7 +229,7 @@ def _shard_qec(
     mi: TestModelInfo,
     sharding_type: ShardingType,
     device: torch.device,
-    expected_shards: List[Tuple[Tuple[int, int, int, int], str]],
+    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
 ) -> torch.nn.Module:
     sharder = TestQuantECSharder(
         sharding_type=sharding_type.value,
@@ -237,19 +241,20 @@ def _shard_qec(
         [sharder],
     )
     msp: ModuleShardingPlan = plan.plan["_module_kjt_input.0"]  # TODO: hardcoded
-    # pyre-ignore
-    ps: ParameterSharding = msp["table_0"]
-    assert ps.sharding_type == sharding_type.value
-    assert ps.sharding_spec is not None
-    sharding_spec: ShardingSpec = ps.sharding_spec
-    # pyre-ignore
-    assert len(sharding_spec.shards) == len(expected_shards)
-    for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
-        sharding_spec.shards, expected_shards
-    ):
-        assert shard.shard_offsets == [offset_r, offset_c]
-        assert shard.shard_sizes == [size_r, size_c]
-        assert str(shard.placement) == placement
+    for i in range(mi.num_features):
+        # pyre-ignore
+        ps: ParameterSharding = msp[f"table_{i}"]
+        assert ps.sharding_type == sharding_type.value
+        assert ps.sharding_spec is not None
+        sharding_spec: ShardingSpec = ps.sharding_spec
+        # pyre-ignore
+        assert len(sharding_spec.shards) == len(expected_shards[i])
+        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+            sharding_spec.shards, expected_shards[i]
+        ):
+            assert shard.shard_offsets == [offset_r, offset_c]
+            assert shard.shard_sizes == [size_r, size_c]
+            assert str(shard.placement) == placement
 
     # We want to leave quant_model unchanged to compare the results with it
     quant_model_copy = copy.deepcopy(mi.quant_model)
@@ -290,8 +295,10 @@ class InferShardingsTest(unittest.TestCase):
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2
         expected_shards = [
-            ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-            ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+            [
+                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
+                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+            ]
         ]
         sharded_model = _shard_qebc(
             mi,
@@ -354,22 +361,24 @@ class InferShardingsTest(unittest.TestCase):
 
         non_sharded_model = mi.quant_model
         expected_shards = [
-            (
-                (0, 0, num_embeddings, emb_dim_4),
-                "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
-            ),
-            (
-                (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
-                "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
-            ),
-            (
-                (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
-                "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
-            ),
-            (
-                (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
-                "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
-            ),
+            [
+                (
+                    (0, 0, num_embeddings, emb_dim_4),
+                    "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+                ),
+                (
+                    (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+                ),
+                (
+                    (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+                ),
+                (
+                    (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
+                    "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+                ),
+            ]
         ]
 
         plan = None
@@ -488,11 +497,13 @@ class InferShardingsTest(unittest.TestCase):
         )
         non_sharded_model = mi.quant_model
         expected_shards = [
-            ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-            ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-            ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-            ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-        ]
+            [
+                ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+                ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+                ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
+                ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+            ],
+        ] * 2
         sharded_model = _shard_qec(
             mi,
             sharding_type=ShardingType.COLUMN_WISE,  # column wise sharding the model
@@ -580,9 +591,11 @@ class InferShardingsTest(unittest.TestCase):
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2
         expected_shards = [
-            ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-            ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
-        ]
+            [
+                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
+                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+            ],
+        ] * 2
         sharded_model = _shard_qec(
             mi,
             sharding_type=ShardingType.ROW_WISE,
