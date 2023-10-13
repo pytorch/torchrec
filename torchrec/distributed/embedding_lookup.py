@@ -532,8 +532,12 @@ class MetaInferGroupedEmbeddingsLookup(
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
         embeddings: List[torch.Tensor] = []
-        features_by_group = sparse_features.split(
-            self._feature_splits,
+        features_by_group = (
+            [sparse_features]
+            if len(self._feature_splits) == 1
+            else sparse_features.split(
+                self._feature_splits,
+            )
         )
         for i in range(len(self._emb_modules)):
             embeddings.append(
@@ -659,8 +663,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             )
 
         embeddings: List[torch.Tensor] = []
-        features_by_group = sparse_features.split(
-            self._feature_splits,
+        features_by_group = (
+            [sparse_features]
+            if len(self._feature_splits) == 1
+            else sparse_features.split(
+                self._feature_splits,
+            )
         )
         # syntax for torchscript
         for i, (config, emb_op) in enumerate(

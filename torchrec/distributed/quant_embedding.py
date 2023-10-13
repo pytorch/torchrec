@@ -179,6 +179,7 @@ def _construct_jagged_tensors_cw(
     embedding_names_per_rank: List[List[str]],
     need_indices: bool,
     features_to_permute_indices: Dict[str, torch.Tensor],
+    key_to_feature_permuted_coordinates: Dict[str, torch.Tensor],
 ) -> Dict[str, JaggedTensor]:
     ret: Dict[str, JaggedTensor] = {}
     stride = features[0].stride()
@@ -199,23 +200,8 @@ def _construct_jagged_tensors_cw(
                 list(torch.split(feature.values(), feature.length_per_key()))
             )
 
-    key_to_feature_coordinates: Dict[str, List[Tuple[int, int]]] = {}
-    for rank, embedding_names in enumerate(embedding_names_per_rank):
-        for idx_in_rank, embedding_name in enumerate(embedding_names):
-            if embedding_name not in key_to_feature_coordinates:
-                key_to_feature_coordinates[embedding_name] = torch.jit.annotate(
-                    List[Tuple[int, int]], []
-                )
-            key_to_feature_coordinates[embedding_name].append((rank, idx_in_rank))
-
-    for key, coordinates in key_to_feature_coordinates.items():
-        permuted_coordinates: List[Tuple[int, int]] = coordinates
-
-        if key in features_to_permute_indices:
-            permuted_coordinates = [(-1, -1)] * len(coordinates)
-            permute_indices: List[int] = features_to_permute_indices[key].tolist()
-            for i, permute_idx in enumerate(permute_indices):
-                permuted_coordinates[i] = coordinates[permute_idx]
+    for key, permuted_coordinate_tensor in key_to_feature_permuted_coordinates.items():
+        permuted_coordinates: List[List[int]] = permuted_coordinate_tensor.tolist()
 
         rank0, idx_in_rank0 = permuted_coordinates[0]
         ret[key] = JaggedTensor(
@@ -241,6 +227,7 @@ def _construct_jagged_tensors(
     need_indices: bool,
     rw_unbucketize_tensor: Optional[torch.Tensor],
     cw_features_to_permute_indices: Dict[str, torch.Tensor],
+    key_to_feature_permuted_coordinates: Dict[str, torch.Tensor],
 ) -> Dict[str, JaggedTensor]:
 
     # Validating sharding type and parameters
@@ -272,6 +259,7 @@ def _construct_jagged_tensors(
             embedding_names_per_rank,
             need_indices,
             cw_features_to_permute_indices,
+            key_to_feature_permuted_coordinates,
         )
     else:  # sharding_type == ShardingType.TABLE_WISE.value
         return _construct_jagged_tensors_tw(embeddings, features, need_indices)
@@ -288,6 +276,7 @@ def output_jt_dict(
     features_to_permute_indices: Dict[str, torch.Tensor],
     unbucketize_tensors: List[torch.Tensor],
     unbucketize_tensor_idxs_per_sharding: List[int],
+    key_to_feature_permuted_coordinates_per_sharding: List[Dict[str, torch.Tensor]],
 ) -> Dict[str, JaggedTensor]:
     jt_dict: Dict[str, JaggedTensor] = {}
     for (
@@ -297,6 +286,7 @@ def output_jt_dict(
         embedding_names_per_rank,
         unbucketize_tensor_idx,
         features_before_input_dist,
+        key_to_feature_permuted_coordinates,
     ) in zip(
         sharding_types,
         emb_per_sharding,
@@ -304,6 +294,7 @@ def output_jt_dict(
         embedding_names_per_rank_per_sharding,
         unbucketize_tensor_idxs_per_sharding,
         features_before_input_dist_per_sharding,
+        key_to_feature_permuted_coordinates_per_sharding,
     ):
         jt_dict.update(
             _construct_jagged_tensors(
@@ -317,6 +308,7 @@ def output_jt_dict(
                 if unbucketize_tensor_idx != -1
                 else None,
                 cw_features_to_permute_indices=features_to_permute_indices,
+                key_to_feature_permuted_coordinates=key_to_feature_permuted_coordinates,
             )
         )
     return jt_dict
@@ -375,6 +367,9 @@ class ShardedQuantEmbeddingCollection(
                 sharding.embedding_names_per_rank()
             )
         self._features_to_permute_indices: Dict[str, torch.Tensor] = {}
+        self._key_to_feature_permuted_coordinates_per_sharding: List[
+            Dict[str, torch.Tensor]
+        ] = [{} for i in range(len(self._embedding_names_per_rank_per_sharding))]
         if ShardingType.COLUMN_WISE.value in self._sharding_type_to_sharding:
             sharding = self._sharding_type_to_sharding[ShardingType.COLUMN_WISE.value]
             # CW partition must be same for all CW sharded parameters
@@ -386,6 +381,8 @@ class ShardedQuantEmbeddingCollection(
                     module.embedding_configs(), table_name_to_parameter_sharding
                 )
             )
+
+            self._generate_permute_coordinates_per_feature_per_sharding()
 
         self._device = device
         self._input_dists: List[nn.Module] = []
@@ -496,6 +493,46 @@ class ShardedQuantEmbeddingCollection(
                     ret[feature_name] = tensor
         return ret
 
+    def _generate_permute_coordinates_per_feature_per_sharding(
+        self,
+    ) -> None:
+        key_to_feature_permuted_coordinates_per_sharding: List[
+            Dict[str, List[Tuple[int, int]]]
+        ] = [{} for i in range(len(self._embedding_names_per_rank_per_sharding))]
+
+        for idx, embedding_names_per_rank in enumerate(
+            self._embedding_names_per_rank_per_sharding
+        ):
+            for rank, embedding_names in enumerate(embedding_names_per_rank):
+                for idx_in_rank, embedding_name in enumerate(embedding_names):
+                    if (
+                        embedding_name
+                        not in key_to_feature_permuted_coordinates_per_sharding[idx]
+                    ):
+                        key_to_feature_permuted_coordinates_per_sharding[idx][
+                            embedding_name
+                        ] = torch.jit.annotate(List[Tuple[int, int]], [])
+                    key_to_feature_permuted_coordinates_per_sharding[idx][
+                        embedding_name
+                    ].append((rank, idx_in_rank))
+
+            for (
+                key,
+                coordinates,
+            ) in key_to_feature_permuted_coordinates_per_sharding[idx].items():
+                permuted_coordinates: List[Tuple[int, int]] = coordinates
+
+                if key in self._features_to_permute_indices:
+                    permuted_coordinates = [(-1, -1)] * len(coordinates)
+                    permute_indices: List[int] = self._features_to_permute_indices[
+                        key
+                    ].tolist()
+                    for i, permute_idx in enumerate(permute_indices):
+                        permuted_coordinates[i] = coordinates[permute_idx]
+                self._key_to_feature_permuted_coordinates_per_sharding[idx][
+                    key
+                ] = torch.tensor(permuted_coordinates)
+
     def _create_input_dist(
         self,
         input_feature_names: List[str],
@@ -566,8 +603,10 @@ class ShardedQuantEmbeddingCollection(
                     self._features_order,
                     self._features_order_tensor,
                 )
-            features_by_sharding = features.split(
-                self._feature_splits,
+            features_by_sharding = (
+                [features]
+                if len(self._feature_splits) == 1
+                else features.split(self._feature_splits)
             )
 
             for i in range(len(self._input_dists)):
@@ -646,6 +685,7 @@ class ShardedQuantEmbeddingCollection(
             unbucketize_tensor_idxs_per_sharding=unbucketize_tensor_idxs_per_sharding,
             unbucketize_tensors=unbucketize_tensors,
             features_to_permute_indices=self._features_to_permute_indices,
+            key_to_feature_permuted_coordinates_per_sharding=self._key_to_feature_permuted_coordinates_per_sharding,
         )
 
     # pyre-ignore

@@ -266,7 +266,11 @@ class ShardedQuantEmbeddingBagCollection(
                     self._features_order,
                     self._features_order_tensor,
                 )
-            features_by_shards = features.split(self._feature_splits)
+            features_by_shards = (
+                [features]
+                if len(self._feature_splits) == 1
+                else features.split(self._feature_splits)
+            )
             return ListOfKJTList(
                 [
                     self._input_dists[i].forward(features_by_shards[i])

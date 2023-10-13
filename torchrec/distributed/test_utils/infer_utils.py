@@ -14,12 +14,13 @@ import torch
 import torchrec
 from torch import quantization as quant
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
-from torchrec.distributed.embedding_types import ModuleSharder
+from torchrec.distributed.embedding_types import ModuleSharder, ShardingType
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.quant_embedding import (
     QuantEmbeddingCollectionSharder,
     ShardedQuantEmbeddingCollection,
@@ -144,6 +145,18 @@ def model_input_to_forward_args(
         idscore_kjt._lengths,
         idscore_kjt._offsets,
     )
+
+
+def create_cw_min_partition_constraints(
+    table_min_partition_pairs: List[Tuple[str, int]]
+) -> Dict[str, ParameterConstraints]:
+    return {
+        name: ParameterConstraints(
+            sharding_types=[ShardingType.COLUMN_WISE.value],
+            min_partition=min_partition,
+        )
+        for name, min_partition in table_min_partition_pairs
+    }
 
 
 def quantize(
