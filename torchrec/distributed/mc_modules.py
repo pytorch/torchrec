@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, DefaultDict, Dict, Iterator, List, Optional, Type
 
 import torch
+import torch.distributed as dist
 
 from torch import nn
 from torch.distributed._shard.sharded_tensor import Shard
@@ -278,7 +279,6 @@ class ShardedManagedCollisionCollection(
                         new_range_size = table.local_metadata.shard_sizes[0]
 
                         mc_module = module._managed_collision_modules[table.name]
-                        # current_max_output_id = mc_module._max_output_id
 
                         # TODO:
                         #  1) need to make TBE accept global indices for now force to local indices
@@ -295,10 +295,37 @@ class ShardedManagedCollisionCollection(
                         )
                         zch_size = self._managed_collision_modules[table.name]._zch_size
 
+                        zch_size_by_rank = [
+                            torch.zeros(1, dtype=torch.int64, device=self._device)
+                            for _ in range(self._env.world_size)
+                        ]
+                        if self._env.world_size > 1:
+                            dist.all_gather(
+                                zch_size_by_rank,
+                                torch.tensor(
+                                    [zch_size], dtype=torch.int64, device=self._device
+                                ),
+                                group=self._env.process_group,
+                            )
+                        else:
+                            zch_size_by_rank[0] = torch.tensor(
+                                [zch_size], dtype=torch.int64, device=self._device
+                            )
+
+                        # Calculate the sum of all ZCH sizes from rank 0 to list
+                        # index. The last item is the sum of all elements in zch_size_by_rank
+                        zch_size_cumsum = torch.cumsum(
+                            torch.cat(zch_size_by_rank), dim=0
+                        ).tolist()
+
+                        zch_size_sum_before_this_rank = (
+                            zch_size_cumsum[self._env.rank] - zch_size
+                        )
+
                         self._mc_module_name_shard_metadata[table.name] = (
-                            zch_size * self._env.rank,  # new_min_output_id,
-                            zch_size,  # new_range_size,
-                            zch_size * (self._env.world_size),  # current_max_output_id,
+                            zch_size_sum_before_this_rank,
+                            zch_size,
+                            zch_size_cumsum[-1],
                         )
                         for feature in table.feature_names:
                             self._feature_to_offset[feature] = new_min_output_id
