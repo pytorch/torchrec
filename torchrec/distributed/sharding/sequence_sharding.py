@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import torch
-import torch.distributed as dist  # noqa
 from torchrec.distributed.embedding_sharding import EmbeddingShardingContext
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor

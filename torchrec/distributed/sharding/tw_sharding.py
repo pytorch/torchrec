@@ -39,7 +39,6 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.types import (
     Awaitable,
     CommOp,
-    NoWait,
     NullShardingContext,
     QuantizedCommCodecs,
     ShardedTensorMetadata,

@@ -63,7 +63,6 @@ from torch.distributed._shard.sharding_spec import (  # noqa
     ShardingSpec,
     ShardMetadata,
 )
-from torch.nn.modules.module import _addindent
 from torchrec.streamable import Multistreamable
 
 

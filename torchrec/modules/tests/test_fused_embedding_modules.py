@@ -17,7 +17,6 @@ import torch.fx
 import torchrec
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
 from hypothesis import given, settings
-from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,

@@ -7,7 +7,6 @@
 
 import argparse
 import logging
-import os
 
 import grpc
 import torch

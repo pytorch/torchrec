@@ -38,7 +38,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual  # noqa
+    pass
 except ImportError:
     pass
 
