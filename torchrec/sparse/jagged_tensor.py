@@ -1682,7 +1682,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets.record_stream(stream)
 
     def to(
-        self, device: torch.device, non_blocking: bool = False
+        self,
+        device: torch.device,
+        non_blocking: bool = False,
+        dtype: Optional[torch.dtype] = None,
     ) -> "KeyedJaggedTensor":
         weights = self._weights
         lengths = self._lengths
@@ -1697,12 +1700,18 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         index_per_key = self._index_per_key
         jt_dict = self._jt_dict
 
+        if weights is not None:
+            if dtype is not None:
+                weights = weights.to(
+                    dtype=dtype, device=device, non_blocking=non_blocking
+                )
+            else:
+                weights = weights.to(device=device, non_blocking=non_blocking)
+
         return KeyedJaggedTensor(
             keys=self._keys,
             values=self._values.to(device, non_blocking=non_blocking),
-            weights=weights.to(device, non_blocking=non_blocking)
-            if weights is not None
-            else None,
+            weights=weights,
             lengths=lengths.to(device, non_blocking=non_blocking)
             if lengths is not None
             else None,
