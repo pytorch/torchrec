@@ -55,7 +55,9 @@ class SparseArch(nn.Module):
 
         mc_modules = {}
         mc_modules["table_0"] = MCHManagedCollisionModule(
-            zch_size=16 - mch_size if mch_size else 16,
+            zch_size=tables[0].num_embeddings - mch_size
+            if mch_size
+            else tables[0].num_embeddings,
             mch_size=mch_size,
             mch_hash_func=mch_hash_func if mch_size else None,
             input_hash_size=4000,
@@ -65,7 +67,9 @@ class SparseArch(nn.Module):
         )
 
         mc_modules["table_1"] = MCHManagedCollisionModule(
-            zch_size=32 - mch_size if mch_size else 32,
+            zch_size=tables[1].num_embeddings - mch_size
+            if mch_size
+            else tables[1].num_embeddings,
             mch_size=mch_size,
             mch_hash_func=mch_hash_func if mch_size else None,
             device=device,
@@ -104,6 +108,62 @@ class SparseArch(nn.Module):
 
 
 def _test_sharding(  # noqa C901
+    tables: List[EmbeddingBagConfig],
+    rank: int,
+    world_size: int,
+    sharder: ModuleSharder[nn.Module],
+    backend: str,
+    local_size: Optional[int] = None,
+    mch_size: Optional[int] = None,
+) -> None:
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        return_remapped: bool = True
+        sparse_arch = SparseArch(
+            tables,
+            torch.device("meta"),
+            return_remapped=return_remapped,
+            mch_size=mch_size,
+        )
+
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            [
+                sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
+                    "table_0"
+                ].weight,
+                sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
+                    "table_1"
+                ].weight,
+            ],
+            {"lr": 0.01},
+        )
+        module_sharding_plan = construct_module_sharding_plan(
+            sparse_arch._mc_ebc,
+            per_param_sharding={"table_0": row_wise(), "table_1": row_wise()},
+            local_size=local_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+            sharder=sharder,
+        )
+
+        sharded_sparse_arch = _shard_modules(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"_mc_ebc": module_sharding_plan}),
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[sharder],
+            device=ctx.device,
+        )
+
+        assert isinstance(
+            sharded_sparse_arch._mc_ebc, ShardedManagedCollisionEmbeddingBagCollection
+        )
+        assert isinstance(
+            sharded_sparse_arch._mc_ebc._managed_collision_collection,
+            ShardedManagedCollisionCollection,
+        )
+
+
+def _test_sharding_and_remapping(  # noqa C901
     tables: List[EmbeddingBagConfig],
     rank: int,
     world_size: int,
@@ -187,6 +247,68 @@ def _test_sharding(  # noqa C901
 
 @skip_if_asan_class
 class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_uneven_sharding(self) -> None:
+        WORLD_SIZE = 2
+
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name="table_0",
+                feature_names=["feature_0"],
+                embedding_dim=8,
+                num_embeddings=17,
+            ),
+            EmbeddingBagConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=8,
+                num_embeddings=33,
+            ),
+        ]
+
+        self._run_multi_process_test(
+            callable=_test_sharding,
+            world_size=WORLD_SIZE,
+            tables=embedding_bag_config,
+            sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
+            backend="nccl",
+        )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_even_sharding(self) -> None:
+        WORLD_SIZE = 2
+
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name="table_0",
+                feature_names=["feature_0"],
+                embedding_dim=8,
+                num_embeddings=16,
+            ),
+            EmbeddingBagConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=8,
+                num_embeddings=32,
+            ),
+        ]
+
+        self._run_multi_process_test(
+            callable=_test_sharding,
+            world_size=WORLD_SIZE,
+            tables=embedding_bag_config,
+            sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
+            backend="nccl",
+        )
+
     # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
@@ -282,7 +404,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         )
 
         self._run_multi_process_test(
-            callable=_test_sharding,
+            callable=_test_sharding_and_remapping,
             world_size=WORLD_SIZE,
             tables=embedding_bag_config,
             kjt_input_per_rank=kjt_input_per_rank,
@@ -414,7 +536,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         )
 
         self._run_multi_process_test(
-            callable=_test_sharding,
+            callable=_test_sharding_and_remapping,
             world_size=WORLD_SIZE,
             tables=embedding_bag_config,
             mch_size=8,
