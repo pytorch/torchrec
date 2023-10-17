@@ -25,7 +25,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
-    EmbeddingBagSharder,
     ShardedEmbeddingBagCollection,
 )
 from torchrec.distributed.fused_embeddingbag import ShardedFusedEmbeddingBagCollection

@@ -5,17 +5,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import unittest
-from typing import Dict, List, Type
+from typing import Dict, Type
 
 import torch
-import torch.distributed as dist
 from torchrec.metrics.mse import compute_mse, compute_rmse, MSEMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
-    rec_metric_value_test_helper,
     rec_metric_value_test_launcher,
     TestMetric,
 )

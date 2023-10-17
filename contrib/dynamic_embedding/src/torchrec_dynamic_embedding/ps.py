@@ -9,9 +9,7 @@ import os
 from typing import Callable, Dict, List, Tuple, Union
 
 import torch
-import torch.nn as nn
 from torch.distributed._shard.sharded_tensor import ShardedTensor
-from torchrec.distributed.model_parallel import DistributedModelParallel as DMP
 from torchrec.distributed.types import ParameterSharding
 
 from .tensor_list import TensorList
