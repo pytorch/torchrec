@@ -158,7 +158,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 else False
             )
             # TODO: remove after deprecating fused_params in sharder
-            if prefetch_pipeline is False:
+            if not prefetch_pipeline:
                 prefetch_pipeline = (
                     sharder.fused_params.get("prefetch_pipeline", False)
                     if hasattr(sharder, "fused_params") and sharder.fused_params
