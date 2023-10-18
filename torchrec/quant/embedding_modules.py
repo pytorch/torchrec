@@ -27,7 +27,6 @@ from torchrec.modules.embedding_configs import (
     dtype_to_data_type,
     EmbeddingBagConfig,
     EmbeddingConfig,
-    EmbeddingTableConfig,
     pooling_type_to_pooling_mode,
     PoolingType,
     QuantConfig,
@@ -50,7 +49,7 @@ except OSError:
 
 # OSS
 try:
-    import fbgemm_gpu  # @manual  # noqa
+    pass
 except ImportError:
     pass
 

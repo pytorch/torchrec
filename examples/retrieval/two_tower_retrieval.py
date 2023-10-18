@@ -25,9 +25,6 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 # OSS import
 try:
-    # pyre-ignore[21]
-    # @manual=//torchrec/github/examples/retrieval/data:dataloader
-    from data.dataloader import get_dataloader
 
     # pyre-ignore[21]
     # @manual=//torchrec/github/examples/retrieval:knn_index

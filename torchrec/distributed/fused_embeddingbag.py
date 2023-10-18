@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, Iterator, List, Optional, Type
+from typing import Dict, List, Optional, Type
 
 import torch
 from torch import nn
@@ -23,7 +23,6 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
-from torchrec.distributed.utils import append_prefix
 from torchrec.modules.fused_embedding_modules import (
     convert_optimizer_type_and_kwargs,
     FusedEmbeddingBagCollection,
