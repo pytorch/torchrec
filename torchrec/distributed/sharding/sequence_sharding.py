@@ -43,13 +43,10 @@ class SequenceShardingContext(EmbeddingShardingContext):
         if self.features_before_input_dist is not None:
             self.features_before_input_dist.record_stream(stream)
         if self.sparse_features_recat is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.sparse_features_recat.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.unbucketize_permute_tensor.record_stream(stream)
         if self.lengths_after_input_dist is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.lengths_after_input_dist.record_stream(stream)
 
 
@@ -74,5 +71,4 @@ class InferSequenceShardingContext(Multistreamable):
         if self.features_before_input_dist is not None:
             self.features_before_input_dist.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             self.unbucketize_permute_tensor.record_stream(stream)
