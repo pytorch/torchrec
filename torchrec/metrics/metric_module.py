@@ -40,6 +40,7 @@ from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall_session import RecallSessionMetric
+from torchrec.metrics.segmented_ne import SegmentedNEMetric
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.metrics.tower_qps import TowerQPSMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
@@ -49,6 +50,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.NE: NEMetric,
+    RecMetricEnum.SEGMENTED_NE: SegmentedNEMetric,
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
