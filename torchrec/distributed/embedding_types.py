@@ -198,6 +198,12 @@ class GroupedEmbeddingConfig:
             dim_sum += table.num_features() * table.local_cols
         return dim_sum
 
+    def table_names(self) -> List[str]:
+        table_names = []
+        for table in self.embedding_tables:
+            table_names.append(table.name)
+        return table_names
+
     def feature_names(self) -> List[str]:
         feature_names = []
         for table in self.embedding_tables:
