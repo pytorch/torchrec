@@ -289,7 +289,6 @@ class EmbeddingCollectionContext(Multistreamable):
         for f in self.input_features:
             f.record_stream(stream)
         for r in self.reverse_indices:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             r.record_stream(stream)
 
 

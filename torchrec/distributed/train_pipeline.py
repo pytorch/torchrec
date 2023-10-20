@@ -468,7 +468,6 @@ class PipelinedForward(BaseForward):
             assert isinstance(
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             data.record_stream(cur_stream)
 
             ctx = self._context.module_contexts[self._name]
