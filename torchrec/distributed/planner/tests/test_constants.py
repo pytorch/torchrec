@@ -57,7 +57,6 @@ class TestKernelBWLookup(unittest.TestCase):
             )
             for caching_ratio in caching_ratios
         ]
-        print(f"henry uvm_caching_bw {uvm_caching_bw}")
         expected_uvm_caching_bw: List[float] = [
             963146416.128,
             963146416.128,

@@ -524,19 +524,15 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
         if weights is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             weights.record_stream(stream)
         if lengths is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             lengths.record_stream(stream)
         if offsets is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             offsets.record_stream(stream)
 
     def __str__(self) -> str:
@@ -1666,19 +1662,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
         if weights is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             weights.record_stream(stream)
         if lengths is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             lengths.record_stream(stream)
         if offsets is not None:
-            # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
             offsets.record_stream(stream)
 
     def to(
@@ -2096,7 +2088,6 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @torch.jit.unused
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        # pyre-fixme[6]: For 1st param expected `Stream` but got `Stream`.
         self._values.record_stream(stream)
 
     def to(self, device: torch.device, non_blocking: bool = False) -> "KeyedTensor":
