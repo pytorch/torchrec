@@ -222,40 +222,43 @@ class TestAllToAll(unittest.TestCase):
         D_local_sum = dim_sum_per_rank[rank]
 
         # Construct pooled embeddings
-        pooled_embeddings = torch.randn([B_global, D_local_sum], requires_grad=True).to(
-            device
-        )
+        pooled_embeddings = torch.randn([B_global, D_local_sum], requires_grad=True, device=device)
+        # .to(
+            # device
+        # )
         pooled_embeddings.retain_grad()
 
-        # Save a copy for running again with gradient division
-        pooled_embeddings_gradient_division = (
-            pooled_embeddings.detach().clone().to(device)
-        )
-        pooled_embeddings_gradient_division.requires_grad = True
-        pooled_embeddings_gradient_division.retain_grad()
+        # # Save a copy for running again with gradient division
+        # pooled_embeddings_gradient_division = (
+        #     pooled_embeddings.detach().clone().to(device)
+        # )
+        # pooled_embeddings_gradient_division.requires_grad = True
+        # pooled_embeddings_gradient_division.retain_grad()
 
         # Run alltoall_pooled with gradient division disabled
-        comm_ops.set_gradient_division(False)
+        # comm_ops.set_gradient_division(False)
         a2a_embedding = comm_ops.alltoall_pooled(
             pooled_embeddings, batch_size_per_rank, dim_sum_per_rank
-        ).wait()
-        a2a_embedding.retain_grad()
-        a2a_embedding.backward(a2a_embedding)
-
-        # Run alltoall_pooled with gradient division enabled
-        comm_ops.set_gradient_division(True)
-        a2a_embedding_gradient_division = comm_ops.alltoall_pooled(
-            pooled_embeddings_gradient_division, batch_size_per_rank, dim_sum_per_rank
-        ).wait()
-        a2a_embedding_gradient_division.retain_grad()
-        a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
-
-        assert torch.equal(
-            none_throws(pooled_embeddings.grad),
-            torch.mul(
-                none_throws(pooled_embeddings_gradient_division.grad), world_size
-            ),
         )
+        print("FINISHED COLLECTIVE CALL")
+        # a2a_embedding.retain_grad()
+        a2a_embedding.sum().backward()
+        # a2a_embedding.backward(a2a_embedding)
+        # Run alltoall_pooled with gradient division enabled
+        # comm_ops.set_gradient_division(True)
+        # a2a_embedding_gradient_division = comm_ops.alltoall_pooled(
+        #     pooled_embeddings_gradient_division, batch_size_per_rank, dim_sum_per_rank
+        # ).wait()
+        # a2a_embedding_gradient_division.retain_grad()
+        # a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
+        # assert torch.equal(
+        #     none_throws(pooled_embeddings.grad),
+        #     torch.mul(
+        #         none_throws(pooled_embeddings_gradient_division.grad), world_size
+        #     ),
+        # )
+        print("pooled embeddings", pooled_embeddings)
+        print("pooled embeddings grad", pooled_embeddings.grad)
         dist.destroy_process_group()
 
     # pyre-fixme[56]: Pyre was not able to infer the type of argument

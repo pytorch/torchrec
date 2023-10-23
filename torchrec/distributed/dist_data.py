@@ -623,7 +623,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         self,
         local_embs: torch.Tensor,
         batch_size_per_rank: Optional[List[int]] = None,
-    ) -> PooledEmbeddingsAwaitable:
+    ) -> torch.Tensor:
         """
         Performs AlltoAll pooled operation on pooled embeddings tensor.
 
@@ -652,13 +652,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
             group=self._pg,
             codecs=self._codecs,
         )
-
-        pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable,
-        )
-        pooled_embedding_awaitable.callbacks.extend(self._callbacks)
-
-        return pooled_embedding_awaitable
+        return tensor_awaitable
 
     @property
     def callbacks(self) -> List[Callable[[torch.Tensor], torch.Tensor]]:

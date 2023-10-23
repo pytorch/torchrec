@@ -305,7 +305,7 @@ def alltoall_pooled(
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Tensor:
     """
     Performs AlltoAll operation for a single pooled embedding tensor. Each process
     splits the input pooled embeddings tensor based on the world size, and then scatters
@@ -340,9 +340,8 @@ def alltoall_pooled(
         group = dist.distributed_c10d._get_default_group()
 
     if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_pooled_embs_tensor)
+        return a2a_pooled_embs_tensor
 
-    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     a2ai = All2AllPooledInfo(
         batch_size_per_rank=batch_size_per_rank,
         dim_sum_per_rank=dim_sum_per_rank,
@@ -350,8 +349,39 @@ def alltoall_pooled(
         cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
         codecs=codecs,
     )
-    All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
-    return myreq
+
+    input_embeddings = a2a_pooled_embs_tensor
+    my_rank = dist.get_rank(group)
+    (B_global, D_local_sum) = input_embeddings.shape
+
+    dim_sum_per_rank = a2ai.dim_sum_per_rank
+    batch_size_per_rank = a2ai.batch_size_per_rank
+    B_local = batch_size_per_rank[my_rank]
+
+    assert B_global == sum(batch_size_per_rank)
+
+    sharded_input_embeddings = input_embeddings.view(-1)
+    output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
+
+    from torchrec.distributed import propagating_async_collective_tensor
+
+    sharded_output_embeddings = propagating_async_collective_tensor.all_to_all_single(
+        sharded_input_embeddings,
+        output_split_sizes=output_split_sizes,
+        input_split_sizes=input_split_sizes,
+        group=group,
+    )
+    print("sharded_output_embeddings", sharded_output_embeddings)
+    # Hack, turn it to PropAsync
+    sharded_output_embeddings = sharded_output_embeddings.view(-1)
+    print("sharded_output_embeddings after view", sharded_output_embeddings)
+
+    outputs_by_rank = sharded_output_embeddings.split(
+        [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    )
+    result = torch.cat([output.view(B_local, -1) for output in outputs_by_rank], dim=1)
+    return result
 
 
 def variable_batch_alltoall_pooled(
@@ -732,7 +762,7 @@ class All2All_Pooled_Req(Function):
 
         sharded_input_embeddings = input_embeddings.view(-1)
 
-        if a2ai.codecs is not None:
+        if False and a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
             qcomm_ctx = codecs.forward.create_context()
             sharded_input_embeddings = codecs.forward.encode(
@@ -766,15 +796,34 @@ class All2All_Pooled_Req(Function):
             device=sharded_input_embeddings.device,
         )
 
-        with record_function("## alltoall_fwd_single ##"):
-            req = dist.all_to_all_single(
-                output=sharded_output_embeddings,
+        from torchrec.distributed import propagating_async_collective_tensor
+
+        sharded_output_embeddings = (
+            propagating_async_collective_tensor.all_to_all_single(
                 input=sharded_input_embeddings,
                 output_split_sizes=output_split_sizes,
                 input_split_sizes=input_split_sizes,
                 group=pg,
-                async_op=True,
             )
+        )
+
+        outputs_by_rank = sharded_output_embeddings.split(
+            [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+        )
+        result = torch.cat(
+            [output.view(B_local, -1) for output in outputs_by_rank], dim=1
+        )
+        return result
+
+        # with record_function("## alltoall_fwd_single ##"):
+        #     req = dist.all_to_all_single(
+        #         output=sharded_output_embeddings,
+        #         input=sharded_input_embeddings,
+        #         output_split_sizes=output_split_sizes,
+        #         input_split_sizes=input_split_sizes,
+        #         group=pg,
+        #         async_op=True,
+        #     )
 
         myreq.req = req
         myreq.tensor = sharded_output_embeddings
