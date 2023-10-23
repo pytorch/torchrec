@@ -97,6 +97,7 @@ class SparseArch(nn.Module):
         """
 
         sparse_features: KeyedTensor = self.embedding_bag_collection(features)
+        print("sparse_features out", sparse_features.values().shape)
 
         sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
         sparse_values: List[torch.Tensor] = []
@@ -208,10 +209,12 @@ class InteractionArch(nn.Module):
 
         # dense/sparse + sparse/sparse interaction
         # size B X (F + F choose 2)
-        interactions = torch.bmm(
-            combined_values, torch.transpose(combined_values, 1, 2)
-        )
-        interactions_flat = interactions[:, self.triu_indices[0], self.triu_indices[1]]
+        interactions = torch.bmm(combined_values, combined_values.transpose(1, 2))
+        print("interactions before manifesting", interactions)
+        # TODO this manifest should happen automatically if interacting with non async tensor
+        interactions_flat = interactions.manifest()[
+            :, self.triu_indices[0], self.triu_indices[1]
+        ]
 
         return torch.cat((dense_features, interactions_flat), dim=1)
 

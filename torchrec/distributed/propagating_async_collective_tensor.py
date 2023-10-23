@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #
@@ -171,6 +172,34 @@ class PropagatingAsyncCollectiveTensor(torch.Tensor):
             fake_view,
         )
 
+    # pyre-ignore
+    def narrow(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
+        def do() -> torch.Tensor:
+            # print("doing custom view")
+            m = self.manifest()
+            did = m.narrow(*args, **kwargs)
+            return did
+
+        fake = self.fake_elem.narrow(*args, **kwargs)
+        return PropagatingAsyncCollectiveTensor(
+            do,
+            fake,
+        )
+
+    # pyre-ignore
+    def transpose(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
+        def do() -> torch.Tensor:
+            # print("doing custom view")
+            m = self.manifest()
+            did = m.transpose(*args, **kwargs)
+            return did
+
+        fake = self.fake_elem.transpose(*args, **kwargs)
+        return PropagatingAsyncCollectiveTensor(
+            do,
+            fake,
+        )
+
     def backward(self, *args, **kwargs) -> None:
         # return
         # print("in custom backward", self.manifest())
@@ -193,7 +222,9 @@ def all_to_all_single(
     group: RANK_TYPES,
     tag: str = "",
 ) -> PropagatingAsyncCollectiveTensor:
-    return _maybe_wrap_tensor(_AlltoAllSingle.apply(group, output_split_sizes, input_split_sizes, self))
+    return _maybe_wrap_tensor(
+        _AlltoAllSingle.apply(group, output_split_sizes, input_split_sizes, self)
+    )
 
 
 def _maybe_wrap_tensor(t: torch.Tensor) -> torch.Tensor:

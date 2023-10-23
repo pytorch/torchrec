@@ -19,7 +19,11 @@ from hypothesis import assume, given, settings, Verbosity
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
+from torch.utils.data import IterableDataset
 from torchrec import distributed as trec_dist
+from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
+from torchrec.datasets.random import RandomRecDataset
+from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
@@ -47,8 +51,12 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
+from torchrec.models.dlrm import DLRM, DLRMTrain
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.optim.keyed import KeyedOptimizerWrapper
+from torchrec.optim.optimizers import in_backward_optimizer_filter
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import (
@@ -396,4 +404,141 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             constraints=constraints,
             is_data_parallel=(sharding_type == ShardingType.DATA_PARALLEL.value),
             use_apply_optimizer_in_backward=use_apply_optimizer_in_backward,
+        )
+
+
+####
+
+
+def _get_random_dataset(
+    num_embeddings: int,
+    batch_size: int = 32,
+) -> IterableDataset:
+    return RandomRecDataset(
+        keys=DEFAULT_CAT_NAMES,
+        batch_size=batch_size,
+        hash_size=num_embeddings,
+        ids_per_feature=1,
+        num_dense=len(DEFAULT_INT_NAMES),
+    )
+
+
+def train_dlrm(rank: int, world_size: int, backend: str, local_size: int) -> None:
+    num_embeddings: int = 1024**2
+    embedding_dim: int = 128
+    dense_arch_layer_sizes = None
+    over_arch_layer_sizes = None
+    learning_rate: float = 0.1
+    num_iterations: int = 1000
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        """
+        Constructs and trains a DLRM model (using random dummy data). Each script is run on each process (rank) in SPMD fashion.
+        The embedding layers will be sharded across available ranks
+
+        qcomm_forward_precision: Compression used in forwards pass. FP16 is the recommended usage. INT8 and FP8 are in development, but feel free to try them out.
+        qcomm_backward_precision: Compression used in backwards pass. We recommend using BF16 to ensure training stability.
+
+        The effects of quantized comms will be most apparent in large training jobs across multiple nodes where inter host communication is expensive.
+        """
+        if dense_arch_layer_sizes is None:
+            dense_arch_layer_sizes = [64, embedding_dim]
+        if over_arch_layer_sizes is None:
+            over_arch_layer_sizes = [64, 1]
+
+        # Init process_group , device, rank, backend
+        rank = ctx.rank
+        device = ctx.device
+        # Construct DLRM module
+        eb_configs = [
+            EmbeddingBagConfig(
+                name=f"t_{feature_name}",
+                embedding_dim=embedding_dim,
+                num_embeddings=num_embeddings,
+                feature_names=[feature_name],
+            )
+            for feature_idx, feature_name in enumerate(DEFAULT_CAT_NAMES)
+        ]
+        dlrm_model = DLRM(
+            embedding_bag_collection=EmbeddingBagCollection(
+                tables=eb_configs, device=torch.device("meta")
+            ),
+            dense_in_features=len(DEFAULT_INT_NAMES),
+            dense_arch_layer_sizes=dense_arch_layer_sizes,
+            over_arch_layer_sizes=over_arch_layer_sizes,
+            dense_device=device,
+        )
+        train_model = DLRMTrain(dlrm_model)
+
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            train_model.model.sparse_arch.parameters(),
+            {"lr": learning_rate},
+        )
+        # qcomm_codecs_registry = (
+        #     get_qcomm_codecs_registry(
+        #         qcomms_config=QCommsConfig(
+        #             # pyre-ignore
+        #             forward_precision=qcomm_forward_precision,
+        #             # pyre-ignore
+        #             backward_precision=qcomm_backward_precision,
+        #         )
+        #     )
+        #     if backend == "nccl"
+        #     else None
+        # )
+        sharder = EmbeddingBagCollectionSharder()
+        # qcomm_codecs_registry=qcomm_codecs_registry)
+
+        model = DistributedModelParallel(
+            module=train_model,
+            device=ctx.device,
+            # pyre-ignore
+            sharders=[sharder],
+        )
+
+        non_fused_optimizer = KeyedOptimizerWrapper(
+            dict(in_backward_optimizer_filter(model.named_parameters())),
+            lambda params: torch.optim.Adagrad(params, lr=learning_rate),
+        )
+        # # Overlap comm/compute/device transfer during training through train_pipeline
+        # train_pipeline = TrainPipelineSparseDist(
+        #     model,
+        #     non_fused_optimizer,
+        #     device,
+        # )
+
+        # train model
+        train_iterator = iter(
+            _get_random_dataset(
+                num_embeddings=num_embeddings,
+            )
+        )
+
+        device = ctx.device
+        print(model(next(train_iterator).to(device))[0])  # warmup, input dists
+        # train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
+        # print(model(next(train_iterator).to(device)))
+        # print(model(next(train_iterator).to(device)))
+        # print(model(next(train_iterator).to(device)))
+        # # for _ in tqdm(range(int(num_iterations)), mininterval=5.0):
+        #     train_pipeline.progress(train_iterator)
+
+
+@skip_if_asan_class
+class DLRMTest(MultiProcessTestBase):
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    def test_dlrm(
+        self,
+    ) -> None:
+
+        WORLD_SIZE = 2
+        self._run_multi_process_test(
+            callable=train_dlrm,
+            world_size=WORLD_SIZE,
+            local_size=WORLD_SIZE,
+            backend="nccl",
         )

@@ -222,9 +222,11 @@ class TestAllToAll(unittest.TestCase):
         D_local_sum = dim_sum_per_rank[rank]
 
         # Construct pooled embeddings
-        pooled_embeddings = torch.randn([B_global, D_local_sum], requires_grad=True, device=device)
+        pooled_embeddings = torch.randn(
+            [B_global, D_local_sum], requires_grad=True, device=device
+        )
         # .to(
-            # device
+        # device
         # )
         pooled_embeddings.retain_grad()
 

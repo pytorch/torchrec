@@ -671,25 +671,25 @@ class ShardedEmbeddingBagCollection(
         output: List[torch.Tensor],
     ) -> KeyedTensor:
         return construct_output_kt(
-                embeddings=[
-                dist(embeddings, sharding_ctx)
+            embeddings=[
+                dist(embeddings, sharding_ctx).manifest()
                 for dist, sharding_ctx, embeddings in zip(
                     self._output_dists,
                     ctx.sharding_contexts,
                     output,
                 )
             ],
-                embedding_names=self._embedding_names,
-                embedding_dims=self._embedding_dims,
-            )
-
+            embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
+        )
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> KeyedTensor:
 
-        embeddings=[
+        embeddings = [
             dist(lookup(features), sharding_ctx)
+            #.manifest()
             for lookup, dist, sharding_ctx, features in zip(
                 self._lookups,
                 self._output_dists,
@@ -698,10 +698,10 @@ class ShardedEmbeddingBagCollection(
             )
         ]
         return construct_output_kt(
-                embeddings=embeddings,
-                embedding_names=self._embedding_names,
-                embedding_dims=self._embedding_dims,
-            )
+            embeddings=embeddings,
+            embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
+        )
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
