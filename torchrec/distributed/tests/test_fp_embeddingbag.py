@@ -189,13 +189,14 @@ def _test_sharding_from_meta(  # noqa C901
     sharder: ModuleSharder[nn.Module],
     backend: str,
     local_size: Optional[int] = None,
+    use_fp_collection: bool = False,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         sparse_arch, sharded_sparse_arch = get_unsharded_and_sharded_module(
             tables,
             sharder,
             use_dmp=True,
-            use_fp_collection=False,
+            use_fp_collection=use_fp_collection,
             init_device=torch.device("meta"),
             ctx=ctx,
         )
@@ -204,6 +205,7 @@ def _test_sharding_from_meta(  # noqa C901
         for key, param in state_dict.items():
             if "_feature_processors" not in key:
                 continue
+            assert not param.is_meta, f"Parameter {key} is still meta after sharding"
             torch.testing.assert_close(param, torch.ones_like(param))
 
 
@@ -333,7 +335,10 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             use_fp_collection=use_fp_collection,
         )
 
-    def test_sharding_fp_ebc_from_meta(self) -> None:
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    # pyre-ignore
+    @given(use_fp_collection=st.booleans())
+    def test_sharding_fp_ebc_from_meta(self, use_fp_collection: bool) -> None:
         embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
         self._run_multi_process_test(
             callable=_test_sharding_from_meta,
@@ -343,4 +348,5 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             backend="nccl"
             if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
             else "gloo",
+            use_fp_collection=use_fp_collection,
         )
