@@ -70,11 +70,11 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.FP16
     elif dtype == torch.bfloat16:
         return DataType.BF16
-    elif dtype in {torch.int, torch.int32}:
+    elif dtype in [torch.int, torch.int32]:
         return DataType.INT32
-    elif dtype in {torch.long, torch.int64}:
+    elif dtype in [torch.long, torch.int64]:
         return DataType.INT64
-    elif dtype in {torch.quint8, torch.qint8, torch.int8}:
+    elif dtype in [torch.quint8, torch.qint8, torch.int8]:
         return DataType.INT8
     elif dtype == torch.uint8:
         return DataType.UINT8
