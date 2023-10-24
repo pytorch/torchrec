@@ -282,18 +282,18 @@ def construct_output_kt(
 class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
-        embeddings: List[torch.Tensor],
+        awaitables: List[Awaitable[torch.Tensor]],
         embedding_dims: List[int],
         embedding_names: List[str],
     ) -> None:
         super().__init__()
-        self._awaitables = embeddings
+        self._awaitables = awaitables
         self._embedding_dims = embedding_dims
         self._embedding_names = embedding_names
 
     def _wait_impl(self) -> KeyedTensor:
         return construct_output_kt(
-            embeddings=self.embeddings,
+            embeddings=[w.wait() for w in self._awaitables],
             embedding_names=self._embedding_names,
             embedding_dims=self._embedding_dims,
         )
@@ -672,7 +672,8 @@ class ShardedEmbeddingBagCollection(
     ) -> KeyedTensor:
         return construct_output_kt(
             embeddings=[
-                dist(embeddings, sharding_ctx).manifest()
+                dist(embeddings, sharding_ctx)
+                # .manifest()
                 for dist, sharding_ctx, embeddings in zip(
                     self._output_dists,
                     ctx.sharding_contexts,
@@ -702,6 +703,23 @@ class ShardedEmbeddingBagCollection(
             embedding_names=self._embedding_names,
             embedding_dims=self._embedding_dims,
         )
+
+    # def compute_and_output_dist(
+    #     self, ctx: EmbeddingBagCollectionContext, input: KJTList
+    # ) -> LazyAwaitable[KeyedTensor]:
+    #     return EmbeddingBagCollectionAwaitable(
+    #         awaitables=[
+    #             dist(lookup(features), sharding_ctx)
+    #             for lookup, dist, sharding_ctx, features in zip(
+    #                 self._lookups,
+    #                 self._output_dists,
+    #                 ctx.sharding_contexts,
+    #                 input,
+    #             )
+    #         ],
+    #         embedding_dims=self._embedding_dims,
+    #         embedding_names=self._embedding_names,
+    #     )
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

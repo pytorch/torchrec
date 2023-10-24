@@ -13,7 +13,9 @@ from torch._subclasses.fake_tensor import FakeTensor
 from torch.autograd import Function
 from torch.distributed._functional_collectives import _expand_group, wait_tensor
 from torch.distributed._functional_collectives_impl import _register_tensor_wrapper
-from torch.utils._pytree import tree_map_only
+from torch.utils._pytree import tree_leaves, tree_map_only
+from torch.autograd.profiler import record_function
+
 
 
 class PropagatingAsyncCollectiveTensor(torch.Tensor):
@@ -34,7 +36,10 @@ class PropagatingAsyncCollectiveTensor(torch.Tensor):
 
     @staticmethod
     def __new__(
-        cls, manifest_elem: Callable[[], torch.Tensor], fake_elem: FakeTensor
+        cls,
+        manifest_elem: Callable[[], torch.Tensor],
+        fake_elem: torch.Tensor,
+        device: torch.device,
     ) -> "PropagatingAsyncCollectiveTensor":
         r = torch.Tensor._make_wrapper_subclass(  # type: ignore[attr-defined]
             cls,
@@ -43,7 +48,7 @@ class PropagatingAsyncCollectiveTensor(torch.Tensor):
             storage_offset=fake_elem.storage_offset(),
             dtype=fake_elem.dtype,
             layout=fake_elem.layout,
-            device=fake_elem.device,
+            device=device,
             requires_grad=True,
         )
 
@@ -96,50 +101,75 @@ class PropagatingAsyncCollectiveTensor(torch.Tensor):
             return e.manifest()
 
         def fake_unwrap(
-            e: PropagatingAsyncCollectiveTensor,
+            e: torch.Tensor,
+            # PropagatingAsyncCollectiveTensor,
         ) -> Union[FakeTensor, torch.Tensor]:
-            return e.fake_elem
+            if isinstance(e, PropagatingAsyncCollectiveTensor):
+                return e.fake_elem
+            return e.to("meta")
+            # return e.fake_elem
 
         # TODO have some logic that can let us delay, or manifest immediately if a non-Async tensor is participating
         # we don't wrap the result as it doesn't need to be waited on.
         # pyre-ignore
         def do(func, args, kwargs):
             # print("unwrapping in ", func, args, kwargs)
-            _args = tree_map_only(PropagatingAsyncCollectiveTensor, unwrap, args)
-            _kwargs = tree_map_only(PropagatingAsyncCollectiveTensor, unwrap, kwargs)
-            ret = func(*_args, **_kwargs)
-            # print("returning for func", func, ret)
-            return ret
+            with record_function(f"## Manifesting {func}"):
+                _args = tree_map_only(PropagatingAsyncCollectiveTensor, unwrap, args)
+                _kwargs = tree_map_only(PropagatingAsyncCollectiveTensor, unwrap, kwargs)
+                ret = func(*_args, **_kwargs)
+                # print("returning for func", func, ret)
+                return ret
 
-        fake_unwrapped_args = tree_map_only(
-            PropagatingAsyncCollectiveTensor, fake_unwrap, args
-        )
-        fake_unwrapped_kwargs = tree_map_only(
-            PropagatingAsyncCollectiveTensor, fake_unwrap, kwargs
-        )
+        device = None
+        leaves = tree_leaves(args)
+        for leaf in leaves:
+            if device is not None:
+                continue
+            if hasattr(leaf, "device"):
+                # print("leaf with device", leaf, )
+                device = getattr(leaf, "device")
+        # print("YING USING DEVICE", device)
+
+        with record_function(f"## Fake Tensor ops {func}"):
+            fake_unwrapped_args = tree_map_only(
+                torch.Tensor, fake_unwrap, args
+            )
+            fake_unwrapped_kwargs = tree_map_only(
+                torch.Tensor, fake_unwrap, kwargs
+            )
+        # print("calling fake mode func", func, "fake unwrapped args ", *fake_unwrapped_args, "kwargs", **fake_unwrapped_kwargs)
         return PropagatingAsyncCollectiveTensor(
             partial(do, func=func, args=args, kwargs=kwargs),
             func(*fake_unwrapped_args, **fake_unwrapped_kwargs),
+            device,
         )
 
     # Doing these in __dispatch__ complains about Attempted to make a tensor into a differentiable view, but the tensor already had autograd metadata associated with it.  If you are using a __torch_dispatch__ mode, the most common cause for this problem is that you used torch.overrides.enable_reentrant_dispatch() improperly; tensors created within the extent of reentrant dispatch MUST NOT be directly returned from __torch_dispatch__; instead, they must be wrapped into fresh tensors that serve as the output.  If you are not using wrappers, you probably don't need reentrant dispatch.  If this doesn't seem applicable, please file a bug to PyTorch.
     # and I don't know what's happening, so just putting them here for now ahhhh
     def split(self, *args, **kwargs) -> List["PropagatingAsyncCollectiveTensor"]:
-        def do_split_and_index(index: int) -> torch.Tensor:
+        def do_split_and_index(index: int, did) -> torch.Tensor:
+            with record_function(f"## Manifesting split"):
             # TODO thunk the initial split
-            did = self.manifest().split(*args, **kwargs)[index]
-            return did
+                if did is None:
+                    did = self.manifest().split(*args, **kwargs)
+                return did[index]
 
         list_of_prop_async = []
-        fake_split = self.fake_elem.split(*args, **kwargs)
+        with record_function(f"## Fake split"):
+            fake_split = self.fake_elem.split(*args, **kwargs)
+
+        did = None
         for index, fake_elem in enumerate(fake_split):
             list_of_prop_async.append(
                 PropagatingAsyncCollectiveTensor(
                     partial(
                         do_split_and_index,
                         index=index,
+                        did = did
                     ),
                     fake_elem,
+                    self.device,
                 )
             )
         return list_of_prop_async
@@ -147,57 +177,69 @@ class PropagatingAsyncCollectiveTensor(torch.Tensor):
     # pyre-ignore
     def reshape(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
         def do_reshape() -> torch.Tensor:
-            # print("doing custom reshape")
-            did = self.manifest().reshape(*args, **kwargs)
-            did.retain_grad()
-            return did
+            with record_function(f"## Manifesting reshape"):
+                did = self.manifest().reshape(*args, **kwargs)
+                did.retain_grad()
+                return did
+            
 
-        fake_reshape = self.fake_elem.reshape(*args, **kwargs)
+        with record_function(f"## fake reshape"):
+            fake_reshape = self.fake_elem.reshape(*args, **kwargs)
         return PropagatingAsyncCollectiveTensor(
             do_reshape,
             fake_reshape,
+            self.device,
         )
 
     # pyre-ignore
     def view(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
         def do_view() -> torch.Tensor:
-            # print("doing custom view")
-            m = self.manifest()
-            did = m.view(*args, **kwargs)
-            return did
+            with record_function(f"## Manifesting view"):
+                # print("doing custom view")
+                m = self.manifest()
+                did = m.view(*args, **kwargs)
+                return did
 
-        fake_view = self.fake_elem.view(*args, **kwargs)
+        with record_function(f"## fake view"):
+            fake_view = self.fake_elem.view(*args, **kwargs)
         return PropagatingAsyncCollectiveTensor(
             do_view,
             fake_view,
+            self.device,
         )
 
     # pyre-ignore
     def narrow(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
         def do() -> torch.Tensor:
             # print("doing custom view")
-            m = self.manifest()
-            did = m.narrow(*args, **kwargs)
-            return did
+            with record_function(f"## Manifesting narrow"):
+                m = self.manifest()
+                did = m.narrow(*args, **kwargs)
+                return did
 
-        fake = self.fake_elem.narrow(*args, **kwargs)
+        with record_function(f"## Fake narrow"):
+            fake = self.fake_elem.narrow(*args, **kwargs)
         return PropagatingAsyncCollectiveTensor(
             do,
             fake,
+            self.device,
         )
 
     # pyre-ignore
     def transpose(self, *args, **kwargs) -> "PropagatingAsyncCollectiveTensor":
         def do() -> torch.Tensor:
             # print("doing custom view")
-            m = self.manifest()
-            did = m.transpose(*args, **kwargs)
-            return did
-
-        fake = self.fake_elem.transpose(*args, **kwargs)
+            with record_function(f"## Manifesting transpose"):
+                m = self.manifest()
+                did = m.transpose(*args, **kwargs)
+                return did
+            
+        with record_function(f"## Fake transpose"):
+            fake = self.fake_elem.transpose(*args, **kwargs)
         return PropagatingAsyncCollectiveTensor(
             do,
             fake,
+            self.device,
         )
 
     def backward(self, *args, **kwargs) -> None:
@@ -233,7 +275,7 @@ def _maybe_wrap_tensor(t: torch.Tensor) -> torch.Tensor:
         wt.retain_grad()
         return wt
 
-    res = PropagatingAsyncCollectiveTensor(do, fake_mode.from_tensor(t))
+    res = PropagatingAsyncCollectiveTensor(do, t.to(torch.device("meta")), t.device)
     return cast(torch.Tensor, res)
 
 

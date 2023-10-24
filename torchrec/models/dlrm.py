@@ -97,7 +97,7 @@ class SparseArch(nn.Module):
         """
 
         sparse_features: KeyedTensor = self.embedding_bag_collection(features)
-        print("sparse_features out", sparse_features.values().shape)
+        # print("sparse_features out", sparse_features.values().shape)
 
         sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
         sparse_values: List[torch.Tensor] = []
@@ -203,6 +203,8 @@ class InteractionArch(nn.Module):
             return dense_features
         (B, D) = dense_features.shape
 
+        # print("SPARSE FEATURES", sparse_features, sparse_features.device)
+
         combined_values = torch.cat(
             (dense_features.unsqueeze(1), sparse_features), dim=1
         )
@@ -210,9 +212,12 @@ class InteractionArch(nn.Module):
         # dense/sparse + sparse/sparse interaction
         # size B X (F + F choose 2)
         interactions = torch.bmm(combined_values, combined_values.transpose(1, 2))
-        print("interactions before manifesting", interactions)
+        # print("YING DEBUG INTERACTION", interactions)
+        # print("interactions before manifesting", interactions)
         # TODO this manifest should happen automatically if interacting with non async tensor
-        interactions_flat = interactions.manifest()[
+        interactions = interactions.manifest()
+        # print("YING DEBUG INTERACTION AFTER MANIFEST", interactions)
+        interactions_flat = interactions[
             :, self.triu_indices[0], self.triu_indices[1]
         ]
 
