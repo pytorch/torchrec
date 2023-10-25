@@ -428,23 +428,13 @@ def convert_to_fbgemm_types(fused_params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def init_parameters(module: nn.Module, device: torch.device) -> None:
-    @torch.no_grad()
-    def init_parameters(module: nn.Module) -> None:
-        # Allocate parameters and buffers if over 'meta' device.
-        has_meta_param = False
-        for name, param in module._parameters.items():
-            if isinstance(param, torch.Tensor) and param.device.type == "meta":
-                module._parameters[name] = nn.Parameter(
-                    torch.empty_like(param, device=device),
-                    requires_grad=param.requires_grad,
-                )
-                has_meta_param = True
-        for name, buffer in module._buffers.items():
-            if isinstance(buffer, torch.Tensor) and buffer.device.type == "meta":
-                module._buffers[name] = torch.empty_like(buffer, device=device)
+    with torch.no_grad():
+        has_meta_param = any(t.is_meta for t in module.parameters())
+        if has_meta_param:
+            module.to_empty(device=device)
 
-        # Init parameters if at least one parameter is over 'meta' device.
-        if has_meta_param and hasattr(module, "reset_parameters"):
-            module.reset_parameters()
+            def maybe_reset_parameters(m: nn.Module) -> None:
+                if hasattr(m, "reset_parameters"):
+                    m.reset_parameters()
 
-    module.apply(init_parameters)
+            module.apply(maybe_reset_parameters)

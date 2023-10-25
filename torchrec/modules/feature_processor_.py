@@ -175,6 +175,8 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection):
         with torch.no_grad():
             for key, _length in self.max_feature_lengths.items():
                 self.position_weights[key].fill_(1.0)
+                # Re-assign python dict to param dict in case of re-materialization
+                self.position_weights_dict[key] = self.position_weights[key]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
         cat_seq = torch.ops.fbgemm.offsets_range(
