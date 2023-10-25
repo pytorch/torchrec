@@ -307,6 +307,14 @@ class ShardingOption:
         return storage
 
     @property
+    def total_perf(self) -> float:
+        perf: float = 0
+        for shard in self.shards:
+            # pyre-ignore: Undefined attribute [16]
+            perf += shard.perf.total
+        return perf
+
+    @property
     def is_pooled(self) -> bool:
         if self._is_pooled is not None:
             return self._is_pooled
