@@ -13,12 +13,8 @@ from typing import Callable, Dict, List, NamedTuple, Optional
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
-from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
-    BoundsCheckMode as FbgemmBoundsCheckMode,
-    CacheAlgorithm as FbgemmCacheAlgorithm,
-    PoolingMode,
-)
-from torchrec.distributed.types import BoundsCheckMode, CacheAlgorithm, DataType
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import PoolingMode
+from torchrec.distributed.types import DataType
 
 
 @unique
@@ -37,30 +33,6 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.INT4: 4,
     DataType.INT2: 2,
 }
-
-
-def to_fbgemm_bounds_check_mode(
-    bounds_check_mode: BoundsCheckMode,
-) -> FbgemmBoundsCheckMode:
-    if bounds_check_mode == BoundsCheckMode.FATAL:
-        return FbgemmBoundsCheckMode.FATAL
-    elif bounds_check_mode == BoundsCheckMode.WARNING:
-        return FbgemmBoundsCheckMode.WARNING
-    elif bounds_check_mode == BoundsCheckMode.IGNORE:
-        return FbgemmBoundsCheckMode.IGNORE
-    elif bounds_check_mode == BoundsCheckMode.NONE:
-        return FbgemmBoundsCheckMode.NONE
-    else:
-        raise Exception(f"Invalid bounds check mode {bounds_check_mode}")
-
-
-def to_fbgemm_cache_algorithm(cache_algorithm: CacheAlgorithm) -> FbgemmCacheAlgorithm:
-    if cache_algorithm == CacheAlgorithm.LRU:
-        return FbgemmCacheAlgorithm.LRU
-    elif cache_algorithm == CacheAlgorithm.LFU:
-        return FbgemmCacheAlgorithm.LFU
-    else:
-        raise Exception(f"Invalid cache algorithm {cache_algorithm}")
 
 
 def dtype_to_data_type(dtype: torch.dtype) -> DataType:

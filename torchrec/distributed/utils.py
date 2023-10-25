@@ -17,18 +17,12 @@ from torch import nn
 from torchrec import optim as trec_optim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.types import (
-    BoundsCheckMode,
-    CacheAlgorithm,
     DataType,
     ParameterSharding,
     ShardedModule,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import (
-    data_type_to_sparse_type,
-    to_fbgemm_bounds_check_mode,
-    to_fbgemm_cache_algorithm,
-)
+from torchrec.modules.embedding_configs import data_type_to_sparse_type
 from torchrec.types import CopyMixIn
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -418,16 +412,16 @@ def convert_to_fbgemm_types(fused_params: Dict[str, Any]) -> Dict[str, Any]:
                 fused_params["cache_precision"]
             )
 
-    if "cache_algorithm" in fused_params:
-        if isinstance(fused_params["cache_algorithm"], CacheAlgorithm):
-            fused_params["cache_algorithm"] = to_fbgemm_cache_algorithm(
-                fused_params["cache_algorithm"]
+    if "weights_precision" in fused_params:
+        if isinstance(fused_params["weights_precision"], DataType):
+            fused_params["weights_precision"] = data_type_to_sparse_type(
+                fused_params["weights_precision"]
             )
 
-    if "bounds_check_mode" in fused_params:
-        if isinstance(fused_params["bounds_check_mode"], BoundsCheckMode):
-            fused_params["bounds_check_mode"] = to_fbgemm_bounds_check_mode(
-                fused_params["bounds_check_mode"]
+    if "output_dtype" in fused_params:
+        if isinstance(fused_params["output_dtype"], DataType):
+            fused_params["output_dtype"] = data_type_to_sparse_type(
+                fused_params["output_dtype"]
             )
 
     return fused_params
