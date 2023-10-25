@@ -703,7 +703,7 @@ class TestMemoryBalancedPartitioner(unittest.TestCase):
         memory_balanced_expected_ranks = {
             "table_0": [0],
             "table_1": [1],
-            "table_2": [1],
+            "table_2": [0],
         }
         self.assertEqual(memory_balanced_ranks, memory_balanced_expected_ranks)
 

@@ -8,6 +8,7 @@
 import copy
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import cast, List
 
 from torchrec.distributed.planner.perf_models import NoopPerfModel
@@ -56,10 +57,16 @@ def _get_uniform_sharding_options(
 class ShardingOptionGroup:
     sharding_options: List[ShardingOption]
     storage_sum: Storage
+    perf_sum: float
+
+
+class SortBy(Enum):
+    STORAGE = "storage"
+    PERF = "perf"
 
 
 def _group_and_sort_non_uniform_sharding_options(
-    sharding_options: List[ShardingOption],
+    sharding_options: List[ShardingOption], sort_by: SortBy = SortBy.STORAGE
 ) -> List[ShardingOptionGroup]:
     sharding_option_groups_by_dependency = {}
     for sharding_option in sharding_options:
@@ -69,7 +76,9 @@ def _group_and_sort_non_uniform_sharding_options(
         group_key = sharding_option.dependency or sharding_option.fqn
         if group_key not in sharding_option_groups_by_dependency:
             sharding_option_groups_by_dependency[group_key] = ShardingOptionGroup(
-                [sharding_option], sharding_option.total_storage
+                [sharding_option],
+                sharding_option.total_storage,
+                sharding_option.total_perf,
             )
         else:
             sharding_option_groups_by_dependency[group_key].sharding_options.append(
@@ -78,9 +87,18 @@ def _group_and_sort_non_uniform_sharding_options(
             sharding_option_groups_by_dependency[
                 group_key
             ].storage_sum += sharding_option.total_storage
+            sharding_option_groups_by_dependency[
+                group_key
+            ].perf_sum += sharding_option.total_perf
     sharding_option_groups = list(sharding_option_groups_by_dependency.values())
 
-    sharding_option_groups.sort(key=lambda group: group.storage_sum, reverse=True)
+    if sort_by == SortBy.STORAGE:
+        sharding_option_groups.sort(key=lambda group: group.storage_sum, reverse=True)
+    elif sort_by == SortBy.PERF:
+        sharding_option_groups.sort(key=lambda group: group.perf_sum, reverse=True)
+    else:
+        raise RuntimeError(f"Unexpected sort_by: {sort_by}")
+
     return sharding_option_groups
 
 
@@ -88,6 +106,9 @@ class GreedyPerfPartitioner(Partitioner):
     """
     Greedy Partitioner
     """
+
+    def __init__(self, sort_by: SortBy = SortBy.STORAGE) -> None:
+        self._sort_by = sort_by
 
     def partition(
         self,
@@ -164,7 +185,9 @@ class GreedyPerfPartitioner(Partitioner):
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
-        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(proposal)
+        sharding_option_groups = _group_and_sort_non_uniform_sharding_options(
+            proposal, sort_by=self._sort_by
+        )
 
         for sharding_option_group in sharding_option_groups:
             if (
@@ -331,7 +354,7 @@ class MemoryBalancedPartitioner(Partitioner):
         of memory.
         """
         _perf_model: PerfModel = NoopPerfModel(storage_constraint)
-        _partitioner = GreedyPerfPartitioner()
+        _partitioner = GreedyPerfPartitioner(sort_by=SortBy.PERF)
         # copying storage_constraint, since we modify it in place
         _topology: Topology = copy.deepcopy(storage_constraint)
 
