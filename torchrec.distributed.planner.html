@@ -456,7 +456,7 @@ to provided ParameterConstraints.</p></li>
 <span id="torchrec-distributed-planner-partitioners"></span><h2>torchrec.distributed.planner.partitioners<a class="headerlink" href="#module-torchrec.distributed.planner.partitioners" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.GreedyPerfPartitioner">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">GreedyPerfPartitioner</span></span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">GreedyPerfPartitioner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sort_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.partitioners.SortBy" title="torchrec.distributed.planner.partitioners.SortBy"><span class="pre">SortBy</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">SortBy.STORAGE</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner" title="torchrec.distributed.planner.types.Partitioner"><code class="xref py py-class docutils literal notranslate"><span class="pre">Partitioner</span></code></a></p>
 <p>Greedy Partitioner</p>
 <dl class="py method">
@@ -542,8 +542,13 @@ of memory.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.ShardingOptionGroup">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">ShardingOptionGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">torchrec.distributed.planner.types.ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_sum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">torchrec.distributed.planner.types.Storage</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">ShardingOptionGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">torchrec.distributed.planner.types.ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_sum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">torchrec.distributed.planner.types.Storage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_sum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.ShardingOptionGroup.perf_sum">
+<span class="sig-name descname"><span class="pre">perf_sum</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.perf_sum" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.ShardingOptionGroup.sharding_options">
 <span class="sig-name descname"><span class="pre">sharding_options</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.sharding_options" title="Permalink to this definition">¶</a></dt>
@@ -552,6 +557,23 @@ of memory.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.ShardingOptionGroup.storage_sum">
 <span class="sig-name descname"><span class="pre">storage_sum</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.planner.types.Storage" title="torchrec.distributed.planner.types.Storage"><span class="pre">Storage</span></a></em><a class="headerlink" href="#torchrec.distributed.planner.partitioners.ShardingOptionGroup.storage_sum" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.SortBy">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">SortBy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.SortBy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>An enumeration.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.SortBy.PERF">
+<span class="sig-name descname"><span class="pre">PERF</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'perf'</span></em><a class="headerlink" href="#torchrec.distributed.planner.partitioners.SortBy.PERF" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.SortBy.STORAGE">
+<span class="sig-name descname"><span class="pre">STORAGE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'storage'</span></em><a class="headerlink" href="#torchrec.distributed.planner.partitioners.SortBy.STORAGE" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1241,6 +1263,11 @@ to store the shard with an estimation ‘perf’.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.tensor">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.tensor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.total_perf">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">total_perf</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.total_perf" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
