@@ -410,25 +410,21 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
 class ConvertFusedParamsTest(unittest.TestCase):
     def test_convert_to_fbgemm_types(self) -> None:
         per_table_fused_params = {
-            "cache_algorithm": CacheAlgorithm.LFU,
             "cache_precision": DataType.FP32,
-            "bounds_check_mode": BoundsCheckMode.WARNING,
+            "weights_precision": DataType.FP32,
+            "output_dtype": DataType.FP32,
         }
-        self.assertTrue(
-            isinstance(per_table_fused_params["cache_algorithm"], CacheAlgorithm)
-        )
         self.assertTrue(isinstance(per_table_fused_params["cache_precision"], DataType))
         self.assertTrue(
-            isinstance(per_table_fused_params["bounds_check_mode"], BoundsCheckMode)
+            isinstance(per_table_fused_params["weights_precision"], DataType)
         )
+        self.assertTrue(isinstance(per_table_fused_params["output_dtype"], DataType))
 
         per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
-        self.assertFalse(
-            isinstance(per_table_fused_params["cache_algorithm"], CacheAlgorithm)
-        )
         self.assertFalse(
             isinstance(per_table_fused_params["cache_precision"], DataType)
         )
         self.assertFalse(
-            isinstance(per_table_fused_params["bounds_check_mode"], BoundsCheckMode)
+            isinstance(per_table_fused_params["weights_precision"], DataType)
         )
+        self.assertFalse(isinstance(per_table_fused_params["output_dtype"], DataType))
