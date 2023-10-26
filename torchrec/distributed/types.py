@@ -23,6 +23,11 @@ from typing import (
     Union,
 )
 
+from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
+    BoundsCheckMode,
+    CacheAlgorithm,
+)
+
 from torch.autograd.profiler import record_function
 from torchrec.types import ModuleNoCopyMixin
 
@@ -100,24 +105,6 @@ def _tabulate(
     )
     rows.insert(1, " | ".join(["-" * width for width in col_widths]))
     return "\n".join(rows)
-
-
-@unique
-class BoundsCheckMode(Enum):
-    # Raise an exception (CPU) or device-side assert (CUDA)
-    FATAL = 0
-    # Log the first out-of-bounds instance per kernel, and set to zero.
-    WARNING = 1
-    # Set to zero.
-    IGNORE = 2
-    # No bounds checks.
-    NONE = 3
-
-
-@unique
-class CacheAlgorithm(Enum):
-    LRU = 0
-    LFU = 1
 
 
 # moved DataType here to avoid circular import
