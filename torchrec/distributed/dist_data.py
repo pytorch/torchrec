@@ -805,6 +805,12 @@ class EmbeddingsAllToOneReduce(nn.Module):
         self._world_size = world_size
         self._cat_dim = cat_dim
 
+    # This method can be used by an inference runtime to update the
+    # device information for this module.
+    @torch.jit.export
+    def set_device(self, device_str: str) -> None:
+        self._device = torch.device(device_str)
+
     def forward(
         self,
         tensors: List[torch.Tensor],
