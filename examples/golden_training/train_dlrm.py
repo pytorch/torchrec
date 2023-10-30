@@ -33,16 +33,19 @@ from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from tqdm import tqdm
 
+DEFAULT_CAT_NAMES = [f"f{idx}" for idx in range(64)]
+DEFAULT_INT_NAMES: List[str] = [f"int_{idx}" for idx in range(1024)]
+
 
 def _get_random_dataset(
     num_embeddings: int,
-    batch_size: int = 256,
+    batch_size: int = 4096,
 ) -> IterableDataset:
     return RandomRecDataset(
         keys=DEFAULT_CAT_NAMES,
         batch_size=batch_size,
         hash_size=num_embeddings,
-        ids_per_feature=3,
+        ids_per_feature=1,
         num_dense=len(DEFAULT_INT_NAMES),
     )
 
@@ -73,7 +76,7 @@ def train(
     The effects of quantized comms will be most apparent in large training jobs across multiple nodes where inter host communication is expensive.
     """
     if dense_arch_layer_sizes is None:
-        dense_arch_layer_sizes = [2048, embedding_dim]
+        dense_arch_layer_sizes = [2049, 2049, 2049, 2049, 2049, 2049, embedding_dim]
     if over_arch_layer_sizes is None:
         over_arch_layer_sizes = [512, 1]
 
@@ -126,7 +129,7 @@ def train(
         if backend == "nccl"
         else None
     )
-    sharder = EmbeddingBagCollectionSharder(qcomm_codecs_registry=qcomm_codecs_registry)
+    sharder = EmbeddingBagCollectionSharder(qcomm_codecs_registry=None)
 
     model = DistributedModelParallel(
         module=train_model,
@@ -147,25 +150,40 @@ def train(
         )
     )
 
-    batches = [next(train_iterator).to(device) for _ in range(50)]
+    batches = [next(train_iterator).to(device) for _ in range(15)]
+    train_iterator = iter(batches)
+    # train_iterator
+    # batches_iter =
+
+    # for b in batches:
+    #     model(b)
+
+    train_pipeline = TrainPipelineSparseDist(
+        model,
+        non_fused_optimizer,
+        device,
+    )
+
+    # # print(next(training_iter))
+    # for i in range(15):
+    #     train_pipeline.progress(train_iterator)
+    # return 
 
     with torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/pact/fix_meta_tensor_{rank}'),
+        schedule=torch.profiler.schedule(wait=1, warmup=4, active=3, repeat=1),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/sst_sleep_pl_dense_after_no_back_3'),
         record_shapes=False,
         profile_memory=False,
         with_stack=False
     ) as prof:
-        for b in batches:
+        for i in range(15):
+            train_pipeline.progress(train_iterator)
             prof.step()
-            model(b)
+        # for b in batches:
+        #     prof.step()
+        #     model(b)
 
-    # # Overlap comm/compute/device transfer during training through train_pipeline
-    # train_pipeline = TrainPipelineSparseDist(
-    #     model,
-    #     non_fused_optimizer,
-    #     device,
-    # )
+    # Overlap comm/compute/device transfer during training through train_pipeline
     # for _ in tqdm(range(int(num_iterations)), mininterval=5.0):
     #     train_pipeline.progress(train_iterator)
 

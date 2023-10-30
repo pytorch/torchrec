@@ -63,6 +63,8 @@ def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
     assert isinstance(
         batch, (torch.Tensor, Pipelineable)
     ), f"{type(batch)} must implement Pipelineable interface"
+    # print("batch in to device", batch)
+    return batch
     return cast(In, batch.to(device=device, non_blocking=non_blocking))
 
 
@@ -140,20 +142,21 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         with record_function("## forward ##"):
             (losses, output) = self._model(cur_batch)
 
-        if self._model.training:
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
+        # if self._model.training:
+        #     with record_function("## backward ##"):
+        #         torch.sum(losses, dim=0).backward()
 
         # Copy the next batch to GPU
         self._cur_batch = cur_batch = next_batch
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
-                self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
+                self._cur_batch = self._cur_batch
+                # _to_device(cur_batch, self._device, non_blocking=True)
 
-        # Update
-        if self._model.training:
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
+        # # Update
+        # if self._model.training:
+        #     with record_function("## optimizer ##"):
+        #         self._optimizer.step()
 
         return output
 
@@ -998,14 +1001,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         self._wait_sparse_data_dist()
 
-        if self._model.training:
-            # backward
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
-            # update
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
+        # if self._model.training:
+        #     # backward
+        #     with record_function("## backward ##"):
+        #         torch.sum(losses, dim=0).backward()
+            # # update
+            # with record_function("## optimizer ##"):
+            #     self._optimizer.step()
 
         self._batch_i = self._batch_ip1
         self._batch_ip1 = self._batch_ip2
@@ -1042,6 +1044,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
                 batch = next(dataloader_iter, None)
+                # print("batch from data_iter", batch)
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                 elif not self._execute_all_batches:

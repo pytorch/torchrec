@@ -368,9 +368,15 @@ def alltoall_pooled(
     output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
     input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
 
-    from torchrec.distributed import propagating_async_collective_tensor
+    # from torchrec.distributed import propagating_async_collective_tensor
+    from torchrec.distributed import stream_sync_tensor
 
-    sharded_output_embeddings = propagating_async_collective_tensor.all_to_all_single(
+    if my_rank == 4:
+        import time
+        print("LET ME SLEEP")
+        time.sleep(1)
+
+    sharded_output_embeddings = stream_sync_tensor.all_to_all_single(
         sharded_input_embeddings,
         output_split_sizes=output_split_sizes,
         input_split_sizes=input_split_sizes,
