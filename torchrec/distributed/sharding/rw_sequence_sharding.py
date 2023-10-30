@@ -167,7 +167,7 @@ class InferRwSequenceEmbeddingDist(
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[InferSequenceShardingContext] = None,
     ) -> List[torch.Tensor]:
-        return self._dist.forward(local_embs)
+        return self._dist(local_embs)
 
 
 class InferRwSequenceEmbeddingSharding(
