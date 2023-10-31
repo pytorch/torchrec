@@ -896,7 +896,7 @@ def calculate_shard_storages(
     ]
     ddr_sizes: List[int] = [
         input_size + output_size + ddr_specific_size
-        if compute_device == "cpu"
+        if compute_device in {"cpu", "mtia"}
         else ddr_specific_size
         for input_size, output_size, ddr_specific_size in zip(
             input_sizes,

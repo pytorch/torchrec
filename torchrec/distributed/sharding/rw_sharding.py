@@ -369,9 +369,7 @@ class InferRwPooledEmbeddingDist(
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
 
-        return self._dist.forward(
-            local_embs,
-        )
+        return self._dist(local_embs)
 
 
 class RwPooledEmbeddingSharding(

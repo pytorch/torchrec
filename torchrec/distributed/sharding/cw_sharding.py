@@ -364,4 +364,4 @@ class InferCwPooledEmbeddingDistWithPermute(
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[NullShardingContext] = None,
     ) -> torch.Tensor:
-        return self._permute.forward(self._dist.forward(local_embs))
+        return self._permute(self._dist(local_embs))
