@@ -392,6 +392,9 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                 0.005390052899352861,
                 0.005390052899352861,
             ],
+            ("quant", "column_wise"): [0.0001296231579222408],
+            ("quant_uvm", "column_wise"): [0.018350937787224266],
+            ("quant_uvm_caching", "column_wise"): [0.004269758427175579],
         }
 
         total_perfs = {
