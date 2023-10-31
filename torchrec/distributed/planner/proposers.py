@@ -10,7 +10,13 @@ import logging
 from decimal import Decimal
 from typing import cast, Dict, List, Optional, Set, Tuple
 
-from torchrec.distributed.planner.types import Perf, Proposer, ShardingOption
+from torchrec.distributed.planner.types import (
+    Enumerator,
+    Perf,
+    Proposer,
+    ShardingOption,
+    Topology,
+)
 from torchrec.distributed.planner.utils import prod
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -43,7 +49,11 @@ class GreedyProposer(Proposer):
         self._best_perf_rating: float = float("inf")
         self._num_inferior_perf: int = 0
 
-    def load(self, search_space: List[ShardingOption]) -> None:
+    def load(
+        self,
+        search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
+    ) -> None:
         self._reset()
         for sharding_option in search_space:
             fqn = sharding_option.fqn
@@ -78,6 +88,7 @@ class GreedyProposer(Proposer):
         partitionable: bool,
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
     ) -> None:
         # When threshold is passed, observe the perf_rating trend. If the perf_rating
         # of the newly proposed plans have worse perf_rating, stop proposing.
@@ -126,7 +137,11 @@ class UniformProposer(Proposer):
         self._grouped_sharding_options: List[List[ShardingOption]] = []
         self._proposal_index: int = 0
 
-    def load(self, search_space: List[ShardingOption]) -> None:
+    def load(
+        self,
+        search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
+    ) -> None:
         self._reset()
         all_fqns = set()
         sharding_options_by_type_and_fqn: Dict[
@@ -175,6 +190,7 @@ class UniformProposer(Proposer):
         partitionable: bool,
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
     ) -> None:
         # static strategy, ignore feedback and just provide next proposal
         self._proposal_index += 1
@@ -187,7 +203,11 @@ class GridSearchProposer(Proposer):
         self._proposal_index: int = 0
         self._proposals: List[List[int]] = []
 
-    def load(self, search_space: List[ShardingOption]) -> None:
+    def load(
+        self,
+        search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
+    ) -> None:
         self._reset()
         for sharding_option in search_space:
             fqn = sharding_option.fqn
@@ -246,6 +266,7 @@ class GridSearchProposer(Proposer):
         partitionable: bool,
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
     ) -> None:
         # static strategy, ignore feedback and just provide next proposal
         self._proposal_index += 1
