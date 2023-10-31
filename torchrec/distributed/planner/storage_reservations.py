@@ -21,7 +21,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import sharder_name, storage_repr_in_gb
-from torchrec.distributed.types import ModuleSharder
+from torchrec.distributed.types import get_tensor_size_bytes, ModuleSharder
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -30,14 +30,12 @@ logger: logging.Logger = logging.getLogger(__name__)
 def _get_module_size(module: nn.Module, multiplier: float) -> int:
     parameters_size = sum(
         [
-            multiplier * parameter.element_size() * parameter.nelement()
+            multiplier * get_tensor_size_bytes(parameter)
             for parameter in module.parameters()
         ]
     )
 
-    buffers_size = sum(
-        [buffer.element_size() * buffer.nelement() for buffer in module.buffers()]
-    )
+    buffers_size = sum([get_tensor_size_bytes(buffer) for buffer in module.buffers()])
 
     return round(parameters_size + buffers_size)
 

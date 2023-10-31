@@ -165,6 +165,7 @@ def quantize(
     output_type: torch.dtype = torch.float,
     register_tbes: bool = False,
     quant_state_dict_split_scale_bias: bool = False,
+    weight_dtype: torch.dtype = torch.qint8,
 ) -> torch.nn.Module:
     module_types: List[Type[torch.nn.Module]] = [
         torchrec.modules.embedding_modules.EmbeddingBagCollection,
@@ -179,7 +180,7 @@ def quantize(
 
     qconfig = quant.QConfig(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
-        weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
+        weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
     )
     return quant.quantize_dynamic(
         module,

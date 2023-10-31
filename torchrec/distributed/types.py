@@ -29,6 +29,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
 )
 
 from torch.autograd.profiler import record_function
+from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
 
 try:
@@ -737,6 +738,22 @@ class ShardedModule(
             yield key
 
 
+def get_tensor_size_bytes(t: torch.Tensor) -> int:
+    b: int = t.numel() * t.element_size()
+    if isinstance(t, UInt4Tensor):
+        assert (
+            b % 2 == 0
+        ), f"UInt4Tensor must have number of elements that is divisible by 2, got {t.numel()}"
+        b = b // 2
+    elif isinstance(t, UInt2Tensor):
+        assert (
+            b % 4 == 0
+        ), f"UInt2Tensor must have number of elements that is divisible by 4, got {t.numel()}"
+        b = b // 4
+
+    return b
+
+
 class ModuleSharder(abc.ABC, Generic[M]):
     """
     `ModuleSharder` is per each module, which supports sharding,
@@ -824,10 +841,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
             # TODO: Update it later. Setting for MTIA is same as CPU's for now.
             "mtia": ParameterStorage.DDR,
         }
-        return {
-            storage_map[compute_device_type].value: tensor.element_size()
-            * tensor.nelement()
-        }
+        return {storage_map[compute_device_type].value: get_tensor_size_bytes(tensor)}
 
 
 class ShardingPlanner(abc.ABC):

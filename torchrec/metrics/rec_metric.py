@@ -36,6 +36,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from torch.profiler import record_function
 from torchmetrics import Metric
+from torchrec.distributed.types import get_tensor_size_bytes
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import (
     compose_metric_key,
@@ -696,9 +697,7 @@ class RecMetric(nn.Module, abc.ABC):
         while attributes_q:
             attribute = attributes_q.popleft()
             if isinstance(attribute, torch.Tensor):
-                tensor_map[attribute] = (
-                    attribute.size().numel() * attribute.element_size()
-                )
+                tensor_map[attribute] = get_tensor_size_bytes(attribute)
             elif isinstance(attribute, WindowBuffer):
                 attributes_q.extend(attribute.buffers)
             elif isinstance(attribute, Mapping):
