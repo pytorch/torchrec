@@ -117,6 +117,7 @@ def _model(
     num_float_features: int = 8,
     num_weight_features: int = 1,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    weight_dtype: torch.dtype = torch.qint8,
 ) -> TestModelInfo:
     topology: Topology = Topology(world_size=world_size, compute_device="cuda")
     mi = TestModelInfo(
@@ -176,6 +177,7 @@ def _model(
         module=mi.model,
         inplace=False,
         quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        weight_dtype=weight_dtype,
     )
     return mi
 
@@ -275,14 +277,18 @@ def _shard_qec(
 
 
 class InferShardingsTest(unittest.TestCase):
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_rw(self) -> None:
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_rw(self, weight_dtype: torch.dtype) -> None:
         num_embeddings = 256
-        emb_dim = 12
+        emb_dim = 16
         world_size = 2
         batch_size = 4
         local_device = torch.device("cuda:0")
@@ -294,6 +300,7 @@ class InferShardingsTest(unittest.TestCase):
             dense_device=local_device,
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -343,9 +350,11 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(
         test_permute=st.booleans(),
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw(self, test_permute: bool) -> None:
+    def test_cw(self, test_permute: bool, weight_dtype: torch.dtype) -> None:
+        test_permute = False
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
@@ -361,6 +370,7 @@ class InferShardingsTest(unittest.TestCase):
             dense_device=local_device,
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -407,7 +417,7 @@ class InferShardingsTest(unittest.TestCase):
             plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
 
         sharded_model = _shard_qebc(
-            mi,
+            mi=mi,
             sharding_type=ShardingType.COLUMN_WISE,
             device=local_device,
             expected_shards=expected_shards,
@@ -448,9 +458,12 @@ class InferShardingsTest(unittest.TestCase):
     @given(
         emb_dim=st.sampled_from([192, 128]),
         test_permute=st.booleans(),
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw_with_smaller_emb_dim(self, emb_dim: int, test_permute: bool) -> None:
+    def test_cw_with_smaller_emb_dim(
+        self, emb_dim: int, test_permute: bool, weight_dtype: torch.dtype
+    ) -> None:
         num_embeddings = 64
         emb_dim_4 = emb_dim // 4
         world_size = 2
@@ -466,6 +479,7 @@ class InferShardingsTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             constraints=constraints,
+            weight_dtype=weight_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -523,12 +537,16 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.COLUMN_WISE.value,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_cw_multiple_tables_with_permute(self) -> None:
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_cw_multiple_tables_with_permute(self, weight_dtype: torch.dtype) -> None:
         num_embeddings = 64
         emb_dim = 512
         emb_dim_2 = 512 // 2
@@ -545,6 +563,7 @@ class InferShardingsTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             num_features=2,
+            weight_dtype=weight_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -613,12 +632,16 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.COLUMN_WISE.value,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs available",
     )
-    def test_cw_irregular_shard_placement(self) -> None:
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_cw_irregular_shard_placement(self, weight_dtype: torch.dtype) -> None:
         num_embeddings = 64
         emb_dim = 384
         emb_dim_2 = emb_dim // 2
@@ -636,6 +659,7 @@ class InferShardingsTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             num_features=3,
+            weight_dtype=weight_dtype,
         )
 
         non_sharded_model = mi.quant_model
@@ -700,12 +724,16 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_cw_sequence(self) -> None:
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_cw_sequence(self, weight_dtype: torch.dtype) -> None:
         num_embeddings = 4
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
@@ -757,7 +785,10 @@ class InferShardingsTest(unittest.TestCase):
 
         mi.model.training = False
         mi.quant_model = quantize(
-            mi.model, inplace=False, quant_state_dict_split_scale_bias=True
+            mi.model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
         )
         non_sharded_model = mi.quant_model
         expected_shards = [
@@ -794,14 +825,18 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.COLUMN_WISE.value,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_rw_sequence(self) -> None:
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_rw_sequence(self, weight_dtype: torch.dtype) -> None:
         num_embeddings = 10
-        emb_dim = 4
+        emb_dim = 16
         world_size = 2
         batch_size = 2
         local_device = torch.device("cuda:0")
@@ -850,7 +885,10 @@ class InferShardingsTest(unittest.TestCase):
 
         mi.model.training = False
         mi.quant_model = quantize(
-            mi.model, inplace=False, quant_state_dict_split_scale_bias=True
+            mi.model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
         )
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2

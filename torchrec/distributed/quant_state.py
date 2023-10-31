@@ -26,7 +26,9 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingType
+from torchrec.modules.embedding_configs import DataType
 from torchrec.streamable import Multistreamable
+from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 
 Out = TypeVar("Out")
 CompIn = TypeVar("CompIn")
@@ -83,6 +85,11 @@ class ShardedQuantEmbeddingModuleState(
                 tbe.split_embedding_weights_with_scale_bias(split_scale_bias_mode=2),
                 config.embedding_tables,
             ):
+                if table.data_type == DataType.INT4:
+                    tbe_split_w = UInt4Tensor(tbe_split_w)
+                elif table.data_type == DataType.INT2:
+                    tbe_split_w = UInt2Tensor(tbe_split_w)
+
                 # weight shards section:
                 assert table.local_metadata
                 metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
