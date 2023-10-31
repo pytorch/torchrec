@@ -100,8 +100,8 @@ class SparseArch(nn.Module):
 
         with record_function("# running sparse arch"):
             sparse_features: KeyedTensor = self.embedding_bag_collection(features)
-            # print("sparse_features out", sparse_features.values().shape)
 
+        with record_function("# running sparse arch user post process"):
             sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
             sparse_values: List[torch.Tensor] = []
             for name in self.sparse_feature_names:
@@ -209,26 +209,31 @@ class InteractionArch(nn.Module):
 
         # print("SPARSE FEATURES", sparse_features, sparse_features.device)
 
-        # print("should not be syncing yet")
-        combined_values = torch.cat(
-            (dense_features.unsqueeze(1), sparse_features), dim=1
-        )
-        # print("should be synced")
+        print("should not be syncing yet")
+        with record_function("interaction arch cat"):
+            combined_values = torch.cat(
+                (dense_features.unsqueeze(1), sparse_features), dim=1
+            )
+        print("should be synced")
 
         # dense/sparse + sparse/sparse interaction
         # size B X (F + F choose 2)
-        interactions = torch.bmm(combined_values, combined_values.transpose(1, 2))
+        with record_function("interaction arch bmm"):
+            interactions = torch.bmm(combined_values, combined_values.transpose(1, 2))
         # print("YING DEBUG INTERACTION", interactions)
         # print("interactions before manifesting", interactions)
         # TODO this manifest should happen automatically if interacting with non async tensor
         # interactions = interactions.manifest()
         # print("YING DEBUG INTERACTION AFTER MANIFEST", interactions)
 
-        interactions_flat = interactions[
-            :, self.triu_indices[0], self.triu_indices[1]
-        ]
+        with record_function("interaction arch flat"):
+            interactions_flat = interactions[
+                :, self.triu_indices[0], self.triu_indices[1]
+            ]
 
-        return torch.cat((dense_features, interactions_flat), dim=1)
+        with record_function("interaction arch cat"):
+            ret = torch.cat((dense_features, interactions_flat), dim=1)
+        return ret
 
 
 class InteractionDCNArch(nn.Module):

@@ -43,16 +43,6 @@ class StreamSyncTensor(torch.Tensor):
     def __repr__(self, *, tensor_contents=None) -> str:
         return f"StreamSyncTensor({self.stream}, {self.elem}"
 
-    @classmethod
-    def __torch_dispatch__(
-        cls,
-        func,
-        types,
-        args=(),
-        kwargs=None,
-    ) -> Any:
-        kwargs = kwargs or {}
-        return func(*args, **kwargs)
 
     @classmethod
     def __torch_dispatch__(
@@ -86,13 +76,12 @@ class StreamSyncTensor(torch.Tensor):
                 out = func(*args, **kwargs)
                 out.requires_grad = True
                 out.retain_grad()
-                # print("out requires grad", out, out.requires_grad, func)
                 return StreamSyncTensor(
                     out,
                     stream_sync_tensor_stream,
                 )
 
-        # print("IM SYNCING MY STREAMS!")
+        print("SYNCING THE STREAMS!")
         for non_stream_sync_tensor in non_stream_sync_tensors:
             torch.cuda.current_stream(device=non_stream_sync_tensor.device).wait_stream(
                 stream_sync_tensor_stream
@@ -119,17 +108,6 @@ class StreamSyncTensor(torch.Tensor):
 
     def transpose(self, *args, **kwargs) -> "StreamSyncTensor":
         return StreamSyncTensor(self.elem.transpose(*args, **kwargs), self.stream)
-
-    def backward(self, *args, **kwargs) -> None:
-        torch.cuda.current_stream(device=self.device).wait_stream(self.stream)
-        # print("calling custom backward")
-        g = self.elem.grad_fn.next_functions[0][0]
-        # print("grad function", g)
-        while g is not None:
-            print("grad function", g)
-            g = g.next_functions[0][0]
-        self.elem.backward(*args, **kwargs)
-
 
 from torch.distributed._functional_collectives import RANK_TYPES
 
