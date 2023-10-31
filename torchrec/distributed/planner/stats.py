@@ -140,6 +140,8 @@ class EmbeddingStats(Stats):
         for sharding_option in best_plan:
             fqn = sharding_option.fqn
 
+            compute_kernels_to_count[sharding_option.compute_kernel] += 1
+
             if shard_by_fqn.get(fqn) is None:
                 continue
             shard: ParameterSharding = shard_by_fqn[fqn]
@@ -153,7 +155,6 @@ class EmbeddingStats(Stats):
             )
             sharding_type_abbr = _get_sharding_type_abbr(shard.sharding_type)
             used_sharding_types.add(sharding_type_abbr)
-            compute_kernels_to_count[sharding_option.compute_kernel] += 1
 
             for i, rank in enumerate(ranks):
                 count = stats[rank]["type"].get(sharding_type_abbr, 0)
@@ -395,7 +396,7 @@ class EmbeddingStats(Stats):
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
             self._stats_table.append(f"# {rank_size_text : <{self._width-3}}#")
 
-            self._log_compute_kernel_stats(compute_kernels_to_count)
+        self._log_compute_kernel_stats(compute_kernels_to_count)
 
         if debug:
             if sharding_plan.plan:
