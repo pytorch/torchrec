@@ -445,6 +445,7 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         types = [
             ShardingType.TABLE_WISE.value,
             ShardingType.ROW_WISE.value,
+            ShardingType.COLUMN_WISE.value,
         ]
 
         return types
