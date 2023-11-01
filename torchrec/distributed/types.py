@@ -482,6 +482,17 @@ class CacheParams:
     precision: Optional[DataType] = None
     prefetch_pipeline: Optional[bool] = None
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.algorithm,
+                self.load_factor,
+                self.reserved_memory,
+                self.precision,
+                self.prefetch_pipeline,
+            )
+        )
+
 
 @dataclass
 class ParameterSharding:

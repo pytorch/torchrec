@@ -338,6 +338,7 @@ class ShardingOption:
                 self.sharding_type,
                 self.compute_kernel,
                 tuple(self.shards),
+                self.cache_params,
             )
         )
 
