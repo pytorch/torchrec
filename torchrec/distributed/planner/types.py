@@ -15,6 +15,7 @@ import torch
 from torch import nn
 from torchrec.distributed.planner.constants import (
     BATCH_SIZE,
+    BWD_COMPUTE_MULTIPLIER,
     CROSS_NODE_BANDWIDTH,
     DDR_CAP,
     DDR_MEM_BW,
@@ -124,6 +125,7 @@ class Topology:
         ddr_mem_bw: float = DDR_MEM_BW,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
+        bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -160,6 +162,7 @@ class Topology:
         self._ddr_mem_bw = ddr_mem_bw
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
+        self._bwd_compute_multiplier = bwd_compute_multiplier
 
     @property
     def compute_device(self) -> str:
@@ -192,6 +195,10 @@ class Topology:
     @property
     def inter_host_bw(self) -> float:
         return self._inter_host_bw
+
+    @property
+    def bwd_compute_multiplier(self) -> float:
+        return self._bwd_compute_multiplier
 
     def __repr__(self) -> str:
         topology_repr: str = f"world_size={self._world_size} \n"
