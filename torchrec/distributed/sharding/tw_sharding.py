@@ -131,6 +131,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     weight_init_max=info.embedding_config.weight_init_max,
                     weight_init_min=info.embedding_config.weight_init_min,
                     fused_params=info.fused_params,
+                    pruning_indices_remapping=info.embedding_config.pruning_indices_remapping,
                 )
             )
         return tables_per_rank

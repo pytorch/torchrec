@@ -7,19 +7,30 @@
 
 #!/usr/bin/env python3
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torchrec
 from torch import quantization as quant
+from torch.distributed._shard.sharding_spec import ShardingSpec
 from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
-from torchrec.distributed.embedding_types import ModuleSharder, ShardingType
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    ModuleSharder,
+    ShardingType,
+)
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.shard_estimators import (
+    EmbeddingPerfEstimator,
+    EmbeddingStorageEstimator,
+)
 from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.quant_embedding import (
     QuantEmbeddingCollectionSharder,
@@ -30,9 +41,15 @@ from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollectionSharder,
     ShardedQuantEmbeddingBagCollection,
 )
-
-from torchrec.distributed.test_utils.test_model import ModelInput
-from torchrec.distributed.types import ParameterSharding, ShardingEnv
+from torchrec.distributed.quant_state import WeightSpec
+from torchrec.distributed.shard import _shard_modules
+from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
+from torchrec.distributed.types import (
+    ModuleShardingPlan,
+    ParameterSharding,
+    ShardingEnv,
+    ShardingPlan,
+)
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
@@ -350,3 +367,225 @@ class TorchTypesModelInputWrapper(CopyableMixin):
             label=label,
         )
         return self._module(mi)
+
+
+def create_test_model(
+    num_embeddings: int,
+    emb_dim: int,
+    world_size: int,
+    batch_size: int,
+    dense_device: torch.device,
+    sparse_device: torch.device,
+    quant_state_dict_split_scale_bias: bool = False,
+    num_features: int = 1,
+    num_float_features: int = 8,
+    num_weight_features: int = 1,
+    constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    weight_dtype: torch.dtype = torch.qint8,
+) -> TestModelInfo:
+    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    mi = TestModelInfo(
+        dense_device=dense_device,
+        sparse_device=sparse_device,
+        num_features=num_features,
+        num_float_features=num_float_features,
+        num_weighted_features=num_weight_features,
+        topology=topology,
+    )
+
+    mi.planner = EmbeddingShardingPlanner(
+        topology=topology,
+        batch_size=batch_size,
+        enumerator=EmbeddingEnumerator(
+            topology=topology,
+            batch_size=batch_size,
+            estimator=[
+                EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                EmbeddingStorageEstimator(topology=topology),
+            ],
+            constraints=constraints,
+        ),
+    )
+
+    mi.tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="table_" + str(i),
+            feature_names=["feature_" + str(i)],
+        )
+        for i in range(mi.num_features)
+    ]
+
+    mi.weighted_tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="weighted_table_" + str(i),
+            feature_names=["weighted_feature_" + str(i)],
+        )
+        for i in range(mi.num_weighted_features)
+    ]
+
+    mi.model = TorchTypesModelInputWrapper(
+        TestSparseNN(
+            tables=mi.tables,
+            weighted_tables=mi.weighted_tables,
+            num_float_features=mi.num_float_features,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+    )
+    mi.model.training = False
+    mi.quant_model = quantize(
+        module=mi.model,
+        inplace=False,
+        quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        weight_dtype=weight_dtype,
+    )
+    return mi
+
+
+def shard_qebc(
+    mi: TestModelInfo,
+    sharding_type: ShardingType,
+    device: torch.device,
+    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
+    plan: Optional[ShardingPlan] = None,
+) -> torch.nn.Module:
+    sharder = TestQuantEBCSharder(
+        sharding_type=sharding_type.value,
+        kernel_type=EmbeddingComputeKernel.QUANT.value,
+        shardable_params=[table.name for table in mi.tables],
+    )
+
+    if not plan:
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+    msp = plan.plan["_module.sparse.ebc"]
+    for i in range(mi.num_features):
+        ps: ParameterSharding = msp[f"table_{i}"]
+        assert ps.sharding_type == sharding_type.value
+        assert ps.sharding_spec is not None
+        sharding_spec: ShardingSpec = ps.sharding_spec
+        # pyre-ignore
+        assert len(sharding_spec.shards) == len(expected_shards[i])
+        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+            sharding_spec.shards, expected_shards[i]
+        ):
+            assert shard.shard_offsets == [offset_r, offset_c]
+            assert shard.shard_sizes == [size_r, size_c]
+            assert str(shard.placement) == placement
+
+    # We want to leave quant_model unchanged to compare the results with it
+    quant_model_copy = copy.deepcopy(mi.quant_model)
+    sharded_model = _shard_modules(
+        module=quant_model_copy,
+        # pyre-ignore
+        sharders=[sharder],
+        device=device,
+        plan=plan,
+        # pyre-ignore
+        env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+    )
+    return sharded_model
+
+
+def shard_qec(
+    mi: TestModelInfo,
+    sharding_type: ShardingType,
+    device: torch.device,
+    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
+) -> torch.nn.Module:
+    sharder = TestQuantECSharder(
+        sharding_type=sharding_type.value,
+        kernel_type=EmbeddingComputeKernel.QUANT.value,
+    )
+    # pyre-ignore
+    plan = mi.planner.plan(
+        mi.quant_model,
+        [sharder],
+    )
+    msp: ModuleShardingPlan = plan.plan["_module_kjt_input.0"]  # TODO: hardcoded
+    for i in range(mi.num_features):
+        # pyre-ignore
+        ps: ParameterSharding = msp[f"table_{i}"]
+        assert ps.sharding_type == sharding_type.value
+        assert ps.sharding_spec is not None
+        sharding_spec: ShardingSpec = ps.sharding_spec
+        # pyre-ignore
+        assert len(sharding_spec.shards) == len(expected_shards[i])
+        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+            sharding_spec.shards, expected_shards[i]
+        ):
+            assert shard.shard_offsets == [offset_r, offset_c]
+            assert shard.shard_sizes == [size_r, size_c]
+            assert str(shard.placement) == placement
+
+    # We want to leave quant_model unchanged to compare the results with it
+    quant_model_copy = copy.deepcopy(mi.quant_model)
+    sharded_model = _shard_modules(
+        module=quant_model_copy,
+        # pyre-ignore
+        sharders=[sharder],
+        device=device,
+        plan=plan,
+        # pyre-ignore
+        env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+    )
+    return sharded_model
+
+
+# pyre-ignore
+def assert_close(expected, actual) -> None:
+    if isinstance(expected, dict):
+        assert list(expected.keys()) == list(actual.keys())
+        for feature, jt_e in expected.items():
+            jt_got = actual[feature]
+            assert_close(jt_e.lengths(), jt_got.lengths())
+            assert_close(jt_e.values(), jt_got.values())
+            assert_close(jt_e.offsets(), jt_got.offsets())
+    else:
+        if isinstance(expected, torch.Tensor) and isinstance(actual, torch.Tensor):
+            if actual.device != expected.device:
+                actual = actual.to(expected.device)
+
+        torch.testing.assert_close(expected, actual)
+
+
+def assert_weight_spec(
+    weights_spec: Dict[str, WeightSpec],
+    all_expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
+    ebc_fqn: str,
+    weights_prefix: str,
+    all_table_names: List[str],
+    sharding_type: str,
+) -> None:
+    tbe_table_idxs = [0, 0]
+    for table_name, expected_shards in zip(all_table_names, all_expected_shards):
+        unsharded_weight_fqn = f"{ebc_fqn}.{weights_prefix}.{table_name}.weight"
+        for (offset_r, offset_c, size_r, size_c), placement in expected_shards:
+            tbe_idx: int = 0
+            if "rank:1/cuda:1" == placement:
+                tbe_idx = 1
+            sharded_weight_fqn: str = f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            tbe_table_idxs[tbe_idx] += 1
+            assert sharded_weight_fqn in weights_spec
+            wspec = weights_spec[sharded_weight_fqn]
+            assert wspec.fqn == unsharded_weight_fqn
+            assert wspec.shard_sizes == [size_r, size_c]
+            assert wspec.shard_offsets == [offset_r, offset_c]
+            assert wspec.sharding_type == sharding_type
+
+            for qcomp in ["qscale", "qbias"]:
+                sharded_weight_qcomp_fqn: str = f"{sharded_weight_fqn}_{qcomp}"
+                assert sharded_weight_qcomp_fqn in weights_spec
+                wqcomp_spec = weights_spec[sharded_weight_qcomp_fqn]
+                assert wqcomp_spec.fqn == f"{unsharded_weight_fqn}_{qcomp}"
+                assert wqcomp_spec.shard_sizes == [size_r, 2]
+                assert wqcomp_spec.shard_offsets == [offset_r, 0]
+                assert wqcomp_spec.sharding_type == sharding_type
