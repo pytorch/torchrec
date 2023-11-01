@@ -195,7 +195,10 @@ class ShardedQuantEmbeddingModuleState(
                     )
                     sharding_type: str = parameter_sharding.sharding_type
 
-                    assert sharding_type == ShardingType.TABLE_WISE.value
+                    assert sharding_type in [
+                        ShardingType.TABLE_WISE.value,
+                        ShardingType.COLUMN_WISE.value,
+                    ]
 
                     qmetadata = ShardMetadata(
                         shard_offsets=[0],
@@ -222,10 +225,6 @@ class ShardedQuantEmbeddingModuleState(
             (
                 self._table_name_to_local_shards_qbias,
                 self._table_name_to_sharded_tensor_qbias,
-            ),
-            (
-                self._table_name_to_local_shards_pruning_index_remappings,
-                self._table_name_to_sharded_tensor_pruning_index_remappings,
             ),
         ]:
             for table_name, local_shards in table_name_to_local_shards.items():
@@ -257,6 +256,17 @@ class ShardedQuantEmbeddingModuleState(
                     local_shards=local_shards,
                     sharded_tensor_metadata=global_metadata,
                 )
+
+        for table_name_to_local_shards, table_name_to_sharded_tensor in [
+            (
+                self._table_name_to_local_shards_pruning_index_remappings,
+                self._table_name_to_sharded_tensor_pruning_index_remappings,
+            ),
+        ]:
+            for table_name, local_shards in table_name_to_local_shards.items():
+                # Single Tensor per table (TW sharding)
+                table_name_to_sharded_tensor[table_name] = local_shards[0].tensor
+                continue
 
         def post_state_dict_hook(
             # Union["ShardedQuantEmbeddingBagCollection", "ShardedQuantEmbeddingCollection"]
