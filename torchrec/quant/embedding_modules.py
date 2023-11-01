@@ -62,6 +62,10 @@ MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
 
 MODULE_ATTR_ROW_ALIGNMENT_INT: str = "__register_row_alignment_in_named_modules"
 
+MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT: str = (
+    "__emb_name_to_pruning_indices_remapping"
+)
+
 DEFAULT_ROW_ALIGNMENT = 16
 
 
@@ -109,12 +113,19 @@ def quant_prep_customize_row_alignment(
     )
 
 
+def pruned_num_embeddings(pruning_indices_mapping: Tensor) -> int:
+    return int(torch.max(pruning_indices_mapping).item()) + 1
+
+
 def quantize_state_dict(
     module: nn.Module,
     table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]],
     table_name_to_data_type: Dict[str, DataType],
+    table_name_to_pruning_indices_mapping: Optional[Dict[str, Tensor]] = None,
 ) -> torch.device:
     device = torch.device("cpu")
+    if not table_name_to_pruning_indices_mapping:
+        table_name_to_pruning_indices_mapping = {}
     for key, tensor in module.state_dict().items():
         # Extract table name from state dict key.
         # e.g. ebc.embedding_bags.t1.weight
@@ -122,11 +133,19 @@ def quantize_state_dict(
         assert splits[-1] == "weight"
         table_name = splits[-2]
         data_type = table_name_to_data_type[table_name]
+        num_rows = tensor.shape[0]
+        pruning_indices_mapping: Optional[Tensor] = None
+        if table_name in table_name_to_pruning_indices_mapping:
+            pruning_indices_mapping = table_name_to_pruning_indices_mapping[table_name]
+        if pruning_indices_mapping is not None:
+            num_rows = pruned_num_embeddings(pruning_indices_mapping)
+
         device = tensor.device
         num_bits = DATA_TYPE_NUM_BITS[data_type]
+
         if tensor.is_meta:
             quant_weight = torch.empty(
-                (tensor.shape[0], (tensor.shape[1] * num_bits) // 8),
+                (num_rows, (tensor.shape[1] * num_bits) // 8),
                 device="meta",
                 dtype=torch.uint8,
             )
@@ -136,13 +155,17 @@ def quantize_state_dict(
                 or data_type == DataType.INT2
             ):
                 scale_shift = torch.empty(
-                    (tensor.shape[0], 4),
+                    (num_rows, 4),
                     device="meta",
                     dtype=torch.uint8,
                 )
             else:
                 scale_shift = None
         else:
+            if pruning_indices_mapping is not None:
+                rows_mask = pruning_indices_mapping.gt(-1)
+                tensor = tensor[rows_mask, :]
+
             if tensor.dtype == torch.float or tensor.dtype == torch.float16:
                 if data_type == DataType.FP16:
                     if tensor.dtype == torch.float:
@@ -304,6 +327,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
             ] = ([] if table_name_to_quantized_weights else None)
             feature_table_map: List[int] = []
+            index_remappings: List[Optional[torch.Tensor]] = []
+            index_remappings_non_none_count: int = 0
 
             for idx, table in enumerate(emb_configs):
                 embedding_specs.append(
@@ -320,6 +345,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                         table_name_to_quantized_weights[table.name]
                     )
                 feature_table_map.extend([idx] * table.num_features())
+                index_remappings.append(table.pruning_indices_remapping)
+                if table.pruning_indices_remapping is not None:
+                    index_remappings_non_none_count += 1
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=embedding_specs,
@@ -329,6 +357,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=row_alignment,
                 feature_table_map=feature_table_map,
+                # pyre-ignore
+                index_remapping=index_remappings
+                if index_remappings_non_none_count > 0
+                else None,
             )
             if weight_lists is None:
                 emb_module.initialize_weights()
@@ -461,12 +493,22 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             cast(List[BaseEmbeddingConfig], embedding_bag_configs),
             module.qconfig,
         )
+        pruning_dict: Dict[str, torch.Tensor] = getattr(
+            module, MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT, {}
+        )
+
+        for config in embedding_bag_configs:
+            if config.name in pruning_dict:
+                pruning_indices_remapping = pruning_dict[config.name]
+                config.num_embeddings = pruned_num_embeddings(pruning_indices_remapping)
+                config.pruning_indices_remapping = pruning_indices_remapping
 
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(
             module,
             table_name_to_quantized_weights,
             {table.name: table.data_type for table in embedding_bag_configs},
+            pruning_dict,
         )
         return cls(
             embedding_bag_configs,

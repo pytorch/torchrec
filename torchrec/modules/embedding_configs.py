@@ -127,6 +127,10 @@ class BaseEmbeddingConfig:
     feature_names: List[str] = field(default_factory=list)
     weight_init_max: Optional[float] = None
     weight_init_min: Optional[float] = None
+    # if table is pruned:
+    # num_embeddings is pruned number of embeddings,
+    # pruning_indices_mapping is not None and contains remapping tensor of shape=[unpruned_num_embeddings], dtype=int32
+    pruning_indices_remapping: Optional[torch.Tensor] = None
 
     init_fn: Optional[Callable[[torch.Tensor], Optional[torch.Tensor]]] = None
     # when the position_weighted feature is in this table config,
