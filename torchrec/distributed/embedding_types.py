@@ -15,6 +15,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLoca
 from torch import fx, nn
 from torch.nn.modules.module import _addindent
 from torchrec.distributed.types import (
+    get_tensor_size_bytes,
     ModuleSharder,
     ParameterStorage,
     QuantizedCommCodecs,
@@ -395,7 +396,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         List of system resources and corresponding usage given a compute device and
         compute kernel
         """
-        tensor_bytes = tensor.element_size() * tensor.nelement()
+        tensor_bytes = get_tensor_size_bytes(tensor)
         if compute_kernel in {
             EmbeddingComputeKernel.FUSED_UVM.value,
             EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
@@ -411,8 +412,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 "mtia": ParameterStorage.DDR,
             }
             return {
-                storage_map[compute_device_type].value: tensor.element_size()
-                * tensor.nelement()
+                storage_map[compute_device_type].value: get_tensor_size_bytes(tensor)
             }
 
 
@@ -445,6 +445,7 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         types = [
             ShardingType.TABLE_WISE.value,
             ShardingType.ROW_WISE.value,
+            ShardingType.COLUMN_WISE.value,
         ]
 
         return types
@@ -501,7 +502,7 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         List of system resources and corresponding usage given a compute device and
         compute kernel
         """
-        tensor_bytes = tensor.element_size() * tensor.nelement() + tensor.shape[0] * 4
+        tensor_bytes = get_tensor_size_bytes(tensor) + tensor.shape[0] * 4
         if compute_kernel in {
             EmbeddingComputeKernel.QUANT_UVM.value,
             EmbeddingComputeKernel.QUANT_UVM_CACHING.value,

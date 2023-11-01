@@ -39,6 +39,7 @@ from torchrec.modules.embedding_modules import (
     get_embedding_names_by_table,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
 
 try:
@@ -354,6 +355,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 # TODO: register as param instead of buffer
                 # however, since this is only needed for inference, we do not need to expose it as part of parameters.
                 # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
+
+                if embedding_config.data_type == DataType.INT4:
+                    weight = UInt4Tensor(weight)
+                elif embedding_config.data_type == DataType.INT2:
+                    weight = UInt2Tensor(weight)
+
                 self.embedding_bags[embedding_config.name].register_buffer(
                     "weight", weight
                 )
@@ -622,7 +629,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             weights_list = emb_module.split_embedding_weights_with_scale_bias(
                 split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
             )
-            self.embeddings[config.name].register_buffer("weight", weights_list[0][0])
+
+            weight = weights_list[0][0]
+            if config.data_type == DataType.INT4:
+                weight = UInt4Tensor(weight)
+            elif config.data_type == DataType.INT2:
+                weight = UInt2Tensor(weight)
+
+            self.embeddings[config.name].register_buffer("weight", weight)
             if quant_state_dict_split_scale_bias:
                 self.embeddings[config.name].register_buffer(
                     "weight_qscale", weights_list[0][1]
