@@ -404,6 +404,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                         "weight_qbias", qbias
                     )
 
+                if embedding_config.pruning_indices_remapping is not None:
+                    self.embedding_bags[embedding_config.name].register_buffer(
+                        "index_remappings_array",
+                        emb_module.index_remappings_array,
+                    )
+
         setattr(
             self,
             MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,

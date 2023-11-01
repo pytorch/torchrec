@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import io
 import unittest
 from typing import Dict, List, Tuple
 
@@ -134,7 +135,11 @@ class QuantPruneTest(unittest.TestCase):
 
         gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
         gm_script = torch.jit.script(gm)
-        gm_script_output = gm_script(*inputs[0])
+        buffer = io.BytesIO()
+        torch.jit.save(gm_script, buffer)
+        buffer.seek(0)
+        loaded_gm_script = torch.jit.load(buffer)
+        gm_script_output = loaded_gm_script(*inputs[0])
         assert_close(quant_output, gm_script_output)
 
         weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
