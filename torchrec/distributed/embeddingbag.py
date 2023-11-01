@@ -252,6 +252,7 @@ def create_sharding_infos_by_sharding(
                     embedding_names=embedding_names,
                     weight_init_max=config.weight_init_max,
                     weight_init_min=config.weight_init_min,
+                    pruning_indices_remapping=config.pruning_indices_remapping,
                 ),
                 param_sharding=parameter_sharding,
                 param=param,
