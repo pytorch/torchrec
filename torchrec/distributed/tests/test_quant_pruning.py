@@ -61,6 +61,11 @@ def prune_and_quantize_model(
 
 
 class QuantPruneTest(unittest.TestCase):
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_qebc_pruned_tw(self) -> None:
         batch_size: int = 4
         world_size = 2
@@ -152,6 +157,11 @@ class QuantPruneTest(unittest.TestCase):
             ShardingType.TABLE_WISE.value,
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_qebc_pruned_tw_one_ebc(self) -> None:
         batch_size: int = 1
         # hash, dim, pruned_hash
@@ -267,6 +277,11 @@ class QuantPruneTest(unittest.TestCase):
         assert_close(q_output["feature_0"][0], torch.tensor([0.0] * table_0_emb_dim))
         assert_close(q_output["feature_0"][2], torch.tensor([0.0] * table_0_emb_dim))
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_qebc_pruned_cw(self) -> None:
         batch_size: int = 4
         world_size = 2
@@ -363,6 +378,11 @@ class QuantPruneTest(unittest.TestCase):
             ShardingType.COLUMN_WISE.value,
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_qebc_pruned_cw_one_ebc(self) -> None:
         batch_size: int = 1
         # hash, dim, pruned_hash
