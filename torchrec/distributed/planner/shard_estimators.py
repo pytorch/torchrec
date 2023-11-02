@@ -16,7 +16,6 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
     BATCHED_COPY_PERF_FACTOR,
     BIGINT_DTYPE,
-    BWD_COMPUTE_MULTIPLIER,
     DP_ELEMENTWISE_KERNELS_PERF_FACTOR,
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
@@ -177,6 +176,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 ddr_mem_bw=self._topology.ddr_mem_bw,
                 intra_host_bw=self._topology.intra_host_bw,
                 inter_host_bw=self._topology.inter_host_bw,
+                bwd_compute_multiplier=self._topology.bwd_compute_multiplier,
                 is_pooled=sharding_option.is_pooled,
                 is_weighted=is_weighted,
                 is_inference=self._is_inference,
@@ -208,6 +208,7 @@ def perf_func_emb_wall_time(
     ddr_mem_bw: float,
     intra_host_bw: float,
     inter_host_bw: float,
+    bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
     caching_ratio: Optional[float] = None,
@@ -287,6 +288,7 @@ def perf_func_emb_wall_time(
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
+                bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 is_inference=is_inference,
@@ -308,6 +310,7 @@ def perf_func_emb_wall_time(
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
+                bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
             )
@@ -328,6 +331,7 @@ def perf_func_emb_wall_time(
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
+                bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
             )
@@ -344,6 +348,7 @@ def perf_func_emb_wall_time(
                 num_poolings=num_poolings,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
+                bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
             )
@@ -370,6 +375,7 @@ def _get_tw_sharding_perf(
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
+    bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
     is_inference: bool = False,
@@ -428,7 +434,7 @@ def _get_tw_sharding_perf(
     )
 
     # includes fused optimizers
-    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+    bwd_compute = fwd_compute * bwd_compute_multiplier
 
     # in order of model parallel execution, starting with:
     # BWD DP -> BWD MP ... FWD MP -> FWD DP
@@ -456,6 +462,7 @@ def _get_rw_sharding_perf(
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
+    bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
 ) -> Perf:
@@ -501,7 +508,7 @@ def _get_rw_sharding_perf(
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
-    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+    bwd_compute = fwd_compute * bwd_compute_multiplier
 
     return Perf(
         fwd_compute=fwd_compute,
@@ -527,6 +534,7 @@ def _get_twrw_sharding_perf(
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
+    bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
 ) -> Perf:
@@ -579,7 +587,7 @@ def _get_twrw_sharding_perf(
 
     bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
 
-    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+    bwd_compute = fwd_compute * bwd_compute_multiplier
 
     return Perf(
         fwd_compute=fwd_compute,
@@ -601,6 +609,7 @@ def _get_dp_sharding_perf(
     num_poolings: List[float],
     device_bw: float,
     inter_host_bw: float,
+    bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
 ) -> Perf:
@@ -642,7 +651,7 @@ def _get_dp_sharding_perf(
     # SGD + Fill + BUnary
     optimizer_kernels = table_size * DP_ELEMENTWISE_KERNELS_PERF_FACTOR / device_bw
 
-    bwd_compute = fwd_compute * BWD_COMPUTE_MULTIPLIER
+    bwd_compute = fwd_compute * bwd_compute_multiplier
 
     bwd_grad_indice_weights_kernel = (
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
