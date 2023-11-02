@@ -149,6 +149,11 @@ class QuantBatchedEmbeddingBag(
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
+        index_remapping = [
+            table.pruning_indices_remapping for table in config.embedding_tables
+        ]
+        if all(v is None for v in index_remapping):
+            index_remapping = None
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
             embedding_specs=[
                 (
@@ -165,6 +170,8 @@ class QuantBatchedEmbeddingBag(
                 )
             ],
             device=device,
+            # pyre-ignore
+            index_remapping=index_remapping,
             pooling_mode=self._pooling,
             feature_table_map=self._feature_table_map,
             row_alignment=16,

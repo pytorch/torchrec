@@ -71,12 +71,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
             sharder = sharder_map[sharder_key]
 
             caching_ratio = (
-                self._constraints[  # pyre-ignore[16]
-                    sharding_option.name
-                ].cache_params.load_factor
-                if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].cache_params
+                sharding_option.cache_params.load_factor
+                if sharding_option.cache_params
                 else None
             )
             # TODO: remove after deprecating fused_params in sharder
@@ -149,13 +145,9 @@ class EmbeddingPerfEstimator(ShardEstimator):
             ) = _extract_comm_data_type_size(sharder, sharding_option)
 
             prefetch_pipeline = (
-                self._constraints[  # pyre-ignore[16]
-                    sharding_option.name
-                ].cache_params.prefetch_pipeline
-                if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].cache_params
-                else False
+                sharding_option.cache_params.prefetch_pipeline
+                if sharding_option.cache_params
+                else None
             )
             # TODO: remove after deprecating fused_params in sharder
             if not prefetch_pipeline:
@@ -749,12 +741,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder = sharder_map[sharder_key]
 
             caching_ratio = (
-                self._constraints[  # pyre-ignore[16]
-                    sharding_option.name
-                ].cache_params.load_factor
-                if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].cache_params
+                sharding_option.cache_params.load_factor
+                if sharding_option.cache_params
                 else None
             )
             # TODO: remove after deprecating fused_params in sharder
