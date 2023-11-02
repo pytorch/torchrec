@@ -100,24 +100,22 @@ class TestStreamSyncCollectiveTensor(MultiProcessTestBase):
             else "gloo",
         )
 
-import unittest
-if __name__ == '__main__':
-    unittest.main()
-    # t = StreamSyncTensor(torch.randn((10,10), device=torch.device("cuda"), requires_grad=True), stream=torch.cuda.Stream())
-    # print("t", t)
-    # add = t.sum()
-    # # print("add", add)
-    # add.backward()
+# import unittest
+# if __name__ == '__main__':
+#     unittest.main()
 
-    # print("grad", t.grad)
-    # # t.grad = None
+t = StreamSyncTensor(torch.randn((10,10), device=torch.device("cuda"), requires_grad=True), stream=torch.cuda.Stream())
+print("t", t)
+times = 2*t 
+add = times.sum()
+add.backward()
+print("grad", t.grad)
 
-    # split = t.split([5,5], dim=1)
-
-    # # split[0].sum().backward()
-    # # print(t.grad)
-    # # with torch.autograd.detect_anomaly(check_nan=False):
-    # #     s = t.sum()
-    # #     print("s", s)
-    # #     s.backward()
-    # #     print(t.grad)
+# split = t.split([5,5], dim=1)
+# split[0].sum().backward()
+# print(t.grad)
+# with torch.autograd.detect_anomaly(check_nan=False):
+#     s = t.sum()
+#     print("s", s)
+#     s.backward()
+#     print(t.grad)

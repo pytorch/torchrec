@@ -129,7 +129,7 @@ def train(
         if backend == "nccl"
         else None
     )
-    sharder = EmbeddingBagCollectionSharder(qcomm_codecs_registry=None)
+    sharder = EmbeddingBagCollectionSharder(qcomm_codecs_registry=qcomm_codecs_registry)
 
     model = DistributedModelParallel(
         module=train_model,
@@ -152,11 +152,6 @@ def train(
 
     batches = [next(train_iterator).to(device) for _ in range(15)]
     train_iterator = iter(batches)
-    # train_iterator
-    # batches_iter =
-
-    # for b in batches:
-    #     model(b)
 
     train_pipeline = TrainPipelineSparseDist(
         model,
@@ -164,24 +159,17 @@ def train(
         device,
     )
 
-    # # print(next(training_iter))
-    # for i in range(15):
-    #     train_pipeline.progress(train_iterator)
-    # return 
-
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=4, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/sst_sleep_pl_dense_after_no_back_6'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/sst_long_a2a_optimizer_qcomm_trace'),
         record_shapes=False,
         profile_memory=False,
         with_stack=False
     ) as prof:
         for i in range(15):
+            # print("on iteration i", i)
             train_pipeline.progress(train_iterator)
             prof.step()
-        # for b in batches:
-        #     prof.step()
-        #     model(b)
 
     # Overlap comm/compute/device transfer during training through train_pipeline
     # for _ in tqdm(range(int(num_iterations)), mininterval=5.0):

@@ -101,6 +101,7 @@ class SparseArch(nn.Module):
         with record_function("# running sparse arch"):
             sparse_features: KeyedTensor = self.embedding_bag_collection(features)
 
+        # this won't block on a2a .wait() finishing. It will schedule on separate stream immediately
         with record_function("# running sparse arch user post process"):
             sparse: Dict[str, torch.Tensor] = sparse_features.to_dict()
             sparse_values: List[torch.Tensor] = []
@@ -208,13 +209,12 @@ class InteractionArch(nn.Module):
         (B, D) = dense_features.shape
 
         # print("SPARSE FEATURES", sparse_features, sparse_features.device)
-
-        print("should not be syncing yet")
+        # print("should not be syncing yet")
         with record_function("interaction arch cat"):
             combined_values = torch.cat(
                 (dense_features.unsqueeze(1), sparse_features), dim=1
             )
-        print("should be synced")
+        # print("should be synced")
 
         # dense/sparse + sparse/sparse interaction
         # size B X (F + F choose 2)
@@ -589,6 +589,10 @@ class DLRM(nn.Module):
         """
         embedded_sparse = self.sparse_arch(sparse_features)
         embedded_dense = self.dense_arch(dense_features)
+        # communication on output_dist stream
+        
+
+        # here syncronize main stream and output dist stream
         concatenated_dense = self.inter_arch(
             dense_features=embedded_dense, sparse_features=embedded_sparse
         )

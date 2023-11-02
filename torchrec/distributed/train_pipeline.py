@@ -1001,13 +1001,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         self._wait_sparse_data_dist()
 
-        # if self._model.training:
-        #     # backward
-        #     with record_function("## backward ##"):
-        #         torch.sum(losses, dim=0).backward()
-            # # update
-            # with record_function("## optimizer ##"):
-            #     self._optimizer.step()
+        if self._model.training:
+            # backward
+            with record_function("## backward ##"):
+                torch.sum(losses, dim=0).backward()
+            # update
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
 
         self._batch_i = self._batch_ip1
         self._batch_ip1 = self._batch_ip2

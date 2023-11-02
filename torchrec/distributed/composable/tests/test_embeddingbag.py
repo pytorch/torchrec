@@ -156,10 +156,6 @@ def _test_sharding(  # noqa C901
 
         unsharded_model_params = dict(unsharded_model.named_parameters())
 
-        if not use_apply_optimizer_in_backward:
-            unsharded_model_optimizer.zero_grad()
-            sharded_model_optimizer.zero_grad()
-
         if is_data_parallel:
             for fqn, param in sharded_model.named_parameters():
                 assert _optional_equals(param.grad, unsharded_model_params[fqn].grad)
@@ -198,13 +194,8 @@ def _test_sharding(  # noqa C901
             [sharded_model_pred_kt[feature] for feature in feature_keys]
         )
 
-        print("sharded model pred before manifesting", sharded_model_pred)
-        # DO ANY DENSE COMPUTATION HERE?!?!?!?!?
-        # there's a bug here, the 2* doesn't get reflecting in gradient..., e.g. it's not floying to the PACT
-        # sharded_model_pred = 2 * sharded_model_pred.manifest()
-        # unsharded_model_pred = 2 * unsharded_model_pred
-
-        # TODO hide this somewhere else
+        sharded_model_pred = sharded_model_pred
+        unsharded_model_pred = unsharded_model_pred
 
         # cast to CPU because when casting unsharded_model.to on the same module, there could some race conditions
         # in normal author modelling code this won't be an issue because each rank would individually create
@@ -215,10 +206,30 @@ def _test_sharding(  # noqa C901
 
         torch.testing.assert_close(sharded_model_pred, unsharded_model_pred)
 
-        sharded_model_pred.sum().backward()
+        for fqn in unsharded_model.state_dict():
+            unsharded_state = unsharded_model.state_dict()[fqn]
+            sharded_state = sharded_model.state_dict()[fqn]
+            if is_data_parallel:
+                torch.testing.assert_close(unsharded_state, sharded_state)
+            else:
+                out = (
+                    torch.zeros(size=unsharded_state.shape, device=ctx.device)
+                    if ctx.rank == 0
+                    else None
+                )
+                sharded_state.gather(out=out)
+                if ctx.rank == 0:
+                    print("unsharded state before backward", unsharded_state)
+                    print("sharded state before backward", out)
+                    torch.testing.assert_close(
+                        unsharded_state,
+                        out,
+                    )
+
+        (3*sharded_model_pred).sum().backward()
 
         all_unsharded_preds = torch.stack(all_unsharded_preds)
-        _sum = all_unsharded_preds.sum()
+        _sum = (3*all_unsharded_preds).sum()
         if is_data_parallel:
             _sum /= world_size
         _sum.backward()
@@ -226,6 +237,9 @@ def _test_sharding(  # noqa C901
         if is_data_parallel:
             for fqn, param in sharded_model.named_parameters():
                 assert _optional_equals(param.grad, unsharded_model_params[fqn].grad)
+
+        for fqn, param in sharded_model.named_parameters():
+            print(fqn, "PARAM", param, "GRADIENT", param.grad)
 
         if not use_apply_optimizer_in_backward:
             unsharded_model_optimizer.step()
@@ -373,6 +387,8 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
                 lengths=torch.LongTensor([2, 2, 4, 2, 0, 1]),
             ),
         ]
+
+
         self._run_multi_process_test(
             callable=_test_sharding,
             world_size=WORLD_SIZE,
@@ -408,139 +424,3 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
 import unittest
 if __name__ == '__main__':
     unittest.main()
-
-####
-
-
-# def _get_random_dataset(
-#     num_embeddings: int,
-#     batch_size: int = 32,
-# ) -> IterableDataset:
-#     return RandomRecDataset(
-#         keys=DEFAULT_CAT_NAMES,
-#         batch_size=batch_size,
-#         hash_size=num_embeddings,
-#         ids_per_feature=1,
-#         num_dense=len(DEFAULT_INT_NAMES),
-#     )
-
-
-# def train_dlrm(rank: int, world_size: int, backend: str, local_size: int) -> None:
-#     num_embeddings: int = 1024**2
-#     embedding_dim: int = 128
-#     dense_arch_layer_sizes = None
-#     over_arch_layer_sizes = None
-#     learning_rate: float = 0.1
-#     num_iterations: int = 1000
-#     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-#         """
-#         Constructs and trains a DLRM model (using random dummy data). Each script is run on each process (rank) in SPMD fashion.
-#         The embedding layers will be sharded across available ranks
-
-#         qcomm_forward_precision: Compression used in forwards pass. FP16 is the recommended usage. INT8 and FP8 are in development, but feel free to try them out.
-#         qcomm_backward_precision: Compression used in backwards pass. We recommend using BF16 to ensure training stability.
-
-#         The effects of quantized comms will be most apparent in large training jobs across multiple nodes where inter host communication is expensive.
-#         """
-#         if dense_arch_layer_sizes is None:
-#             dense_arch_layer_sizes = [64, embedding_dim]
-#         if over_arch_layer_sizes is None:
-#             over_arch_layer_sizes = [64, 1]
-
-#         # Init process_group , device, rank, backend
-#         rank = ctx.rank
-#         device = ctx.device
-#         # Construct DLRM module
-#         eb_configs = [
-#             EmbeddingBagConfig(
-#                 name=f"t_{feature_name}",
-#                 embedding_dim=embedding_dim,
-#                 num_embeddings=num_embeddings,
-#                 feature_names=[feature_name],
-#             )
-#             for feature_idx, feature_name in enumerate(DEFAULT_CAT_NAMES)
-#         ]
-#         dlrm_model = DLRM(
-#             embedding_bag_collection=EmbeddingBagCollection(
-#                 tables=eb_configs, device=torch.device("meta")
-#             ),
-#             dense_in_features=len(DEFAULT_INT_NAMES),
-#             dense_arch_layer_sizes=dense_arch_layer_sizes,
-#             over_arch_layer_sizes=over_arch_layer_sizes,
-#             dense_device=device,
-#         )
-#         train_model = DLRMTrain(dlrm_model)
-
-#         apply_optimizer_in_backward(
-#             RowWiseAdagrad,
-#             train_model.model.sparse_arch.parameters(),
-#             {"lr": learning_rate},
-#         )
-#         # qcomm_codecs_registry = (
-#         #     get_qcomm_codecs_registry(
-#         #         qcomms_config=QCommsConfig(
-#         #             # pyre-ignore
-#         #             forward_precision=qcomm_forward_precision,
-#         #             # pyre-ignore
-#         #             backward_precision=qcomm_backward_precision,
-#         #         )
-#         #     )
-#         #     if backend == "nccl"
-#         #     else None
-#         # )
-#         sharder = EmbeddingBagCollectionSharder()
-#         # qcomm_codecs_registry=qcomm_codecs_registry)
-
-#         model = DistributedModelParallel(
-#             module=train_model,
-#             device=ctx.device,
-#             # pyre-ignore
-#             sharders=[sharder],
-#         )
-
-#         non_fused_optimizer = KeyedOptimizerWrapper(
-#             dict(in_backward_optimizer_filter(model.named_parameters())),
-#             lambda params: torch.optim.Adagrad(params, lr=learning_rate),
-#         )
-#         # # Overlap comm/compute/device transfer during training through train_pipeline
-#         # train_pipeline = TrainPipelineSparseDist(
-#         #     model,
-#         #     non_fused_optimizer,
-#         #     device,
-#         # )
-
-#         # train model
-#         train_iterator = iter(
-#             _get_random_dataset(
-#                 num_embeddings=num_embeddings,
-#             )
-#         )
-
-#         device = ctx.device
-#         print(model(next(train_iterator).to(device))[0])  # warmup, input dists
-#         # train_model.forward = torch.compile(fullgraph=True, backend="eager")(train_model.forward)
-#         # print(model(next(train_iterator).to(device)))
-#         # print(model(next(train_iterator).to(device)))
-#         # print(model(next(train_iterator).to(device)))
-#         # # for _ in tqdm(range(int(num_iterations)), mininterval=5.0):
-#         #     train_pipeline.progress(train_iterator)
-
-
-# @skip_if_asan_class
-# class DLRMTest(MultiProcessTestBase):
-#     @unittest.skipIf(
-#         torch.cuda.device_count() <= 1,
-#         "Not enough GPUs, this test requires at least two GPUs",
-#     )
-#     # pyre-fixme[56]
-#     def test_dlrm(
-#         self,
-#     ) -> None:
-
-#         WORLD_SIZE = 2
-#         self._run_multi_process_test(
-#             callable=train_dlrm,
-#             world_size=WORLD_SIZE,
-#             local_size=WORLD_SIZE,
-#             backend="nccl",
-#         )

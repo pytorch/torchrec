@@ -339,21 +339,6 @@ def alltoall_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_pooled_embs_tensor)
-
-    # myreq = Request(group, device=a2a_pooled_embs_tensor.device)
-    # a2ai = All2AllPooledInfo(
-    #     batch_size_per_rank=batch_size_per_rank,
-    #     dim_sum_per_rank=dim_sum_per_rank,
-    #     dim_sum_per_rank_tensor=dim_sum_per_rank_tensor,
-    #     cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
-    #     codecs=codecs,
-    # )
-    # All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
-    # return myreq
-
-    # below is PACT code
     input_embeddings = a2a_pooled_embs_tensor
     my_rank = dist.get_rank(group)
     (B_global, D_local_sum) = input_embeddings.shape
@@ -368,13 +353,14 @@ def alltoall_pooled(
     output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
     input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
 
-    # from torchrec.distributed import propagating_async_collective_tensor
     from torchrec.distributed import stream_sync_tensor
 
-    if my_rank == 4:
-        import time
-        print("LET ME SLEEP")
-        time.sleep(.2)
+    if codecs is not None:
+        with record_function("## codecs encode"):
+            codecs = none_throws(codecs)
+            qcomm_ctx = codecs.forward.create_context()
+            # DO ENCODe/DECODE HAVE AUTOGRAD DEFINED?
+            sharded_input_embeddings = codecs.forward.encode(sharded_input_embeddings)
 
     sharded_output_embeddings = stream_sync_tensor.all_to_all_single(
         sharded_input_embeddings,
@@ -382,6 +368,12 @@ def alltoall_pooled(
         input_split_sizes=input_split_sizes,
         group=group,
     )
+
+    if codecs is not None:
+        with record_function("## codecs decode"):
+            codecs = none_throws(codecs)
+            sharded_output_embeddings = codecs.forward.decode(sharded_output_embeddings, qcomm_ctx)
+
     outputs_by_rank = sharded_output_embeddings.split(
         [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
     )
