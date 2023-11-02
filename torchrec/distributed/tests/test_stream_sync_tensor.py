@@ -15,7 +15,7 @@ import hypothesis.strategies as st
 import torch
 import torch.nn as nn
 
-from torchrec.distributed.stream_sync_tensor import all_to_all_single
+from torchrec.distributed.stream_sync_tensor import StreamSyncTensor, all_to_all_single
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -57,6 +57,14 @@ def _test_stream_sync_collective_tensor(  # noqa C901
             input, output_split_sizes=[4, 4], input_split_sizes=[4, 4], group=ctx.pg
         )
 
+        a2a_out.split([4,4])[0].sum().backward()
+        # return
+
+        # torch.cat(a2a_out.split([4,4])).sum().backward()
+        # torch.cat([a2a_out]).sum().backward()
+        print("input grad", input.grad)
+        return
+
         print("a2a out", a2a_out)
         twice_a2a_out = a2a_out
         print("twice_a2a_out", twice_a2a_out)
@@ -94,4 +102,22 @@ class TestStreamSyncCollectiveTensor(MultiProcessTestBase):
 
 import unittest
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
+    t = StreamSyncTensor(torch.randn((10,10), device=torch.device("cuda"), requires_grad=True), stream=torch.cuda.Stream())
+    print("t", t)
+    # add = t.sum()
+    # print("add", add)
+    # add.backward()
+
+    # print("grad", t.grad)
+    # t.grad = None
+
+    split = t.split([5,5], dim=1)
+
+    # split[0].sum().backward()
+    # print(t.grad)
+    # with torch.autograd.detect_anomaly(check_nan=False):
+    #     s = t.sum()
+    #     print("s", s)
+    #     s.backward()
+    #     print(t.grad)

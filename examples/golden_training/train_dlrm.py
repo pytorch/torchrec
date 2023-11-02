@@ -171,7 +171,7 @@ def train(
 
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=4, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/sst_sleep_pl_dense_after_no_back_3'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./trace/sst_sleep_pl_dense_after_no_back_6'),
         record_shapes=False,
         profile_memory=False,
         with_stack=False
