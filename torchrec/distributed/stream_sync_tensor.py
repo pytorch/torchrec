@@ -7,13 +7,13 @@
 # LICENSE file in the root directory of this source tree.
 
 from functools import partial
-from typing import Any, Callable, cast, List, Optional, Union
+from typing import Any, List, Optional
 
 import torch
 from torch.autograd import Function
 from torch.distributed._functional_collectives import _expand_group, wait_tensor
-from torch.distributed._functional_collectives_impl import _register_tensor_wrapper
 from torch.utils._pytree import tree_leaves, tree_map_only
+from torch.utils._python_dispatch import return_and_correct_aliasing
 
 
 class StreamSyncTensor(torch.Tensor):
@@ -31,18 +31,17 @@ class StreamSyncTensor(torch.Tensor):
             dtype=elem.dtype,
             layout=elem.layout,
             device=elem.device,
-            requires_grad=True,
-            # elem.requires_grad,
+            requires_grad=elem.requires_grad,
         )
-        r.stream = stream
-        r.elem = elem
-        r.retain_grad()
         return r
+
+    def __init__(self, elem, stream):
+        self.elem = elem
+        self.stream = stream
 
     # pyre-ignore
     def __repr__(self, *, tensor_contents=None) -> str:
         return f"StreamSyncTensor({self.elem.__repr__()})"
-
 
     @classmethod
     def __torch_dispatch__(
@@ -71,44 +70,24 @@ class StreamSyncTensor(torch.Tensor):
         def wrap(e, stream):
             return StreamSyncTensor(e, stream=stream)
 
-        args = tree_map_only(StreamSyncTensor, unwrap, args)
-        kwargs = tree_map_only(StreamSyncTensor, unwrap, kwargs)
+        unwrapped_args = tree_map_only(StreamSyncTensor, unwrap, args)
+        unwrapped_kwargs = tree_map_only(StreamSyncTensor, unwrap, kwargs)
 
         if not non_stream_sync_tensors:
             with torch.cuda.stream(stream_sync_tensor_stream):
-                out = func(*args, **kwargs)
-            return tree_map_only(torch.Tensor, partial(wrap, stream=stream_sync_tensor_stream), out)
+                out = func(*unwrapped_args, **unwrapped_kwargs)
+
+            out = tree_map_only(torch.Tensor, partial(wrap, stream=stream_sync_tensor_stream), out)
+            return return_and_correct_aliasing(func, args, kwargs, out)
 
         for non_stream_sync_tensor in non_stream_sync_tensors:
             torch.cuda.current_stream(device=non_stream_sync_tensor.device).wait_stream(
                 stream_sync_tensor_stream
             )
-            torch.cuda.current_stream().wait_stream(stream_sync_tensor_stream)
-        return func(*args, **kwargs)
-
-    # def split(self, *args, **kwargs) -> List["StreamSyncTensor"]:
-    #     splits = self.elem.split(*args, **kwargs)
-    #     return [StreamSyncTensor(split, self.stream) for split in splits]
-
-    # # pyre-ignore
-    # def view(self, *args, **kwargs) -> "StreamSyncTensor":
-    #     out = StreamSyncTensor(self.elem.view(*args, **kwargs), self.stream)
-    #     out.retain_grad()
-    #     out.requires_grad = True
-    #     return out
-
-    # # pyre-ignore
-    # def reshape(self, *args, **kwargs) -> "StreamSyncTensor":
-    #     return StreamSyncTensor(self.elem.reshape(*args, **kwargs), self.stream)
-
-    # def narrow(self, *args, **kwargs) -> "StreamSyncTensor":
-    #     return StreamSyncTensor(self.elem.narrow(*args, **kwargs), self.stream)
-
-    # def transpose(self, *args, **kwargs) -> "StreamSyncTensor":
-    #     return StreamSyncTensor(self.elem.transpose(*args, **kwargs), self.stream)
+        torch.cuda.current_stream().wait_stream(stream_sync_tensor_stream)
+        return func(*unwrapped_args, **unwrapped_kwargs)
 
 from torch.distributed._functional_collectives import RANK_TYPES
-
 
 def all_to_all_single(
     self: torch.Tensor,
@@ -120,12 +99,7 @@ def all_to_all_single(
 ) -> StreamSyncTensor:
     if stream is None:
         stream = torch.cuda.Stream()
-    return StreamSyncTensor(
-        _AlltoAllSingle.apply(
-            stream, group, output_split_sizes, input_split_sizes, self
-        ),
-        stream,
-    )
+    return _AlltoAllSingle.apply(stream, group, output_split_sizes, input_split_sizes, self)
 
 class _AlltoAllSingle(Function):
     @staticmethod
@@ -140,10 +114,10 @@ class _AlltoAllSingle(Function):
         tag, rankset, group_size = _expand_group(group, "")
         with torch.cuda.stream(stream):
             tensor = torch.ops.c10d_functional.all_to_all_single(input, output_split_sizes, input_split_sizes, tag, rankset, group_size)  # type: ignore[attr-defined]
-            tensor.requires_grad = True
-            tensor.retain_grad()
+            # tensor.requires_grad = True
+            # tensor.retain_grad()
             wait_tensor(tensor)
-        return tensor
+        return StreamSyncTensor(tensor, ctx.stream)
 
     @staticmethod
     # pyre-ignore
