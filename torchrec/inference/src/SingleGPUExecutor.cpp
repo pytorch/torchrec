@@ -19,17 +19,23 @@ SingleGPUExecutor::SingleGPUExecutor(
     ExecInfos execInfos,
     size_t numGpu,
     std::shared_ptr<ISingleGPUExecutorObserver> observer,
-    c10::Device resultDevice)
+    c10::Device resultDevice,
+    size_t numProcessThreads)
     : manager_(manager),
       execInfos_(std::move(execInfos)),
       numGpu_(numGpu),
+      numProcessThreads_(numProcessThreads),
       resultDevice_(resultDevice),
       observer_(observer),
       requests_(kQUEUE_CAPACITY),
+      processExecutor_(
+          std::make_unique<folly::CPUThreadPoolExecutor>(numProcessThreads)),
       completionExecutor_(
           std::make_unique<folly::CPUThreadPoolExecutor>(execInfos_.size())),
-      roundRobinExecInfoNextIdx_(0u),
-      processThread_([&]() { process(); }) {
+      roundRobinExecInfoNextIdx_(0u) {
+  for (size_t i = 0; i < numProcessThreads_; ++i) {
+    processExecutor_->add([&]() { process(); });
+  }
   for (const auto& exec_info : execInfos_) {
     TORCHREC_CHECK(exec_info.interpIdx < manager_->allInstances().size());
   }
@@ -37,8 +43,10 @@ SingleGPUExecutor::SingleGPUExecutor(
 }
 
 SingleGPUExecutor::~SingleGPUExecutor() {
-  requests_.blockingWrite(nullptr);
-  processThread_.join();
+  for (size_t i = 0; i < numProcessThreads_; ++i) {
+    requests_.blockingWrite(nullptr);
+  }
+  processExecutor_->join();
   completionExecutor_->join();
 }
 
