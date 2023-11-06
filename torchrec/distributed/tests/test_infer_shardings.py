@@ -29,6 +29,7 @@ from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSp
 from torchrec.distributed.sharding_plan import (
     column_wise,
     construct_module_sharding_plan,
+    row_wise,
 )
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
@@ -709,3 +710,98 @@ class InferShardingsTest(unittest.TestCase):
             ["table_0", "table_1"],
             ShardingType.ROW_WISE.value,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 2,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_rw_uneven_sharding(self, weight_dtype: torch.dtype) -> None:
+        num_embeddings = 512
+        emb_dim = 64
+        local_size = 3
+        world_size = 3
+        batch_size = 4
+        local_device = torch.device("cuda:0")
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            num_features=1,
+        )
+
+        non_sharded_model = mi.quant_model
+        expected_shards = [
+            [
+                (
+                    (0, 0, 256, 64),
+                    "cpu",
+                ),
+                (
+                    (256, 0, 128, 64),
+                    "rank:0/cuda:0",
+                ),
+                (
+                    (384, 0, 128, 64),
+                    "rank:1/cuda:1",
+                ),
+            ],
+        ]
+
+        sharder = TestQuantEBCSharder(
+            sharding_type=ShardingType.ROW_WISE.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+
+        module_plan = construct_module_sharding_plan(
+            non_sharded_model._module.sparse.ebc,
+            per_param_sharding={
+                "table_0": row_wise(
+                    [
+                        (256, 0, "cpu"),
+                        (128, 1, "rank:0/cuda:0"),
+                        (128, 2, "rank:1/cuda:1"),
+                    ]
+                ),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+        )
+
+        plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
+        sharded_model = shard_qebc(
+            mi=mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
+            plan=plan,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        # We need this first inference to make all lazy init in forward
+        _ = sharded_model(*inputs[0])
+        _ = non_sharded_model(*inputs[0])
+        # TODO: enable sharded and nonsharded results comparison once remaining enablement is done
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        _ = gm_script(*inputs[0])
+        # TODO: enable scripted and nonscripted results comparison once remaining enablement is done
+        # TODO: add test for weightSpec
