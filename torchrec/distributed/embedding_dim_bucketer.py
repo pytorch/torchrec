@@ -9,7 +9,10 @@ import logging
 from enum import Enum, unique
 from typing import Dict, List
 
-from torchrec.distributed.embedding_types import ShardedEmbeddingTable
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    ShardedEmbeddingTable,
+)
 from torchrec.modules.embedding_configs import DATA_TYPE_NUM_BITS, DataType
 
 
@@ -153,3 +156,36 @@ class EmbDimBucketer:
 
     def dim_in_bytes(self, dim: int, dtype: DataType) -> int:
         return dim * DATA_TYPE_NUM_BITS[dtype] // 8
+
+
+def should_do_dim_bucketing(
+    embedding_tables: List[ShardedEmbeddingTable],
+) -> bool:
+    """
+    When embedding memory offloading with caching is enabled, we prefer to
+    do dim bucketing for better utilization of cache space. Only applied to
+    "prefetch-sparse-dist" training pipeline.
+
+    Currently using the compute kernel to deduct caching is enabled.
+    """
+    table_pipeline_count = 0
+    for table in embedding_tables:
+        if (
+            table.fused_params is not None
+            and "prefetch_pipeline" in table.fused_params
+            and table.fused_params["prefetch_pipeline"]
+        ):
+            table_pipeline_count += 1
+
+    if table_pipeline_count > 0 and table_pipeline_count != len(embedding_tables):
+        AssertionError(
+            f"Only {table_pipeline_count} tables have prefetch-sparse-dist pipeline. It should be all {len(embedding_tables)} tables."
+        )
+
+    for table in embedding_tables:
+        if (
+            table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+            and table_pipeline_count
+        ):
+            return True
+    return False
