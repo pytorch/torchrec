@@ -132,6 +132,7 @@ class RecMetricComputation(Metric, abc.ABC):
         should_validate_update: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
         fused_update_limit: int = 0,
+        allow_missing_label_with_zero_weight: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:

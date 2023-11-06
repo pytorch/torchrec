@@ -51,12 +51,17 @@ class TestNEMetric(TestMetric):
 
     @staticmethod
     def _compute(states: Dict[str, torch.Tensor]) -> torch.Tensor:
+        allow_missing_label_with_zero_weight = False
+        if not states["weighted_num_samples"].all():
+            allow_missing_label_with_zero_weight = True
+
         return compute_ne(
             states["cross_entropy_sum"],
             states["weighted_num_samples"],
             pos_labels=states["pos_labels"],
             neg_labels=states["neg_labels"],
             eta=TestNEMetric.eta,
+            allow_missing_label_with_zero_weight=allow_missing_label_with_zero_weight,
         )
 
 
@@ -175,6 +180,21 @@ class NEMetricTest(unittest.TestCase):
         #     world_size=WORLD_SIZE,
         #     entry_point=self._test_ne_large_window_size,
         # )
+
+    def test_ne_zero_weights(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=NEMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestNEMetric,
+            metric_name=NEMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+            zero_weights=True,
+        )
 
     _logloss_metric_test_helper: Callable[..., None] = partial(
         metric_test_helper, include_logloss=True
