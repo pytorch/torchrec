@@ -763,6 +763,8 @@ class InferShardingsTest(unittest.TestCase):
             shardable_params=[table.name for table in mi.tables],
         )
 
+        expected_host_port_pairs = ["dev01.meta.od:1234", None, None]
+
         module_plan = construct_module_sharding_plan(
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
@@ -771,13 +773,23 @@ class InferShardingsTest(unittest.TestCase):
                         (256, 0, "cpu"),
                         (128, 1, "rank:0/cuda:0"),
                         (128, 2, "rank:1/cuda:1"),
-                    ]
+                    ],
+                    expected_host_port_pairs,
                 ),
             },
             # pyre-ignore
             sharder=sharder,
             local_size=local_size,
             world_size=world_size,
+        )
+
+        self.assertEqual(
+            expected_host_port_pairs,
+            [
+                shard.host_port_pair
+                # pyre-ignore
+                for shard in module_plan["table_0"].sharding_spec.shards
+            ],
         )
 
         plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})

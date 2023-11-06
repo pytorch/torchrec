@@ -247,10 +247,14 @@ def _get_parameter_sharding(
     device_type: str,
     sharder: ModuleSharder[nn.Module],
     placements: Optional[List[str]] = None,
+    host_port_pairs: Optional[List[str]] = None,
 ) -> ParameterSharding:
     placements_: List[str] = [""] * len(size_offset_ranks)
+    host_port_pairs_: List[str] = [""] * len(size_offset_ranks)
     if placements:
         placements_ = placements
+    if host_port_pairs:
+        host_port_pairs_ = host_port_pairs
     return ParameterSharding(
         sharding_spec=None
         if sharding_type == ShardingType.DATA_PARALLEL.value
@@ -266,9 +270,10 @@ def _get_parameter_sharding(
                     )
                     if not placement_
                     else placement_,
+                    host_port_pair=None if not host_port_pair_ else host_port_pair_,
                 )
-                for (size, offset, rank), placement_ in zip(
-                    size_offset_ranks, placements_
+                for (size, offset, rank), placement_, host_port_pair_ in zip(
+                    size_offset_ranks, placements_, host_port_pairs_
                 )
             ]
         ),
@@ -386,7 +391,8 @@ def table_wise(
 
 
 def row_wise(
-    sizes_ranks_placements: Optional[List[Tuple[int, int, str]]] = None
+    sizes_ranks_placements: Optional[List[Tuple[int, int, str]]] = None,
+    host_port_pairs: Optional[List[Optional[str]]] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
@@ -440,6 +446,7 @@ def row_wise(
             placements=[srp[2] for srp in sizes_ranks_placements]
             if sizes_ranks_placements
             else None,
+            host_port_pairs=host_port_pairs,
         )
 
     return _parameter_sharding_generator
