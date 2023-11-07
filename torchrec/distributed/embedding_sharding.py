@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
@@ -14,6 +15,11 @@ from torch import distributed as dist, nn
 from torchrec.distributed.dist_data import (
     KJTAllToAllTensorsAwaitable,
     SplitsAllToAllAwaitable,
+)
+from torchrec.distributed.embedding_dim_bucketer import (
+    EmbDimBucketer,
+    EmbDimBucketerPolicy,
+    should_do_dim_bucketing,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
@@ -151,59 +157,82 @@ def group_tables(
             EmbeddingComputeKernel.QUANT,
         ]
 
+        emb_dim_bucketer_policy = (
+            EmbDimBucketerPolicy.ALL_BUCKETS
+            if should_do_dim_bucketing(embedding_tables)
+            else EmbDimBucketerPolicy.SINGLE_BUCKET
+        )
+        emb_dim_bucketer = EmbDimBucketer(embedding_tables, emb_dim_bucketer_policy)
+        logging.info(f"bucket count {emb_dim_bucketer.bucket_count()}")
+
         for data_type in DataType:
             for pooling in PoolingType:
                 # remove this when finishing migration
                 for has_feature_processor in [False, True]:
                     for fused_params_group in fused_params_groups:
                         for compute_kernel in compute_kernels:
-                            grouped_tables: List[ShardedEmbeddingTable] = []
-                            is_weighted = False
-                            for table in embedding_tables:
-                                compute_kernel_type = table.compute_kernel
-                                is_weighted = table.is_weighted
-                                if table.compute_kernel in [
-                                    EmbeddingComputeKernel.FUSED_UVM,
-                                    EmbeddingComputeKernel.FUSED_UVM_CACHING,
-                                ]:
-                                    compute_kernel_type = EmbeddingComputeKernel.FUSED
-                                elif table.compute_kernel in [
-                                    EmbeddingComputeKernel.QUANT_UVM,
-                                    EmbeddingComputeKernel.QUANT_UVM_CACHING,
-                                ]:
-                                    compute_kernel_type = EmbeddingComputeKernel.QUANT
-                                if (
-                                    table.data_type == data_type
-                                    and table.pooling.value == pooling.value
-                                    and table.has_feature_processor
-                                    == has_feature_processor
-                                    and compute_kernel_type == compute_kernel
-                                    and table.fused_params == fused_params_group
-                                ):
-                                    grouped_tables.append(table)
+                            for dim_bucket in range(emb_dim_bucketer.bucket_count()):
+                                grouped_tables: List[ShardedEmbeddingTable] = []
+                                is_weighted = False
+                                for table in embedding_tables:
+                                    compute_kernel_type = table.compute_kernel
+                                    is_weighted = table.is_weighted
+                                    if table.compute_kernel in [
+                                        EmbeddingComputeKernel.FUSED_UVM,
+                                        EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                                    ]:
+                                        compute_kernel_type = (
+                                            EmbeddingComputeKernel.FUSED
+                                        )
+                                    elif table.compute_kernel in [
+                                        EmbeddingComputeKernel.QUANT_UVM,
+                                        EmbeddingComputeKernel.QUANT_UVM_CACHING,
+                                    ]:
+                                        compute_kernel_type = (
+                                            EmbeddingComputeKernel.QUANT
+                                        )
 
-                            if fused_params_group is None:
-                                fused_params_group = {}
+                                    if (
+                                        table.data_type == data_type
+                                        and table.pooling.value == pooling.value
+                                        and table.has_feature_processor
+                                        == has_feature_processor
+                                        and compute_kernel_type == compute_kernel
+                                        and table.fused_params == fused_params_group
+                                        and (
+                                            emb_dim_bucketer.get_bucket(
+                                                table.embedding_dim, table.data_type
+                                            )
+                                            == dim_bucket
+                                        )
+                                    ):
+                                        grouped_tables.append(table)
 
-                            if grouped_tables:
-                                grouped_embedding_configs.append(
-                                    GroupedEmbeddingConfig(
-                                        data_type=data_type,
-                                        pooling=pooling,
-                                        is_weighted=is_weighted,
-                                        has_feature_processor=has_feature_processor,
-                                        compute_kernel=compute_kernel,
-                                        embedding_tables=grouped_tables,
-                                        fused_params={
-                                            k: v
-                                            for k, v in fused_params_group.items()
-                                            if k
-                                            not in [
-                                                "_batch_key"
-                                            ]  # drop '_batch_key' not a native fused param
-                                        },
+                                if fused_params_group is None:
+                                    fused_params_group = {}
+
+                                if grouped_tables:
+                                    logging.info(
+                                        f"{len(grouped_tables)} tables are grouped for bucket: {dim_bucket}."
                                     )
-                                )
+                                    grouped_embedding_configs.append(
+                                        GroupedEmbeddingConfig(
+                                            data_type=data_type,
+                                            pooling=pooling,
+                                            is_weighted=is_weighted,
+                                            has_feature_processor=has_feature_processor,
+                                            compute_kernel=compute_kernel,
+                                            embedding_tables=grouped_tables,
+                                            fused_params={
+                                                k: v
+                                                for k, v in fused_params_group.items()
+                                                if k
+                                                not in [
+                                                    "_batch_key"
+                                                ]  # drop '_batch_key' not a native fused param
+                                            },
+                                        )
+                                    )
         return grouped_embedding_configs
 
     table_weightedness = [
