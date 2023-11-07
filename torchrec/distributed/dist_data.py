@@ -733,6 +733,7 @@ class VariableBatchPooledEmbeddingsAllToAll(nn.Module):
         codecs: Optional[QuantizedCommCodecs] = None,
     ) -> None:
         super().__init__()
+        torch._C._log_api_usage_once("torchrec.distributed.vbe")
         self._pg = pg
         self._emb_dim_per_rank_per_feature = emb_dim_per_rank_per_feature
         self._callbacks: List[Callable[[torch.Tensor], torch.Tensor]] = []
