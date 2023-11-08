@@ -225,12 +225,16 @@ def rec_metric_value_test_helper(
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
     n_classes: Optional[int] = None,
+    zero_weights: bool = False,
     **kwargs: Any,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
     tasks = gen_test_tasks(task_names)
     model_outs = []
-
     for _ in range(nsteps):
+        weight_value: Optional[torch.Tensor] = None
+        if zero_weights:
+            weight_value = torch.zeros(batch_size)
+
         _model_outs = [
             gen_test_batch(
                 label_name=task.label_name,
@@ -238,6 +242,7 @@ def rec_metric_value_test_helper(
                 weight_name=task.weight_name,
                 batch_size=batch_size,
                 n_classes=n_classes,
+                weight_value=weight_value,
             )
             for task in tasks
         ]
@@ -254,6 +259,9 @@ def rec_metric_value_test_helper(
         window_size = world_size * batch_size * batch_window_size
         if n_classes:
             kwargs["number_of_classes"] = n_classes
+        if zero_weights:
+            kwargs["allow_missing_label_with_zero_weight"] = True
+
         target_metric_obj = target_clazz(
             world_size=world_size,
             my_rank=my_rank,
@@ -345,6 +353,7 @@ def rec_metric_value_test_launcher(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     test_nsteps: int = 1,
     n_classes: Optional[int] = None,
+    zero_weights: bool = False,
     **kwargs: Any,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -368,8 +377,10 @@ def rec_metric_value_test_launcher(
             nsteps=test_nsteps,
             batch_window_size=1,
             n_classes=n_classes,
+            zero_weights=zero_weights,
             **kwargs,
         )
+
         pet.elastic_launch(lc, entrypoint=entry_point)(
             target_clazz,
             target_compute_mode,
@@ -382,6 +393,7 @@ def rec_metric_value_test_launcher(
             batch_window_size,
             n_classes,
             test_nsteps,
+            zero_weights,
         )
 
 
@@ -407,6 +419,7 @@ def metric_test_helper(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     n_classes: Optional[int] = None,
     nsteps: int = 1,
+    zero_weights: bool = False,
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
     **kwargs: Any,
@@ -418,6 +431,7 @@ def metric_test_helper(
         world_size=world_size,
         rank=rank,
     )
+
     target_metrics, test_metrics = rec_metric_value_test_helper(
         target_clazz=target_clazz,
         target_compute_mode=target_compute_mode,
@@ -433,6 +447,7 @@ def metric_test_helper(
         nsteps=nsteps,
         is_time_dependent=is_time_dependent,
         time_dependent_metric=time_dependent_metric,
+        zero_weights=zero_weights,
         **kwargs,
     )
 

@@ -44,13 +44,21 @@ def _compute_cross_entropy_norm(
     )
 
 
+@torch.fx.wrap
 def compute_ne(
     ce_sum: torch.Tensor,
     weighted_num_samples: torch.Tensor,
     pos_labels: torch.Tensor,
     neg_labels: torch.Tensor,
     eta: float,
+    allow_missing_label_with_zero_weight: bool = False,
 ) -> torch.Tensor:
+    if allow_missing_label_with_zero_weight and not weighted_num_samples.all():
+        # If nan were to occur, return a dummy value instead of nan if
+        # allow_missing_label_with_zero_weight is True
+        return torch.tensor([eta])
+
+    # Goes into this block if all elements in weighted_num_samples > 0
     mean_label = pos_labels / weighted_num_samples
     ce_norm = _compute_cross_entropy_norm(mean_label, pos_labels, neg_labels, eta)
     return ce_sum / ce_norm
@@ -96,9 +104,16 @@ class NEMetricComputation(RecMetricComputation):
     """
 
     def __init__(
-        self, *args: Any, include_logloss: bool = False, **kwargs: Any
+        self,
+        *args: Any,
+        include_logloss: bool = False,
+        allow_missing_label_with_zero_weight: bool = False,
+        **kwargs: Any,
     ) -> None:
         self._include_logloss: bool = include_logloss
+        self._allow_missing_label_with_zero_weight: bool = (
+            allow_missing_label_with_zero_weight
+        )
         super().__init__(*args, **kwargs)
         self._add_state(
             "cross_entropy_sum",
@@ -161,6 +176,7 @@ class NEMetricComputation(RecMetricComputation):
                     cast(torch.Tensor, self.pos_labels),
                     cast(torch.Tensor, self.neg_labels),
                     self.eta,
+                    self._allow_missing_label_with_zero_weight,
                 ),
             ),
             MetricComputationReport(
@@ -172,6 +188,7 @@ class NEMetricComputation(RecMetricComputation):
                     self.get_window_state("pos_labels"),
                     self.get_window_state("neg_labels"),
                     self.eta,
+                    self._allow_missing_label_with_zero_weight,
                 ),
             ),
         ]
