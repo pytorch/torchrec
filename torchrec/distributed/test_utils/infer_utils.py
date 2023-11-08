@@ -85,7 +85,11 @@ class TestModelInfo:
 
 
 def prep_inputs(
-    model_info: TestModelInfo, world_size: int, batch_size: int = 1, count: int = 5
+    model_info: TestModelInfo,
+    world_size: int,
+    batch_size: int = 1,
+    count: int = 5,
+    long_indices: bool = True,
 ) -> List[ModelInput]:
     inputs = []
     for _ in range(count):
@@ -96,6 +100,7 @@ def prep_inputs(
                 num_float_features=model_info.num_float_features,
                 tables=model_info.tables,
                 weighted_tables=model_info.weighted_tables,
+                long_indices=long_indices,
             )[1][0],
         )
     return inputs

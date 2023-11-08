@@ -464,14 +464,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             embeddings.append(
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
                 emb_op(
-                    indices=indices.int(),
-                    offsets=offsets.int(),
+                    indices=indices,
+                    offsets=offsets,
                     per_sample_weights=weights if self._is_weighted else None,
                 )
                 if self.register_tbes
                 else emb_op.forward(
-                    indices=indices.int(),
-                    offsets=offsets.int(),
+                    indices=indices,
+                    offsets=offsets,
                     per_sample_weights=weights if self._is_weighted else None,
                 )
             )
@@ -736,9 +736,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 offsets = f.offsets()
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
                 lookup = (
-                    emb_module(indices=values.int(), offsets=offsets.int())
+                    emb_module(indices=values, offsets=offsets)
                     if self.register_tbes
-                    else emb_module.forward(indices=values.int(), offsets=offsets.int())
+                    else emb_module.forward(indices=values, offsets=offsets)
                 )
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,

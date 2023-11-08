@@ -62,6 +62,7 @@ class ModelInput(Pipelineable):
             ]
         ] = None,
         variable_batch_size: bool = False,
+        long_indices: bool = True,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -109,7 +110,12 @@ class ModelInput(Pipelineable):
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
-            indices = torch.randint(0, ind_range, (num_indices,))
+            indices = torch.randint(
+                0,
+                ind_range,
+                (num_indices,),
+                dtype=torch.long if long_indices else torch.int32,
+            )
             global_idlist_lengths.append(lengths)
             global_idlist_indices.append(indices)
         global_idlist_kjt = KeyedJaggedTensor(
@@ -133,7 +139,12 @@ class ModelInput(Pipelineable):
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
-            indices = torch.randint(0, ind_range, (num_indices,))
+            indices = torch.randint(
+                0,
+                ind_range,
+                (num_indices,),
+                dtype=torch.long if long_indices else torch.int32,
+            )
             weights = torch.rand((num_indices,))
             global_idscore_lengths.append(lengths)
             global_idscore_indices.append(indices)
