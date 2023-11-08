@@ -131,7 +131,7 @@ class QuantPruneTest(unittest.TestCase):
 
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(quant_model.state_dict())
         quant_output = quant_model(*inputs[0])
@@ -264,8 +264,8 @@ class QuantPruneTest(unittest.TestCase):
 
         kjt = KeyedJaggedTensor.from_lengths_sync(
             keys=["feature_0"],
-            values=torch.LongTensor([0, 1, 2]).cuda(),
-            lengths=torch.LongTensor([1, 1, 1]).cuda(),
+            values=torch.tensor([0, 1, 2], dtype=torch.int32).cuda(),
+            lengths=torch.tensor([1, 1, 1], dtype=torch.int32).cuda(),
             weights=None,
         )
 
@@ -352,7 +352,7 @@ class QuantPruneTest(unittest.TestCase):
 
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(quant_model.state_dict())
         quant_output = quant_model(*inputs[0])
@@ -485,8 +485,8 @@ class QuantPruneTest(unittest.TestCase):
 
         kjt = KeyedJaggedTensor.from_lengths_sync(
             keys=["feature_0"],
-            values=torch.LongTensor([0, 1, 2, 197, 198, 199]).cuda(),
-            lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]).cuda(),
+            values=torch.tensor([0, 1, 2, 197, 198, 199], dtype=torch.int32).cuda(),
+            lengths=torch.tensor([1, 1, 1, 1, 1, 1], dtype=torch.int32).cuda(),
             weights=None,
         )
 

@@ -111,6 +111,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
             dense_device=cuda_device,
             sparse_device=cuda_device,
             generate=generate,
+            long_indices=False,
         )
         global_model = quantize_callable(global_model, **quantize_callable_kwargs)
         local_input = _inputs[0][1][default_rank].to(cuda_device)
