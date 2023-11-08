@@ -108,6 +108,7 @@ class ModelInputCallable(Protocol):
             Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
         ] = None,
         variable_batch_size: bool = False,
+        long_indices: bool = True,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         ...
 
@@ -121,6 +122,7 @@ def generate_inputs(
     batch_size: int = 4,
     num_float_features: int = 16,
     variable_batch_size: bool = False,
+    long_indices: bool = True,
 ) -> Tuple[ModelInput, List[ModelInput]]:
     return generate(
         batch_size=batch_size,
@@ -130,6 +132,7 @@ def generate_inputs(
         dedup_tables=dedup_tables,
         weighted_tables=weighted_tables or [],
         variable_batch_size=variable_batch_size,
+        long_indices=long_indices,
     )
 
 
@@ -148,6 +151,7 @@ def gen_model_and_input(
     variable_batch_size: bool = False,
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
+    long_indices: bool = True,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -188,6 +192,7 @@ def gen_model_and_input(
             num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
+            long_indices=long_indices,
         )
     ]
     return (model, inputs)

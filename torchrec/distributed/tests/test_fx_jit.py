@@ -188,7 +188,7 @@ class ModelTraceScriptTest(unittest.TestCase):
             env=ShardingEnv.from_local(world_size=world_size, rank=0),
         )
 
-        inputs = prep_inputs(model_info, world_size)
+        inputs = prep_inputs(model_info, world_size, long_indices=False)
 
         return (
             model_info.quant_model,
@@ -214,7 +214,7 @@ class ModelTraceScriptTest(unittest.TestCase):
             env=ShardingEnv.from_local(world_size=world_size, rank=0),
         )
 
-        inputs = prep_inputs(model_info, world_size)
+        inputs = prep_inputs(model_info, world_size, long_indices=False)
 
         return (
             model_info.quant_model,
@@ -259,7 +259,7 @@ class ModelTraceScriptTest(unittest.TestCase):
 
         dmp = dmp.copy(model_info.sparse_device)
 
-        inputs = prep_inputs(model_info, world_size)
+        inputs = prep_inputs(model_info, world_size, long_indices=False)
 
         m = dmp.module if unwrap_dmp else dmp
         return (
@@ -305,7 +305,7 @@ class ModelTraceScriptTest(unittest.TestCase):
             )
             model_info.model = m.module
 
-        inputs = prep_inputs(model_info, world_size)
+        inputs = prep_inputs(model_info, world_size, long_indices=False)
 
         return (
             model_info.quant_model,
