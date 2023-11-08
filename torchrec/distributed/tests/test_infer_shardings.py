@@ -99,7 +99,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
 
         sharded_model.load_state_dict(non_sharded_model.state_dict())
@@ -205,7 +205,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(non_sharded_model.state_dict())
         # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
@@ -292,7 +292,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(non_sharded_model.state_dict())
         # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
@@ -387,7 +387,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(non_sharded_model.state_dict())
         # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
@@ -489,7 +489,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
         sharded_model.load_state_dict(non_sharded_model.state_dict())
         # torchrec.distributed.test_utils.test_sharding.copy_state_dict(sharded_model.state_dict(), non_sharded_model.state_dict()) does not work for CW due to non-trivial qscaleshift copy which is handled in shardedQEBC load_state_dict
@@ -587,7 +587,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = [
             model_input_to_forward_args_kjt(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
 
         sharded_model.load_state_dict(non_sharded_model.state_dict())
@@ -687,7 +687,7 @@ class InferShardingsTest(unittest.TestCase):
 
         inputs = [
             model_input_to_forward_args_kjt(inp.to(local_device))
-            for inp in prep_inputs(mi, world_size, batch_size)
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
 
         sharded_model.load_state_dict(non_sharded_model.state_dict())

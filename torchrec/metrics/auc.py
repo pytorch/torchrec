@@ -27,10 +27,16 @@ REQUIRED_INPUTS = "required_inputs"
 
 
 def _compute_auc_helper(
-    predictions: torch.Tensor, labels: torch.Tensor, weights: torch.Tensor
+    predictions: torch.Tensor,
+    labels: torch.Tensor,
+    weights: torch.Tensor,
+    apply_bin: bool = False,
 ) -> torch.Tensor:
     sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
     sorted_labels = torch.index_select(labels, dim=0, index=sorted_indices)
+    if apply_bin:
+        # [RECGPT] - applying binning, >=0.5 --> 1, <0.5 --> 0
+        sorted_labels = torch.ge(sorted_labels, 0.5).to(dtype=sorted_labels.dtype)
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
     cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
     cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
@@ -43,7 +49,11 @@ def _compute_auc_helper(
 
 
 def compute_auc(
-    n_tasks: int, predictions: torch.Tensor, labels: torch.Tensor, weights: torch.Tensor
+    n_tasks: int,
+    predictions: torch.Tensor,
+    labels: torch.Tensor,
+    weights: torch.Tensor,
+    apply_bin: bool = False,
 ) -> torch.Tensor:
     """
     Computes AUC (Area Under the Curve) for binary classification.
@@ -56,7 +66,7 @@ def compute_auc(
     """
     aucs = []
     for predictions_i, labels_i, weights_i in zip(predictions, labels, weights):
-        auc = _compute_auc_helper(predictions_i, labels_i, weights_i)
+        auc = _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin)
         aucs.append(auc.view(1))
     return torch.cat(aucs)
 
@@ -140,6 +150,7 @@ class AUCMetricComputation(RecMetricComputation):
         self,
         *args: Any,
         grouped_auc: bool = False,
+        apply_bin: bool = False,
         fused_update_limit: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -150,6 +161,7 @@ class AUCMetricComputation(RecMetricComputation):
             )
 
         self._grouped_auc: bool = grouped_auc
+        self._apply_bin: bool = apply_bin
         self._add_state(
             PREDICTIONS,
             [],
@@ -273,6 +285,7 @@ class AUCMetricComputation(RecMetricComputation):
                     cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
                     cast(torch.Tensor, getattr(self, LABELS)[0]),
                     cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
+                    self._apply_bin,
                 ),
             )
         ]
