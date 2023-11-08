@@ -542,20 +542,20 @@ class EmbeddingCollectionTest(unittest.TestCase):
             name="t1",
             embedding_dim=16,
             num_embeddings=10,
-            feature_names=["f1"],
+            feature_names=["f1", "f2"],
             data_type=data_type,
         )
         eb2_config = EmbeddingConfig(
             name="t2",
             embedding_dim=16,
             num_embeddings=10,
-            feature_names=["f2"],
+            feature_names=["f3", "f4"],
             data_type=data_type,
         )
         features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.as_tensor([0, 1]),
-            lengths=torch.as_tensor([1, 1]),
+            keys=["f1", "f2", "f3", "f4"],
+            values=torch.as_tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            lengths=torch.as_tensor([1, 2, 3, 2]),
         )
         self._test_ec(
             tables=[eb1_config, eb2_config],

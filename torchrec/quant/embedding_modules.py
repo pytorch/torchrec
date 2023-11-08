@@ -738,23 +738,48 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             self._embedding_names_by_table,
             self._emb_modules,
         ):
-            for feature_name, embedding_name in zip(
-                config.feature_names, embedding_names
-            ):
+            indices_list = []
+            length_list = []
+            if len(config.feature_names) == 1:
+                feature_name = config.feature_names[0]
                 f = jt_dict[feature_name]
                 values = f.values()
                 offsets = set_fake_stbe_offsets(values)
-                # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
                 lookup = (
                     emb_module(indices=values, offsets=offsets)
                     if self.register_tbes
                     else emb_module.forward(indices=values, offsets=offsets)
                 )
-                feature_embeddings[embedding_name] = JaggedTensor(
+                feature_embeddings[embedding_names[0]] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
                     weights=f.values() if self.need_indices else None,
                 )
+            else:
+                for feature_name in config.feature_names:
+                    f = jt_dict[feature_name]
+                    values = f.values()
+                    length_list.append(f.lengths().view(1, -1))
+                    indices_list.append(values)
+                indices = torch.cat(indices_list)
+                offsets = set_fake_stbe_offsets(indices)
+                length_all = torch.cat(length_list, dim=0)
+                # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
+                lookup = (
+                    emb_module(indices=indices, offsets=offsets)
+                    if self.register_tbes
+                    else emb_module.forward(indices=indices, offsets=offsets)
+                ).view(-1, self._embedding_dim)
+                length_split = torch.sum(length_all, dim=1).tolist()
+                splits = lookup.split(length_split, dim=0)
+                for embedding_name, length, indice, embedding in zip(
+                    embedding_names, length_list, indices_list, splits
+                ):
+                    feature_embeddings[embedding_name] = JaggedTensor(
+                        values=embedding,
+                        lengths=length.view(-1),
+                        weights=indice if self.need_indices else None,
+                    )
         return feature_embeddings
 
     @classmethod
