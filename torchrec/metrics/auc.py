@@ -35,7 +35,7 @@ def _compute_auc_helper(
     sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
     sorted_labels = torch.index_select(labels, dim=0, index=sorted_indices)
     if apply_bin:
-        # [RECGPT] - applying binning, >=0.5 --> 1, <0.5 --> 0
+        # applying binning, for use with soft labels, >=0.5 --> 1, <0.5 --> 0
         sorted_labels = torch.ge(sorted_labels, 0.5).to(dtype=sorted_labels.dtype)
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
     cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)

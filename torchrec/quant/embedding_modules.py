@@ -69,6 +69,16 @@ MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT: str = (
 DEFAULT_ROW_ALIGNMENT = 16
 
 
+@torch.fx.wrap
+def set_fake_stbe_offsets(values: torch.Tensor) -> torch.Tensor:
+    return torch.arange(
+        0,
+        values.numel() + 1,
+        device=values.device,
+        dtype=values.dtype,
+    )
+
+
 def for_each_module_of_type_do(
     module: nn.Module,
     module_types: List[Type[torch.nn.Module]],
@@ -659,7 +669,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         else EmbeddingLocation.DEVICE,
                     )
                 ],
-                pooling_mode=PoolingMode.NONE,
+                pooling_mode=PoolingMode.SUM,
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
@@ -733,7 +743,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             ):
                 f = jt_dict[feature_name]
                 values = f.values()
-                offsets = f.offsets()
+                offsets = set_fake_stbe_offsets(values)
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
                 lookup = (
                     emb_module(indices=values, offsets=offsets)

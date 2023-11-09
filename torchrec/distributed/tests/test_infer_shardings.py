@@ -134,7 +134,6 @@ class InferShardingsTest(unittest.TestCase):
     )
     @settings(max_examples=4, deadline=None)
     def test_cw(self, test_permute: bool, weight_dtype: torch.dtype) -> None:
-        test_permute = False
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
