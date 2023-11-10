@@ -35,8 +35,8 @@ def _compute_auc_helper(
     sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
     sorted_labels = torch.index_select(labels, dim=0, index=sorted_indices)
     if apply_bin:
-        # applying binning, for use with soft labels, >=0.5 --> 1, <0.5 --> 0
-        sorted_labels = torch.ge(sorted_labels, 0.5).to(dtype=sorted_labels.dtype)
+        # TODO - [add flag to set bining dyamically] for use with soft labels, >=0.039 --> 1, <0.039 --> 0
+        sorted_labels = torch.ge(sorted_labels, 0.039).to(dtype=sorted_labels.dtype)
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
     cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
     cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
@@ -50,64 +50,77 @@ def _compute_auc_helper(
 
 def compute_auc(
     n_tasks: int,
-    predictions: torch.Tensor,
-    labels: torch.Tensor,
-    weights: torch.Tensor,
-    apply_bin: bool = False,
+    predictions: List[torch.Tensor],
+    labels: List[torch.Tensor],
+    weights: List[torch.Tensor],
 ) -> torch.Tensor:
     """
     Computes AUC (Area Under the Curve) for binary classification.
 
     Args:
         n_tasks (int): number of tasks.
-        predictions (torch.Tensor): tensor of size (n_tasks, n_examples).
-        labels (torch.Tensor): tensor of size (n_tasks, n_examples).
-        weights (torch.Tensor): tensor of size (n_tasks, n_examples).
+        predictions (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples).
+        labels (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples).
+        weights (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples).
     """
+    # concatenate tensors along dim = -1
+    predictions_cat = torch.cat(predictions, dim=-1)
+    labels_cat = torch.cat(labels, dim=-1)
+    weights_cat = torch.cat(weights, dim=-1)
+
     aucs = []
-    for predictions_i, labels_i, weights_i in zip(predictions, labels, weights):
-        auc = _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin)
+    for predictions_i, labels_i, weights_i in zip(
+        predictions_cat, labels_cat, weights_cat
+    ):
+        auc = _compute_auc_helper(predictions_i, labels_i, weights_i)
         aucs.append(auc.view(1))
     return torch.cat(aucs)
 
 
 def compute_auc_per_group(
     n_tasks: int,
-    predictions: torch.Tensor,
-    labels: torch.Tensor,
-    weights: torch.Tensor,
-    grouping_keys: torch.Tensor,
+    predictions: List[torch.Tensor],
+    labels: List[torch.Tensor],
+    weights: List[torch.Tensor],
+    grouping_keys: List[torch.Tensor],
 ) -> torch.Tensor:
     """
     Computes AUC (Area Under the Curve) for binary classification for groups of predictions/labels.
     Args:
         n_tasks (int): number of tasks
-        predictions (torch.Tensor): tensor of size (n_tasks, n_examples)
-        labels (torch.Tensor): tensor of size (n_tasks, n_examples)
-        weights (torch.Tensor): tensor of size (n_tasks, n_examples)
-        grouping_keys (torch.Tensor): tensor of size (n_examples,)
+        predictions (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples)
+        labels (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples)
+        weights (List[torch.Tensor]): List of tensors of size (n_tasks, n_examples)
+        grouping_keys (List[torch.Tensor]): List of tensors of size (n_examples,)
 
     Returns:
         torch.Tensor: tensor of size (n_tasks,), average of AUCs per group.
     """
+    predictions_cat = torch.cat(predictions, dim=-1)
+    labels_cat = torch.cat(labels, dim=-1)
+    weights_cat = torch.cat(weights, dim=-1)
+    grouping_keys_cat = torch.cat(grouping_keys, dim=-1)
+
     aucs = []
-    if grouping_keys.numel() != 0 and grouping_keys[0] == -1:
+    if grouping_keys_cat.numel() != 0 and grouping_keys_cat[0] == -1:
         # we added padding  as the first elements during init to avoid floating point exception in sync()
         # removing the paddings to avoid numerical errors.
-        grouping_keys = grouping_keys[1:]
-        predictions = predictions[:, 1:]
-        labels = labels[:, 1:]
-        weights = weights[:, 1:]
+        grouping_keys_cat = grouping_keys_cat[1:]
+        predictions_cat = predictions_cat[:, 1:]
+        labels_cat = labels_cat[:, 1:]
+        weights_cat = weights_cat[:, 1:]
 
     # get unique group indices
-    group_indices = torch.unique(grouping_keys)
+    group_indices = torch.unique(grouping_keys_cat)
 
-    for (predictions_i, labels_i, weights_i) in zip(predictions, labels, weights):
+    for (predictions_i, labels_i, weights_i) in zip(
+        predictions_cat, labels_cat, weights_cat
+    ):
         # Loop over each group
         auc_groups_sum = torch.tensor([0], dtype=torch.float32)
         for group_idx in group_indices:
             # get predictions, labels, and weights for this group
-            group_mask = grouping_keys == group_idx
+            group_mask = grouping_keys_cat == group_idx
             grouped_predictions = predictions_i[group_mask]
             grouped_labels = labels_i[group_mask]
             grouped_weights = weights_i[group_mask]
@@ -241,25 +254,12 @@ class AUCMetricComputation(RecMetricComputation):
         predictions = predictions.float()
         labels = labels.float()
         weights = weights.float()
-        num_samples = getattr(self, PREDICTIONS)[0].size(-1)
-        batch_size = predictions.size(-1)
-        start_index = max(num_samples + batch_size - self._window_size, 0)
+
         # Using `self.predictions =` will cause Pyre errors.
-        getattr(self, PREDICTIONS)[0] = torch.cat(
-            [
-                cast(torch.Tensor, getattr(self, PREDICTIONS)[0])[:, start_index:],
-                predictions,
-            ],
-            dim=-1,
-        )
-        getattr(self, LABELS)[0] = torch.cat(
-            [cast(torch.Tensor, getattr(self, LABELS)[0])[:, start_index:], labels],
-            dim=-1,
-        )
-        getattr(self, WEIGHTS)[0] = torch.cat(
-            [cast(torch.Tensor, getattr(self, WEIGHTS)[0])[:, start_index:], weights],
-            dim=-1,
-        )
+        getattr(self, PREDICTIONS).append(predictions)
+        getattr(self, LABELS).append(labels)
+        getattr(self, WEIGHTS).append(weights)
+
         if self._grouped_auc:
             if REQUIRED_INPUTS not in kwargs or (
                 (grouping_keys := kwargs[REQUIRED_INPUTS].get(GROUPING_KEYS)) is None
@@ -267,13 +267,8 @@ class AUCMetricComputation(RecMetricComputation):
                 raise RecMetricException(
                     f"Input '{GROUPING_KEYS}' are required for AUCMetricComputation grouped update"
                 )
-            getattr(self, GROUPING_KEYS)[0] = torch.cat(
-                [
-                    cast(torch.Tensor, getattr(self, GROUPING_KEYS)[0])[start_index:],
-                    grouping_keys.squeeze(),
-                ],
-                dim=0,
-            )
+
+            getattr(self, GROUPING_KEYS).append(grouping_keys.squeeze())
 
     def _compute(self) -> List[MetricComputationReport]:
         reports = [
@@ -282,10 +277,12 @@ class AUCMetricComputation(RecMetricComputation):
                 metric_prefix=MetricPrefix.WINDOW,
                 value=compute_auc(
                     self._n_tasks,
-                    cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
-                    cast(torch.Tensor, getattr(self, LABELS)[0]),
-                    cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
-                    self._apply_bin,
+                    # pyre-ignore[6]
+                    cast(torch.Tensor, getattr(self, PREDICTIONS)),
+                    # pyre-ignore[6]
+                    cast(torch.Tensor, getattr(self, LABELS)),
+                    # pyre-ignore[6]
+                    cast(torch.Tensor, getattr(self, WEIGHTS)),
                 ),
             )
         ]
@@ -296,10 +293,14 @@ class AUCMetricComputation(RecMetricComputation):
                     metric_prefix=MetricPrefix.WINDOW,
                     value=compute_auc_per_group(
                         self._n_tasks,
-                        cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
-                        cast(torch.Tensor, getattr(self, LABELS)[0]),
-                        cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
-                        cast(torch.Tensor, getattr(self, GROUPING_KEYS)[0]),
+                        # pyre-ignore[6]
+                        cast(torch.Tensor, getattr(self, PREDICTIONS)),
+                        # pyre-ignore[6]
+                        cast(torch.Tensor, getattr(self, LABELS)),
+                        # pyre-ignore[6]
+                        cast(torch.Tensor, getattr(self, WEIGHTS)),
+                        # pyre-ignore[6]
+                        cast(torch.Tensor, getattr(self, GROUPING_KEYS)),
                     ),
                 )
             )

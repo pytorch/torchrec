@@ -48,9 +48,9 @@ class TestGPU(unittest.TestCase):
             labels={"DefaultTask": model_output["label"]},
             weights={"DefaultTask": model_output["weight"]},
         )
-        self.assertEqual(len(auc._metrics_computations[0].predictions), 1)
-        self.assertEqual(len(auc._metrics_computations[0].labels), 1)
-        self.assertEqual(len(auc._metrics_computations[0].weights), 1)
+        self.assertEqual(len(auc._metrics_computations[0].predictions), 2)
+        self.assertEqual(len(auc._metrics_computations[0].labels), 2)
+        self.assertEqual(len(auc._metrics_computations[0].weights), 2)
         self.assertEqual(auc._metrics_computations[0].predictions[0].device, device)
         self.assertEqual(auc._metrics_computations[0].labels[0].device, device)
         self.assertEqual(auc._metrics_computations[0].weights[0].device, device)
