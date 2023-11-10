@@ -669,7 +669,12 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         else EmbeddingLocation.DEVICE,
                     )
                 ],
-                pooling_mode=PoolingMode.SUM,
+                # Expected optimal performance due to TBE sequential lookup inefficiency:
+                # cpu: PoolingMode.SUM all lengths == 1, fake offsets without cumsum
+                # cuda: PoolingMode.NONE all lengths == 1, fake offsets without cumsum
+                pooling_mode=PoolingMode.SUM
+                if device.type == "cpu"
+                else PoolingMode.NONE,
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
