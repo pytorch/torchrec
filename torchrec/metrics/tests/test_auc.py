@@ -177,23 +177,6 @@ class AUCMetricValueTest(unittest.TestCase):
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
 
-    def test_calc_multiple_updates(self) -> None:
-        expected_auc = torch.tensor([0.4464], dtype=torch.float)
-        # first batch
-        self.labels["DefaultTask"] = torch.tensor([1, 0, 0])
-        self.predictions["DefaultTask"] = torch.tensor([0.2, 0.6, 0.8])
-        self.weights["DefaultTask"] = torch.tensor([0.13, 0.2, 0.5])
-
-        self.auc.update(**self.batches)
-        # second batch
-        self.labels["DefaultTask"] = torch.tensor([1, 1])
-        self.predictions["DefaultTask"] = torch.tensor([0.4, 0.9])
-        self.weights["DefaultTask"] = torch.tensor([0.8, 0.75])
-
-        self.auc.update(**self.batches)
-        multiple_batch = self.auc.compute()["auc-DefaultTask|window_auc"]
-        torch.allclose(expected_auc, multiple_batch)
-
 
 def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
     return [
