@@ -19,7 +19,12 @@ from torchrec.distributed.planner.proposers import (
     proposers_to_proposals_list,
     UniformProposer,
 )
-from torchrec.distributed.planner.types import Proposer, ShardingOption, Topology
+from torchrec.distributed.planner.types import (
+    Enumerator,
+    Proposer,
+    ShardingOption,
+    Topology,
+)
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -29,6 +34,7 @@ class MockProposer(Proposer):
     def load(
         self,
         search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
     ) -> None:
         pass
 
@@ -37,6 +43,7 @@ class MockProposer(Proposer):
         partitionable: bool,
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
     ) -> None:
         pass
 
