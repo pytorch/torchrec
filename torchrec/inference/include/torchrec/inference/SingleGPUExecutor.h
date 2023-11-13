@@ -34,7 +34,8 @@ class SingleGPUExecutor {
       std::shared_ptr<ISingleGPUExecutorObserver> observer =
           std::make_shared<EmptySingleGPUExecutorObserver>(),
       c10::Device resultDevice = c10::kCPU,
-      size_t numProcessThreads = 1u);
+      size_t numProcessThreads = 1u,
+      bool useHighPriCudaStream = false);
 
   // Moveable only
   SingleGPUExecutor(SingleGPUExecutor&& executor) noexcept = default;
@@ -50,6 +51,7 @@ class SingleGPUExecutor {
   const ExecInfos execInfos_;
   const size_t numGpu_;
   const size_t numProcessThreads_;
+  const bool useHighPriCudaStream_;
   const c10::Device resultDevice_;
   std::shared_ptr<ISingleGPUExecutorObserver> observer_;
   folly::MPMCQueue<std::shared_ptr<PredictionBatch>> requests_;

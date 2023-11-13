@@ -20,11 +20,13 @@ SingleGPUExecutor::SingleGPUExecutor(
     size_t numGpu,
     std::shared_ptr<ISingleGPUExecutorObserver> observer,
     c10::Device resultDevice,
-    size_t numProcessThreads)
+    size_t numProcessThreads,
+    bool useHighPriCudaStream)
     : manager_(manager),
       execInfos_(std::move(execInfos)),
       numGpu_(numGpu),
       numProcessThreads_(numProcessThreads),
+      useHighPriCudaStream_(useHighPriCudaStream),
       resultDevice_(resultDevice),
       observer_(observer),
       requests_(kQUEUE_CAPACITY),
@@ -104,8 +106,8 @@ void SingleGPUExecutor::process() {
   c10::InferenceMode inferenceModeGuard;
   std::vector<c10::cuda::CUDAStream> streams;
   for (size_t i = 0; i < numGpu_; ++i) {
-    streams.push_back(at::cuda::getStreamFromPool(
-        false /* isHighPriority */, i /* device */));
+    streams.push_back(
+        at::cuda::getStreamFromPool(useHighPriCudaStream_, i /* device */));
   }
   at::cuda::CUDAMultiStreamGuard streamGuard(streams);
 
