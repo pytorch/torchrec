@@ -30,7 +30,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
 
 from torch.autograd.profiler import record_function
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
-from torchrec.types import ModuleNoCopyMixin
+from torchrec.types import DataType, ModuleNoCopyMixin
 
 try:
     # For python 3.6 and below, GenericMeta will be used by
@@ -106,29 +106,6 @@ def _tabulate(
     )
     rows.insert(1, " | ".join(["-" * width for width in col_widths]))
     return "\n".join(rows)
-
-
-# moved DataType here to avoid circular import
-# TODO: organize types and dependencies
-@unique
-class DataType(Enum):
-    """
-    Our fusion implementation supports only certain types of data
-    so it makes sense to retrict in a non-fused version as well.
-    """
-
-    FP32 = "FP32"
-    FP16 = "FP16"
-    BF16 = "BF16"
-    INT64 = "INT64"
-    INT32 = "INT32"
-    INT8 = "INT8"
-    UINT8 = "UINT8"
-    INT4 = "INT4"
-    INT2 = "INT2"
-
-    def __str__(self) -> str:
-        return self.value
 
 
 class ShardingType(Enum):
