@@ -118,7 +118,7 @@ def _quantize_weight(
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    return features.values().int(), features.offsets().int(), features.weights_or_none()
+    return features.values(), features.offsets(), features.weights_or_none()
 
 
 class QuantBatchedEmbeddingBag(
