@@ -229,7 +229,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         ] = {}
 
         for proposer in self._proposers:
-            proposer.load(search_space=search_space)
+            proposer.load(search_space=search_space, enumerator=self._enumerator)
 
         for proposer in self._proposers:
             proposal = proposer.propose()
@@ -242,6 +242,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                         partitionable=partitionable,
                         plan=plan,
                         perf_rating=perf_rating,
+                        storage_constraint=storage_constraint,
                     )
                     proposal = proposer.propose()
                     continue
@@ -260,7 +261,10 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                         best_plan = copy.deepcopy(plan)
                     proposal_cache[proposal_key] = (True, plan, perf_rating)
                     proposer.feedback(
-                        partitionable=True, plan=plan, perf_rating=perf_rating
+                        partitionable=True,
+                        plan=plan,
+                        perf_rating=perf_rating,
+                        storage_constraint=storage_constraint,
                     )
                 except PlannerError as planner_error:
                     last_planner_error = planner_error
@@ -280,7 +284,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     if current_storage < lowest_storage:
                         lowest_storage = current_storage
                     proposal_cache[proposal_key] = (False, None, None)
-                    proposer.feedback(partitionable=False)
+                    proposer.feedback(
+                        partitionable=False, storage_constraint=storage_constraint
+                    )
 
                 # clear shard.rank for each sharding_option
                 reset_shard_rank(proposal)

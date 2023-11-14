@@ -496,6 +496,13 @@ class Enumerator(abc.ABC):
         """
         ...
 
+    @abc.abstractmethod
+    def populate_estimates(self, sharding_options: List[ShardingOption]) -> None:
+        """
+        See class description.
+        """
+        ...
+
 
 class Proposer(abc.ABC):
     """
@@ -507,6 +514,7 @@ class Proposer(abc.ABC):
     def load(
         self,
         search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
     ) -> None:
         ...
 
@@ -516,6 +524,7 @@ class Proposer(abc.ABC):
         partitionable: bool,
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
     ) -> None:
         ...
 
