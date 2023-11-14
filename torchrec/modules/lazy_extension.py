@@ -159,8 +159,8 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
     # pyre-ignore[2, 47]
     #  `LazyModuleMixin` inconsistently.
     def _infer_parameters(self: _LazyExtensionProtocol, module, args, kwargs) -> None:
-        r"""Infers the size and initializes the parameters according to the
-        provided input batch.
+        r"""Infers the size and initializes the parameters according to the provided input batch.
+
         Given a module that contains parameters that were declared inferrable
         using :class:`torch.nn.parameter.ParameterMode.Infer`, runs a forward pass
         in the complete module using the provided input to initialize all the parameters
