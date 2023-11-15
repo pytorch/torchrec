@@ -345,7 +345,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             num_float_features=10,
             tables=self.tables,
             weighted_tables=self.weighted_tables,
-            long_indices=False,
         )
 
         # pyre-ignore
@@ -430,7 +429,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             num_float_features=10,
             tables=self.tables,
             weighted_tables=self.weighted_tables,
-            long_indices=False,
         )
 
         torch.testing.assert_close(
