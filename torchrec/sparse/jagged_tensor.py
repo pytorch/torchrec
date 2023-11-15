@@ -571,7 +571,12 @@ def _jt_flatten_spec(t: JaggedTensor, spec: TreeSpec) -> List[Optional[torch.Ten
     return [getattr(t, a) for a in JaggedTensor._fields]
 
 
-_register_pytree_node(JaggedTensor, _jt_flatten, _jt_unflatten)
+_register_pytree_node(
+    JaggedTensor,
+    _jt_flatten,
+    _jt_unflatten,
+    serialized_type_name=f"{JaggedTensor.__module__}.{JaggedTensor.__name__}",
+)
 register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 
 
