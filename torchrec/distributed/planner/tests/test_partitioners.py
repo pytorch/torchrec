@@ -714,3 +714,133 @@ class TestMemoryBalancedPartitioner(unittest.TestCase):
                     memory_balanced_hbm_uses[shard.rank] += shard.storage.hbm
 
         self.assertTrue(max(memory_balanced_hbm_uses) < max(greedy_perf_hbm_uses))
+
+
+class TestBalanceModules(unittest.TestCase):
+    def setUp(self) -> None:
+        compute_device = "cuda"
+        self.topology = Topology(world_size=2, compute_device=compute_device)
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100 + i,
+                embedding_dim=4 * (10 + i),
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1)
+        ]
+        weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=200 + i,
+                embedding_dim=8 * (10 + i),
+                name="weighted_table_" + str(i),
+                feature_names=["weighted_feature_" + str(i)],
+            )
+            for i in range(3)
+        ]
+        self.topology = Topology(
+            world_size=2,
+            compute_device=compute_device,
+            hbm_cap=2000 * 1024**2,
+        )
+        self.model = TestSparseNN(tables=tables, weighted_tables=weighted_tables)
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=BATCH_SIZE
+        )
+
+        self.sharding_options = self.enumerator.enumerate(
+            module=self.model, sharders=[TWSharder()]
+        )
+        for sharding_option in self.sharding_options:
+            sharding_option.shards[0].perf = Perf(
+                fwd_compute=40, fwd_comms=30, bwd_compute=20, bwd_comms=10
+            )
+            sharding_option.shards[0].storage = Storage(
+                hbm=10 * 1024**2, ddr=1000 * 1024**2
+            )
+
+    def test_greedy_partitioner(self) -> None:
+        greedy_partitioner = GreedyPerfPartitioner(balance_modules=False)
+        balance_modules_greedy_partitioner = GreedyPerfPartitioner(balance_modules=True)
+
+        greedy_sharding_plan = greedy_partitioner.partition(
+            proposal=self.sharding_options,
+            storage_constraint=self.topology,
+        )
+        greedy_ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in greedy_sharding_plan
+        }
+
+        reset_shard_rank(self.sharding_options)
+
+        balance_modules_sharding_plan = balance_modules_greedy_partitioner.partition(
+            proposal=self.sharding_options,
+            storage_constraint=self.topology,
+        )
+        balance_modules_ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in balance_modules_sharding_plan
+        }
+
+        greedy_expected_ranks = {
+            "weighted_table_0": [0],
+            "weighted_table_1": [1],
+            "weighted_table_2": [0],
+            "table_0": [1],
+        }
+        balance_modules_expected_ranks = {
+            "weighted_table_0": [1],
+            "weighted_table_1": [0],
+            "weighted_table_2": [1],
+            "table_0": [0],
+        }
+
+        self.assertEqual(greedy_expected_ranks, greedy_ranks)
+        self.assertEqual(balance_modules_expected_ranks, balance_modules_ranks)
+
+    def test_memory_balanced_partitioner(self) -> None:
+        memory_balanced_partitioner = MemoryBalancedPartitioner(
+            tolerance=100, balance_modules=False
+        )
+        balance_modules_memory_balanced_partitioner = MemoryBalancedPartitioner(
+            tolerance=100, balance_modules=True
+        )
+
+        memory_balanced_plan = memory_balanced_partitioner.partition(
+            proposal=self.sharding_options,
+            storage_constraint=self.topology,
+        )
+        memory_balanced_ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in memory_balanced_plan
+        }
+
+        reset_shard_rank(self.sharding_options)
+
+        balance_modules_sharding_plan = (
+            balance_modules_memory_balanced_partitioner.partition(
+                proposal=self.sharding_options,
+                storage_constraint=self.topology,
+            )
+        )
+        balance_modules_ranks = {
+            sharding_option.name: [shard.rank for shard in sharding_option.shards]
+            for sharding_option in balance_modules_sharding_plan
+        }
+
+        memory_balanced_expected_ranks = {
+            "weighted_table_0": [0],
+            "weighted_table_1": [1],
+            "weighted_table_2": [0],
+            "table_0": [1],
+        }
+        balance_modules_expected_ranks = {
+            "weighted_table_0": [1],
+            "weighted_table_1": [0],
+            "weighted_table_2": [1],
+            "table_0": [0],
+        }
+
+        self.assertEqual(memory_balanced_expected_ranks, memory_balanced_ranks)
+        self.assertEqual(balance_modules_expected_ranks, balance_modules_ranks)
