@@ -33,6 +33,7 @@ from torchrec.distributed.planner.shard_estimators import (
 )
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
+    assert_close,
     KJTInputWrapper,
     model_input_to_forward_args,
     model_input_to_forward_args_kjt,
@@ -477,18 +478,6 @@ class ModelTraceScriptTest(unittest.TestCase):
             if test_type == FxJitTestType.FX_JIT:
                 gm_script = torch.jit.script(gm)
                 gm_script_output = gm_script(*inputs[0])
-
-                # pyre-ignore
-                # TODO: Add JaggedTensor check to assert_close
-                def assert_close(expected, got) -> None:
-                    if isinstance(expected, dict):
-                        for feature, jt_e in expected.items():
-                            jt_got = got[feature]
-                            torch.testing.assert_close(jt_e.lengths(), jt_got.lengths())
-                            torch.testing.assert_close(jt_e.values(), jt_got.values())
-                            torch.testing.assert_close(jt_e.offsets(), jt_got.offsets())
-                    else:
-                        torch.testing.assert_close(expected, got)
 
                 if isinstance(eager_output, Awaitable):
                     eager_output = eager_output.wait()
