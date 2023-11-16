@@ -6,21 +6,26 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import copy
-import re
 import unittest
-from contextlib import contextmanager
 from typing import List
 
 import torch
 import torch._dynamo.skipfiles
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
-from torch._dynamo import skipfiles
 from torch._export import dynamic_dim
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
+    create_test_model_ebc_only,
+    dynamo_skipfiles_allow,
     KJTInputExportWrapper,
+    prep_inputs,
+    replace_registered_tbes_with_mock_tbes,
+    replace_sharded_quant_modules_tbes_with_mock_tbes,
+    TestQuantEBCSharder,
 )
+from torchrec.distributed.types import ShardingEnv, ShardingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -35,22 +40,6 @@ def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
     )
     dynamic_dim(kjt._values, 0)
     return kjt
-
-
-# TODO(ivankobzarev): Remove once torchrec is not in dynamo skipfiles
-@contextmanager
-# pyre-ignore
-def dynamo_skipfiles_allow(exclude_from_skipfiles_pattern: str):
-    original_FBCODE_SKIP_DIRS_RE = copy.deepcopy(skipfiles.FBCODE_SKIP_DIRS_RE)
-    new_FBCODE_SKIP_DIRS = {
-        s for s in skipfiles.FBCODE_SKIP_DIRS if exclude_from_skipfiles_pattern not in s
-    }
-    skipfiles.FBCODE_SKIP_DIRS_RE = re.compile(
-        # pyre-ignore
-        f".*({'|'.join(map(re.escape, new_FBCODE_SKIP_DIRS))})"
-    )
-    yield
-    skipfiles.FBCODE_SKIP_DIRS_RE = original_FBCODE_SKIP_DIRS_RE
 
 
 class TestPt2(unittest.TestCase):
@@ -92,3 +81,64 @@ class TestPt2(unittest.TestCase):
         self._test_kjt_input_module(
             M(), kjt.keys(), (kjt._values, kjt._lengths, indices)
         )
+
+    def test_sharded_quant_dynamo_export(self) -> None:
+        num_embeddings = 256
+        emb_dim = 12
+        world_size = 2
+        batch_size = 4
+        local_device = torch.device("cuda:0")
+        mi = create_test_model_ebc_only(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            num_features=2,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+        )
+        input_kjts = [
+            inp.to(local_device).idlist_features
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+        model: torch.nn.Module = KJTInputExportWrapper(
+            mi.quant_model, input_kjts[0].keys()
+        )
+
+        sharding_type: ShardingType = ShardingType.TABLE_WISE
+        sharder = TestQuantEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+        # pyre-ignore
+        plan = mi.planner.plan(
+            model,
+            [sharder],
+        )
+        sharded_model = _shard_modules(
+            module=model,
+            # pyre-ignore
+            sharders=[sharder],
+            device=local_device,
+            plan=plan,
+            # pyre-ignore
+            env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+        )
+
+        kjt = input_kjts[0]
+        sharded_model(kjt.values(), kjt.lengths())
+
+        model: torch.nn.Module = sharded_model
+        model.training = False
+        replace_registered_tbes_with_mock_tbes(model)
+        replace_sharded_quant_modules_tbes_with_mock_tbes(model)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            tracing_values = kjt.values()
+            tracing_lengths = kjt.lengths()
+            torch._dynamo.mark_dynamic(tracing_values, 0)
+            torch._dynamo.export(model, same_signature=False)(
+                tracing_values, tracing_lengths
+            )

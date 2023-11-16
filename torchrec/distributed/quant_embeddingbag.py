@@ -57,6 +57,14 @@ from torchrec.quant.embedding_modules import (
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling():  # type: ignore[misc]
+        return False
+
+
 torch.fx.wrap("len")
 
 
@@ -324,6 +332,13 @@ class ShardedQuantEmbeddingBagCollection(
         return self._sharding_type_to_sharding
 
     def create_context(self) -> NullShardedModuleContext:
+        if is_torchdynamo_compiling():
+            # Context creation is not supported by dynamo yet.
+            # Context is not needed for TW sharding =>
+            # Unblocking dynamo TW with None.
+            # pyre-ignore
+            return None
+
         return NullShardedModuleContext()
 
 

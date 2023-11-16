@@ -8,12 +8,26 @@
 #!/usr/bin/env python3
 
 import copy
+import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import torch
+
+import torch._dynamo.skipfiles
 import torchrec
-from torch import quantization as quant
+from fbgemm_gpu import sparse_ops  # noqa: F401, E402
+from fbgemm_gpu.split_embedding_configs import SparseType
+from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
+    EmbeddingLocation,
+    PoolingMode,
+)
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
+from torch import nn, quantization as quant, Tensor
+from torch._dynamo import skipfiles
 from torch.distributed._shard.sharding_spec import ShardingSpec
 from torch.utils import _pytree as pytree
 from torchrec import (
@@ -487,12 +501,82 @@ def create_test_model(
     return mi
 
 
+def create_test_model_ebc_only(
+    num_embeddings: int,
+    emb_dim: int,
+    world_size: int,
+    batch_size: int,
+    num_features: int,
+    dense_device: torch.device,
+    sparse_device: torch.device,
+    quant_state_dict_split_scale_bias: bool = False,
+) -> TestModelInfo:
+    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    mi = TestModelInfo(
+        dense_device=dense_device,
+        sparse_device=sparse_device,
+        num_features=num_features,
+        num_float_features=8,
+        num_weighted_features=1,
+        topology=topology,
+    )
+
+    mi.planner = EmbeddingShardingPlanner(
+        topology=topology,
+        batch_size=batch_size,
+        enumerator=EmbeddingEnumerator(
+            topology=topology,
+            batch_size=batch_size,
+            estimator=[
+                EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                EmbeddingStorageEstimator(topology=topology),
+            ],
+        ),
+    )
+
+    mi.tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="table_" + str(i),
+            feature_names=["feature_" + str(i)],
+        )
+        for i in range(mi.num_features)
+    ]
+
+    mi.weighted_tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="weighted_table_" + str(i),
+            feature_names=["weighted_feature_" + str(i)],
+        )
+        for i in range(mi.num_weighted_features)
+    ]
+
+    mi.model = torch.nn.Sequential(
+        EmbeddingBagCollection(
+            tables=mi.tables,
+            device=mi.sparse_device,
+        )
+    )
+    mi.model.training = False
+    mi.quant_model = quantize(
+        module=mi.model,
+        inplace=False,
+        register_tbes=True,
+        quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+    )
+    return mi
+
+
 def shard_qebc(
     mi: TestModelInfo,
     sharding_type: ShardingType,
     device: torch.device,
-    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
+    expected_shards: Optional[List[List[Tuple[Tuple[int, int, int, int], str]]]] = None,
     plan: Optional[ShardingPlan] = None,
+    ebc_fqn: str = "_module.sparse.ebc",
 ) -> torch.nn.Module:
     sharder = TestQuantEBCSharder(
         sharding_type=sharding_type.value,
@@ -507,20 +591,21 @@ def shard_qebc(
             [sharder],
         )
 
-    msp = plan.plan["_module.sparse.ebc"]
-    for i in range(mi.num_features):
-        ps: ParameterSharding = msp[f"table_{i}"]
-        assert ps.sharding_type == sharding_type.value
-        assert ps.sharding_spec is not None
-        sharding_spec: ShardingSpec = ps.sharding_spec
-        # pyre-ignore
-        assert len(sharding_spec.shards) == len(expected_shards[i])
-        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
-            sharding_spec.shards, expected_shards[i]
-        ):
-            assert shard.shard_offsets == [offset_r, offset_c]
-            assert shard.shard_sizes == [size_r, size_c]
-            assert str(shard.placement) == placement
+    if expected_shards is not None:
+        msp = plan.plan[ebc_fqn]
+        for i in range(mi.num_features):
+            ps: ParameterSharding = msp[f"table_{i}"]
+            assert ps.sharding_type == sharding_type.value
+            assert ps.sharding_spec is not None
+            sharding_spec: ShardingSpec = ps.sharding_spec
+            # pyre-ignore
+            assert len(sharding_spec.shards) == len(expected_shards[i])
+            for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+                sharding_spec.shards, expected_shards[i]
+            ):
+                assert shard.shard_offsets == [offset_r, offset_c]
+                assert shard.shard_sizes == [size_r, size_c]
+                assert str(shard.placement) == placement
 
     # We want to leave quant_model unchanged to compare the results with it
     quant_model_copy = copy.deepcopy(mi.quant_model)
@@ -635,3 +720,101 @@ def assert_weight_spec(
                 assert wqcomp_spec.shard_sizes == [size_r, 2]
                 assert wqcomp_spec.shard_offsets == [offset_r, 0]
                 assert wqcomp_spec.sharding_type == sharding_type
+
+
+# TODO(ivankobzarev): Remove once torchrec is not in dynamo skipfiles
+@contextmanager
+# pyre-ignore
+def dynamo_skipfiles_allow(exclude_from_skipfiles_pattern: str):
+    original_FBCODE_SKIP_DIRS_RE = copy.deepcopy(skipfiles.FBCODE_SKIP_DIRS_RE)
+    new_FBCODE_SKIP_DIRS = {
+        s for s in skipfiles.FBCODE_SKIP_DIRS if exclude_from_skipfiles_pattern not in s
+    }
+    skipfiles.FBCODE_SKIP_DIRS_RE = re.compile(
+        # pyre-ignore
+        f".*({'|'.join(map(re.escape, new_FBCODE_SKIP_DIRS))})"
+    )
+    yield
+    skipfiles.FBCODE_SKIP_DIRS_RE = original_FBCODE_SKIP_DIRS_RE
+
+
+class MockTBE(nn.Module):
+    def __init__(
+        self,
+        embedding_specs: List[Tuple[str, int, int, SparseType, EmbeddingLocation]],
+        device: torch.device,
+        output_dtype: int,
+        pooling_mode: PoolingMode,
+    ) -> None:
+        super(MockTBE, self).__init__()
+        self.embedding_specs: List[
+            Tuple[str, int, int, SparseType, EmbeddingLocation]
+        ] = embedding_specs
+        self.pooling_mode = pooling_mode
+        self.device = device
+        self.output_dtype: torch.dtype = SparseType.from_int(output_dtype).as_dtype()
+        self.D: int = max([D for _, _, D, _, _ in embedding_specs])
+
+        self.weights: List[torch.Tensor] = [
+            torch.arange(N).view(N, 1).expand(N, D) for _, N, D, _, _ in embedding_specs
+        ]
+        self.split_embedding_weights: List[
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        ] = [
+            (
+                torch.zeros(N, D, dtype=torch.uint8),
+                torch.zeros(N, 2, dtype=torch.uint8),
+                torch.zeros(N, 2, dtype=torch.uint8),
+            )
+            for _, N, D, _, _ in embedding_specs
+        ]
+
+    def forward(
+        self,
+        indices: Tensor,
+        offsets: Tensor,
+        per_sample_weights: Optional[Tensor] = None,
+    ) -> Tensor:
+        if self.pooling_mode == PoolingMode.SUM:
+            return torch.ones(1, self.D, device=self.device, dtype=self.output_dtype)
+
+        return torch.zeros(
+            indices.size(0), self.D, device=self.device, dtype=self.output_dtype
+        )
+
+    def split_embedding_weights_with_scale_bias(
+        self, split_scale_bias_mode: int = 1
+    ) -> List[Tuple[Tensor, Optional[Tensor], Optional[Tensor]]]:
+        if split_scale_bias_mode == 2:
+            # pyre-ignore
+            return self.split_embedding_weights
+        raise NotImplementedError()
+
+
+def mock_tbe_from_tbe(tbe: IntNBitTableBatchedEmbeddingBagsCodegen) -> MockTBE:
+    return MockTBE(
+        tbe.embedding_specs,
+        tbe.current_device,
+        tbe.output_dtype,
+        tbe.pooling_mode,
+    )
+
+
+def replace_registered_tbes_with_mock_tbes(M: torch.nn.Module, path: str = "") -> None:
+    for child_name, child in M.named_children():
+        child_path = f"{path}.{child_name}" if path else child_name
+        if isinstance(child, IntNBitTableBatchedEmbeddingBagsCodegen):
+            M.register_module(
+                child_name,
+                mock_tbe_from_tbe(child),
+            )
+        else:
+            replace_registered_tbes_with_mock_tbes(child, child_path)
+
+
+def replace_sharded_quant_modules_tbes_with_mock_tbes(M: torch.nn.Module) -> None:
+    for m in M.modules():
+        if isinstance(m, ShardedQuantEmbeddingBagCollection):
+            for lookup in m._lookups:
+                for lookup_per_rank in lookup._embedding_lookups_per_rank:
+                    replace_registered_tbes_with_mock_tbes(lookup_per_rank)
