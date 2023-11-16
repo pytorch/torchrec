@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
@@ -48,6 +49,8 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 torch.fx.wrap("len")
+
+CACHE_LOAD_FACTOR_STR: str = "cache_load_factor"
 
 
 # torch.Tensor.to can not be fx symbolic traced as it does not go through __torch_dispatch__ => fx.wrap it
@@ -123,6 +126,52 @@ def bucketize_kjt_before_all2all(
     )
 
 
+def _get_weighted_avg_cache_load_factor(
+    embedding_tables: List[ShardedEmbeddingTable],
+) -> Optional[float]:
+    """
+    Calculate the weighted average cache load factor of all tables. The cache
+    load factors are weighted by the hash size of each table.
+    """
+    cache_load_factor_sum: float = 0.0
+    weight: int = 0
+
+    for table in embedding_tables:
+        if (
+            table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+            and table.fused_params
+            and CACHE_LOAD_FACTOR_STR in table.fused_params
+        ):
+            cache_load_factor_sum += (
+                table.fused_params[CACHE_LOAD_FACTOR_STR] * table.num_embeddings
+            )
+            weight += table.num_embeddings
+
+    # if no fused_uvm_caching tables, return default cache load factor
+    if weight == 0:
+        return None
+
+    return cache_load_factor_sum / weight
+
+
+def _get_grouping_fused_params(
+    fused_params: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """
+    Only shallow copy the fused params we need for grouping tables into TBEs. In
+    particular, we do not copy cache_load_factor.
+    """
+    grouping_fused_params: Optional[Dict[str, Any]] = copy.copy(fused_params)
+
+    if not grouping_fused_params:
+        return grouping_fused_params
+
+    if CACHE_LOAD_FACTOR_STR in grouping_fused_params:
+        del grouping_fused_params[CACHE_LOAD_FACTOR_STR]
+
+    return grouping_fused_params
+
+
 # group tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
@@ -143,13 +192,15 @@ def group_tables(
     ) -> List[GroupedEmbeddingConfig]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
 
-        # add fused params:
+        # populate grouping fused params
         fused_params_groups = []
         for table in embedding_tables:
             if table.fused_params is None:
                 table.fused_params = {}
-            if table.fused_params not in fused_params_groups:
-                fused_params_groups.append(table.fused_params)
+
+            grouping_fused_params = _get_grouping_fused_params(table.fused_params)
+            if grouping_fused_params not in fused_params_groups:
+                fused_params_groups.append(grouping_fused_params)
 
         compute_kernels = [
             EmbeddingComputeKernel.DENSE,
@@ -198,7 +249,10 @@ def group_tables(
                                         and table.has_feature_processor
                                         == has_feature_processor
                                         and compute_kernel_type == compute_kernel
-                                        and table.fused_params == fused_params_group
+                                        and fused_params_group
+                                        == _get_grouping_fused_params(
+                                            table.fused_params
+                                        )
                                         and (
                                             emb_dim_bucketer.get_bucket(
                                                 table.embedding_dim, table.data_type
@@ -215,6 +269,17 @@ def group_tables(
                                     logging.info(
                                         f"{len(grouped_tables)} tables are grouped for bucket: {dim_bucket}."
                                     )
+                                    cache_load_factor = (
+                                        _get_weighted_avg_cache_load_factor(
+                                            grouped_tables
+                                        )
+                                    )
+                                    per_tbe_fused_params = copy.copy(fused_params_group)
+                                    if cache_load_factor is not None:
+                                        per_tbe_fused_params[
+                                            CACHE_LOAD_FACTOR_STR
+                                        ] = cache_load_factor
+
                                     grouped_embedding_configs.append(
                                         GroupedEmbeddingConfig(
                                             data_type=data_type,
@@ -225,7 +290,7 @@ def group_tables(
                                             embedding_tables=grouped_tables,
                                             fused_params={
                                                 k: v
-                                                for k, v in fused_params_group.items()
+                                                for k, v in per_tbe_fused_params.items()
                                                 if k
                                                 not in [
                                                     "_batch_key"
