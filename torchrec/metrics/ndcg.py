@@ -8,6 +8,8 @@
 from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
+from torch import distributed as dist
+from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,
@@ -30,8 +32,8 @@ def session_ids_to_lengths(
     computations.
 
     Args:
-        session_ids: a list of string session_ids,
-            e.g., ["session_1", "session_2", "session_2"]
+        session_ids: a tensor of session_ids,
+            e.g., ["1", "2", "2"]
         device: the device to put session_ids into
 
     Returns:
@@ -219,16 +221,16 @@ class NDCGComputation(RecMetricComputation):
             labels (torch.Tensor): tensor of size (n_task, n_examples)
             weights (torch.Tensor): tensor of size (n_task, n_examples)
         """
-
         if (
             REQUIRED_INPUTS not in kwargs
             or self._session_key not in kwargs[REQUIRED_INPUTS]
         ):
             raise RecMetricException(
-                f"{self._session_key} input is required to calculate NDCG"
+                f"{self._session_key=} {kwargs=} input is required to calculate NDCG"
             )
 
         session_ids = kwargs[REQUIRED_INPUTS][self._session_key]
+
         if predictions is None or weights is None or session_ids is None:
             raise RecMetricException(
                 "Inputs 'predictions', 'weights' and 'session_ids' should not be None for NDCGMetricComputation update"
@@ -277,3 +279,32 @@ class NDCGComputation(RecMetricComputation):
 class NDCGMetric(RecMetric):
     _namespace: MetricNamespace = MetricNamespace.NDCG
     _computation_class: Type[RecMetricComputation] = NDCGComputation
+
+    def __init__(
+        self,
+        world_size: int,
+        my_rank: int,
+        batch_size: int,
+        tasks: List[RecTaskInfo],
+        compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+        window_size: int = 100,
+        fused_update_limit: int = 0,
+        compute_on_all_ranks: bool = False,
+        should_validate_update: bool = False,
+        process_group: Optional[dist.ProcessGroup] = None,
+        **kwargs: Dict[str, Any],
+    ) -> None:
+        super().__init__(
+            world_size=world_size,
+            my_rank=my_rank,
+            batch_size=batch_size,
+            tasks=tasks,
+            compute_mode=compute_mode,
+            window_size=window_size,
+            fused_update_limit=fused_update_limit,
+            compute_on_all_ranks=compute_on_all_ranks,
+            should_validate_update=should_validate_update,
+            process_group=process_group,
+            **kwargs,
+        )
+        self._required_inputs.add("session_id")
