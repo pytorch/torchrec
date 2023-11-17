@@ -15,7 +15,13 @@ import torch
 import torchrec
 from torch import quantization as quant
 from torch.distributed._shard.sharding_spec import ShardingSpec
-from torchrec import EmbeddingCollection, EmbeddingConfig, KeyedJaggedTensor
+from torch.utils import _pytree as pytree
+from torchrec import (
+    EmbeddingCollection,
+    EmbeddingConfig,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     ModuleSharder,
@@ -82,6 +88,36 @@ class TestModelInfo:
     sharders: List[ModuleSharder] = field(default_factory=list)
     topology: Optional[Topology] = None
     planner: Optional[EmbeddingShardingPlanner] = None
+
+
+class KJTInputExportWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        module_kjt_input: torch.nn.Module,
+        kjt_keys: List[str],
+    ) -> None:
+        super().__init__()
+        self._module_kjt_input = module_kjt_input
+        self._kjt_keys = kjt_keys
+
+    # pyre-ignore
+    def forward(
+        self,
+        values: torch.Tensor,
+        lengths: torch.Tensor,
+        # pyre-ignore
+        *args,
+        # pyre-ignore
+        **kwargs,
+    ):
+        kjt = KeyedJaggedTensor(
+            keys=self._kjt_keys,
+            values=values,
+            lengths=lengths,
+        )
+        output = self._module_kjt_input(kjt, *args, **kwargs)
+        # TODO(ivankobzarev): Support of None leaves in dynamo/export (e.g. KJT offsets)
+        return [leaf for leaf in pytree.tree_leaves(output) if leaf is not None]
 
 
 def prep_inputs(
@@ -547,6 +583,11 @@ def shard_qec(
 
 # pyre-ignore
 def assert_close(expected, actual) -> None:
+    if isinstance(expected, KeyedTensor):
+        assert isinstance(actual, KeyedTensor)
+        assert len(expected.keys()) == len(actual.keys())
+        torch.testing.assert_close(expected.values(), actual.values())
+        torch.testing.assert_close(expected.length_per_key(), actual.length_per_key())
     if isinstance(expected, dict):
         assert list(expected.keys()) == list(actual.keys())
         for feature, jt_e in expected.items():

@@ -29,6 +29,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling():  # type: ignore[misc]
+        return False
+
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     return (
@@ -1519,6 +1526,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 )
             else:
                 split_length_per_key = _length_per_key[start:end]
+
+                if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+                    # Checks for dynamo dynamic shapes tracing
+                    torch._check_is_size(start_offset)
+                    torch._check_is_size(end_offset)
+                    torch._check_is_size(end_offset - start_offset)
+                    torch._check(start_offset <= self._values.size(0))
+                    torch._check(end_offset <= self._values.size(0))
+                    torch._check(end_offset >= start_offset)
+
                 split_list.append(
                     KeyedJaggedTensor(
                         keys=keys,
