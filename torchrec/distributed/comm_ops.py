@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, List, Optional, Tuple, TypeVar
 
 import torch
@@ -14,6 +15,9 @@ import torch.distributed as dist
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.profiler import record_function
+from torchrec.distributed.propagating_async_collective_tensor import (
+    PropagatingAsyncCollectiveTensor,
+)
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.distributed.utils import none_throws
 
@@ -1873,3 +1877,131 @@ class ReduceScatterV_Wait(Function):
         myreq.req = req
         myreq.tensor = grad_input
         return (None, None, myreq.dummy_tensor)
+
+
+from torch.autograd import Function
+from torch.distributed._functional_collectives import (
+    _expand_group,
+    RANK_TYPES,
+    wait_tensor,
+)
+
+
+def all_to_all_single(
+    input_tensor: torch.Tensor,
+    output_split_sizes: Optional[List[int]],
+    input_split_sizes: Optional[List[int]],
+    group: RANK_TYPES,
+    tag: str = "",
+    stream: Optional[torch.cuda.Stream] = None,
+) -> PropagatingAsyncCollectiveTensor:
+
+    stream = stream or torch.cuda.Stream()
+    a2a_tensor = _AllToAllSingle.apply(
+        group, output_split_sizes, input_split_sizes, input_tensor, stream
+    )
+    # If we put this into AllToAllSingle, the incoming grad in AllToAllSingle:::backward will be a non manifested PropagatingAsyncTensor (but we want actual tensors).
+    # A future use case may to have the grads as PACT as well
+    return CreateA2AAsyncPropagatingTensorFunc.apply(a2a_tensor, stream)
+
+
+class WaitFunction(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(ctx, tensor: torch.Tensor) -> torch.Tensor:
+        wait_tensor(tensor)
+        return tensor
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad_output) -> torch.Tensor:
+        return grad_output
+
+
+class CreateA2AAsyncPropagatingTensorFunc(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(ctx, a2a_tensor, stream) -> PropagatingAsyncCollectiveTensor:
+        def manifest_elem(
+            a2a_tensor: torch.Tensor,
+            current_stream: torch.cuda.Stream,
+            stream: torch.cuda.Stream,
+        ) -> torch.Tensor:
+            # TODO to support all backends we need to support Optional[Stream] and don't do anything if we're not on CUDA.
+            with torch.cuda.stream(stream):
+                # If we don't wrap this in a function (use wait_tensor(a2a_tensor) we get an error message:
+                # UserWarning: c10d_functional::wait_tensor: an autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it.
+                # This may lead to silently incorrect behavior. This behavior is deprecated and will be removed in a future version of PyTorch.
+                # If your operator is differentiable, please ensure you have registered an autograd kernel to the correct Autograd key
+                # (e.g. DispatchKey::Autograd, DispatchKey::CompositeImplicitAutograd).
+                # If your operator is not differentiable, or to squash this warning and use the previous behavior,
+                # please register torch::CppFunction::makeFallthrough() to DispatchKey::Autograd.
+                # (Triggered internally at fbcode/caffe2/torch/csrc/autograd/autograd_not_implemented_fallback.cpp:72.)
+                # wait_tensor(a2a_tensor)
+                WaitFunction.apply(a2a_tensor)
+
+            current_stream.wait_stream(stream)
+            a2a_tensor.record_stream(current_stream)
+            return a2a_tensor
+
+        return PropagatingAsyncCollectiveTensor(
+            partial(
+                manifest_elem,
+                a2a_tensor=a2a_tensor,
+                current_stream=torch.cuda.current_stream(),
+                stream=stream,
+            ),
+            fake_elem=a2a_tensor.to("meta"),
+            device=a2a_tensor.device,
+            manifest_on_op_with_non_prop_async_tensor=False,
+        )
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad):
+        return (grad, None)
+
+
+class _AllToAllSingle(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        # pyre-ignore
+        ctx,
+        group: dist.ProcessGroup,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
+        input: torch.Tensor,
+        stream: torch.cuda.Stream,
+    ) -> torch.Tensor:
+        ctx.stream = stream
+        ctx.group = group
+        ctx.input_size = input.size()
+        ctx.bwd_output_split_sizes = input_split_sizes
+        ctx.bwd_input_split_sizes = output_split_sizes
+        ctx.tag, ctx.rankset, ctx.group_size = _expand_group(group, "")
+
+        ctx.stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(ctx.stream):
+            input.record_stream(ctx.stream)
+            a2a_tensor = torch.ops.c10d_functional.all_to_all_single(input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+
+        return a2a_tensor
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad_output: torch.Tensor):
+        ctx.stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(ctx.stream):
+            grad_output.record_stream(ctx.stream)
+            grad_input = torch.ops.c10d_functional.all_to_all_single(grad_output.contiguous(), ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+            wait_tensor(grad_input)
+
+        # Immediately sync with main stream here (usually no more further backward calls)
+        torch.cuda.current_stream().wait_stream(ctx.stream)
+        grad_input.record_stream(torch.cuda.current_stream())
+
+        if get_gradient_division():
+            grad_input.div_(ctx.group_size)
+
+        return (None, None, None, grad_input, None, None)
