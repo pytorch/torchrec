@@ -7,16 +7,15 @@
 
 #!/usr/bin/env python3
 
-import copy
 
 import unittest
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 
 import hypothesis.strategies as st
 
 import torch
 from hypothesis import given, settings
-from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
+from torchrec import EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
@@ -24,7 +23,6 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
-from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.sharding_plan import (
     column_wise,
@@ -44,15 +42,8 @@ from torchrec.distributed.test_utils.infer_utils import (
     shard_qec,
     TestModelInfo,
     TestQuantEBCSharder,
-    TestQuantECSharder,
-    TorchTypesModelInputWrapper,
 )
-from torchrec.distributed.types import (
-    ModuleShardingPlan,
-    ParameterSharding,
-    ShardingEnv,
-    ShardingPlan,
-)
+from torchrec.distributed.types import ShardingPlan
 from torchrec.fx import symbolic_trace
 
 

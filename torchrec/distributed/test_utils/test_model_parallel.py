@@ -9,8 +9,6 @@ import unittest
 from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import torch
-
-import torch.distributed as dist  # noqa
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import assume, given, settings, strategies as st, Verbosity
