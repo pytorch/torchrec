@@ -33,7 +33,10 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
-from torchrec.distributed.quant_embeddingbag import FPEmbeddingBagCollectionSharder
+from torchrec.distributed.quant_embeddingbag import (
+    FPEmbeddingBagCollectionSharder,
+    QuantFPEmbeddingBagCollectionSharder,
+)
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.sharding_plan import (
@@ -50,6 +53,7 @@ from torchrec.distributed.test_utils.infer_utils import (
     model_input_to_forward_args_kjt,
     prep_inputs,
     quantize,
+    quantize_fpebc,
     shard_qebc,
     shard_qec,
     TestModelInfo,
@@ -946,15 +950,150 @@ class InferShardingsTest(unittest.TestCase):
         print(f"script:\n{gm_script.code}")
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_quant_fp_ebc_tw(self, weight_dtype: torch.dtype) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device("cuda:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                FeatureProcessedEmbeddingBagCollection(
+                    EmbeddingBagCollection(
+                        tables=mi.tables,
+                        is_weighted=True,
+                        device=mi.sparse_device,
+                    ),
+                    TimeGapPoolingCollectionModule(
+                        feature_pow={
+                            f"feature_{i}": 1.0 for i in range(mi.num_features)
+                        },
+                        feature_min={
+                            f"feature_{i}": -1.0 for i in range(mi.num_features)
+                        },
+                        feature_max={
+                            f"feature_{i}": 1.0 for i in range(mi.num_features)
+                        },
+                        device=mi.sparse_device,
+                    ),
+                )
+            )
+        )
+        model_inputs: List[ModelInput] = prep_inputs(
+            mi, world_size, batch_size, long_indices=False
+        )
+        inputs = []
+        for model_input in model_inputs:
+            kjt = model_input.idlist_features
+            kjt = kjt.to(local_device)
+            weights = torch.rand(
+                kjt._values.size(0), dtype=torch.float, device=local_device
+            )
+            inputs.append(
+                (
+                    kjt._keys,
+                    kjt._values,
+                    weights,
+                    kjt._lengths,
+                    kjt._offsets,
+                )
+            )
+
+        mi.model(*inputs[0])
+        print(f"model:\n{mi.model}")
+
+        mi.quant_model = quantize_fpebc(
+            module=mi.model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=False,
+            weight_dtype=weight_dtype,
+        )
+        quant_model = mi.quant_model
+        print(f"quant_model:\n{quant_model}")
+        non_sharded_output = mi.quant_model(*inputs[0])
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+        sharder = QuantFPEmbeddingBagCollectionSharder()
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+        sharded_model = _shard_modules(
+            module=quant_model,
             sharders=[sharder],
             device=local_device,
             plan=plan,
             # pyre-ignore
             env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
         )
+        print(f"sharded_model:\n{sharded_model}")
         sharded_output = sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
 
         gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        print("fx:")
+        gm.print_readable()
         gm_script = torch.jit.script(gm)
+        print(f"script:\n{gm_script.code}")
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)

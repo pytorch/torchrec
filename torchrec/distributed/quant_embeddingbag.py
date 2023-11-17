@@ -56,9 +56,11 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+
 
 torch.fx.wrap("len")
 
@@ -365,6 +367,7 @@ class QuantEmbeddingBagCollectionSharder(
         return QuantEmbeddingBagCollection
 
 
+# FPEBC(QEBC) -> ShardedQEBC(w FP)
 class FPEmbeddingBagCollectionSharder(
     BaseQuantEmbeddingSharder[FeatureProcessedEmbeddingBagCollection]
 ):
@@ -412,3 +415,58 @@ class FPEmbeddingBagCollectionSharder(
     @property
     def module_type(self) -> Type[FeatureProcessedEmbeddingBagCollection]:
         return FeatureProcessedEmbeddingBagCollection
+
+
+# QFPEBC -> ShardedEBC(w FP)
+class QuantFPEmbeddingBagCollectionSharder(
+    BaseQuantEmbeddingSharder[QuantFeatureProcessedEmbeddingBagCollection]
+):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [
+            ShardingType.TABLE_WISE.value,
+        ]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.QUANT.value]
+
+    def shard(
+        self,
+        module: QuantFeatureProcessedEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedQuantEmbeddingBagCollection:
+        qebc = module
+        assert isinstance(qebc, QuantEmbeddingBagCollection)
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(qebc.output_dtype())
+        )
+        if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS not in fused_params:
+            fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+                qebc, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            )
+        if FUSED_PARAM_REGISTER_TBE_BOOL not in fused_params:
+            fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+                qebc, FUSED_PARAM_REGISTER_TBE_BOOL, False
+            )
+
+        return ShardedQuantEmbeddingBagCollection(
+            qebc,
+            params,
+            env,
+            fused_params,
+            device=device,
+            feature_processor=module._feature_processor,
+        )
+
+    @property
+    def module_type(self) -> Type[QuantFeatureProcessedEmbeddingBagCollection]:
+        return QuantFeatureProcessedEmbeddingBagCollection
+        )
+
+    @property
+    def module_type(self) -> Type[QuantFeatureProcessedEmbeddingBagCollection]:
+        return QuantFeatureProcessedEmbeddingBagCollection
