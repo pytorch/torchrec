@@ -1911,10 +1911,8 @@ def all_to_all_single(
     stream: Optional[torch.cuda.Stream] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> PropagatingAsyncCollectiveTensor:
-
-    stream = stream or torch.cuda.Stream()
-    return _AllToAllSingle.apply(
-        group, output_split_sizes, input_split_sizes, input_tensor, stream, codecs
+    return CreateA2AAsyncPropagatingTensorFunc.apply(
+        input_tensor, group, output_split_sizes, input_split_sizes, codecs
     )
 
 
@@ -1934,107 +1932,100 @@ class WaitFunction(Function):
 class CreateA2AAsyncPropagatingTensorFunc(Function):
     @staticmethod
     # pyre-ignore
-    def forward(ctx, a2a_tensor, stream) -> PropagatingAsyncCollectiveTensor:
-        def manifest_elem(
-            a2a_tensor: torch.Tensor,
-            current_stream: torch.cuda.Stream,
-            stream: torch.cuda.Stream,
-        ) -> torch.Tensor:
-            # TODO to support all backends we need to support Optional[Stream] and don't do anything if we're not on CUDA.
-            with torch.cuda.stream(stream):
-                # If we don't wrap this in a function (use wait_tensor(a2a_tensor) we get an error message:
-                # UserWarning: c10d_functional::wait_tensor: an autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it.
-                # This may lead to silently incorrect behavior. This behavior is deprecated and will be removed in a future version of PyTorch.
-                # If your operator is differentiable, please ensure you have registered an autograd kernel to the correct Autograd key
-                # (e.g. DispatchKey::Autograd, DispatchKey::CompositeImplicitAutograd).
-                # If your operator is not differentiable, or to squash this warning and use the previous behavior,
-                # please register torch::CppFunction::makeFallthrough() to DispatchKey::Autograd.
-                # (Triggered internally at fbcode/caffe2/torch/csrc/autograd/autograd_not_implemented_fallback.cpp:72.)
-                # wait_tensor(a2a_tensor)
-                WaitFunction.apply(a2a_tensor)
-
-            current_stream.wait_stream(stream)
-            a2a_tensor.record_stream(current_stream)
-            return a2a_tensor
-
-        return PropagatingAsyncCollectiveTensor(
-            partial(
-                manifest_elem,
-                a2a_tensor=a2a_tensor,
-                current_stream=torch.cuda.current_stream(),
-                stream=stream,
-            ),
-            fake_elem=a2a_tensor.to("meta"),
-            device=a2a_tensor.device,
-            manifest_on_op_with_non_prop_async_tensor=False,
-        )
-
-    @staticmethod
-    # pyre-ignore
-    def backward(ctx, grad):
-        return (grad, None)
-
-
-class _AllToAllSingle(Function):
-    @staticmethod
-    # pyre-ignore
     def forward(
         # pyre-ignore
         ctx,
+        tensor_input: torch.Tensor,
         group: dist.ProcessGroup,
         output_split_sizes: List[int],
         input_split_sizes: List[int],
-        input: torch.Tensor,
-        stream: torch.cuda.Stream,
         codecs: Optional[QuantizedCommCodecs] = None,
-    ) -> torch.Tensor:
-        ctx.stream = stream
+    ) -> PropagatingAsyncCollectiveTensor:
+
         ctx.group = group
-        ctx.input_size = input.size()
         ctx.bwd_output_split_sizes = input_split_sizes
         ctx.bwd_input_split_sizes = output_split_sizes
         ctx.tag, ctx.rankset, ctx.group_size = _expand_group(group, "")
         ctx.codecs = codecs
 
-        ctx.stream.wait_stream(torch.cuda.current_stream())
-
         qcomm_ctx = None
-        with torch.cuda.stream(ctx.stream):
-            input.record_stream(ctx.stream)
-            if ctx.codecs is not None:
-                qcomm_ctx = ctx.codecs.forward.create_context()
-                input = ctx.codecs.forward.encode(input, qcomm_ctx)
-            a2a_tensor = torch.ops.c10d_functional.all_to_all_single(input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+        if codecs is not None:
+            qcomm_ctx = codecs.forward.create_context()
+            tensor_input = codecs.forward.encode(
+                tensor_input,
+                qcomm_ctx,
+            )
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(tensor_input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
 
-        pact = CreateA2AAsyncPropagatingTensorFunc.apply(a2a_tensor, stream)
+        def manifest_elem(
+            a2a_tensor: torch.Tensor,
+        ) -> torch.Tensor:
+            # TODO to support all backends we need to support Optional[Stream] and don't do anything if we're not on CUDA.
+            # If we don't wrap this in a function (use wait_tensor(a2a_tensor) we get an error message:
+            # UserWarning: c10d_functional::wait_tensor: an autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it.
+            # This may lead to silently incorrect behavior. This behavior is deprecated and will be removed in a future version of PyTorch.
+            # If your operator is differentiable, please ensure you have registered an autograd kernel to the correct Autograd key
+            # (e.g. DispatchKey::Autograd, DispatchKey::CompositeImplicitAutograd).
+            # If your operator is not differentiable, or to squash this warning and use the previous behavior,
+            # please register torch::CppFunction::makeFallthrough() to DispatchKey::Autograd.
+            # (Triggered internally at fbcode/caffe2/torch/csrc/autograd/autograd_not_implemented_fallback.cpp:72.)
+            # wait_tensor(a2a_tensor)
+            WaitFunction.apply(a2a_tensor)
+            return a2a_tensor
 
-        if ctx.codecs is not None:
-            pact = ctx.codecs.forward.decode(pact, qcomm_ctx)
+        pact = PropagatingAsyncCollectiveTensor(
+            partial(
+                manifest_elem,
+                a2a_tensor=a2a_tensor,
+            ),
+            fake_elem=a2a_tensor.to("meta"),
+            device=a2a_tensor.device,
+            manifest_on_op_with_non_prop_async_tensor=False,
+        )
+        if codecs:
+            codecs.forward.decode(pact, qcomm_ctx)
         return pact
 
     @staticmethod
     # pyre-ignore
-    def backward(ctx, grad_output: torch.Tensor):
-        ctx.stream.wait_stream(torch.cuda.current_stream())
+    def backward(ctx, grad_output):
         grad_output = grad_output.contiguous()
-        qcomm_ctx = None
-        with torch.cuda.stream(ctx.stream):
-            grad_output.record_stream(ctx.stream)
-            if ctx.codecs is not None:
-                qcomm_ctx = ctx.codecs.backward.create_context()
-                grad_output = ctx.codecs.backward.encode(grad_output, qcomm_ctx)
-
-            grad_input = torch.ops.c10d_functional.all_to_all_single(grad_output, ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
-            wait_tensor(grad_input)
-
-        # Immediately sync with main stream here (usually no more further backward calls)
-        torch.cuda.current_stream().wait_stream(ctx.stream)
-        grad_input.record_stream(torch.cuda.current_stream())
-
-        if ctx.codecs is not None:
-            grad_input = ctx.codecs.backward.decode(grad_input, qcomm_ctx)
-
         if get_gradient_division():
-            grad_input.div_(ctx.group_size)
+            grad_output.div_(ctx.group_size)
 
-        return (None, None, None, grad_input, None, None)
+        qcomm_ctx = None
+        if ctx.codecs is not None:
+            qcomm_ctx = ctx.codecs.backward.create_context()
+            grad_output = ctx.codecs.backward.encode(
+                grad_output,
+                qcomm_ctx,
+            )
+
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(grad_output, ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+
+        def manifest_elem(
+            a2a_tensor: torch.Tensor,
+            codecs: Optional[QuantizedCommCodecs] = None,
+        ) -> torch.Tensor:
+            wait_tensor(a2a_tensor)
+            return a2a_tensor
+
+        pact = PropagatingAsyncCollectiveTensor(
+            partial(
+                manifest_elem,
+                a2a_tensor=a2a_tensor,
+            ),
+            fake_elem=a2a_tensor.to("meta"),
+            device=a2a_tensor.device,
+            manifest_on_op_with_non_prop_async_tensor=True,
+        )
+        if ctx.codecs:
+            pact = ctx.codecs.backward.decode(pact, qcomm_ctx)
+
+        return (
+            pact,
+            None,
+            None,
+            None,
+            None,
+        )

@@ -81,6 +81,7 @@ def _test_propagating_async_collective_tensor(  # noqa C901
         )
 
         a2a_split_cat_sum_twice_twice.sum().backward()
+        print("input grad", input.grad)
         torch.testing.assert_close(
             input.grad,
             torch.ones_like(input) * 4

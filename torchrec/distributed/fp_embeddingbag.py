@@ -37,7 +37,9 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 def param_dp_sync(kt: KeyedTensor, no_op_tensor: torch.Tensor) -> KeyedTensor:
+    kt._values.manifest_on_op_with_non_prop_async_tensor = False
     kt._values = kt._values + no_op_tensor
+    kt._values.manifest_on_op_with_non_prop_async_tensor = True
     return kt
 
 
