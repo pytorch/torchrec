@@ -309,7 +309,7 @@ def alltoall_pooled(
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Tensor:
     """
     Performs AlltoAll operation for a single pooled embedding tensor. Each process
     splits the input pooled embeddings tensor based on the world size, and then scatters
@@ -343,19 +343,34 @@ def alltoall_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_pooled_embs_tensor)
+    input_embeddings = a2a_pooled_embs_tensor
+    my_rank = dist.get_rank(group)
+    (B_global, D_local_sum) = input_embeddings.shape
 
-    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
-    a2ai = All2AllPooledInfo(
-        batch_size_per_rank=batch_size_per_rank,
-        dim_sum_per_rank=dim_sum_per_rank,
-        dim_sum_per_rank_tensor=dim_sum_per_rank_tensor,
-        cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
+    dim_sum_per_rank = dim_sum_per_rank
+    batch_size_per_rank = batch_size_per_rank
+    B_local = batch_size_per_rank[my_rank]
+
+    assert B_global == sum(batch_size_per_rank)
+
+    sharded_input_embeddings = input_embeddings.view(-1)
+    output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
+
+    # sharded_output_embeddings is a PropagatingAsyncCollectiveTensor
+    sharded_output_embeddings = all_to_all_single(
+        sharded_input_embeddings,
+        output_split_sizes=output_split_sizes,
+        input_split_sizes=input_split_sizes,
+        group=group,
         codecs=codecs,
     )
-    All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
-    return myreq
+
+    outputs_by_rank = sharded_output_embeddings.split(
+        [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    )
+    result = torch.cat([output.view(B_local, -1) for output in outputs_by_rank], dim=1)
+    return result
 
 
 def variable_batch_alltoall_pooled(
@@ -1894,15 +1909,13 @@ def all_to_all_single(
     group: RANK_TYPES,
     tag: str = "",
     stream: Optional[torch.cuda.Stream] = None,
+    codecs: Optional[QuantizedCommCodecs] = None,
 ) -> PropagatingAsyncCollectiveTensor:
 
     stream = stream or torch.cuda.Stream()
-    a2a_tensor = _AllToAllSingle.apply(
-        group, output_split_sizes, input_split_sizes, input_tensor, stream
+    return _AllToAllSingle.apply(
+        group, output_split_sizes, input_split_sizes, input_tensor, stream, codecs
     )
-    # If we put this into AllToAllSingle, the incoming grad in AllToAllSingle:::backward will be a non manifested PropagatingAsyncTensor (but we want actual tensors).
-    # A future use case may to have the grads as PACT as well
-    return CreateA2AAsyncPropagatingTensorFunc.apply(a2a_tensor, stream)
 
 
 class WaitFunction(Function):
@@ -1973,6 +1986,7 @@ class _AllToAllSingle(Function):
         input_split_sizes: List[int],
         input: torch.Tensor,
         stream: torch.cuda.Stream,
+        codecs: Optional[QuantizedCommCodecs] = None,
     ) -> torch.Tensor:
         ctx.stream = stream
         ctx.group = group
@@ -1980,26 +1994,45 @@ class _AllToAllSingle(Function):
         ctx.bwd_output_split_sizes = input_split_sizes
         ctx.bwd_input_split_sizes = output_split_sizes
         ctx.tag, ctx.rankset, ctx.group_size = _expand_group(group, "")
+        ctx.codecs = codecs
 
         ctx.stream.wait_stream(torch.cuda.current_stream())
+
+        qcomm_ctx = None
         with torch.cuda.stream(ctx.stream):
             input.record_stream(ctx.stream)
+            if ctx.codecs is not None:
+                qcomm_ctx = ctx.codecs.forward.create_context()
+                input = ctx.codecs.forward.encode(input, qcomm_ctx)
             a2a_tensor = torch.ops.c10d_functional.all_to_all_single(input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
 
-        return a2a_tensor
+        pact = CreateA2AAsyncPropagatingTensorFunc.apply(a2a_tensor, stream)
+
+        if ctx.codecs is not None:
+            pact = ctx.codecs.forward.decode(pact, qcomm_ctx)
+        return pact
 
     @staticmethod
     # pyre-ignore
     def backward(ctx, grad_output: torch.Tensor):
         ctx.stream.wait_stream(torch.cuda.current_stream())
+        grad_output = grad_output.contiguous()
+        qcomm_ctx = None
         with torch.cuda.stream(ctx.stream):
             grad_output.record_stream(ctx.stream)
-            grad_input = torch.ops.c10d_functional.all_to_all_single(grad_output.contiguous(), ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+            if ctx.codecs is not None:
+                qcomm_ctx = ctx.codecs.backward.create_context()
+                grad_output = ctx.codecs.backward.encode(grad_output, qcomm_ctx)
+
+            grad_input = torch.ops.c10d_functional.all_to_all_single(grad_output, ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
             wait_tensor(grad_input)
 
         # Immediately sync with main stream here (usually no more further backward calls)
         torch.cuda.current_stream().wait_stream(ctx.stream)
         grad_input.record_stream(torch.cuda.current_stream())
+
+        if ctx.codecs is not None:
+            grad_input = ctx.codecs.backward.decode(grad_input, qcomm_ctx)
 
         if get_gradient_division():
             grad_input.div_(ctx.group_size)

@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from functools import partial
 from typing import Any, Dict, Iterator, List, Optional, Type, Union
 
 import torch
@@ -23,7 +22,6 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    LazyAwaitable,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardingEnv,
@@ -39,7 +37,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 def param_dp_sync(kt: KeyedTensor, no_op_tensor: torch.Tensor) -> KeyedTensor:
-    kt._values.add_(no_op_tensor)
+    kt._values = kt._values + no_op_tensor
     return kt
 
 
@@ -115,26 +113,28 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         fp_features = self.apply_feature_processors_to_kjt_list(dist_input)
         return self._embedding_bag_collection.compute(ctx, fp_features)
 
+    # pyre-ignore
     def output_dist(
         self,
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
-    ) -> LazyAwaitable[KeyedTensor]:
-        lazy_awaitable_kt = self._embedding_bag_collection.output_dist(ctx, output)
-        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+    ) -> KeyedTensor:
+        pact_kt = self._embedding_bag_collection.output_dist(ctx, output)
+        return self.add_fp_params_grad_sync_callback(pact_kt)
 
+    # pyre-ignore
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> KeyedTensor:
         fp_features = self.apply_feature_processors_to_kjt_list(input)
-        lazy_awaitable_kt = self._embedding_bag_collection.compute_and_output_dist(
+        pact_kt = self._embedding_bag_collection.compute_and_output_dist(
             ctx, fp_features
         )
-        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+        return self.add_fp_params_grad_sync_callback(pact_kt)
 
     def add_fp_params_grad_sync_callback(
-        self, lazy_awaitable_kt: LazyAwaitable[KeyedTensor]
-    ) -> LazyAwaitable[KeyedTensor]:
+        self, lazy_awaitable_kt: KeyedTensor
+    ) -> KeyedTensor:
         # This will ensure that all feature processor parameters participate in the
         # autograd graph across all ranks. This will protect from mismatched collective
         # calls order when using DistributedDataParallel over feature processors.
@@ -144,9 +144,7 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
                 [x.flatten() for x in self._feature_processors.parameters()]
             ).sum()
         )
-        lazy_awaitable_kt.callbacks.append(
-            partial(param_dp_sync, no_op_tensor=no_op_tensor)
-        )
+        lazy_awaitable_kt = param_dp_sync(lazy_awaitable_kt, no_op_tensor=no_op_tensor)
         return lazy_awaitable_kt
 
     def create_context(self) -> EmbeddingBagCollectionContext:

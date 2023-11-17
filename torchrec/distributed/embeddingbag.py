@@ -39,6 +39,9 @@ from torchrec.distributed.embedding_types import (
     KJTList,
     ShardedEmbeddingModule,
 )
+from torchrec.distributed.propagating_async_collective_tensor import (
+    PropagatingAsyncCollectiveTensor,
+)
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import RwPooledEmbeddingSharding
@@ -272,32 +275,14 @@ def construct_output_kt(
         cat_embeddings = embeddings[0]
     else:
         cat_embeddings = torch.cat(embeddings, dim=1)
+    assert isinstance(cat_embeddings, PropagatingAsyncCollectiveTensor)
+    cat_embeddings.manifest_on_op_with_non_prop_async_tensor = True
     return KeyedTensor(
         keys=embedding_names,
         length_per_key=embedding_dims,
         values=cat_embeddings,
         key_dim=1,
     )
-
-
-class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
-    def __init__(
-        self,
-        awaitables: List[Awaitable[torch.Tensor]],
-        embedding_dims: List[int],
-        embedding_names: List[str],
-    ) -> None:
-        super().__init__()
-        self._awaitables = awaitables
-        self._embedding_dims = embedding_dims
-        self._embedding_names = embedding_names
-
-    def _wait_impl(self) -> KeyedTensor:
-        return construct_output_kt(
-            embeddings=[w.wait() for w in self._awaitables],
-            embedding_names=self._embedding_names,
-            embedding_dims=self._embedding_dims,
-        )
 
 
 @dataclass
@@ -666,13 +651,14 @@ class ShardedEmbeddingBagCollection(
     ) -> List[torch.Tensor]:
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
+    # pyre-ignore
     def output_dist(
         self,
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
-    ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
+    ) -> KeyedTensor:
+        return construct_output_kt(
+            embeddings=[
                 dist(embeddings, sharding_ctx)
                 for dist, sharding_ctx, embeddings in zip(
                     self._output_dists,
@@ -680,25 +666,26 @@ class ShardedEmbeddingBagCollection(
                     output,
                 )
             ],
-            embedding_dims=self._embedding_dims,
             embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
         )
 
+    # pyre-ignore
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
-    ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(lookup(features), sharding_ctx)
-                for lookup, dist, sharding_ctx, features in zip(
-                    self._lookups,
-                    self._output_dists,
-                    ctx.sharding_contexts,
-                    input,
-                )
-            ],
-            embedding_dims=self._embedding_dims,
+    ) -> KeyedTensor:
+        embeddings = []
+        for lookup, dist, sharding_ctx, features in zip(
+            self._lookups,
+            self._output_dists,
+            ctx.sharding_contexts,
+            input,
+        ):
+            embeddings.append(dist(lookup(features), sharding_ctx))
+        return construct_output_kt(
+            embeddings=embeddings,
             embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
         )
 
     @property
