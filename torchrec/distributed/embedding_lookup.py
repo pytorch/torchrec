@@ -51,6 +51,7 @@ from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbeddingBag,
 )
 from torchrec.distributed.types import ShardedTensor
+from torchrec.distributed.utils import copy_to_device
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -703,16 +704,12 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             )
         )
         # syntax for torchscript
-        for i, (config, emb_op) in enumerate(
-            zip(self.grouped_configs, self._emb_modules)
-        ):
+        for i, emb_op in enumerate(self._emb_modules):
             features = features_by_group[i]
-            if (
-                config.has_feature_processor
-                and self._feature_processor is not None
-                and isinstance(self._feature_processor, BaseGroupedFeatureProcessor)
+            if self._feature_processor is not None and isinstance(
+                self._feature_processor, BaseGroupedFeatureProcessor
             ):
-                features = self._feature_processor(features)
+                features = self._feature_processor.forward(features)
             embeddings.append(emb_op.forward(features))
 
         return embeddings_cat_empty_rank_handle(
@@ -844,6 +841,7 @@ class InferGroupedPooledEmbeddingsLookup(
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[
@@ -852,12 +850,19 @@ class InferGroupedPooledEmbeddingsLookup(
 
         device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
+            device = torch.device(type=device_type, index=rank)
+            if feature_processor is not None:
+                # pyre-ignore
+                feature_processor = copy_to_device(
+                    feature_processor, feature_processor.device, device
+                )
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     # syntax for torchscript
-                    device=torch.device(type=device_type, index=rank),
+                    device=device,
+                    feature_processor=feature_processor,
                     fused_params=fused_params,
                 )
             )

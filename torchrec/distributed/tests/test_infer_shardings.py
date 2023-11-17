@@ -7,25 +7,35 @@
 
 #!/usr/bin/env python3
 
-import copy
-
+import math
 import unittest
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import hypothesis.strategies as st
 
 import torch
 from hypothesis import given, settings
-from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
+from torch import nn
+from torchrec import (
+    EmbeddingBagConfig,
+    EmbeddingCollection,
+    EmbeddingConfig,
+    KeyedJaggedTensor,
+)
+from torchrec.distributed.embedding_types import (
+    BaseGroupedFeatureProcessor,
+    EmbeddingComputeKernel,
+    ShardingType,
+)
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
-from torchrec.distributed.planner.types import ParameterConstraints
+from torchrec.distributed.quant_embeddingbag import FPEmbeddingBagCollectionSharder
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
+from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.sharding_plan import (
     column_wise,
     construct_module_sharding_plan,
@@ -44,16 +54,99 @@ from torchrec.distributed.test_utils.infer_utils import (
     shard_qec,
     TestModelInfo,
     TestQuantEBCSharder,
-    TestQuantECSharder,
-    TorchTypesModelInputWrapper,
 )
-from torchrec.distributed.types import (
-    ModuleShardingPlan,
-    ParameterSharding,
-    ShardingEnv,
-    ShardingPlan,
-)
+from torchrec.distributed.test_utils.test_model import ModelInput
+from torchrec.distributed.types import ShardingEnv, ShardingPlan
 from torchrec.fx import symbolic_trace
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+
+torch.fx.wrap("len")
+
+
+@torch.fx.wrap
+def fx_wrap_fp_forward(
+    features: KeyedJaggedTensor,
+    feature_pow: Dict[str, float],
+    feature_min: Dict[str, float],
+    feature_max: Dict[str, float],
+    bucket_w_dict: Dict[str, torch.Tensor],
+) -> KeyedJaggedTensor:
+    scores_list = []
+    for feature_name in features.keys():
+        jt = features[feature_name]
+        if feature_name in feature_min:
+            scores = jt.weights()
+            scores = torch.clamp(
+                scores,
+                min=feature_min[feature_name],
+                max=feature_max[feature_name],
+            )
+            indices = torch.floor(torch.pow(scores, feature_pow[feature_name]))
+            indices = indices.to(torch.int32)
+            scores = torch.index_select(bucket_w_dict[feature_name], 0, indices)
+            scores_list.append(scores)
+        else:
+            scores_list.append(
+                jt.weights()
+                if jt.weights_or_none() is not None
+                else torch.ones(jt.values().shape[0], device=jt.values().device)
+            )
+
+    return KeyedJaggedTensor(
+        keys=features.keys(),
+        values=features.values(),
+        weights=torch.cat(scores_list) if scores_list else features.weights_or_none(),
+        lengths=features.lengths(),
+        offsets=features.offsets(),
+        stride=features.stride(),
+        length_per_key=features.length_per_key(),
+    )
+
+
+class TimeGapPoolingCollectionModule(
+    FeatureProcessorsCollection, BaseGroupedFeatureProcessor
+):
+    def __init__(
+        self,
+        feature_pow: Dict[str, float],
+        feature_min: Dict[str, float],
+        feature_max: Dict[str, float],
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        self.feature_min = feature_min
+        self.feature_max = feature_max
+        self.feature_pow = feature_pow
+
+        self.bucket_w: nn.ParameterDict = nn.ParameterDict()
+        self.device = device
+        # needed since nn.ParameterDict isn't torchscriptable (get_items)
+        self.bucket_w_dict: Dict[str, torch.Tensor] = {}
+
+        for feature_name in feature_pow.keys():
+            param = torch.empty(
+                [
+                    math.ceil(
+                        math.pow(feature_max[feature_name], feature_pow[feature_name])
+                    )
+                    + 2
+                ],
+                device=device,
+            )
+            self.bucket_w[feature_name] = param
+            self.bucket_w_dict[feature_name] = param
+            self.register_buffer(f"bucket_w_dict_{feature_name}", param)
+
+    def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+        return fx_wrap_fp_forward(
+            features,
+            self.feature_pow,
+            self.feature_min,
+            self.feature_max,
+            {k: getattr(self, f"bucket_w_dict_{k}") for k in self.bucket_w_dict.keys()},
+        )
 
 
 class InferShardingsTest(unittest.TestCase):
@@ -708,3 +801,160 @@ class InferShardingsTest(unittest.TestCase):
             ["table_0", "table_1"],
             ShardingType.ROW_WISE.value,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_fp_ebc_tw(self, weight_dtype: torch.dtype) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device("cuda:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                FeatureProcessedEmbeddingBagCollection(
+                    EmbeddingBagCollection(
+                        tables=mi.tables,
+                        is_weighted=True,
+                        device=mi.sparse_device,
+                    ),
+                    TimeGapPoolingCollectionModule(
+                        feature_pow={
+                            f"feature_{i}": 1.0 for i in range(mi.num_features)
+                        },
+                        feature_min={
+                            f"feature_{i}": -1.0 for i in range(mi.num_features)
+                        },
+                        feature_max={
+                            f"feature_{i}": 1.0 for i in range(mi.num_features)
+                        },
+                        device=mi.sparse_device,
+                    ),
+                )
+            )
+        )
+        model_inputs: List[ModelInput] = prep_inputs(
+            mi, world_size, batch_size, long_indices=False
+        )
+        inputs = []
+        for model_input in model_inputs:
+            kjt = model_input.idlist_features
+            kjt = kjt.to(local_device)
+            weights = torch.rand(
+                kjt._values.size(0), dtype=torch.float, device=local_device
+            )
+            inputs.append(
+                (
+                    kjt._keys,
+                    kjt._values,
+                    weights,
+                    kjt._lengths,
+                    kjt._offsets,
+                )
+            )
+
+        mi.model(*inputs[0])
+        print(f"model:\n{mi.model}")
+
+        mi.quant_model = quantize(
+            module=mi.model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=False,
+            weight_dtype=weight_dtype,
+        )
+        quant_model = mi.quant_model
+        print(f"quant_model:\n{quant_model}")
+        non_sharded_output = mi.quant_model(*inputs[0])
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+        sharder = FPEmbeddingBagCollectionSharder()
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+        sharded_model = _shard_modules(
+            module=quant_model,
+            sharders=[sharder],
+            device=local_device,
+            plan=plan,
+            # pyre-ignore
+            env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+        )
+        print(f"sharded_model:\n{sharded_model}")
+        sharded_output = sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        print("fx:")
+        gm.print_readable()
+        gm_script = torch.jit.script(gm)
+        print(f"script:\n{gm_script.code}")
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+            sharders=[sharder],
+            device=local_device,
+            plan=plan,
+            # pyre-ignore
+            env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+        )
+        sharded_output = sharded_model(*inputs[0])
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)

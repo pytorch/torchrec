@@ -161,11 +161,18 @@ def prep_inputs_multiprocess(
 
 def model_input_to_forward_args_kjt(
     mi: ModelInput,
-) -> Tuple[List[str], torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> Tuple[
+    List[str],
+    torch.Tensor,
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
+]:
     kjt = mi.idlist_features
     return (
         kjt._keys,
         kjt._values,
+        kjt._weights,
         kjt._lengths,
         kjt._offsets,
     )
@@ -356,12 +363,14 @@ class KJTInputWrapper(torch.nn.Module):
         self,
         keys: List[str],
         values: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
     ):
         kjt = KeyedJaggedTensor(
             keys=keys,
             values=values,
+            weights=weights,
             lengths=lengths,
             offsets=offsets,
         )
@@ -588,7 +597,7 @@ def assert_close(expected, actual) -> None:
         assert len(expected.keys()) == len(actual.keys())
         torch.testing.assert_close(expected.values(), actual.values())
         torch.testing.assert_close(expected.length_per_key(), actual.length_per_key())
-    if isinstance(expected, dict):
+    elif isinstance(expected, dict):
         assert list(expected.keys()) == list(actual.keys())
         for feature, jt_e in expected.items():
             jt_got = actual[feature]

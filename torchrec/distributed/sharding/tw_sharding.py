@@ -507,6 +507,7 @@ class InferTwEmbeddingSharding(
             world_size=self._world_size,
             fused_params=fused_params,
             device=device,
+            feature_processor=feature_processor,
         )
 
     def create_output_dist(
