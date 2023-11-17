@@ -8,7 +8,7 @@
 
 import random
 import unittest
-from typing import List
+from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import hypothesis.strategies as st
@@ -18,10 +18,12 @@ from hypothesis import given, settings
 from torchrec.distributed.embedding_lookup import EmbeddingComputeKernel
 
 from torchrec.distributed.embedding_sharding import (
+    _get_compute_kernel_type,
     _get_grouping_fused_params,
     _get_weighted_avg_cache_load_factor,
     group_tables,
 )
+
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
@@ -168,3 +170,222 @@ class TestPerTBECacheLoadFactor(unittest.TestCase):
         table_group = table_groups[0]
         self.assertIsNotNone(table_group.fused_params)
         self.assertEqual(table_group.fused_params.get("cache_load_factor"), 0.35)
+
+
+def _get_table_names_by_groups(
+    embedding_tables: List[ShardedEmbeddingTable],
+) -> List[List[str]]:
+    # since we don't have access to _group_tables_per_rank
+    tables_per_rank: List[List[ShardedEmbeddingTable]] = [embedding_tables]
+
+    # taking only the list for the first rank
+    table_groups: List[GroupedEmbeddingConfig] = group_tables(tables_per_rank)[0]
+    return [table_group.table_names() for table_group in table_groups]
+
+
+class TestGroupTablesPerRank(unittest.TestCase):
+    # pyre-ignore[56]
+    @given(
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        has_feature_processor=st.sampled_from([False, True]),
+        fused_params_group=st.sampled_from(
+            [
+                {
+                    "cache_load_factor": 0.5,
+                    "prefetch_pipeline": False,
+                },
+                {
+                    "cache_load_factor": 0.3,
+                    "prefetch_pipeline": True,
+                },
+            ]
+        ),
+        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        pooling_type=st.sampled_from(list(PoolingType)),
+        compute_kernel=st.sampled_from(list(EmbeddingComputeKernel)),
+    )
+    @settings(max_examples=10, deadline=10000)
+    def test_should_group_together(
+        self,
+        data_type: DataType,
+        has_feature_processor: bool,
+        fused_params_group: Dict[str, Any],
+        embedding_dim: int,
+        pooling_type: PoolingType,
+        compute_kernel: EmbeddingComputeKernel,
+    ) -> None:
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=data_type,
+                pooling=pooling_type,
+                has_feature_processor=has_feature_processor,
+                fused_params=fused_params_group,
+                compute_kernel=compute_kernel,
+                embedding_dim=embedding_dim,
+                num_embeddings=10000,
+            )
+            for i in range(2)
+        ]
+
+        expected_table_names_by_groups = [["table_0", "table_1"]]
+        self.assertEqual(
+            _get_table_names_by_groups(tables),
+            expected_table_names_by_groups,
+        )
+
+    # pyre-ignore[56]
+    @given(
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        has_feature_processor=st.sampled_from([False, True]),
+        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        pooling_type=st.sampled_from(list(PoolingType)),
+        compute_kernel=st.sampled_from(list(EmbeddingComputeKernel)),
+    )
+    @settings(max_examples=10, deadline=10000)
+    def test_should_group_together_with_prefetch(
+        self,
+        data_type: DataType,
+        has_feature_processor: bool,
+        embedding_dim: int,
+        pooling_type: PoolingType,
+        compute_kernel: EmbeddingComputeKernel,
+    ) -> None:
+        fused_params_groups = [
+            {
+                "cache_load_factor": 0.3,
+                "prefetch_pipeline": True,
+            },
+            {
+                "cache_load_factor": 0.5,
+                "prefetch_pipeline": True,
+            },
+        ]
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=data_type,
+                pooling=pooling_type,
+                has_feature_processor=has_feature_processor,
+                fused_params=fused_params_groups[i],
+                compute_kernel=compute_kernel,
+                embedding_dim=embedding_dim,
+                num_embeddings=10000,
+            )
+            for i in range(2)
+        ]
+
+        expected_table_names_by_groups = [["table_0", "table_1"]]
+        self.assertEqual(
+            _get_table_names_by_groups(tables),
+            expected_table_names_by_groups,
+        )
+
+    # pyre-ignore[56]
+    @given(
+        data_types=st.lists(
+            st.sampled_from([DataType.FP16, DataType.FP32]),
+            min_size=2,
+            max_size=2,
+            unique=True,
+        ),
+        has_feature_processors=st.lists(
+            st.sampled_from([False, True]), min_size=2, max_size=2, unique=True
+        ),
+        fused_params_group=st.sampled_from(
+            [
+                {
+                    "cache_load_factor": 0.5,
+                    "prefetch_pipeline": True,
+                },
+                {
+                    "cache_load_factor": 0.3,
+                    "prefetch_pipeline": True,
+                },
+            ],
+        ),
+        embedding_dims=st.lists(
+            st.sampled_from(list(range(160, 320, 40))),
+            min_size=2,
+            max_size=2,
+            unique=True,
+        ),
+        pooling_types=st.lists(
+            st.sampled_from(list(PoolingType)), min_size=2, max_size=2, unique=True
+        ),
+        compute_kernels=st.lists(
+            st.sampled_from(list(EmbeddingComputeKernel)),
+            min_size=2,
+            max_size=2,
+            unique=True,
+        ),
+        distinct_key=st.sampled_from(
+            [
+                "data_type",
+                "has_feature_processor",
+                "embedding_dim",
+                "pooling_type",
+                "compute_kernel",
+            ]
+        ),
+    )
+    @settings(max_examples=10, deadline=10000)
+    def test_should_not_group_together(
+        self,
+        data_types: List[DataType],
+        has_feature_processors: List[bool],
+        fused_params_group: Dict[str, Any],
+        embedding_dims: List[int],
+        pooling_types: List[PoolingType],
+        compute_kernels: List[EmbeddingComputeKernel],
+        distinct_key: str,
+    ) -> None:
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=data_types[i]
+                if distinct_key == "data_type"
+                else data_types[0],
+                pooling=pooling_types[i]
+                if distinct_key == "pooling_type"
+                else pooling_types[0],
+                has_feature_processor=has_feature_processors[i]
+                if distinct_key == "has_feature_processor"
+                else has_feature_processors[0],
+                fused_params=fused_params_group,  # can't hash dicts
+                compute_kernel=compute_kernels[i]
+                if distinct_key == "compute_kernel"
+                else compute_kernels[0],
+                embedding_dim=embedding_dims[i]
+                if distinct_key == "embedding_dim"
+                else embedding_dims[0],
+                num_embeddings=10000,
+            )
+            for i in range(2)
+        ]
+
+        if distinct_key == "compute_kernel" and _get_compute_kernel_type(
+            compute_kernels[0]
+        ) == _get_compute_kernel_type(compute_kernels[1]):
+            self.assertEqual(
+                _get_table_names_by_groups(tables),
+                [["table_0", "table_1"]],
+            )
+            return
+
+        # emb dim bucketizier only in use when computer kernel is uvm caching
+        # and prefetch pipeline is True
+        if (
+            distinct_key == "embedding_dim"
+            and compute_kernels[0] != EmbeddingComputeKernel.FUSED_UVM_CACHING
+        ):
+            self.assertEqual(
+                _get_table_names_by_groups(tables),
+                [["table_0", "table_1"]],
+            )
+            return
+
+        self.assertEqual(
+            sorted(_get_table_names_by_groups(tables)),
+            [["table_0"], ["table_1"]],
+        )
