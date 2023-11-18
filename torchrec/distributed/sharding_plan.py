@@ -246,6 +246,8 @@ def _get_parameter_sharding(
     local_size: int,
     device_type: str,
     sharder: ModuleSharder[nn.Module],
+    placements: Optional[List[str]] = None,
+    compute_kernel: Optional[str] = None,
 ) -> ParameterSharding:
     return ParameterSharding(
         sharding_spec=None
@@ -259,19 +261,33 @@ def _get_parameter_sharding(
                         device_type,
                         none_throws(rank),
                         none_throws(local_size),
-                    ),
+                    )
+                    if not device_placement
+                    else device_placement,
                 )
-                for (size, offset, rank) in (size_offset_ranks)
+                for (size, offset, rank), device_placement in zip(
+                    size_offset_ranks,
+                    placements if placements else [None] * len(size_offset_ranks),
+                )
             ]
         ),
         sharding_type=sharding_type,
-        compute_kernel=_get_compute_kernel(sharder, param, sharding_type, device_type),
+        compute_kernel=compute_kernel
+        if compute_kernel
+        else _get_compute_kernel(sharder, param, sharding_type, device_type),
         ranks=[rank for (_, _, rank) in size_offset_ranks],
     )
 
 
 ParameterShardingGenerator = Callable[
-    [nn.Parameter, int, int, str, ModuleSharder[nn.Module]], ParameterSharding
+    [
+        nn.Parameter,
+        int,
+        int,
+        str,
+        ModuleSharder[nn.Module],
+    ],
+    ParameterSharding,
 ]
 
 
@@ -370,9 +386,14 @@ def table_wise(
     return _parameter_sharding_generator
 
 
-def row_wise() -> ParameterShardingGenerator:
+def row_wise(
+    sizes_placement: Optional[Tuple[List[int], str]] = None
+) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
+
+    Args:
+    sizes_placement (Optional[Tuple[List[int], str]]): Only use it in inference for uneven shardinglist of tuples of (sizes, placement); sizes is the row size list
 
     Example::
 
@@ -381,6 +402,7 @@ def row_wise() -> ParameterShardingGenerator:
             ebc,
             {
                 "table_1": row_wise(),
+                "table_2": row_wise([10, 5, 0, 3], "cpu")
             },
         )
     """
@@ -392,16 +414,41 @@ def row_wise() -> ParameterShardingGenerator:
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
-        size_and_offsets = _get_parameter_size_offsets(
-            param,
-            ShardingType.ROW_WISE,
-            local_size,
-            world_size,
-        )
-        assert len(size_and_offsets) <= world_size
-        size_offset_ranks = []
-        for (size, offset), rank in zip(size_and_offsets, range(world_size)):
-            size_offset_ranks.append((size, offset, rank))
+        if sizes_placement is None:
+            size_and_offsets = _get_parameter_size_offsets(
+                param,
+                ShardingType.ROW_WISE,
+                local_size,
+                world_size,
+            )
+            assert len(size_and_offsets) <= world_size
+            size_offset_ranks = []
+            for (size, offset), rank in zip(size_and_offsets, range(world_size)):
+                size_offset_ranks.append((size, offset, rank))
+        else:
+            size_offset_ranks = []
+            sizes = sizes_placement[0]
+            (rows, cols) = param.shape
+            cur_offset = 0
+            prev_offset = 0
+            for rank, size in enumerate(sizes):
+                per_rank_row = size
+                cur_offset += per_rank_row
+                cur_offset = min(cur_offset, rows)
+                per_rank_row = cur_offset - prev_offset
+                size_offset_ranks.append(([per_rank_row, cols], [prev_offset, 0], rank))
+                prev_offset = cur_offset
+
+            if cur_offset < rows:
+                raise ValueError(
+                    f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {sizes_placement}"
+                )
+
+        def placement_helper(device_type: str, index: int = 0) -> str:
+            if device_type == "cpu":
+                return f"rank:0/{device_type}"  # cpu only use rank 0
+
+            return f"rank:{index}/{device_type}:{index}"
 
         return _get_parameter_sharding(
             param,
@@ -410,6 +457,15 @@ def row_wise() -> ParameterShardingGenerator:
             local_size,
             device_type,
             sharder,
+            placements=[
+                placement_helper(sizes_placement[1], i)
+                for i in range(len(sizes_placement[0]))
+            ]
+            if sizes_placement
+            else None,
+            compute_kernel=EmbeddingComputeKernel.QUANT.value
+            if sizes_placement
+            else None,
         )
 
     return _parameter_sharding_generator
