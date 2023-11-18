@@ -786,25 +786,21 @@ class VariableBatchPooledEmbeddingsAllToAll(nn.Module):
 
 class EmbeddingsAllToOneReduce(nn.Module):
     """
-    Merges the pooled/sequence embedding tensor on each device into single tensor.
+    Merges the pooled embedding tensor on each device into single tensor.
 
     Args:
         device (torch.device): device on which buffer will be allocated.
         world_size (int): number of devices in the topology.
-        cat_dim (int): which dimension you would like to concatenate on.
-            For pooled embedding it is 1; for sequence embedding it is 0.
     """
 
     def __init__(
         self,
         device: torch.device,
         world_size: int,
-        cat_dim: int,
     ) -> None:
         super().__init__()
         self._device = device
         self._world_size = world_size
-        self._cat_dim = cat_dim
 
     # This method can be used by an inference runtime to update the
     # device information for this module.
@@ -817,7 +813,7 @@ class EmbeddingsAllToOneReduce(nn.Module):
         tensors: List[torch.Tensor],
     ) -> torch.Tensor:
         """
-        Performs AlltoOne operation with Reduce on pooled/sequence embeddings tensors.
+        Performs AlltoOne operation with Reduce on pooled embeddings tensors.
 
         Args:
             tensors (List[torch.Tensor]): list of embedding tensors.

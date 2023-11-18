@@ -335,7 +335,7 @@ class InferRwPooledEmbeddingDist(
     BaseEmbeddingDist[NullShardingContext, List[torch.Tensor], torch.Tensor]
 ):
     """
-    Redistributes sequence embedding tensor in RW fashion with an AlltoOne operation.
+    Redistributes pooled embedding tensor in RW fashion with an AlltoOne operation.
 
     Args:
         device (torch.device): device on which the tensors will be communicated to.
@@ -351,7 +351,6 @@ class InferRwPooledEmbeddingDist(
         self._dist: EmbeddingsAllToOneReduce = EmbeddingsAllToOneReduce(
             device=device,
             world_size=world_size,
-            cat_dim=1,
         )
 
     def forward(
