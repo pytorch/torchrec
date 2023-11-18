@@ -49,6 +49,13 @@ from torchrec.distributed.types import ShardingPlan
 from torchrec.fx import symbolic_trace
 
 
+def placement_helper(device_type: str, index: int = 0) -> str:
+    if device_type == "cpu":
+        return f"rank:0/{device_type}"  # cpu only use rank 0
+
+    return f"rank:{index}/{device_type}:{index}"
+
+
 class InferShardingsTest(unittest.TestCase):
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
@@ -702,6 +709,7 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.ROW_WISE.value,
         )
 
+    @unittest.skip("Need D51309697 before turn on")
     @unittest.skipIf(
         torch.cuda.device_count() <= 2,
         "Not enough GPUs available",
@@ -728,7 +736,7 @@ class InferShardingsTest(unittest.TestCase):
         local_size = 3
         world_size = 3
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device("cpu")
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -792,11 +800,147 @@ class InferShardingsTest(unittest.TestCase):
         sharded_model.load_state_dict(non_sharded_model.state_dict())
 
         # We need this first inference to make all lazy init in forward
-        _ = sharded_model(*inputs[0])
-        _ = non_sharded_model(*inputs[0])
-        # TODO (drqiangzhang): Add comparison between sharded and unsharded model outputs
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
 
         gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
         gm_script = torch.jit.script(gm)
-        _ = gm_script(*inputs[0])
-        # TODO (drqiangzhang): Add comparison between scripted and nonscripted model outputs
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skip("Need D51309697 before turn on")
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_rw_uneven_sharding_mutiple_table(
+        self,
+        weight_dtype: torch.dtype,
+    ) -> None:
+        num_embeddings = 512
+        emb_dim = 64
+        local_size = 4
+        world_size = 4
+        batch_size = 1
+        local_device = torch.device("cpu")
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            num_features=3,
+        )
+
+        non_sharded_model = mi.quant_model
+        expected_shards = [
+            [
+                (
+                    (0, 0, 256, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (256, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (384, 0, 64, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (448, 0, 64, 64),
+                    placement_helper("cpu", 0),
+                ),
+            ],
+            [
+                (
+                    (0, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (128, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (256, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (384, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+            ],
+            [
+                (
+                    (0, 0, 256, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (256, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (384, 0, 128, 64),
+                    placement_helper("cpu", 0),
+                ),
+                (
+                    (512, 0, 0, 64),
+                    placement_helper("cpu", 0),
+                ),
+            ],
+        ]
+
+        sharder = TestQuantEBCSharder(
+            sharding_type=ShardingType.ROW_WISE.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+
+        module_plan = construct_module_sharding_plan(
+            non_sharded_model._module.sparse.ebc,
+            per_param_sharding={
+                "table_0": row_wise(
+                    ([256, 128, 64, 64], "cpu"),
+                ),
+                "table_1": row_wise(([128, 128, 128, 128], "cpu")),
+                "table_2": row_wise(([256, 128, 128, 0], "cpu")),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+        )
+
+        plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
+        sharded_model = shard_qebc(
+            mi=mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
+            plan=plan,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        # We need this first inference to make all lazy init in forward
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
