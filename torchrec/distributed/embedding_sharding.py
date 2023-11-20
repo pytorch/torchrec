@@ -105,7 +105,6 @@ def bucketize_kjt_before_all2all(
         block_sizes=block_sizes_new_type,
         my_size=num_buckets,
         weights=kjt.weights_or_none(),
-        block_bucketize_pos=block_bucketize_row_pos,
     )
 
     return (
