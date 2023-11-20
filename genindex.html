@@ -1267,6 +1267,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.forward">(torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll method)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.forward">[1]</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward">(torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter method)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward">[1]</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.CommOpGradientScaling.forward">(torchrec.distributed.embedding_lookup.CommOpGradientScaling static method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup method)</a>
@@ -1630,8 +1632,6 @@
 </li>
       <li><a href="torchrec.distributed.html#id20">input_size (torchrec.distributed.comm_ops.AllGatherBaseInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.AllGatherBaseInfo.input_size">[1]</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id21">input_sizes (torchrec.distributed.comm_ops.ReduceScatterBaseInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes">[1]</a>
 
       <ul>
@@ -1640,6 +1640,8 @@
         <li><a href="torchrec.distributed.html#id23">(torchrec.distributed.comm_ops.ReduceScatterVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterVInfo.input_sizes">[1]</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id18">input_split_sizes (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.input_split_sizes">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_splits">input_splits (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
@@ -1670,12 +1672,22 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.intra_host_bw">intra_host_bw (torchrec.distributed.planner.types.Topology property)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.inverse_indices">inverse_indices (torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext attribute)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices">inverse_indices() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices_or_none">inverse_indices_or_none() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.collective_utils.invoke_on_rank_and_broadcast_result">invoke_on_rank_and_broadcast_result() (in module torchrec.distributed.collective_utils)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.INVSQRT">INVSQRT (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.is_fx_tracing">is_fx_tracing() (in module torchrec.fx.tracer)</a>
+
+      <ul>
+        <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.is_fx_tracing">(in module torchrec.modules.embedding_modules)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#id33">is_getitems (torchrec.distributed.train_pipeline.ArgInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.ArgInfo.is_getitems">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.collective_utils.is_leader">is_leader() (in module torchrec.distributed.collective_utils)</a>
@@ -2587,6 +2599,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_pooled">reduce_scatter_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_v_per_feature_pooled">reduce_scatter_v_per_feature_pooled() (in module torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_v_pooled">reduce_scatter_v_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
@@ -3456,6 +3470,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training">(torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll attribute)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training">[1]</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training">(torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter attribute)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training">[1]</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.training">(torchrec.distributed.embedding.ShardedEmbeddingCollection attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup attribute)</a>
@@ -3609,10 +3625,22 @@
 <h2 id="U">U</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PartitionByType.UNIFORM">UNIFORM (torchrec.distributed.planner.types.PartitionByType attribute)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_dims">uncombined_embedding_dims() (torchrec.distributed.embedding_sharding.EmbeddingSharding method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_dims">(torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding method)</a>
 </li>
+      </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_names">uncombined_embedding_names() (torchrec.distributed.embedding_sharding.EmbeddingSharding method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_names">(torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding method)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PartitionByType.UNIFORM">UNIFORM (torchrec.distributed.planner.types.PartitionByType attribute)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer">UniformProposer (class in torchrec.distributed.planner.proposers)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync">unsync() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
@@ -3639,19 +3667,27 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.Variable_Batch_All2All_Pooled_Wait">Variable_Batch_All2All_Pooled_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.variable_batch_alltoall_pooled">variable_batch_alltoall_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext.variable_batch_per_feature">variable_batch_per_feature (torchrec.distributed.embedding_sharding.EmbeddingShardingContext attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.variable_batch_per_feature">(torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext attribute)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#id13">variable_batch_size (torchrec.distributed.comm_ops.All2AllSequenceInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo.variable_batch_size">[1]</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.variable_stride_per_key">variable_stride_per_key() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.VariableBatchAll2AllPooledInfo">VariableBatchAll2AllPooledInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.VariableBatchEmbeddingBagCollectionAwaitable">VariableBatchEmbeddingBagCollectionAwaitable (class in torchrec.distributed.embeddingbag)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll">VariableBatchPooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll">[1]</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter">VariableBatchPooledEmbeddingsReduceScatter (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter">[1]</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.VectorCrossNet">VectorCrossNet (class in torchrec.modules.crossnet)</a>
 </li>

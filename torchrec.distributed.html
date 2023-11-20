@@ -2479,6 +2479,38 @@ default process group will be used.</p></li>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.distributed.comm_ops.reduce_scatter_v_per_feature_pooled">
+<span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">reduce_scatter_v_per_feature_pooled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size_per_rank_per_feature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.reduce_scatter_v_per_feature_pooled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs reduce-scatter-v operation for a 1-d pooled embeddings tensor of variable
+batch size per feature split unevenly into world size number of chunks. The result
+of the reduce operation gets scattered to all processes in the group.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input</strong> (<em>Tensor</em>) – tensors to scatter, one per rank.</p></li>
+<li><p><strong>batch_size_per_rank_per_feature</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – batch size per rank per
+feature used to determine input splits.</p></li>
+<li><p><strong>embedding_dims</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – embedding dimensions per feature used to determine
+input splits.</p></li>
+<li><p><strong>group</strong> (<em>Optional</em><em>[</em><em>dist.ProcessGroup</em><em>]</em>) – The process group to work on. If None, the
+default process group will be used.</p></li>
+<li><p><strong>codecs</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em>) – quantized communication codecs.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>async work handle (Awaitable), which can be <cite>wait()</cite> later to get the resulting tensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[Tensor]</p>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p><cite>reduce_scatter_v_per_feature_pooled</cite> is experimental and subject to change.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.comm_ops.reduce_scatter_v_pooled">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.comm_ops.</span></span><span class="sig-name descname"><span class="pre">reduce_scatter_v_pooled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><span class="pre">Awaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.comm_ops.reduce_scatter_v_pooled" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs reduce-scatter-v operation for a pooled embeddings tensor split unevenly
@@ -2796,8 +2828,11 @@ gather input tensors from all ranks into a flattened output tensor.</p>
 The all-gather is only available for NCCL backend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the all-gather communication
-happens within.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the all-gather communication
+happens within.</p></li>
+<li><p><strong>codecs</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em>) – quantized communication codecs.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Example:</p>
@@ -3025,6 +3060,7 @@ For pooled embedding it is 1; for sequence embedding it is 0.</p></li>
 happens within.</p></li>
 <li><p><strong>features_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of number of features per rank.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
+<li><p><strong>codecs</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em>) – quantized communication codecs.</p></li>
 </ul>
 </dd>
 </dl>
@@ -3207,6 +3243,60 @@ Ordered by rank_0 feature, rank_1 feature, …</p></li>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training">
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">VariableBatchPooledEmbeddingsReduceScatter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>The module class that wraps reduce-scatter communication primitives for pooled
+embedding communication of variable batch in rw and twrw sharding.</p>
+<p>For variable batch per feature pooled embeddings, we have a local model-parallel
+output tensor with a 1d layout of the total sum of batch sizes per rank per feature
+multiplied by corresponding embedding dim <cite>[batch_size_r0_f0 * emb_dim_f0 + …)]</cite>.
+We split the tensor into unequal chunks by rank according to
+<cite>batch_size_per_rank_per_feature</cite> and corresponding <cite>embedding_dims</cite> and reduce them
+into the output tensor and scatter the results for corresponding ranks.</p>
+<p>The class returns the async <cite>Awaitable</cite> handle for pooled embeddings tensor.
+The <cite>reduce-scatter-v</cite> operation is only available for NCCL backend.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the reduce-scatter communication
+happens within.</p></li>
+<li><p><strong>codecs</strong> – quantized communication codecs.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size_per_rank_per_feature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable" title="torchrec.distributed.dist_data.PooledEmbeddingsAwaitable"><span class="pre">PooledEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs reduce scatter operation on pooled embeddings tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of shape
+<cite>[num_buckets * batch_size, dimension]</cite>.</p></li>
+<li><p><strong>batch_size_per_rank_per_feature</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – batch size per rank per
+feature used to determine input splits.</p></li>
+<li><p><strong>embedding_dims</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – embedding dimensions per feature used to
+determine input splits.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>awaitable of pooled embeddings of tensor of shape [batch_size, dimension].</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable" title="torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -4392,6 +4482,16 @@ table_wise.</p>
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">qcomm_codecs_registry</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.embedding_sharding.EmbeddingSharding.qcomm_codecs_registry" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_dims">
+<span class="sig-name descname"><span class="pre">uncombined_embedding_dims</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_dims" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_names">
+<span class="sig-name descname"><span class="pre">uncombined_embedding_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -5085,8 +5185,13 @@ Inputs and outputs are data-parallel.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.embeddingbag.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollectionContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_contexts:</span> <span class="pre">List[Union[torchrec.distributed.embedding_sharding.EmbeddingShardingContext</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">NoneType]]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.embeddingbag.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagCollectionContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">sharding_contexts:</span> <span class="pre">List[Union[torchrec.distributed.embedding_sharding.EmbeddingShardingContext,</span> <span class="pre">NoneType]]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">inverse_indices:</span> <span class="pre">Union[Tuple[List[str],</span> <span class="pre">torch.Tensor],</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">variable_batch_per_feature:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Multistreamable</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.inverse_indices">
+<span class="sig-name descname"><span class="pre">inverse_indices</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.inverse_indices" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.record_stream">
 <span class="sig-name descname"><span class="pre">record_stream</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Stream</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.record_stream" title="Permalink to this definition">¶</a></dt>
@@ -5096,6 +5201,11 @@ Inputs and outputs are data-parallel.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.sharding_contexts">
 <span class="sig-name descname"><span class="pre">sharding_contexts</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.embedding_sharding.EmbeddingShardingContext" title="torchrec.distributed.embedding_sharding.EmbeddingShardingContext"><span class="pre">EmbeddingShardingContext</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.sharding_contexts" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.variable_batch_per_feature">
+<span class="sig-name descname"><span class="pre">variable_batch_per_feature</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.variable_batch_per_feature" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -5472,6 +5582,12 @@ completes.</p>
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBagCollection.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.embeddingbag.VariableBatchEmbeddingBagCollectionAwaitable">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.embeddingbag.</span></span><span class="sig-name descname"><span class="pre">VariableBatchEmbeddingBagCollectionAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.embeddingbag.VariableBatchEmbeddingBagCollectionAwaitable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.LazyAwaitable" title="torchrec.distributed.types.LazyAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyAwaitable</span></code></a>[<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeyedTensor</span></code></a>]</p>
 </dd></dl>
 
 <dl class="py function">

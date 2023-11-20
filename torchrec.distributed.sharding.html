@@ -363,6 +363,16 @@
 <span class="sig-name descname"><span class="pre">embedding_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.embedding_names" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_dims">
+<span class="sig-name descname"><span class="pre">uncombined_embedding_dims</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_dims" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_names">
+<span class="sig-name descname"><span class="pre">uncombined_embedding_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.sharding.cw_sharding.BaseCwEmbeddingSharding.uncombined_embedding_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -739,8 +749,11 @@ gather input tensors from all ranks into a flattened output tensor.</p>
 The all-gather is only available for NCCL backend.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the all-gather communication
-happens within.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the all-gather communication
+happens within.</p></li>
+<li><p><strong>codecs</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em>) – quantized communication codecs.</p></li>
+</ul>
 </dd>
 </dl>
 <p>Example:</p>
@@ -968,6 +981,7 @@ For pooled embedding it is 1; for sequence embedding it is 0.</p></li>
 happens within.</p></li>
 <li><p><strong>features_per_rank</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of number of features per rank.</p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
+<li><p><strong>codecs</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em>) – quantized communication codecs.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1150,6 +1164,60 @@ Ordered by rank_0 feature, rank_1 feature, …</p></li>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training">
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsAllToAll.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">VariableBatchPooledEmbeddingsReduceScatter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">codecs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>The module class that wraps reduce-scatter communication primitives for pooled
+embedding communication of variable batch in rw and twrw sharding.</p>
+<p>For variable batch per feature pooled embeddings, we have a local model-parallel
+output tensor with a 1d layout of the total sum of batch sizes per rank per feature
+multiplied by corresponding embedding dim <cite>[batch_size_r0_f0 * emb_dim_f0 + …)]</cite>.
+We split the tensor into unequal chunks by rank according to
+<cite>batch_size_per_rank_per_feature</cite> and corresponding <cite>embedding_dims</cite> and reduce them
+into the output tensor and scatter the results for corresponding ranks.</p>
+<p>The class returns the async <cite>Awaitable</cite> handle for pooled embeddings tensor.
+The <cite>reduce-scatter-v</cite> operation is only available for NCCL backend.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – the process group that the reduce-scatter communication
+happens within.</p></li>
+<li><p><strong>codecs</strong> – quantized communication codecs.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_embs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size_per_rank_per_feature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable" title="torchrec.distributed.dist_data.PooledEmbeddingsAwaitable"><span class="pre">PooledEmbeddingsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs reduce scatter operation on pooled embeddings tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – tensor of shape
+<cite>[num_buckets * batch_size, dimension]</cite>.</p></li>
+<li><p><strong>batch_size_per_rank_per_feature</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – batch size per rank per
+feature used to determine input splits.</p></li>
+<li><p><strong>embedding_dims</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – embedding dimensions per feature used to
+determine input splits.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>awaitable of pooled embeddings of tensor of shape [batch_size, dimension].</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable" title="torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.VariableBatchPooledEmbeddingsReduceScatter.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1400,7 +1468,7 @@ registered hooks while the latter silently ignores them.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.sharding.rw_sharding.</span></span><span class="sig-name descname"><span class="pre">RwPooledEmbeddingDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.sharding.rw_sharding.</span></span><span class="sig-name descname"><span class="pre">RwPooledEmbeddingDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">embedding_dims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.sharding.rw_sharding.RwPooledEmbeddingDist" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist" title="torchrec.distributed.embedding_sharding.BaseEmbeddingDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEmbeddingDist</span></code></a>[<a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext" title="torchrec.distributed.embedding_sharding.EmbeddingShardingContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">EmbeddingShardingContext</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>]</p>
 <p>Redistributes pooled embedding tensor in RW fashion by performing a reduce-scatter
 operation.</p>
@@ -1415,7 +1483,11 @@ operation.</p>
 <dd><p>Performs reduce-scatter pooled operation on pooled embeddings tensor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – pooled embeddings tensor to distribute.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>local_embs</strong> (<em>torch.Tensor</em>) – pooled embeddings tensor to distribute.</p></li>
+<li><p><strong>sharding_ctx</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext" title="torchrec.distributed.embedding_sharding.EmbeddingShardingContext"><em>EmbeddingShardingContext</em></a><em>]</em>) – shared context from
+KJTAllToAll operation.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>awaitable of pooled embeddings tensor.</p>
@@ -1819,7 +1891,7 @@ within a host group.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.sharding.twrw_sharding.</span></span><span class="sig-name descname"><span class="pre">TwRwPooledEmbeddingDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cross_pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim_sum_per_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.sharding.twrw_sharding.</span></span><span class="sig-name descname"><span class="pre">TwRwPooledEmbeddingDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cross_pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">intra_pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim_sum_per_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">emb_dim_per_node_per_feature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qcomm_codecs_registry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><span class="pre">QuantizedCommCodecs</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.sharding.twrw_sharding.TwRwPooledEmbeddingDist" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.BaseEmbeddingDist" title="torchrec.distributed.embedding_sharding.BaseEmbeddingDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEmbeddingDist</span></code></a>[<a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext" title="torchrec.distributed.embedding_sharding.EmbeddingShardingContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">EmbeddingShardingContext</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>]</p>
 <p>Redistributes pooled embedding tensor in TWRW fashion by performing a reduce-scatter
 operation row wise on the host level and then an AlltoAll operation table wise on
@@ -1833,7 +1905,9 @@ communication.</p></li>
 communication.</p></li>
 <li><p><strong>dim_sum_per_node</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – number of features (sum of dimensions) of the
 embedding for each host.</p></li>
+<li><p><strong>emb_dim_per_node_per_feature</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – </p></li>
 <li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which buffers will be allocated.</p></li>
+<li><p><strong>qcomm_codecs_registry</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodecs" title="torchrec.distributed.types.QuantizedCommCodecs"><em>QuantizedCommCodecs</em></a><em>]</em><em>]</em>) – </p></li>
 </ul>
 </dd>
 </dl>
