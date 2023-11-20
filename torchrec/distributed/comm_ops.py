@@ -6,7 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple, TypeVar
+from functools import partial
+from typing import Any, cast, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
@@ -14,6 +15,9 @@ import torch.distributed as dist
 from torch import Tensor
 from torch.autograd import Function
 from torch.autograd.profiler import record_function
+from torchrec.distributed.propagating_async_collective_tensor import (
+    PropagatingAsyncCollectiveTensor,
+)
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.distributed.utils import none_throws
 
@@ -1873,3 +1877,137 @@ class ReduceScatterV_Wait(Function):
         myreq.req = req
         myreq.tensor = grad_input
         return (None, None, myreq.dummy_tensor)
+
+
+from torch.autograd import Function
+from torch.distributed._functional_collectives import (
+    _expand_group,
+    RANK_TYPES,
+    wait_tensor,
+)
+
+MAX_SEQ_NUM: int = 2**62  # being a little bit conservative
+
+
+def all_to_all_single(
+    input_tensor: torch.Tensor,
+    output_split_sizes: Optional[List[int]],
+    input_split_sizes: Optional[List[int]],
+    group: RANK_TYPES,
+    tag: str = "",
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> PropagatingAsyncCollectiveTensor:
+    a2a_out = CreateA2AAsyncPropagatingTensorFunc.apply(
+        input_tensor, group, output_split_sizes, input_split_sizes, codecs
+    )
+    # Later on when we increase seequence number for A2A and A2A post ops, stop at
+    # a2a so TBE backwards doesn't block any compute.
+    if a2a_out is not None:
+        a2a_out.grad_fn._stop_priority_sequence = True
+    return a2a_out
+
+
+class WaitFunction(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(ctx, tensor: torch.Tensor) -> torch.Tensor:
+        wait_tensor(tensor)
+        return tensor
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad_output) -> torch.Tensor:
+        return grad_output
+
+
+def manifest_wait(collective_tensor: torch.Tensor) -> torch.Tensor:
+    # If we don't wrap this in a function (use wait_tensor(a2a_tensor) we get an error message:
+    # UserWarning: c10d_functional::wait_tensor: an autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it.
+    # This may lead to silently incorrect behavior. This behavior is deprecated and will be removed in a future version of PyTorch.
+    # If your operator is differentiable, please ensure you have registered an autograd kernel to the correct Autograd key
+    # (e.g. DispatchKey::Autograd, DispatchKey::CompositeImplicitAutograd).
+    # If your operator is not differentiable, or to squash this warning and use the previous behavior,
+    # please register torch::CppFunction::makeFallthrough() to DispatchKey::Autograd.
+    # (Triggered internally at fbcode/caffe2/torch/csrc/autograd/autograd_not_implemented_fallback.cpp:72.)
+    # wait_tensor(a2a_tensor)
+    WaitFunction.apply(collective_tensor)
+    return collective_tensor
+
+
+class CreateA2AAsyncPropagatingTensorFunc(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        # pyre-ignore
+        ctx,
+        tensor_input: torch.Tensor,
+        group: dist.ProcessGroup,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ) -> PropagatingAsyncCollectiveTensor:
+
+        ctx.group = group
+        ctx.bwd_output_split_sizes = input_split_sizes
+        ctx.bwd_input_split_sizes = output_split_sizes
+        ctx.tag, ctx.rankset, ctx.group_size = _expand_group(group, "")
+        ctx.codecs = codecs
+
+        qcomm_ctx = None
+        if codecs is not None:
+            tensor_input = codecs.forward.encode(tensor_input, qcomm_ctx)
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(tensor_input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+
+        pact = PropagatingAsyncCollectiveTensor(
+            partial(
+                manifest_wait,
+                collective_tensor=a2a_tensor,
+            ),
+            fake_elem=a2a_tensor.to("meta"),
+            device=a2a_tensor.device,
+            manifest_on_op_with_non_prop_async_tensor=False,
+        )
+        if codecs:
+            pact = cast(
+                PropagatingAsyncCollectiveTensor, codecs.forward.decode(pact, qcomm_ctx)
+            )
+        return pact
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad_output):
+        grad_output = grad_output.contiguous()
+
+        qcomm_ctx = None
+        if ctx.codecs is not None:
+            qcomm_ctx = ctx.codecs.backward.create_context()
+            grad_output = ctx.codecs.backward.encode(
+                grad_output,
+                qcomm_ctx,
+            )
+
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(grad_output, ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+
+        pact = PropagatingAsyncCollectiveTensor(
+            partial(
+                manifest_wait,
+                collective_tensor=a2a_tensor,
+            ),
+            fake_elem=a2a_tensor.to("meta"),
+            device=a2a_tensor.device,
+            manifest_on_op_with_non_prop_async_tensor=True,
+        )
+
+        if ctx.codecs:
+            pact = ctx.codecs.backward.decode(pact, qcomm_ctx)
+
+        if get_gradient_division():
+            grad_output.div_(ctx.group_size)
+
+        return (
+            pact,
+            None,
+            None,
+            None,
+            None,
+        )
