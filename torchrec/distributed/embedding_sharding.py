@@ -34,7 +34,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
-    NoWait,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
@@ -55,6 +54,36 @@ def _fx_wrap_tensor_to_device_dtype(
     t: torch.Tensor, tensor_device_dtype: torch.Tensor
 ) -> torch.Tensor:
     return t.to(device=tensor_device_dtype.device, dtype=tensor_device_dtype.dtype)
+
+
+@torch.fx.wrap
+def _fx_wrap_batch_size_per_feature(kjt: KeyedJaggedTensor) -> Optional[torch.Tensor]:
+    return (
+        torch.tensor(kjt.stride_per_key(), device=kjt.device())
+        if kjt.variable_stride_per_key()
+        else None
+    )
+
+
+@torch.fx.wrap
+def _fx_wrap_max_B(kjt: KeyedJaggedTensor) -> int:
+    return max(kjt.stride_per_key()) if kjt.variable_stride_per_key() else -1
+
+
+@torch.fx.wrap
+def _fx_wrap_stride(kjt: KeyedJaggedTensor) -> Optional[int]:
+    return None if kjt.variable_stride_per_key() else kjt.stride()
+
+
+@torch.fx.wrap
+def _fx_wrap_stride_per_key_per_rank(
+    kjt: KeyedJaggedTensor, num_buckets: int
+) -> Optional[List[List[int]]]:
+    return (
+        kjt.stride_per_key_per_rank() * num_buckets
+        if kjt.variable_stride_per_key()
+        else None
+    )
 
 
 def bucketize_kjt_before_all2all(
@@ -105,6 +134,8 @@ def bucketize_kjt_before_all2all(
         block_sizes=block_sizes_new_type,
         my_size=num_buckets,
         weights=kjt.weights_or_none(),
+        batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
+        max_B=_fx_wrap_max_B(kjt),
         block_bucketize_pos=block_bucketize_row_pos,
     )
 
@@ -116,7 +147,8 @@ def bucketize_kjt_before_all2all(
             weights=pos if bucketize_pos else bucketized_weights,
             lengths=bucketized_lengths.view(-1),
             offsets=None,
-            stride=kjt.stride(),
+            stride=_fx_wrap_stride(kjt),
+            stride_per_key_per_rank=_fx_wrap_stride_per_key_per_rank(kjt, num_buckets),
             length_per_key=None,
             offset_per_key=None,
             index_per_key=None,
@@ -388,25 +420,6 @@ def _set_sharding_context_intra_a2a(
                 sharding_context.batch_size_per_rank = awaitable._stride_per_rank
 
 
-def _set_sharding_context_pre_a2a(
-    awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
-    ctx: C,
-) -> None:
-    for awaitable, sharding_context in zip(
-        awaitables,
-        getattr(ctx, "sharding_contexts", []),
-    ):
-        kjt = (
-            awaitable._obj._obj
-            if isinstance(awaitable, NoWait)
-            else awaitable._input  # pyre-ignore[16]: KJTAllToAllSplitsAwaitable or KJTSplitsAllToAllMeta
-        )
-        if hasattr(sharding_context, "batch_size_per_feature_pre_a2a"):
-            sharding_context.batch_size_per_feature_pre_a2a = kjt.stride_per_key()
-        if hasattr(sharding_context, "variable_batch_per_feature"):
-            sharding_context.variable_batch_per_feature = kjt.variable_stride_per_key()
-
-
 def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
     return [
         flat_list[sum(splits[:i]) : sum(splits[:i]) + n] for i, n in enumerate(splits)
@@ -432,7 +445,6 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         super().__init__()
         self.awaitables = awaitables
         self.ctx = ctx
-        _set_sharding_context_pre_a2a(self.awaitables, self.ctx)
 
     def _wait_impl(self) -> KJTListAwaitable:
         """
@@ -477,8 +489,6 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         self._awaitables: List[
             Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
         ] = [awaitable for request in requests for awaitable in request.awaitables]
-        for req, ctx in zip(requests, self._contexts):
-            _set_sharding_context_pre_a2a(req.awaitables, ctx)
         self._output_lengths: List[int] = [
             len(request.awaitables) for request in requests
         ]

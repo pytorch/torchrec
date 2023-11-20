@@ -1855,6 +1855,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         num_workers: int,
         recat: Optional[torch.Tensor],
         stride_per_rank: Optional[List[int]],
+        stagger: int = 1,
     ) -> "KeyedJaggedTensor":
         assert len(tensors) in [2, 3, 4]
         lengths = tensors[0]
@@ -1897,6 +1898,17 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     )
             if not stride_per_key_per_rank:
                 stride_per_key_per_rank = [[0]] * len(keys)
+            if stagger > 1:
+                stride_per_key_per_rank_stagger: List[List[int]] = []
+                local_world_size = num_workers // stagger
+                for i in range(len(keys)):
+                    stride_per_rank_stagger: List[int] = []
+                    for j in range(local_world_size):
+                        stride_per_rank_stagger.extend(
+                            stride_per_key_per_rank[i][j::local_world_size]
+                        )
+                    stride_per_key_per_rank_stagger.append(stride_per_rank_stagger)
+                stride_per_key_per_rank = stride_per_key_per_rank_stagger
             kjt = KeyedJaggedTensor(
                 keys=keys,
                 values=values,

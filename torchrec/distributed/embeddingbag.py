@@ -772,7 +772,12 @@ class ShardedEmbeddingBagCollection(
                 self._input_dists, features_by_shards
             ):
                 awaitables.append(input_dist(features_by_shard))
-                ctx.sharding_contexts.append(EmbeddingShardingContext())
+                ctx.sharding_contexts.append(
+                    EmbeddingShardingContext(
+                        batch_size_per_feature_pre_a2a=features_by_shard.stride_per_key(),
+                        variable_batch_per_feature=features_by_shard.variable_stride_per_key(),
+                    )
+                )
             return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(

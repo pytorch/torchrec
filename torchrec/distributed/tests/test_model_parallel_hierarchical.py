@@ -380,3 +380,38 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
+        local_size=st.sampled_from([2]),
+        global_constant_batch=st.booleans(),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_sharding_variable_batch(
+        self,
+        sharding_type: str,
+        local_size: int,
+        global_constant_batch: bool,
+    ) -> None:
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    sharding_type,
+                    EmbeddingComputeKernel.FUSED.value,
+                    device=torch.device("cuda"),
+                ),
+            ],
+            backend="nccl",
+            world_size=4,
+            local_size=local_size,
+            variable_batch_per_feature=True,
+            has_weighted_tables=False,
+            global_constant_batch=global_constant_batch,
+        )
