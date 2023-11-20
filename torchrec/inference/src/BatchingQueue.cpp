@@ -339,7 +339,13 @@ void BatchingQueue::pinMemory(int gpuIdx) {
         folly::RequestContext::setContext(nullptr);
       }
     } catch (const std::exception& ex) {
-      LOG(FATAL) << "Error batching requests, ex: " << folly::exceptionStr(ex);
+      LOG(ERROR) << "Error batching requests, ex: " << folly::exceptionStr(ex);
+      for (auto& ctx : contexts) {
+        rejectionExecutor_->add([promise = std::move(ctx.promise)]() mutable {
+          handleRequestException<TorchrecException>(
+              promise, "Error during batching requests");
+        });
+      }
     }
   }
 }
